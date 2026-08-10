@@ -124,7 +124,34 @@ public sealed class BattleScreen
         Balls = finished.Balls;
         IsOver = true;
 
-        if (_pending.Count == 0 && _message.Length == 0) Phase = BattlePhase.Finished;
+        if (finished.Winner == Side.Opponent)
+            Say("You have no more usable Pokémon! Your party was healed.");
+
+        // Reading, not finished: whatever is on screen still deserves a keypress. The
+        // queue draining is what lands on Finished, and going straight there would
+        // swallow the last line of a battle.
+        Phase = BattlePhase.ReadingMessages;
+
+        if (_message.Length == 0) AdvanceMessage();
+    }
+
+    /// <summary>
+    /// The server has nothing to say about this battle.
+    /// <para>
+    /// Only reachable when the two sides disagree about whether a battle is running,
+    /// which is a bug — but a bug that must not leave a player holding a screen that
+    /// will never respond again. Closing it loses nothing: the server is authoritative
+    /// and has already stopped.
+    /// </para>
+    /// </summary>
+    public void Abandon(string reason)
+    {
+        IsOver = true;
+        Say(reason);
+
+        Phase = BattlePhase.ReadingMessages;
+
+        if (_message.Length == 0) AdvanceMessage();
     }
 
     private bool IsOver { get; set; }

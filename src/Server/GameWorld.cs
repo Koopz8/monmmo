@@ -196,6 +196,11 @@ public sealed class GameWorld
                 Party = [.. saved.Party],
             };
 
+            // A save from before healing existed, or one written mid-wipe, would leave
+            // this account unable to start a battle for good. Waking up healthy is the
+            // only state that is always recoverable.
+            if (player.Party.Count > 0 && !CanFight(player)) HealParty(player);
+
             var send = new List<Outgoing>
             {
                 new(
@@ -462,6 +467,9 @@ public sealed class GameWorld
         if (_battles is null) return;
 
         if (_battles.Wild(encounter.Species, encounter.Level) is not { } wild) return;
+
+        // No healthy lead, no encounter. Starting one here would start a battle that
+        // was over before its first turn — which is exactly the freeze this fixes.
         if (LeadBattler(player) is not { } lead) return;
 
         player.Battle = new Battle(lead, wild, _rng.State);
@@ -481,8 +489,32 @@ public sealed class GameWorld
             if (_battles.Restore(saved) is { } battler && !battler.HasFainted) return battler;
         }
 
-        return player.Party.Count > 0 ? _battles.Restore(player.Party[0]) : null;
+        // Nothing can fight. Starting a battle here would start one already lost: it
+        // would be over before the first turn, and the player would be left pressing
+        // buttons at a screen that has nothing left to say.
+        return null;
     }
+
+    /// <summary>
+    /// Puts a wiped party back on its feet.
+    /// <para>
+    /// The games send you to a centre. There are none yet, so this stands in for one —
+    /// and it has to exist in some form, because without it a single loss ends an
+    /// account permanently: no healthy lead means no encounters, and no encounters
+    /// means no way back.
+    /// </para>
+    /// </summary>
+    private void HealParty(ServerPlayer player)
+    {
+        if (_battles is null) return;
+
+        for (int i = 0; i < player.Party.Count; i++)
+            player.Party[i] = _battles.Healed(player.Party[i]);
+    }
+
+    /// <summary>True when at least one party member could take a turn.</summary>
+    private bool CanFight(ServerPlayer player) =>
+        _battles is not null && player.Party.Any(_battles.CanFight);
 
     /// <summary>
     /// Resolves one turn of a battle.
@@ -545,6 +577,11 @@ public sealed class GameWorld
             player.Party.Add(BattleFactory.Save(battle.Opponent));
 
         player.Battle = null;
+
+        // Losing costs nothing but the walk back, for now. What it must not cost is
+        // the account: a wiped party can never start another battle, so it would have
+        // no way to recover on its own.
+        if (winner == Side.Opponent) HealParty(player);
 
         return new BattleFinished(winner, caught, player.Balls, [.. player.Party]);
     }

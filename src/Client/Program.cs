@@ -313,6 +313,13 @@ public static class Program
                     battle?.Apply(finished);
                     balls = finished.Balls;
                     break;
+
+                case Rejected rejected when battle is not null:
+                    // The two sides disagree about whether a battle is running. The
+                    // server wins, and the screen has to let go rather than wait for a
+                    // reply that is never coming.
+                    battle.Abandon(rejected.Reason);
+                    break;
             }
         }
     }

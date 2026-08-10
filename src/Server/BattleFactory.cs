@@ -80,6 +80,27 @@ public sealed class BattleFactory(GameRules rules)
         battler.Moves.Select(m => m.Id).ToList());
 
     /// <summary>
+    /// A party member restored to full health, as a visit to a centre would leave it.
+    /// <para>
+    /// Rebuilt rather than patched, because maximum health is computed from base stats
+    /// — the stored number is not something to raise to a value worked out elsewhere.
+    /// </para>
+    /// </summary>
+    public SavedMon Healed(SavedMon saved)
+    {
+        if (Restore(saved) is not { } battler) return saved;
+
+        battler.Heal(battler.MaxHp);
+        battler.Status = StatusCondition.None;
+        battler.SleepTurns = 0;
+
+        return Save(battler);
+    }
+
+    /// <summary>True when this one can still fight.</summary>
+    public bool CanFight(SavedMon saved) => Restore(saved) is { HasFainted: false };
+
+    /// <summary>
     /// The creature a new account begins with.
     /// <para>
     /// Given at registration rather than conjured at the first encounter, so that a

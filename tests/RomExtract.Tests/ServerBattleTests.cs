@@ -251,3 +251,129 @@ public class ServerBattleTests
         }
     }
 }
+
+/// <summary>
+/// What happens after a loss.
+/// <para>
+/// This is the case that froze a real game: a party with nothing left standing has no
+/// healthy lead, so every encounter after it started a battle that was already over.
+/// </para>
+/// </summary>
+public class LosingTests
+{
+    private const string Route = "3.19";
+
+    private static GameWorld GrassyWorld(uint seed = 1)
+    {
+        var behaviours = new byte[16];
+        Array.Fill(behaviours, MetatileBehaviour.TallGrass);
+
+        MapData map = new(Route, "ROUTE 1", 4, 4, new byte[16])
+        {
+            Behaviours = behaviours,
+            Encounters = new MapEncounters(Route, Land: new EncounterTable(
+                EncounterKind.Land,
+                100,
+                Enumerable.Range(0, 12).Select(_ => new WildSlot(16, 3, 3)).ToList())),
+        };
+
+        return new GameWorld(new WorldData([map]), Route, TestRules.All, seed);
+    }
+
+    private static SavedMon Fainted(int species = 16) =>
+        new(species, 3, null, 0, StatusCondition.None, Nature.Hardy, [TestRules.FirstMove]);
+
+    private static bool WalkIntoGrass(GameWorld world, ServerPlayer player, int steps = 200)
+    {
+        double now = 0;
+
+        for (int step = 0; step < steps; step++)
+        {
+            player.Square = new GridPosition(step % 4, 1);
+            player.LastStepAt = double.NegativeInfinity;
+            now += 1;
+
+            if (world.Move(player.Id, Direction.Down, now).Any(o => o.Message is BattleStarted)) return true;
+        }
+
+        return false;
+    }
+
+    [Fact]
+    public void AWipedPartyIsHealedOnLogin()
+    {
+        // Without this a save written mid-wipe is an account that can never battle
+        // again — no healthy lead, no encounters, and so no way back.
+        GameWorld world = GrassyWorld();
+
+        (ServerPlayer player, _) = world.Join(
+            1, "Mason", new SavedCharacter(Route, 0, 0, Direction.Down, 10, [Fainted()]));
+
+        Assert.True(player.Party[0].CurrentHp > 0);
+    }
+
+    [Fact]
+    public void HealingOnLoginLeavesAHealthyPartyAlone()
+    {
+        GameWorld world = GrassyWorld();
+
+        var hurt = new SavedMon(16, 3, null, 1, StatusCondition.Burn, Nature.Hardy, [TestRules.FirstMove]);
+
+        (ServerPlayer player, _) = world.Join(
+            1, "Mason", new SavedCharacter(Route, 0, 0, Direction.Down, 10, [hurt]));
+
+        // One battler on its last point is not a wipe, and healing it would make every
+        // reconnect a free rest stop.
+        Assert.Equal(hurt, player.Party[0]);
+    }
+
+    [Fact]
+    public void NoEncounterStartsWhenNothingCanFight()
+    {
+        // The freeze: the battle was over before the first turn, so the server had
+        // nothing to answer with and the screen waited forever.
+        GameWorld world = GrassyWorld();
+
+        (ServerPlayer player, _) = world.Join(
+            1, "Mason", new SavedCharacter(Route, 0, 0, Direction.Down, 10, [Fainted()]));
+
+        // Faint it again, past the login heal, to reach the state directly.
+        player.Party[0] = Fainted();
+
+        Assert.False(WalkIntoGrass(world, player));
+        Assert.Null(player.Battle);
+    }
+
+    [Fact]
+    public void LosingHealsThePartyRatherThanEndingTheAccount()
+    {
+        GameWorld world = GrassyWorld(seed: 3);
+
+        (ServerPlayer player, _) = world.Join(1, "Mason", world.FreshCharacter());
+
+        // A single point of health, so the loss arrives quickly.
+        player.Party[0] = player.Party[0] with { CurrentHp = 1 };
+
+        Assert.True(WalkIntoGrass(world, player));
+
+        BattleFinished? finished = null;
+
+        for (int turn = 0; turn < 40 && finished is null; turn++)
+        {
+            finished = world.TakeBattleTurn(player.Id, new BattleAction.UseMove(0))
+                .Select(o => o.Message)
+                .OfType<BattleFinished>()
+                .FirstOrDefault();
+        }
+
+        Assert.NotNull(finished);
+
+        if (finished!.Winner != Side.Opponent) return;   // it won; nothing to heal
+
+        Assert.All(finished.Party, m => Assert.True(m.CurrentHp > 0));
+        Assert.All(player.Party, m => Assert.True(m.CurrentHp > 0));
+
+        // And the proof it is recoverable: another encounter can start.
+        Assert.True(WalkIntoGrass(world, player));
+    }
+}
