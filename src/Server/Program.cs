@@ -64,15 +64,40 @@ public static class Program
         }
 
         Console.WriteLine($"Loaded {world.Count} maps from {worldPath}");
-        Console.WriteLine($"Hosting {game.Map.Name} ({game.Map.Id}) — {game.Map.Width}x{game.Map.Height}");
+        Console.WriteLine(
+            $"Starting players on {game.StartingMap.Name} ({game.StartingMap.Id}) — " +
+            $"{game.StartingMap.Width}x{game.StartingMap.Height}");
 
-        ReportEncounterReadiness(game.Map);
+        ReportWorldLinks(world);
+        ReportEncounterReadiness(game.StartingMap);
 
         using var store = new SqlitePlayerStore(databasePath);
         Console.WriteLine($"Accounts in {Path.GetFullPath(databasePath)}");
 
         await new GameServer(game, store, verbose).RunAsync(port);
         return 0;
+    }
+
+    /// <summary>
+    /// Says how connected the world is.
+    /// <para>
+    /// A world file exported before warps existed loads perfectly well and simply
+    /// never lets anyone leave the first map, which from the outside is
+    /// indistinguishable from a bug in the movement code.
+    /// </para>
+    /// </summary>
+    private static void ReportWorldLinks(WorldData world)
+    {
+        int warps = world.Maps.Sum(m => m.Warps.Count);
+        int connections = world.Maps.Sum(m => m.Connections.Count);
+
+        if (warps == 0 && connections == 0)
+        {
+            Console.WriteLine("  no warps or connections in this world file — re-export it, nobody can leave the first map");
+            return;
+        }
+
+        Console.WriteLine($"  {warps} warps and {connections} edge connections across {world.Count} maps");
     }
 
     /// <summary>
@@ -285,11 +310,20 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                             // landed on and what that square is. Silence otherwise says
                             // nothing: a client that never sends a move and a player
                             // who never crosses grass look the same.
+                            foreach (Outgoing outgoing in result)
+                            {
+                                if (outgoing.Message is MapChanged changed && outgoing.OnlyTo == playerId)
+                                {
+                                    Console.WriteLine(
+                                        $"> #{playerId} moved to {changed.MapId} at ({changed.X}, {changed.Y})");
+                                }
+                            }
+
                             if (verbose && world.Find(playerId) is { } walker)
                             {
                                 Console.WriteLine(
-                                    $"  #{playerId} {move.Direction} -> {walker.Square} " +
-                                    $"behaviour 0x{world.Map.BehaviourAt(walker.Square):X2}");
+                                    $"  #{playerId} {move.Direction} -> {walker.MapId} {walker.Square} " +
+                                    $"behaviour 0x{world.MapOf(walker.MapId)?.BehaviourAt(walker.Square) ?? 0:X2}");
                             }
 
                             await DispatchAsync(result, playerId, cancellationToken).ConfigureAwait(false);
@@ -343,6 +377,10 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
             {
                 if (item.OnlyTo is { } only && only != id) continue;
                 if (item.Except is { } except && except == id) continue;
+
+                // A world of 425 maps would behave like one enormous room without
+                // this — every step anyone took anywhere, sent to everyone.
+                if (item.OnMap is { } scope && world.MapIdOf(id) != scope) continue;
 
                 try
                 {

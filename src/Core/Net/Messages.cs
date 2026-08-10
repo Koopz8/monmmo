@@ -19,6 +19,7 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(MoveRequest), "move")]
 [JsonDerivedType(typeof(Welcome), "welcome")]
 [JsonDerivedType(typeof(AuthFailed), "authfailed")]
+[JsonDerivedType(typeof(MapChanged), "mapchanged")]
 [JsonDerivedType(typeof(PlayerAppeared), "appeared")]
 [JsonDerivedType(typeof(PlayerMoved), "moved")]
 [JsonDerivedType(typeof(PlayerLeft), "left")]
@@ -69,6 +70,16 @@ public sealed record Welcome(
     Direction Facing,
     int Balls,
     IReadOnlyList<SavedMon> Party) : NetMessage;
+
+/// <summary>
+/// The player is now on a different map, through a door or off an edge.
+/// <para>
+/// Sent only to the player who moved. Everyone else sees them leave one map and
+/// appear on another, which is the same pair of messages a disconnect and a join
+/// would produce — so a client watching other players needs no new case at all.
+/// </para>
+/// </summary>
+public sealed record MapChanged(string MapId, int X, int Y, Direction Facing) : NetMessage;
 
 /// <summary>
 /// The credentials were not accepted. Deliberately vague about which half was wrong,

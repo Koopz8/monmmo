@@ -62,14 +62,21 @@ public static class Program
         }
 
         GameData data;
+        MapLibrary library;
         LoadedMap map;
 
         try
         {
             // Opened once: locating the tables scans the whole cartridge several
-            // times, which is fine at startup and not fine mid-encounter.
+            // times, which is fine at startup and not fine when a player opens a door.
             data = GameData.Load(settings.RomPath);
-            map = WorldLoader.Load(data.Rom, settings.MapName, settings.MapAddress);
+            library = MapLibrary.Open(data.Rom);
+
+            map = (string.IsNullOrWhiteSpace(settings.MapAddress)
+                      ? library.TryLoadByName(settings.MapName)
+                      : library.TryLoad(settings.MapAddress!))
+                  ?? throw new InvalidDataException(
+                      $"No map matching '{settings.MapAddress ?? settings.MapName}'.");
         }
         catch (Exception ex)
         {
@@ -110,7 +117,7 @@ public static class Program
             ClientSettings.RememberUsername(directory, login.Username);
         }
 
-        Run(data, map, network, settings);
+        Run(data, library, map, network, settings);
 
         Raylib.CloseWindow();
         return 0;
@@ -125,17 +132,13 @@ public static class Program
             : (value, 7777);
     }
 
-    private static void Run(GameData data, LoadedMap map, NetworkClient network, ClientSettings settings)
+    private static void Run(
+        GameData data, MapLibrary library, LoadedMap first, NetworkClient network, ClientSettings settings)
     {
-        // Reuse the extractor's own PNG writer rather than marshalling raw pixels:
-        // it is already covered by tests, and it keeps this file free of unsafe code.
-        Image image = Raylib.LoadImageFromMemory(".png", map.ToPng());
-        Texture2D texture = Raylib.LoadTextureFromImage(image);
-        Raylib.UnloadImage(image);
-        Raylib.SetTextureFilter(texture, TextureFilter.Point);
+        using var view = new MapView(library, first);
 
         var player = new WalkingCharacter();
-        player.Place(map.Collision, map.Collision.FirstWalkable());
+        player.Place(view.Map.Collision, view.Map.Collision.FirstWalkable());
 
         var camera = new Camera2D
         {
@@ -153,7 +156,7 @@ public static class Program
             float delta = Raylib.GetFrameTime();
 
             WildEncounterStarted? encounter =
-                ApplyServerMessages(network, others, player, map, data, party, ref balls);
+                ApplyServerMessages(network, others, player, view, data, party, ref balls);
 
             // An encounter suspends the overworld entirely: the server has already
             // decided it, and walking on while a battle is pending would put the two
@@ -197,13 +200,13 @@ public static class Program
             foreach (RemoteCharacter other in others.Values) other.Update(delta);
 
             (float playerX, float playerY) = player.PixelPosition;
-            camera.Target = ClampView(playerX, playerY, map);
+            camera.Target = ClampView(playerX, playerY, view.Map);
 
             Raylib.BeginDrawing();
             Raylib.ClearBackground(Color.Black);
 
             Raylib.BeginMode2D(camera);
-            Raylib.DrawTexture(texture, 0, 0, Color.White);
+            Raylib.DrawTexture(view.Texture, 0, 0, Color.White);
 
             foreach (RemoteCharacter other in others.Values)
             {
@@ -215,12 +218,10 @@ public static class Program
             DrawPlayer(playerX, playerY, player.Facing);
             Raylib.EndMode2D();
 
-            DrawStatus(map, player, network, others.Count);
+            DrawStatus(view.Map, player, network, others.Count);
             Raylib.EndDrawing();
         }
 
-        Raylib.UnloadTexture(texture);
-        Raylib.CloseWindow();
     }
 
     /// <summary>
@@ -235,7 +236,7 @@ public static class Program
         NetworkClient network,
         Dictionary<int, RemoteCharacter> others,
         WalkingCharacter player,
-        LoadedMap map,
+        MapView view,
         GameData data,
         Party party,
         ref int balls)
@@ -247,7 +248,8 @@ public static class Program
             switch (message)
             {
                 case Welcome welcome:
-                    player.Place(map.Collision, new GridPosition(welcome.X, welcome.Y));
+                    view.SwitchTo(welcome.MapId);
+                    player.Place(view.Map.Collision, new GridPosition(welcome.X, welcome.Y));
                     balls = welcome.Balls;
 
                     // The server kept numbers; this is where the cartridge on this
@@ -268,13 +270,25 @@ public static class Program
                         other.MoveTo(new GridPosition(moved.X, moved.Y), moved.Facing);
                     break;
 
+                case MapChanged changed:
+                    // Everyone who was visible was visible on the old map.
+                    others.Clear();
+
+                    if (view.SwitchTo(changed.MapId))
+                    {
+                        player.Place(view.Map.Collision, new GridPosition(changed.X, changed.Y));
+                        Raylib.SetWindowTitle($"MonMMO — {view.Map.Name}");
+                    }
+
+                    break;
+
                 case PlayerMoved mine when !player.IsStepping:
                     var confirmed = new GridPosition(mine.X, mine.Y);
-                    if (confirmed != player.Square) player.Place(map.Collision, confirmed);
+                    if (confirmed != player.Square) player.Place(view.Map.Collision, confirmed);
                     break;
 
                 case MoveRejected rejected:
-                    player.Place(map.Collision, new GridPosition(rejected.X, rejected.Y));
+                    player.Place(view.Map.Collision, new GridPosition(rejected.X, rejected.Y));
                     break;
 
                 case PlayerLeft left:
