@@ -21,6 +21,8 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(Welcome), "welcome")]
 [JsonDerivedType(typeof(AuthFailed), "authfailed")]
 [JsonDerivedType(typeof(MapChanged), "mapchanged")]
+[JsonDerivedType(typeof(ObjectsPlaced), "objects")]
+[JsonDerivedType(typeof(ObjectMoved), "objectmoved")]
 [JsonDerivedType(typeof(PlayerAppeared), "appeared")]
 [JsonDerivedType(typeof(PlayerMoved), "moved")]
 [JsonDerivedType(typeof(PlayerLeft), "left")]
@@ -85,6 +87,23 @@ public sealed record MapChanged(string MapId, int X, int Y, Direction Facing) : 
 /// so this cannot be used to find out which usernames exist.
 /// </summary>
 public sealed record AuthFailed(string Reason) : NetMessage;
+
+/// <summary>
+/// Somebody standing on a map, as the server has them right now.
+/// <para>
+/// Sent rather than read from the cartridge, which is a change from when they stood
+/// still. Once they move, where they are is a fact about the running world rather than
+/// about the image on anyone's disk, and two machines deciding it independently would
+/// disagree within seconds.
+/// </para>
+/// </summary>
+public sealed record ObjectView(int LocalId, int GraphicsId, int X, int Y, Direction Facing);
+
+/// <summary>Everyone standing on the map a player has just arrived on.</summary>
+public sealed record ObjectsPlaced(IReadOnlyList<ObjectView> Objects) : NetMessage;
+
+/// <summary>One of them turned or took a step.</summary>
+public sealed record ObjectMoved(int LocalId, int X, int Y, Direction Facing) : NetMessage;
 
 /// <summary>Another player is now visible — sent on join, and for everyone already present.</summary>
 public sealed record PlayerAppeared(int PlayerId, string Name, int X, int Y, Direction Facing) : NetMessage;

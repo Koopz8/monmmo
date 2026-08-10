@@ -84,6 +84,8 @@ public sealed class GameWorld
 
     private readonly BattleFactory? _battles;
     private readonly Progression? _progression;
+    private readonly Dictionary<string, MapPopulation> _populated = [];
+    private readonly BattleRng _objectRng = new(0x5EED);
 
     public GameWorld(WorldData world, string startingMapId, GameRules? rules = null, uint encounterSeed = 1)
     {
@@ -215,6 +217,9 @@ public sealed class GameWorld
             // Tell the newcomer about everyone already on this map, before announcing them.
             foreach (ServerPlayer existing in _players.Values.Where(p => p.MapId == mapId))
                 send.Add(new Outgoing(existing.ToAppeared(), OnlyTo: player.Id));
+
+            if (Populate(mapId, 0) is { } people)
+                send.Add(new Outgoing(new ObjectsPlaced([.. people.Views]), OnlyTo: player.Id));
 
             _players[player.Id] = player;
             send.Add(new Outgoing(player.ToAppeared(), Except: player.Id, OnMap: mapId));
@@ -358,13 +363,73 @@ public sealed class GameWorld
     /// <summary>
     /// True when somebody is standing on a square.
     /// <para>
-    /// The people on a map are as solid as its walls, and this has to be the server's
-    /// answer rather than the client's — the client draws them from its own cartridge
-    /// and could simply decline to.
+    /// Read from the living population rather than the map file, because they move now.
+    /// A map nobody is watching is not simulated, so its people are wherever the
+    /// cartridge put them — which is also where they will be when somebody arrives.
     /// </para>
     /// </summary>
     private bool IsOccupied(string mapId, GridPosition square) =>
-        _world.Find(mapId)?.ObjectAt(square) is not null;
+        _populated.TryGetValue(mapId, out MapPopulation? people)
+            ? people.At(square) is not null
+            : _world.Find(mapId)?.ObjectAt(square) is not null;
+
+    /// <summary>
+    /// The people on a map, brought to life if this is the first player to see it.
+    /// <para>
+    /// Lazily, because there are sixteen hundred of them across four hundred maps and
+    /// stepping the ones nobody can see would be the largest thing this server does.
+    /// </para>
+    /// </summary>
+    private MapPopulation? Populate(string mapId, double now)
+    {
+        if (_populated.TryGetValue(mapId, out MapPopulation? existing)) return existing;
+        if (_world.Find(mapId) is not { } map) return null;
+
+        var people = new MapPopulation(map, _objectRng, now);
+
+        _populated[mapId] = people;
+        return people;
+    }
+
+    /// <summary>
+    /// Moves everybody who is due to move, on every map somebody is standing on.
+    /// <para>
+    /// Called on a timer rather than in response to anything, which makes it the first
+    /// thing in this world that happens without a player asking for it.
+    /// </para>
+    /// </summary>
+    public List<Outgoing> Tick(double nowSeconds)
+    {
+        lock (_gate)
+        {
+            var send = new List<Outgoing>();
+
+            foreach (string mapId in _players.Values.Select(p => p.MapId).Distinct().ToList())
+            {
+                if (Populate(mapId, nowSeconds) is not { } people) continue;
+
+                foreach (ObjectView moved in people.Step(_objectRng, nowSeconds, square => IsFree(mapId, square)))
+                    send.Add(new Outgoing(new ObjectMoved(moved.LocalId, moved.X, moved.Y, moved.Facing), OnMap: mapId));
+            }
+
+            // Maps nobody can see any more stop being simulated, and forget where their
+            // people had wandered to. That is a deliberate simplification and worth
+            // knowing: walk away and back, and the street is as the cartridge left it.
+            foreach (string mapId in _populated.Keys.ToList())
+            {
+                if (_players.Values.Any(p => p.MapId == mapId)) continue;
+                _populated.Remove(mapId);
+            }
+
+            return send;
+        }
+    }
+
+    /// <summary>Whether anybody at all could stand on a square: not a wall, nobody there.</summary>
+    private bool IsFree(string mapId, GridPosition square) =>
+        GridFor(mapId).IsWalkable(square) &&
+        !IsOccupied(mapId, square) &&
+        !_players.Values.Any(p => p.MapId == mapId && p.Square == square);
 
     /// <summary>Standing still, announced so everyone still sees the turn.</summary>
     private Outgoing Stay(ServerPlayer player) =>
@@ -453,6 +518,9 @@ public sealed class GameWorld
         send.Add(new Outgoing(
             new MapChanged(mapId, arrival.X, arrival.Y, facing),
             OnlyTo: player.Id));
+
+        if (Populate(mapId, 0) is { } arrived)
+            send.Add(new Outgoing(new ObjectsPlaced([.. arrived.Views]), OnlyTo: player.Id));
 
         foreach (ServerPlayer existing in _players.Values.Where(p => p.MapId == mapId && p.Id != player.Id))
             send.Add(new Outgoing(existing.ToAppeared(), OnlyTo: player.Id));

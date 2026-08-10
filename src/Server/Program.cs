@@ -288,6 +288,8 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
 
         Console.WriteLine($"Listening on port {boundPort}. Ctrl+C to stop.");
 
+        _ = TickAsync(cancellationToken);
+
         try
         {
             while (!cancellationToken.IsCancellationRequested)
@@ -299,6 +301,36 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
         finally
         {
             listener.Stop();
+        }
+    }
+
+    /// <summary>
+    /// The world's own clock.
+    /// <para>
+    /// Everything else here happens because a client asked for it. This is the one loop
+    /// that runs whether or not anybody says anything, which is what lets the people on
+    /// a map move while a player stands still and watches them.
+    /// </para>
+    /// </summary>
+    private async Task TickAsync(CancellationToken cancellationToken)
+    {
+        var interval = TimeSpan.FromMilliseconds(200);
+
+        try
+        {
+            using var timer = new PeriodicTimer(interval);
+
+            while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
+            {
+                List<Outgoing> moved = world.Tick(Now);
+
+                if (moved.Count > 0)
+                    await DispatchAsync(moved, 0, cancellationToken).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Ordinary shutdown.
         }
     }
 

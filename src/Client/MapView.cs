@@ -1,3 +1,4 @@
+using PokeMmo.Core.Net;
 using PokeMmo.Core.World;
 using PokeMmo.RomExtract.Maps;
 using Raylib_cs;
@@ -22,7 +23,7 @@ public sealed class MapView : IDisposable
     {
         _library = library;
         Map = first;
-        Collision = WithPeople(first);
+        Collision = first.Collision;
         _texture = Upload(first);
     }
 
@@ -35,8 +36,39 @@ public sealed class MapView : IDisposable
     /// people as blocking; a client predicting against bare map collision would walk
     /// straight through somebody, be corrected, and spend the rest of the map arguing.
     /// </para>
+    /// <para>
+    /// Rebuilt whenever they move. Copying a map's walkability is a few hundred bytes
+    /// and happens a handful of times a second, which is cheaper than teaching every
+    /// caller to consult two sources.
+    /// </para>
     /// </summary>
     public CollisionGrid Collision { get; private set; } = null!;
+
+    /// <summary>Where the server says everybody is, keyed by their id on this map.</summary>
+    public Dictionary<int, ObjectView> People { get; } = [];
+
+    /// <summary>Replaces everybody, as sent on arriving at a map.</summary>
+    public void Place(IEnumerable<ObjectView> people)
+    {
+        People.Clear();
+
+        foreach (ObjectView person in people) People[person.LocalId] = person;
+
+        Rebuild();
+    }
+
+    /// <summary>Moves one of them.</summary>
+    public void Moved(ObjectMoved moved)
+    {
+        if (!People.TryGetValue(moved.LocalId, out ObjectView existing)) return;
+
+        People[moved.LocalId] = existing with { X = moved.X, Y = moved.Y, Facing = moved.Facing };
+
+        Rebuild();
+    }
+
+    private void Rebuild() =>
+        Collision = Map.Collision.With(People.Values.Select(p => new GridPosition(p.X, p.Y)));
 
     public Texture2D Texture => _texture;
 
@@ -56,14 +88,16 @@ public sealed class MapView : IDisposable
         Raylib.UnloadTexture(_texture);
 
         Map = loaded;
-        Collision = WithPeople(loaded);
+
+        // Emptied rather than carried over: whoever was on the last map is not here,
+        // and the server sends this map's people immediately after saying we arrived.
+        People.Clear();
+        Collision = loaded.Collision;
+
         _texture = Upload(loaded);
 
         return true;
     }
-
-    private static CollisionGrid WithPeople(LoadedMap map) =>
-        map.Collision.With(map.Objects.Select(o => o.Square));
 
     private static Texture2D Upload(LoadedMap map)
     {

@@ -112,6 +112,11 @@ public static class MapLinkExtractor
             int x = (short)rom.ReadU16(at + 4);
             int y = (short)rom.ReadU16(at + 6);
             int movementType = rom.ReadU8(at + 9);
+
+            // One byte holds both halves of the beat: x in the low nibble, y in the
+            // high one.
+            byte range = rom.ReadU8(at + 10);
+
             int trainerType = rom.ReadU16(at + 12);
 
             if (x < 0 || x >= width || y < 0 || y >= height)
@@ -127,7 +132,9 @@ public static class MapLinkExtractor
                 y,
                 MapObject.FacingFor(movementType),
                 movementType,
-                trainerType != 0));
+                trainerType != 0,
+                range & 0x0F,
+                (range >> 4) & 0x0F));
         }
 
         return objects;

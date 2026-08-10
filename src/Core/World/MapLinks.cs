@@ -55,9 +55,29 @@ public sealed record MapObject(
     int Y,
     Direction Facing,
     int MovementType,
-    bool IsTrainer)
+    bool IsTrainer,
+    int RangeX = 0,
+    int RangeY = 0)
 {
     public GridPosition Square => new(X, Y);
+
+    /// <summary>True when this one paces about rather than standing still.</summary>
+    public bool Wanders => MovementType is 2 or 3 or 4 or 5 or 6;
+
+    /// <summary>True when this one turns on the spot without going anywhere.</summary>
+    public bool LooksAround => MovementType == 1;
+
+    /// <summary>
+    /// Whether a square is within this one's beat.
+    /// <para>
+    /// The range is a box around where they started, and it is per-axis: a shopkeeper
+    /// pacing left and right has a range in x and none in y. Ignoring it would let
+    /// everybody wander off across the map, which is both wrong and a good way to
+    /// block a doorway nobody expected to be blocked.
+    /// </para>
+    /// </summary>
+    public bool IsWithinRange(GridPosition square) =>
+        Math.Abs(square.X - X) <= RangeX && Math.Abs(square.Y - Y) <= RangeY;
 
     /// <summary>
     /// Which way one of these starts out looking.

@@ -70,7 +70,7 @@ public sealed class WorldData
     /// <summary>Identifies the format, so a wrong or stale file fails loudly.</summary>
     private static readonly byte[] Magic = "MONWORLD"u8.ToArray();
 
-    private const int Version = 4;
+    private const int Version = 5;
 
     private readonly Dictionary<string, MapData> _maps;
 
@@ -211,6 +211,8 @@ public sealed class WorldData
             writer.Write((int)entry.Facing);
             writer.Write(entry.MovementType);
             writer.Write(entry.IsTrainer);
+            writer.Write(entry.RangeX);
+            writer.Write(entry.RangeY);
         }
     }
 
@@ -272,7 +274,15 @@ public sealed class WorldData
                 throw new InvalidDataException($"Map '{mapId}' has an object facing {facing}.");
 
             objects.Add(new MapObject(
-                localId, graphicsId, x, y, (Direction)facing, reader.ReadInt32(), reader.ReadBoolean()));
+                localId,
+                graphicsId,
+                x,
+                y,
+                (Direction)facing,
+                reader.ReadInt32(),
+                reader.ReadBoolean(),
+                reader.ReadInt32(),
+                reader.ReadInt32()));
         }
 
         return objects;

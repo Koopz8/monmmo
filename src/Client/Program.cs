@@ -243,7 +243,7 @@ public static class Program
 
             // Drawn before the players, so anyone standing in front of somebody is in
             // front of them rather than behind.
-            foreach (MapObject standing in view.Map.Objects)
+            foreach (ObjectView standing in view.People.Values)
             {
                 float ox = standing.X * WalkingCharacter.SquarePixels;
                 float oy = standing.Y * WalkingCharacter.SquarePixels;
@@ -316,6 +316,14 @@ public static class Program
                 case PlayerMoved moved when moved.PlayerId != network.PlayerId:
                     if (others.TryGetValue(moved.PlayerId, out RemoteCharacter? other))
                         other.MoveTo(new GridPosition(moved.X, moved.Y), moved.Facing);
+                    break;
+
+                case ObjectsPlaced placed:
+                    view.Place(placed.Objects);
+                    break;
+
+                case ObjectMoved moved:
+                    view.Moved(moved);
                     break;
 
                 case MapChanged changed:
