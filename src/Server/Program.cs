@@ -63,8 +63,41 @@ public static class Program
         Console.WriteLine($"Loaded {world.Count} maps from {worldPath}");
         Console.WriteLine($"Hosting {game.Map.Name} ({game.Map.Id}) — {game.Map.Width}x{game.Map.Height}");
 
+        ReportEncounterReadiness(game.Map);
+
         await new GameServer(game).RunAsync(port);
         return 0;
+    }
+
+    /// <summary>
+    /// Says up front whether this map can produce encounters at all.
+    /// <para>
+    /// Without this, a world file exported before behaviours existed, or a map with no
+    /// grass, looks exactly like a working server that simply never rolls anything —
+    /// and there is no way to tell which from the outside.
+    /// </para>
+    /// </summary>
+    private static void ReportEncounterReadiness(MapData map)
+    {
+        int grass = map.Behaviours.Count(MetatileBehaviour.IsEncounterGrass);
+
+        if (map.Behaviours.Length == 0)
+        {
+            Console.WriteLine("  no square behaviours in this world file — re-export it, encounters cannot fire");
+        }
+        else
+        {
+            Console.WriteLine($"  {grass} grass squares of {map.Behaviours.Length}");
+        }
+
+        if (map.Encounters?.Land is { IsUsable: true } land)
+        {
+            Console.WriteLine($"  land encounters: rate {land.Rate}, {land.Slots.Count} slots");
+        }
+        else
+        {
+            Console.WriteLine("  no land encounter table for this map — nothing will appear");
+        }
     }
 
     private static string? ArgumentValue(string[] args, string name)
@@ -147,8 +180,18 @@ public sealed class GameServer(GameWorld world)
                             break;
 
                         case MoveRequest move when playerId != 0:
-                            await DispatchAsync(world.Move(playerId, move.Direction, Now), playerId, cancellationToken)
-                                .ConfigureAwait(false);
+                            List<Outgoing> result = world.Move(playerId, move.Direction, Now);
+
+                            foreach (Outgoing outgoing in result)
+                            {
+                                if (outgoing.Message is WildEncounterStarted encounter)
+                                {
+                                    Console.WriteLine(
+                                        $"! #{playerId} met species {encounter.Species} at level {encounter.Level}");
+                                }
+                            }
+
+                            await DispatchAsync(result, playerId, cancellationToken).ConfigureAwait(false);
                             break;
 
                         default:
