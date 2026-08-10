@@ -2,6 +2,7 @@ using System.Net.Sockets;
 using PokeMmo.Core.Net;
 using PokeMmo.Core.World;
 using PokeMmo.Server;
+using PokeMmo.Server.Storage;
 
 namespace PokeMmo.RomExtract.Tests;
 
@@ -18,6 +19,7 @@ public class ServerIntegrationTests : IAsyncLifetime
 {
     private readonly CancellationTokenSource _shutdown = new();
     private GameServer _server = null!;
+    private InMemoryPlayerStore _store = null!;
     private int _port;
 
     public async Task InitializeAsync()
@@ -29,7 +31,8 @@ public class ServerIntegrationTests : IAsyncLifetime
             new WorldData([new MapData("3.0", "PALLET TOWN", 4, 3, collision)]),
             "3.0");
 
-        _server = new GameServer(world);
+        _store = new InMemoryPlayerStore();
+        _server = new GameServer(world, _store);
 
         // Port 0 asks the system for a free port, so tests never collide.
         _ = _server.RunAsync(0, _shutdown.Token);
@@ -55,7 +58,7 @@ public class ServerIntegrationTests : IAsyncLifetime
         await socket.ConnectAsync("127.0.0.1", _port);
 
         var channel = new MessageChannel(socket.GetStream());
-        await channel.SendAsync(new JoinRequest(name));
+        await channel.SendAsync(new RegisterRequest(name, "a-good-password"));
 
         return new TestClient(socket, channel);
     }
@@ -177,7 +180,7 @@ public class ServerIntegrationTests : IAsyncLifetime
             await channel.SendAsync(new MoveRequest(Direction.Up));
 
             Rejected rejected = await ExpectAsync<Rejected>(channel);
-            Assert.Contains("Join", rejected.Reason);
+            Assert.Contains("Log in", rejected.Reason);
         }
     }
 

@@ -1,5 +1,7 @@
 using System.Buffers.Binary;
+using PokeMmo.Core.Battle;
 using PokeMmo.Core.Net;
+using PokeMmo.Core.Save;
 using PokeMmo.Core.World;
 
 namespace PokeMmo.RomExtract.Tests;
@@ -50,22 +52,44 @@ public class MessageChannelTests
     {
         NetMessage[] sent =
         [
-            new JoinRequest("Mason"),
+            new RegisterRequest("Mason", "a-good-password"),
+            new LoginRequest("Mason", "a-good-password"),
+            new SaveRequest(12, [new SavedMon(25, 7, "Sparky", 14, StatusCondition.Paralysis, Nature.Timid, [1, 2, 3])]),
             new MoveRequest(Direction.Left),
-            new Welcome(7, "3.0", 12, 5, Direction.Up),
+            new Welcome(7, "3.0", 12, 5, Direction.Up, 20, [new SavedMon(1, 5, null, 19, StatusCondition.None, Nature.Hardy, [33])]),
             new PlayerAppeared(9, "Someone", 1, 2, Direction.Right),
             new PlayerMoved(9, 3, 4, Direction.Down),
             new PlayerLeft(9),
             new MoveRejected(1, 1, Direction.Up, "Too fast."),
-            new Rejected("Join first."),
+            new AuthFailed("Wrong name or password."),
+            new Rejected("Log in first."),
         ];
 
         using var stream = new MemoryStream(await EncodeAsync(sent));
         var channel = new MessageChannel(stream);
 
         foreach (NetMessage expected in sent)
-            Assert.Equal(expected, await channel.ReceiveAsync());
+        {
+            NetMessage? received = await channel.ReceiveAsync();
+
+            Assert.NotNull(received);
+            Assert.Equal(expected.GetType(), received.GetType());
+            Assert.Equal(Canonical(expected), Canonical(received));
+        }
     }
+
+    /// <summary>
+    /// A message reduced to its wire form.
+    /// <para>
+    /// Records compare their members with <c>Equals</c>, and for a list member that is
+    /// reference equality — so two messages carrying identical parties are not equal
+    /// to a record. Comparing the encoded form is both the thing this test actually
+    /// cares about and the only comparison that means anything for a message holding
+    /// a collection. Worth knowing before writing <c>==</c> on one of these in earnest.
+    /// </para>
+    /// </summary>
+    private static string Canonical(NetMessage message) =>
+        System.Text.Json.JsonSerializer.Serialize(message);
 
     [Theory]
     [InlineData(1)]

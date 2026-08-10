@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using PokeMmo.Core.Save;
 using PokeMmo.Core.World;
 
 namespace PokeMmo.Core.Net;
@@ -12,9 +13,12 @@ namespace PokeMmo.Core.Net;
 /// </para>
 /// </summary>
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "t")]
-[JsonDerivedType(typeof(JoinRequest), "join")]
+[JsonDerivedType(typeof(RegisterRequest), "register")]
+[JsonDerivedType(typeof(LoginRequest), "login")]
+[JsonDerivedType(typeof(SaveRequest), "save")]
 [JsonDerivedType(typeof(MoveRequest), "move")]
 [JsonDerivedType(typeof(Welcome), "welcome")]
+[JsonDerivedType(typeof(AuthFailed), "authfailed")]
 [JsonDerivedType(typeof(PlayerAppeared), "appeared")]
 [JsonDerivedType(typeof(PlayerMoved), "moved")]
 [JsonDerivedType(typeof(PlayerLeft), "left")]
@@ -25,16 +29,52 @@ public abstract record NetMessage;
 
 // --- client to server --------------------------------------------------------
 
-/// <summary>Asks to enter the world.</summary>
-public sealed record JoinRequest(string Name) : NetMessage;
+/// <summary>Creates an account and enters the world with a fresh character.</summary>
+public sealed record RegisterRequest(string Username, string Password) : NetMessage;
+
+/// <summary>
+/// Enters the world as an existing account.
+/// <para>
+/// Logging in and joining are one step rather than two. A connection that has
+/// authenticated but not yet joined is a state with no purpose, and every state a
+/// protocol has is a state its server has to handle correctly.
+/// </para>
+/// </summary>
+public sealed record LoginRequest(string Username, string Password) : NetMessage;
 
 /// <summary>Asks to step one square. The server decides whether it happens.</summary>
 public sealed record MoveRequest(Direction Direction) : NetMessage;
 
+/// <summary>
+/// Reports the party after a battle, so the server can store it.
+/// <para>
+/// This is a temporary trust gap and worth naming: battles resolve on the client, so
+/// the client is telling the server what it caught. It is fine while the only player
+/// is the person running the server, and it has to close before anyone else plays.
+/// Closing it means resolving battles server-side, which needs base stats and catch
+/// rates the server does not have — a species export, the same arrangement as the
+/// world file.
+/// </para>
+/// </summary>
+public sealed record SaveRequest(int Balls, IReadOnlyList<SavedMon> Party) : NetMessage;
+
 // --- server to client --------------------------------------------------------
 
-/// <summary>Accepts a join and says where the player now stands.</summary>
-public sealed record Welcome(int PlayerId, string MapId, int X, int Y, Direction Facing) : NetMessage;
+/// <summary>Accepts a login and hands back everything the character was left with.</summary>
+public sealed record Welcome(
+    int PlayerId,
+    string MapId,
+    int X,
+    int Y,
+    Direction Facing,
+    int Balls,
+    IReadOnlyList<SavedMon> Party) : NetMessage;
+
+/// <summary>
+/// The credentials were not accepted. Deliberately vague about which half was wrong,
+/// so this cannot be used to find out which usernames exist.
+/// </summary>
+public sealed record AuthFailed(string Reason) : NetMessage;
 
 /// <summary>Another player is now visible — sent on join, and for everyone already present.</summary>
 public sealed record PlayerAppeared(int PlayerId, string Name, int X, int Y, Direction Facing) : NetMessage;

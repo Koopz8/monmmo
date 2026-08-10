@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Net.Sockets;
 using PokeMmo.Core.Net;
+using PokeMmo.Core.Save;
 using PokeMmo.Core.World;
 
 namespace PokeMmo.Client;
@@ -22,7 +23,7 @@ public sealed class NetworkClient : IDisposable
     private TcpClient? _connection;
     private MessageChannel? _channel;
 
-    /// <summary>Assigned by the server on join; zero until then.</summary>
+    /// <summary>Assigned by the server on login; zero until then.</summary>
     public int PlayerId { get; private set; }
 
     public bool IsConnected => _connection?.Connected ?? false;
@@ -30,15 +31,57 @@ public sealed class NetworkClient : IDisposable
     /// <summary>Set when the connection drops, so the client can say why.</summary>
     public string? Failure { get; private set; }
 
-    public async Task ConnectAsync(string host, int port, string playerName)
+    /// <summary>Opens the socket. No account is involved yet.</summary>
+    public async Task ConnectAsync(string host, int port)
     {
         _connection = new TcpClient { NoDelay = true };
         await _connection.ConnectAsync(host, port).ConfigureAwait(false);
 
         _channel = new MessageChannel(_connection.GetStream());
-        await _channel.SendAsync(new JoinRequest(playerName), _shutdown.Token).ConfigureAwait(false);
+    }
 
-        _ = ReceiveLoopAsync();
+    /// <summary>
+    /// Logs in or registers. Returns null on success, or the server's reason.
+    /// <para>
+    /// The reply is awaited here rather than through the inbox because the receive
+    /// loop is not running yet: a failed attempt has to leave the connection usable
+    /// for another try, and a queue would mean the login screen polling for something
+    /// that may never come.
+    /// </para>
+    /// </summary>
+    public async Task<string?> AuthenticateAsync(string username, string password, bool register)
+    {
+        if (_channel is null) return "Not connected.";
+
+        NetMessage request = register
+            ? new RegisterRequest(username, password)
+            : new LoginRequest(username, password);
+
+        await _channel.SendAsync(request, _shutdown.Token).ConfigureAwait(false);
+
+        NetMessage? reply = await _channel.ReceiveAsync(_shutdown.Token).ConfigureAwait(false);
+
+        switch (reply)
+        {
+            case Welcome welcome:
+                PlayerId = welcome.PlayerId;
+
+                // Handed to the game loop like any other message, so there is one code
+                // path that places the player.
+                _inbox.Enqueue(welcome);
+
+                _ = ReceiveLoopAsync();
+                return null;
+
+            case AuthFailed refused:
+                return refused.Reason;
+
+            case null:
+                return "The server closed the connection.";
+
+            default:
+                return "The server said something unexpected.";
+        }
     }
 
     private async Task ReceiveLoopAsync()
@@ -48,7 +91,6 @@ public sealed class NetworkClient : IDisposable
             while (!_shutdown.IsCancellationRequested &&
                    await _channel!.ReceiveAsync(_shutdown.Token).ConfigureAwait(false) is { } message)
             {
-                if (message is Welcome welcome) PlayerId = welcome.PlayerId;
                 _inbox.Enqueue(message);
             }
 
@@ -75,7 +117,15 @@ public sealed class NetworkClient : IDisposable
     /// already predicted the result, and waiting for confirmation would add a round
     /// trip of input lag to every square walked.
     /// </summary>
-    public void SendMove(Direction direction)
+    public void SendMove(Direction direction) => Send(new MoveRequest(direction));
+
+    /// <summary>
+    /// Reports the party after a battle. Sent the moment a battle ends rather than on
+    /// disconnect, because disconnects are not always polite.
+    /// </summary>
+    public void SendSave(int balls, IReadOnlyList<SavedMon> party) => Send(new SaveRequest(balls, party));
+
+    private void Send(NetMessage message)
     {
         if (_channel is null) return;
 
@@ -83,7 +133,7 @@ public sealed class NetworkClient : IDisposable
         {
             try
             {
-                await _channel.SendAsync(new MoveRequest(direction), _shutdown.Token).ConfigureAwait(false);
+                await _channel.SendAsync(message, _shutdown.Token).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is IOException or ObjectDisposedException or OperationCanceledException)
             {

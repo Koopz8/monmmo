@@ -1,11 +1,12 @@
 using PokeMmo.Core.Battle;
 using PokeMmo.Core.Net;
+using PokeMmo.Core.Save;
 using PokeMmo.Core.World;
 
 namespace PokeMmo.Server;
 
 /// <summary>A player as the server sees them.</summary>
-public sealed record ServerPlayer(int Id, string Name)
+public sealed record ServerPlayer(int Id, long AccountId, string Name)
 {
     public GridPosition Square { get; set; }
 
@@ -16,6 +17,16 @@ public sealed record ServerPlayer(int Id, string Name)
 
     /// <summary>True while this player is in a battle and should not be walking.</summary>
     public bool InBattle { get; set; }
+
+    public int Balls { get; set; } = SavedCharacter.StartingBalls;
+
+    /// <summary>
+    /// The party, stored as the numbers a save holds rather than as battlers. The
+    /// server has no cartridge and so cannot build a battler at all — it has no base
+    /// stats to build one from. That constraint is the reason this is a save shape
+    /// and not a game object.
+    /// </summary>
+    public List<SavedMon> Party { get; set; } = [];
 
     public PlayerAppeared ToAppeared() => new(Id, Name, Square.X, Square.Y, Facing);
 }
@@ -85,22 +96,40 @@ public sealed class GameWorld(WorldData world, string startingMapId, uint encoun
         lock (_gate) return _players.GetValueOrDefault(id);
     }
 
-    /// <summary>
-    /// Admits a player. Returns the messages to send: a welcome and the existing
-    /// players to the newcomer, and the newcomer to everyone else.
-    /// </summary>
-    public (ServerPlayer Player, List<Outgoing> Send) Join(string name)
+    /// <summary>Where a brand new character starts, and what it starts with.</summary>
+    public SavedCharacter FreshCharacter()
     {
         lock (_gate)
         {
-            var player = new ServerPlayer(_nextPlayerId++, Sanitise(name))
+            GridPosition spawn = FindSpawn();
+            return SavedCharacter.Fresh(Map.Id, spawn.X, spawn.Y);
+        }
+    }
+
+    /// <summary>
+    /// Admits a player where their save left them. Returns the messages to send: a
+    /// welcome and the existing players to the newcomer, and the newcomer to everyone
+    /// else.
+    /// </summary>
+    public (ServerPlayer Player, List<Outgoing> Send) Join(long accountId, string name, SavedCharacter saved)
+    {
+        lock (_gate)
+        {
+            var player = new ServerPlayer(_nextPlayerId++, accountId, Sanitise(name))
             {
-                Square = FindSpawn(),
+                Square = ResumeSquare(saved),
+                Facing = saved.Facing,
+                Balls = saved.Balls,
+                Party = [.. saved.Party],
             };
 
             var send = new List<Outgoing>
             {
-                new(new Welcome(player.Id, Map.Id, player.Square.X, player.Square.Y, player.Facing), OnlyTo: player.Id),
+                new(
+                    new Welcome(
+                        player.Id, Map.Id, player.Square.X, player.Square.Y, player.Facing,
+                        player.Balls, player.Party),
+                    OnlyTo: player.Id),
             };
 
             // Tell the newcomer about everyone already here, before announcing them.
@@ -178,6 +207,56 @@ public sealed class GameWorld(WorldData world, string startingMapId, uint encoun
             }
 
             return send;
+        }
+    }
+
+    /// <summary>
+    /// The square a returning player resumes on.
+    /// <para>
+    /// A save from another map, or one pointing at a square this map no longer allows,
+    /// falls back to a spawn rather than being refused. A player stuck inside a wall
+    /// because a world file was re-exported has no way out from their side.
+    /// </para>
+    /// </summary>
+    private GridPosition ResumeSquare(SavedCharacter saved)
+    {
+        if (saved.MapId != Map.Id) return FindSpawn();
+
+        var square = new GridPosition(saved.X, saved.Y);
+        return Grid.IsWalkable(square) ? square : FindSpawn();
+    }
+
+    /// <summary>What to write down for a player, as they stand right now.</summary>
+    public SavedCharacter? Snapshot(int playerId)
+    {
+        lock (_gate)
+        {
+            if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return null;
+
+            return new SavedCharacter(
+                Map.Id, player.Square.X, player.Square.Y, player.Facing, player.Balls, [.. player.Party]);
+        }
+    }
+
+    /// <summary>
+    /// Records what a client says it came out of a battle with.
+    /// <para>
+    /// Capped at a legal party size here rather than trusted, because this arrives
+    /// over a socket. It is not real validation — that needs the battle resolved
+    /// server-side — but a client cannot at least claim a party of two hundred.
+    /// </para>
+    /// </summary>
+    public bool UpdateSave(int playerId, int balls, IReadOnlyList<SavedMon> party)
+    {
+        lock (_gate)
+        {
+            if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return false;
+
+            player.Balls = Math.Clamp(balls, 0, 999);
+            player.Party = [.. party.Take(Party.MaxSize)];
+            player.InBattle = false;
+
+            return true;
         }
     }
 

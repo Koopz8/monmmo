@@ -28,8 +28,15 @@ public sealed class ClientSettings
     /// <summary>Server to join, as <c>host</c> or <c>host:port</c>. Empty plays alone.</summary>
     public string Server { get; set; } = "";
 
-    /// <summary>Name other players see.</summary>
+    /// <summary>Name other players see when playing alone.</summary>
     public string PlayerName { get; set; } = "Player";
+
+    /// <summary>
+    /// The account name to offer at the login screen. Remembered; the password is
+    /// not, and never will be — a client that stores one is a client that can have it
+    /// taken off the machine.
+    /// </summary>
+    public string Username { get; set; } = "";
 
     /// <summary>
     /// The creature you battle with. A placeholder until there is a party system —
@@ -101,6 +108,35 @@ public sealed class ClientSettings
             // A malformed settings file should not stop the game starting; the
             // on-screen message will explain what is missing.
             return new ClientSettings();
+        }
+    }
+
+    /// <summary>
+    /// Stores the account name for next time, leaving every other setting alone.
+    /// <para>
+    /// The file is re-read rather than this instance written out, because this one may
+    /// carry command-line overrides that were meant for a single run.
+    /// </para>
+    /// </summary>
+    public static void RememberUsername(string projectDirectory, string username)
+    {
+        string path = Path.Combine(projectDirectory, FileName);
+
+        ClientSettings onDisk = ReadFile(path);
+        if (onDisk.Username == username) return;
+
+        onDisk.Username = username;
+
+        try
+        {
+            File.WriteAllText(path, JsonSerializer.Serialize(onDisk, new JsonSerializerOptions
+            {
+                WriteIndented = true,
+            }));
+        }
+        catch (IOException)
+        {
+            // Not being able to remember a name is not worth interrupting a game for.
         }
     }
 

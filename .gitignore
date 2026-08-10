@@ -30,4 +30,10 @@ TestResults/
 
 # Client configuration — points at the player's own cartridge.
 client.json
+
+# Server database — accounts and saves. Contains password hashes; never committed.
+# The -wal and -shm files are SQLite's write-ahead log and shared memory.
+*.db
+*.db-wal
+*.db-shm
 .godot/

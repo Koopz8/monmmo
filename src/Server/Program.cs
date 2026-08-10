@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Sockets;
 using PokeMmo.Core.Net;
 using PokeMmo.Core.World;
+using PokeMmo.Server.Storage;
 
 namespace PokeMmo.Server;
 
@@ -22,6 +23,7 @@ public static class Program
     public static async Task<int> Main(string[] args)
     {
         string worldPath = ArgumentValue(args, "--world") ?? "world.dat";
+        string databasePath = ArgumentValue(args, "--db") ?? SqlitePlayerStore.DefaultFileName;
         string startingMap = ArgumentValue(args, "--map") ?? "pallet town";
         int port = int.TryParse(ArgumentValue(args, "--port"), out int parsed) ? parsed : DefaultPort;
         bool verbose = args.Contains("--verbose");
@@ -66,7 +68,10 @@ public static class Program
 
         ReportEncounterReadiness(game.Map);
 
-        await new GameServer(game, verbose).RunAsync(port);
+        using var store = new SqlitePlayerStore(databasePath);
+        Console.WriteLine($"Accounts in {Path.GetFullPath(databasePath)}");
+
+        await new GameServer(game, store, verbose).RunAsync(port);
         return 0;
     }
 
@@ -147,7 +152,7 @@ public static class Program
 }
 
 /// <summary>Accepts connections and fans messages out to them.</summary>
-public sealed class GameServer(GameWorld world, bool verbose = false)
+public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose = false)
 {
     private readonly ConcurrentDictionary<int, MessageChannel> _channels = new();
     private readonly Stopwatch _clock = Stopwatch.StartNew();
@@ -197,6 +202,7 @@ public sealed class GameServer(GameWorld world, bool verbose = false)
         {
             var channel = new MessageChannel(stream);
             int playerId = 0;
+            long accountId = 0;
 
             try
             {
@@ -204,16 +210,53 @@ public sealed class GameServer(GameWorld world, bool verbose = false)
                 {
                     switch (message)
                     {
-                        case JoinRequest join when playerId == 0:
-                            (ServerPlayer player, List<Outgoing> welcome) = world.Join(join.Name);
+                        case RegisterRequest or LoginRequest when playerId == 0:
+                            AuthOutcome outcome = message switch
+                            {
+                                RegisterRequest register => await store
+                                    .RegisterAsync(register.Username, register.Password, world.FreshCharacter(), cancellationToken)
+                                    .ConfigureAwait(false),
+
+                                LoginRequest login => await store
+                                    .LoginAsync(login.Username, login.Password, cancellationToken)
+                                    .ConfigureAwait(false),
+
+                                _ => new AuthOutcome.Failed("Unknown request."),
+                            };
+
+                            if (outcome is AuthOutcome.Failed failed)
+                            {
+                                Console.WriteLine($"? refused a login: {failed.Reason}");
+                                await channel.SendAsync(new AuthFailed(failed.Reason), cancellationToken).ConfigureAwait(false);
+                                break;
+                            }
+
+                            var success = (AuthOutcome.Success)outcome;
+                            accountId = success.Account.Id;
+
+                            (ServerPlayer player, List<Outgoing> welcome) =
+                                world.Join(accountId, success.Account.Username, success.Character);
+
                             playerId = player.Id;
 
                             // Registered only after the world knows about them, so no
                             // broadcast can reach a half-joined connection.
                             _channels[playerId] = channel;
 
-                            Console.WriteLine($"+ {player.Name} (#{player.Id}) at {player.Square}, {world.PlayerCount} online");
+                            Console.WriteLine(
+                                $"+ {player.Name} (#{player.Id}) at {player.Square}, " +
+                                $"{player.Party.Count} in party, {world.PlayerCount} online");
+
                             await DispatchAsync(welcome, playerId, cancellationToken).ConfigureAwait(false);
+                            break;
+
+                        case SaveRequest save when playerId != 0:
+                            if (world.UpdateSave(playerId, save.Balls, save.Party) && world.Snapshot(playerId) is { } state)
+                            {
+                                await store.SaveAsync(accountId, state, cancellationToken).ConfigureAwait(false);
+                                Console.WriteLine($"= #{playerId} saved, {state.Party.Count} in party, {state.Balls} balls");
+                            }
+
                             break;
 
                         case MoveRequest move when playerId != 0:
@@ -254,7 +297,7 @@ public sealed class GameServer(GameWorld world, bool verbose = false)
 
                         default:
                             await channel
-                                .SendAsync(new Rejected("Join first."), cancellationToken)
+                                .SendAsync(new Rejected("Log in first."), cancellationToken)
                                 .ConfigureAwait(false);
                             break;
                     }
@@ -268,6 +311,22 @@ public sealed class GameServer(GameWorld world, bool verbose = false)
             {
                 if (playerId != 0)
                 {
+                    // Written before the player is removed, because a snapshot needs
+                    // them still in the world. A crash between here and the last save
+                    // costs whatever happened since — which is why catching saves
+                    // immediately rather than waiting for a clean disconnect.
+                    if (world.Snapshot(playerId) is { } state)
+                    {
+                        try
+                        {
+                            await store.SaveAsync(accountId, state, CancellationToken.None).ConfigureAwait(false);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.Error.WriteLine($"! could not save #{playerId}: {ex.Message}");
+                        }
+                    }
+
                     _channels.TryRemove(playerId, out _);
                     await DispatchAsync(world.Leave(playerId), playerId, CancellationToken.None).ConfigureAwait(false);
                     Console.WriteLine($"- #{playerId} left, {world.PlayerCount} online");

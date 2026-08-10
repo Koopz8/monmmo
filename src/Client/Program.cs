@@ -1,5 +1,6 @@
 using PokeMmo.Core.Battle;
 using PokeMmo.Core.Net;
+using PokeMmo.Core.Save;
 using PokeMmo.Core.World;
 using PokeMmo.RomExtract;
 using PokeMmo.RomExtract.Maps;
@@ -61,13 +62,14 @@ public static class Program
         }
 
         using var network = new NetworkClient();
+        bool online = !string.IsNullOrWhiteSpace(settings.Server);
 
-        if (!string.IsNullOrWhiteSpace(settings.Server))
+        if (online)
         {
             try
             {
                 (string host, int port) = ParseServer(settings.Server);
-                network.ConnectAsync(host, port, settings.PlayerName).GetAwaiter().GetResult();
+                network.ConnectAsync(host, port).GetAwaiter().GetResult();
             }
             catch (Exception ex)
             {
@@ -76,7 +78,25 @@ public static class Program
             }
         }
 
+        Raylib.InitWindow(WindowWidth, WindowHeight, $"MonMMO — {map.Name}");
+        Raylib.SetTargetFPS(60);
+
+        if (online)
+        {
+            var login = new LoginScreen(settings.Username);
+
+            if (!login.Run(network))
+            {
+                Raylib.CloseWindow();
+                return 0;
+            }
+
+            ClientSettings.RememberUsername(directory, login.Username);
+        }
+
         Run(data, map, network, settings);
+
+        Raylib.CloseWindow();
         return 0;
     }
 
@@ -91,9 +111,6 @@ public static class Program
 
     private static void Run(GameData data, LoadedMap map, NetworkClient network, ClientSettings settings)
     {
-        Raylib.InitWindow(WindowWidth, WindowHeight, $"MonMMO — {map.Name}");
-        Raylib.SetTargetFPS(60);
-
         // Reuse the extractor's own PNG writer rather than marshalling raw pixels:
         // it is already covered by tests, and it keeps this file free of unsafe code.
         Image image = Raylib.LoadImageFromMemory(".png", map.ToPng());
@@ -119,13 +136,14 @@ public static class Program
         {
             float delta = Raylib.GetFrameTime();
 
-            WildEncounterStarted? encounter = ApplyServerMessages(network, others, player, map);
+            WildEncounterStarted? encounter =
+                ApplyServerMessages(network, others, player, map, data, party, ref balls);
 
             // An encounter suspends the overworld entirely: the server has already
             // decided it, and walking on while a battle is pending would put the two
             // sides out of step.
             if (encounter is not null && battle is null)
-                battle = StartBattle(data, settings, encounter, party);
+                battle = StartBattle(data, settings, encounter, party, balls);
 
             if (battle is not null)
             {
@@ -138,9 +156,12 @@ public static class Program
                 {
                     balls = battle.Balls;
 
-                    // A caught creature joins the party. Nothing persists it yet, so
-                    // it lasts only as long as the client runs.
                     if (battle.Caught is { } caught) party.TryAdd(caught);
+
+                    // Sent every time a battle ends, not only when something was
+                    // caught: health and status changed too, and a disconnect a moment
+                    // later should not undo them.
+                    network.SendSave(balls, party.Members.Select(PartyBuilder.ToSaved).ToList());
 
                     battle.Unload();
                     battle = null;
@@ -198,7 +219,10 @@ public static class Program
         NetworkClient network,
         Dictionary<int, RemoteCharacter> others,
         WalkingCharacter player,
-        LoadedMap map)
+        LoadedMap map,
+        GameData data,
+        Party party,
+        ref int balls)
     {
         WildEncounterStarted? encounter = null;
 
@@ -208,6 +232,13 @@ public static class Program
             {
                 case Welcome welcome:
                     player.Place(map.Collision, new GridPosition(welcome.X, welcome.Y));
+                    balls = welcome.Balls;
+
+                    // The server kept numbers; this is where the cartridge on this
+                    // machine turns them back into something with a name and a sprite.
+                    foreach (SavedMon saved in welcome.Party)
+                        if (PartyBuilder.Restore(data, saved) is { } restored) party.TryAdd(restored);
+
                     break;
 
                 case PlayerAppeared appeared when appeared.PlayerId != network.PlayerId:
@@ -248,7 +279,7 @@ public static class Program
     /// encounter, so every roll here matches what the server would compute.
     /// </summary>
     private static BattleScreen? StartBattle(
-        GameData data, ClientSettings settings, WildEncounterStarted encounter, Party party)
+        GameData data, ClientSettings settings, WildEncounterStarted encounter, Party party, int balls)
     {
         Battler? wild = PartyBuilder.BuildWild(data, encounter.Species, encounter.Level);
 
@@ -259,7 +290,7 @@ public static class Program
 
         if (wild is null || lead is null) return null;
 
-        return new BattleScreen(new Battle(lead, wild, encounter.Seed), data, settings.Balls);
+        return new BattleScreen(new Battle(lead, wild, encounter.Seed), data, balls);
     }
 
     private static Direction? ReadDirection()
