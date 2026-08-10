@@ -179,90 +179,86 @@ public static class TableLocator
         return count;
     }
 
+
+    /// <summary>Decides whether the entry at <paramref name="entryOffset"/> is the <paramref name="expectedTag"/>-th member of a table.</summary>
+    private delegate bool EntryPredicate(Rom rom, int entryOffset, int expectedTag);
+
+    private const int TableEntrySize = 8;
+
     /// <summary>
-    /// Finds sprite-sheet tables. Each entry is {pointer, size, tag}; for mon pics the
-    /// size is always 0x800 and the tag is the species index, so a genuine table is a
-    /// long run of entries whose tags count up from zero.
+    /// Sprite-sheet entry: {pointer, size, tag}. Mon pics are always 0x800 bytes and
+    /// tagged with the species index.
     /// </summary>
-    private static List<TableLocation> LocatePicTables(Rom rom, Action<string> log)
+    private static bool IsPicEntry(Rom rom, int entryOffset, int expectedTag) =>
+        rom.IsRomAddress(rom.ReadU32(entryOffset))
+        && rom.ReadU16(entryOffset + 4) == MonPicSizeBytes
+        && rom.ReadU16(entryOffset + 6) == expectedTag;
+
+    /// <summary>
+    /// Sprite-palette entry: {pointer, tag, padding}. The trailing halfword is
+    /// structure padding and is zero in every statically initialised table.
+    /// </summary>
+    private static bool IsPaletteEntry(Rom rom, int entryOffset, int expectedTag) =>
+        rom.IsRomAddress(rom.ReadU32(entryOffset))
+        && rom.ReadU16(entryOffset + 4) == expectedTag
+        && rom.ReadU16(entryOffset + 6) == 0;
+
+    /// <summary>
+    /// Walks the whole image looking for runs of consecutive entries that satisfy
+    /// <paramref name="predicate"/> with tags counting up from zero.
+    /// </summary>
+    private static List<TableLocation> ScanRuns(
+        Rom rom,
+        EntryPredicate predicate,
+        int minimumRun,
+        string label,
+        Action<string>? log = null)
     {
         var found = new List<TableLocation>();
-        const int entrySize = 8;
 
-        for (int offset = 0; offset + entrySize * MinimumRunLength <= rom.Length; offset += 4)
+        for (int offset = 0; offset + TableEntrySize * minimumRun <= rom.Length; offset += 4)
         {
             int run = 0;
-            while (true)
+            while (offset + (run + 1) * TableEntrySize <= rom.Length
+                   && predicate(rom, offset + run * TableEntrySize, run))
             {
-                int entry = offset + run * entrySize;
-                if (entry + entrySize > rom.Length) break;
-
-                uint pointer = rom.ReadU32(entry);
-                ushort size = rom.ReadU16(entry + 4);
-                ushort tag = rom.ReadU16(entry + 6);
-
-                if (!rom.IsRomAddress(pointer) || size != MonPicSizeBytes || tag != run) break;
                 run++;
             }
 
-            if (run >= MinimumRunLength)
-            {
-                log($"  pic table: run of {run} entries at 0x{Rom.BaseAddress + (uint)offset:X8}");
-                found.Add(new TableLocation(
-                    found.Count == 0 ? "FrontPics" : "BackPics", offset, entrySize, run,
-                    $"run of {run} sized/tagged entries"));
+            if (run < minimumRun) continue;
 
-                // Resume exactly at the first byte past this table, not four bytes
-                // beyond it. These tables sit back-to-back on the cartridge, and the
-                // loop's own increment supplies the remaining step — overshooting here
-                // skips the next table's first entry and loses the table entirely.
-                offset += run * entrySize - 4;
-            }
+            log?.Invoke($"  {label}: run of {run} entries at 0x{Rom.BaseAddress + (uint)offset:X8}");
+            found.Add(new TableLocation(label, offset, TableEntrySize, run, $"run of {run} tagged entries"));
+
+            // Resume exactly at the first byte past this table, not four bytes beyond
+            // it. Tables can sit back-to-back, and the loop's own increment supplies
+            // the remaining step — overshooting here would skip the next table's first
+            // entry and lose the table entirely.
+            offset += run * TableEntrySize - 4;
         }
 
         return found;
     }
 
-    /// <summary>
-    /// Finds sprite-palette tables. Each entry is {pointer, tag, padding}; a genuine
-    /// table is a long run whose tags count up from zero with zero padding.
-    /// </summary>
-    private static List<TableLocation> LocatePaletteTables(Rom rom, Action<string> log)
+    /// <summary>All sprite-sheet table candidates, longest-run-first ties broken by address.</summary>
+    public static List<TableLocation> ScanPicRuns(Rom rom, int minimumRun = MinimumRunLength, Action<string>? log = null) =>
+        ScanRuns(rom, IsPicEntry, minimumRun, "pic table", log);
+
+    /// <summary>All sprite-palette table candidates.</summary>
+    public static List<TableLocation> ScanPaletteRuns(Rom rom, int minimumRun = MinimumRunLength, Action<string>? log = null) =>
+        ScanRuns(rom, IsPaletteEntry, minimumRun, "palette table", log);
+
+    private static List<TableLocation> LocatePicTables(Rom rom, Action<string> log) =>
+        Rename(ScanPicRuns(rom, MinimumRunLength, log), "FrontPics", "BackPics");
+
+    private static List<TableLocation> LocatePaletteTables(Rom rom, Action<string> log) =>
+        Rename(ScanPaletteRuns(rom, MinimumRunLength, log), "NormalPalettes", "ShinyPalettes");
+
+    private static List<TableLocation> Rename(List<TableLocation> runs, params string[] names)
     {
-        var found = new List<TableLocation>();
-        const int entrySize = 8;
+        for (int i = 0; i < runs.Count && i < names.Length; i++)
+            runs[i] = runs[i] with { Name = names[i] };
 
-        for (int offset = 0; offset + entrySize * MinimumRunLength <= rom.Length; offset += 4)
-        {
-            int run = 0;
-            while (true)
-            {
-                int entry = offset + run * entrySize;
-                if (entry + entrySize > rom.Length) break;
-
-                uint pointer = rom.ReadU32(entry);
-                ushort tag = rom.ReadU16(entry + 4);
-                ushort padding = rom.ReadU16(entry + 6);
-
-                if (!rom.IsRomAddress(pointer) || tag != run || padding != 0) break;
-                run++;
-            }
-
-            if (run >= MinimumRunLength)
-            {
-                log($"  palette table: run of {run} entries at 0x{Rom.BaseAddress + (uint)offset:X8}");
-                found.Add(new TableLocation(
-                    found.Count == 0 ? "NormalPalettes" : "ShinyPalettes", offset, entrySize, run,
-                    $"run of {run} tagged entries"));
-
-                // Resume exactly at the first byte past this table, not four bytes
-                // beyond it. These tables sit back-to-back on the cartridge, and the
-                // loop's own increment supplies the remaining step — overshooting here
-                // skips the next table's first entry and loses the table entirely.
-                offset += run * entrySize - 4;
-            }
-        }
-
-        return found;
+        return runs;
     }
 }

@@ -73,6 +73,23 @@ public static class Program
             return 2;
         }
 
+        if (options.Diagnose)
+        {
+            Directory.CreateDirectory(options.OutputDirectory);
+            string diagnosticsPath = Path.Combine(options.OutputDirectory, "diagnostics.txt");
+
+            var lines = new List<string>();
+            RomDiagnostics.Report(rom, extractor.Tables, line =>
+            {
+                Console.WriteLine(line);
+                lines.Add(line);
+            });
+
+            File.WriteAllLines(diagnosticsPath, lines);
+            Console.WriteLine();
+            Console.WriteLine($"Wrote {diagnosticsPath}");
+        }
+
         Directory.CreateDirectory(options.OutputDirectory);
 
         WriteTableReport(extractor, options.OutputDirectory);
@@ -196,6 +213,8 @@ public static class Program
               --back                 use the back-sprite table
               --tile-order <o>       row (default) or column
               --no-sprites           dump data tables only
+              --diagnose             report every candidate table run and dump raw
+                                     entries, for investigating an unexpected layout
 
             The ROM is read locally and never leaves this machine.
             """);
@@ -209,6 +228,7 @@ public static class Program
         public bool Shiny { get; private init; }
         public bool Back { get; private init; }
         public bool SkipSprites { get; private init; }
+        public bool Diagnose { get; private init; }
         public TileOrder TileOrder { get; private init; } = TileOrder.RowMajor;
 
         public static Options Parse(string[] args)
@@ -219,7 +239,7 @@ public static class Program
 
             string output = "out";
             int[] species = [1, 4, 7];
-            bool shiny = false, back = false, skip = false;
+            bool shiny = false, back = false, skip = false, diagnose = false;
             TileOrder order = TileOrder.RowMajor;
 
             for (int i = 1; i < args.Length; i++)
@@ -244,6 +264,9 @@ public static class Program
                     case "--no-sprites":
                         skip = true;
                         break;
+                    case "--diagnose":
+                        diagnose = true;
+                        break;
                     case "--tile-order":
                         string value = Next(args, ref i, "--tile-order");
                         order = value.StartsWith("col", StringComparison.OrdinalIgnoreCase)
@@ -263,6 +286,7 @@ public static class Program
                 Shiny = shiny,
                 Back = back,
                 SkipSprites = skip,
+                Diagnose = diagnose,
                 TileOrder = order,
             };
         }
