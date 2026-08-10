@@ -114,6 +114,33 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
             """;
 
         command.ExecuteNonQuery();
+
+        AddColumnIfMissing(connection, "party_members", "experience", "INTEGER NOT NULL DEFAULT 0");
+    }
+
+    /// <summary>
+    /// Adds a column to an existing table, if it is not already there.
+    /// <para>
+    /// <c>CREATE TABLE IF NOT EXISTS</c> does nothing to a table that already exists,
+    /// so a database made before a column was added would never gain it — the schema
+    /// would be right on a fresh machine and wrong on every machine that had been
+    /// playing. Existing rows take the default, which for experience means their level
+    /// is treated as the truth and the curve is entered at the bottom of it.
+    /// </para>
+    /// </summary>
+    private static void AddColumnIfMissing(SqliteConnection connection, string table, string column, string definition)
+    {
+        using (SqliteCommand check = connection.CreateCommand())
+        {
+            check.CommandText = $"SELECT COUNT(*) FROM pragma_table_info('{table}') WHERE name = $column;";
+            check.Parameters.AddWithValue("$column", column);
+
+            if (Convert.ToInt64(check.ExecuteScalar()) > 0) return;
+        }
+
+        using SqliteCommand alter = connection.CreateCommand();
+        alter.CommandText = $"ALTER TABLE {table} ADD COLUMN {column} {definition};";
+        alter.ExecuteNonQuery();
     }
 
     public async Task<AuthOutcome> RegisterAsync(
@@ -276,8 +303,9 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
                 insert.Transaction = transaction;
                 insert.CommandText =
                     """
-                    INSERT INTO party_members (account_id, slot, species, level, nickname, current_hp, status, nature)
-                    VALUES ($account, $slot, $species, $level, $nickname, $hp, $status, $nature)
+                    INSERT INTO party_members
+                        (account_id, slot, species, level, nickname, current_hp, status, nature, experience)
+                    VALUES ($account, $slot, $species, $level, $nickname, $hp, $status, $nature, $experience)
                     RETURNING id;
                     """;
 
@@ -289,6 +317,7 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
                 insert.Parameters.AddWithValue("$hp", mon.CurrentHp);
                 insert.Parameters.AddWithValue("$status", (int)mon.Status);
                 insert.Parameters.AddWithValue("$nature", (int)mon.Nature);
+                insert.Parameters.AddWithValue("$experience", mon.Experience);
 
                 memberId = (long)(await insert.ExecuteScalarAsync(cancellationToken))!;
             }
@@ -363,7 +392,7 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
         {
             command.CommandText =
                 """
-                SELECT id, species, level, nickname, current_hp, status, nature
+                SELECT id, species, level, nickname, current_hp, status, nature, experience
                 FROM party_members
                 WHERE account_id = $id
                 ORDER BY slot;
@@ -384,7 +413,8 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
                     CurrentHp: reader.GetInt32(4),
                     Status: (StatusCondition)reader.GetInt32(5),
                     Nature: (Nature)reader.GetInt32(6),
-                    Moves: moves.GetValueOrDefault(memberId, [])));
+                    Moves: moves.GetValueOrDefault(memberId, []),
+                    Experience: reader.GetInt32(7)));
             }
         }
 

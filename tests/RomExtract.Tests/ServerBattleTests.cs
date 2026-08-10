@@ -204,6 +204,68 @@ public class ServerBattleTests
     }
 
     [Fact]
+    public void WinningLeavesTheExperienceOnTheParty()
+    {
+        // The writeback at the end of a battle rebuilds the lead's health from the
+        // battler that fought — and that battler was built before the battle and never
+        // grew. Rebuilding it wholesale would silently undo the level-up that just
+        // happened, and only a test that looks after the battle would notice.
+        (GameWorld world, ServerPlayer player, _) = InBattle(seed: 11);
+
+        BattleFinished? finished = null;
+
+        for (int turn = 0; turn < 40 && finished is null; turn++)
+        {
+            finished = world.TakeBattleTurn(player.Id, new BattleAction.UseMove(0))
+                .Select(o => o.Message)
+                .OfType<BattleFinished>()
+                .FirstOrDefault();
+        }
+
+        Assert.NotNull(finished);
+        Assert.Equal(Side.Player, finished!.Winner);
+
+        Assert.True(player.Party[0].Experience > 0, "the payout was lost when the battle closed");
+        Assert.Equal(player.Party[0].Experience, finished.Party[0].Experience);
+    }
+
+    [Fact]
+    public void WinningIsNarratedAsAPayout()
+    {
+        (GameWorld world, ServerPlayer player, _) = InBattle(seed: 11);
+
+        var events = new List<BattleEvent>();
+
+        for (int turn = 0; turn < 40 && player.Battle is not null; turn++)
+        {
+            events.AddRange(world.TakeBattleTurn(player.Id, new BattleAction.UseMove(0))
+                .Select(o => o.Message)
+                .OfType<BattleUpdate>()
+                .SelectMany(u => u.Events));
+        }
+
+        // Sent with the turn that earned it, not after the battle, so a level-up reads
+        // as part of the fight.
+        Assert.Contains(events, e => e is BattleEvent.ExperienceGained);
+    }
+
+    [Fact]
+    public void CatchingSomethingPaysNoExperience()
+    {
+        // The games award none for a capture, and it matters here for a duller reason:
+        // the opponent is about to join the party, so paying out for beating it would
+        // be paying for something that never fainted.
+        (GameWorld world, ServerPlayer player, _) = InBattle();
+
+        List<Outgoing> send = world.TakeBattleTurn(player.Id, new BattleAction.ThrowBall(BallKind.Master));
+
+        BattleUpdate update = send.Select(o => o.Message).OfType<BattleUpdate>().Single();
+
+        Assert.DoesNotContain(update.Events, e => e is BattleEvent.ExperienceGained);
+        Assert.Equal(0, player.Party[0].Experience);
+    }
+
+    [Fact]
     public void ATurnFromSomebodyNotInABattleIsRefused()
     {
         GameWorld world = GrassyWorld();

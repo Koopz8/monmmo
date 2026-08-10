@@ -83,12 +83,14 @@ public sealed class GameWorld
     private int _nextPlayerId = 1;
 
     private readonly BattleFactory? _battles;
+    private readonly Progression? _progression;
 
     public GameWorld(WorldData world, string startingMapId, GameRules? rules = null, uint encounterSeed = 1)
     {
         _world = world;
         _rng = new BattleRng(encounterSeed);
         _battles = rules is null ? null : new BattleFactory(rules);
+        _progression = rules is null ? null : new Progression(rules);
 
         StartingMap = world.Find(startingMapId)
             ?? world.FindByName(startingMapId)
@@ -538,6 +540,11 @@ public sealed class GameWorld
 
             List<BattleEvent> events = battle.ResolveTurn(action, new BattleAction.UseMove(0));
 
+            // Experience is awarded before the update goes out, so a level-up reads as
+            // part of the turn that earned it rather than arriving after the battle.
+            if (battle.IsOver && battle.Winner == Side.Player && !battle.OpponentCaught)
+                events.AddRange(AwardExperience(player, battle));
+
             var send = new List<Outgoing>
             {
                 new(
@@ -550,6 +557,28 @@ public sealed class GameWorld
             send.Add(new Outgoing(FinishBattle(player, battle), OnlyTo: playerId));
             return send;
         }
+    }
+
+    /// <summary>
+    /// Pays out for a win, and writes the result straight into the party.
+    /// <para>
+    /// Only the battler that fought is paid. Sharing it out across a party is a later
+    /// problem, and one that needs a rule about who counts as having taken part.
+    /// </para>
+    /// </summary>
+    private List<BattleEvent> AwardExperience(ServerPlayer player, Battle battle)
+    {
+        if (_progression is null) return [];
+
+        int lead = player.Party.FindIndex(m => m.Species == battle.Player.Species.Index);
+        if (lead < 0) return [];
+
+        (SavedMon grown, List<BattleEvent> events) = _progression.Award(
+            player.Party[lead], battle.Opponent.Species.Index, battle.Opponent.Level);
+
+        player.Party[lead] = grown;
+
+        return events;
     }
 
     /// <summary>
@@ -570,7 +599,18 @@ public sealed class GameWorld
         if (player.Party.Count > 0)
         {
             int lead = player.Party.FindIndex(m => m.Species == battle.Player.Species.Index);
-            if (lead >= 0) player.Party[lead] = BattleFactory.Save(battle.Player);
+
+            // Health and status only. The level, moves and experience have already been
+            // written by the payout, and rebuilding from the battler would undo them —
+            // that battler was built before the battle and never grew.
+            if (lead >= 0)
+            {
+                player.Party[lead] = player.Party[lead] with
+                {
+                    CurrentHp = battle.Player.CurrentHp,
+                    Status = battle.Player.Status,
+                };
+            }
         }
 
         if (caught && player.Party.Count < Party.MaxSize)

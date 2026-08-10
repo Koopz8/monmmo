@@ -63,6 +63,15 @@ public static class BattleNarrator
                 _ => "Gah! It was so close, too!",
             },
 
+        BattleEvent.ExperienceGained e => $"{names.Of(e.Side)} gained {e.Amount} EXP!",
+
+        BattleEvent.LevelledUp e => $"{names.Of(e.Side)} grew to level {e.Level}!",
+
+        BattleEvent.MoveLearned e => $"{names.Of(e.Side)} learned {names.MoveNamed(e.MoveId)}!",
+
+        BattleEvent.MoveNotLearned e =>
+            $"{names.Of(e.Side)} wants to learn {names.MoveNamed(e.MoveId)}, but already knows four moves.",
+
         BattleEvent.Ended e => e.Winner switch
         {
             Side.Player => "You won the battle!",

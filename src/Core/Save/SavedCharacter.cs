@@ -20,7 +20,8 @@ public sealed record SavedMon(
     int CurrentHp,
     StatusCondition Status,
     Nature Nature,
-    IReadOnlyList<int> Moves)
+    IReadOnlyList<int> Moves,
+    int Experience = 0)
 {
     /// <summary>
     /// Compares move lists by their contents.
@@ -41,6 +42,7 @@ public sealed record SavedMon(
         CurrentHp == other.CurrentHp &&
         Status == other.Status &&
         Nature == other.Nature &&
+        Experience == other.Experience &&
         Moves.SequenceEqual(other.Moves);
 
     public override int GetHashCode()
@@ -53,6 +55,7 @@ public sealed record SavedMon(
         hash.Add(CurrentHp);
         hash.Add(Status);
         hash.Add(Nature);
+        hash.Add(Experience);
 
         foreach (int move in Moves) hash.Add(move);
 

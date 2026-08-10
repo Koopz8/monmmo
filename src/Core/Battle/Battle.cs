@@ -30,6 +30,10 @@ public enum Side
 [JsonDerivedType(typeof(StatusHurt), "statushurt")]
 [JsonDerivedType(typeof(Fainted), "fainted")]
 [JsonDerivedType(typeof(BallThrown), "ball")]
+[JsonDerivedType(typeof(ExperienceGained), "exp")]
+[JsonDerivedType(typeof(LevelledUp), "levelup")]
+[JsonDerivedType(typeof(MoveLearned), "learned")]
+[JsonDerivedType(typeof(MoveNotLearned), "notlearned")]
 [JsonDerivedType(typeof(Ended), "ended")]
 public abstract record BattleEvent
 {
@@ -62,6 +66,21 @@ public abstract record BattleEvent
     /// which is what tells a player how close they came.
     /// </summary>
     public sealed record BallThrown(Side Target, int Shakes, bool Caught) : BattleEvent;
+
+    public sealed record ExperienceGained(Side Side, int Amount) : BattleEvent;
+
+    public sealed record LevelledUp(Side Side, int Level) : BattleEvent;
+
+    public sealed record MoveLearned(Side Side, int MoveId) : BattleEvent;
+
+    /// <summary>
+    /// A move was offered and could not be taken, because four are already known.
+    /// <para>
+    /// The games ask which to forget. Until something can ask, nothing is forgotten:
+    /// silently dropping a move a player chose is worse than not learning a new one.
+    /// </para>
+    /// </summary>
+    public sealed record MoveNotLearned(Side Side, int MoveId) : BattleEvent;
 
     /// <summary>The battle is over. A null winner means both sides fell in the same turn.</summary>
     public sealed record Ended(Side? Winner) : BattleEvent;

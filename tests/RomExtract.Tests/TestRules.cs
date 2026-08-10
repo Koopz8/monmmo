@@ -33,6 +33,10 @@ internal static class TestRules
                 Type2 = PokemonType.Normal,
                 CatchRate = 255,
                 ExpYield = 64,
+
+                // Named rather than left to the enum's first value, so the experience
+                // tests are asserting against a curve they actually chose.
+                GrowthRate = GrowthRate.MediumFast,
             });
         }
 
