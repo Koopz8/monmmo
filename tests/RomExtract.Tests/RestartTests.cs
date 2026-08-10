@@ -19,8 +19,7 @@ namespace PokeMmo.RomExtract.Tests;
 /// </summary>
 public class RestartTests : IDisposable
 {
-    private readonly string _databasePath =
-        Path.Combine(Path.GetTempPath(), $"monmmo-restart-{Guid.NewGuid():N}.db");
+    private readonly string _databasePath = TempDatabase.Path();
 
     private static GameWorld World()
     {
@@ -177,20 +176,5 @@ public class RestartTests : IDisposable
         });
     }
 
-    public void Dispose()
-    {
-        string directory = Path.GetDirectoryName(_databasePath)!;
-
-        foreach (string leftover in Directory.GetFiles(directory, Path.GetFileName(_databasePath) + "*"))
-        {
-            try
-            {
-                File.Delete(leftover);
-            }
-            catch (IOException)
-            {
-                // A stray temp file is not worth failing a green run over.
-            }
-        }
-    }
+    public void Dispose() => TempDatabase.Delete(_databasePath);
 }

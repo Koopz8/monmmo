@@ -391,5 +391,21 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
         return new SavedCharacter(mapId, x, y, facing, balls, party);
     }
 
-    public void Dispose() => _keepAlive.Dispose();
+    /// <summary>
+    /// Closes the store and actually lets go of the file.
+    /// <para>
+    /// Disposing a connection returns it to a pool rather than closing it, so the
+    /// handle outlives this object and the file stays locked. On Linux that is
+    /// invisible — an open file can still be deleted or replaced. On Windows it is
+    /// not, and a server that has stopped but still has its own database open is a
+    /// problem for anyone trying to back it up, move it, or start a second one.
+    /// </para>
+    /// </summary>
+    public void Dispose()
+    {
+        _keepAlive.Dispose();
+
+        using var last = new SqliteConnection(_connectionString);
+        SqliteConnection.ClearPool(last);
+    }
 }

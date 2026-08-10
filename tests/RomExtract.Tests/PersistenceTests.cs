@@ -200,11 +200,37 @@ public class SqlitePlayerStoreTests
     }
 
     [Fact]
+    public async Task ClosingTheStoreReleasesTheFile()
+    {
+        // Only Windows can fail this: disposing a connection returns it to a pool
+        // rather than closing it, and Windows refuses to delete a file something still
+        // holds open while Linux allows it. Asserted here so the gap is checked rather
+        // than discovered by whoever happens to run the suite on Windows next.
+        string path = TempDatabase.Path();
+
+        try
+        {
+            using (var store = new SqlitePlayerStore(path))
+            {
+                await store.RegisterAsync("Mason", "a-good-password", Character());
+            }
+
+            using var exclusive = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+
+            Assert.True(exclusive.Length > 0);
+        }
+        finally
+        {
+            TempDatabase.Delete(path);
+        }
+    }
+
+    [Fact]
     public async Task DataOutlivesTheProcessThatWroteIt()
     {
         // The whole milestone in one test: write with one store, read with another
         // that shares nothing but the file.
-        string path = Path.Combine(Path.GetTempPath(), $"monmmo-{Guid.NewGuid():N}.db");
+        string path = TempDatabase.Path();
 
         try
         {
@@ -225,8 +251,40 @@ public class SqlitePlayerStoreTests
         }
         finally
         {
-            foreach (string leftover in Directory.GetFiles(Path.GetDirectoryName(path)!, Path.GetFileName(path) + "*"))
+            TempDatabase.Delete(path);
+        }
+    }
+}
+
+/// <summary>
+/// Cleaning up a database file a test just used.
+/// <para>
+/// Tolerant on purpose. Deleting a scratch file is not what any of these tests are
+/// about, and a stray file in the temp directory must not turn a green run red — as
+/// it did on Windows, where an unreleased handle makes the delete fail outright and
+/// Linux quietly allows it.
+/// </para>
+/// </summary>
+internal static class TempDatabase
+{
+    public static string Path() =>
+        System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"monmmo-{Guid.NewGuid():N}.db");
+
+    public static void Delete(string path)
+    {
+        string directory = System.IO.Path.GetDirectoryName(path)!;
+        string prefix = System.IO.Path.GetFileName(path);
+
+        // The -wal and -shm companions belong to the same database.
+        foreach (string leftover in Directory.GetFiles(directory, prefix + "*"))
+        {
+            try
+            {
                 File.Delete(leftover);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+            }
         }
     }
 }
