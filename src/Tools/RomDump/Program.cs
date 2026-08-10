@@ -244,11 +244,20 @@ public static class Program
             ? "  no region name table found — maps will be labelled by section id"
             : $"  region names: {regions}");
 
+        // Section ids need not start at zero, so align the lowest one in use with the
+        // table's first name before resolving anything.
+        List<int> sectionIds = banks.AllMaps.Select(m => (int)m.Header.RegionSectionId).ToList();
+        int indexBase = regions?.InferIndexBase(sectionIds) ?? 0;
+
+        if (indexBase != 0)
+            Console.WriteLine($"  section ids start at {indexBase}, aligned to the first name");
+
         List<NamedMap> maps = banks.AllMaps
             .Select(entry => new NamedMap(
                 entry.Bank,
                 entry.Map,
-                NameFor(regions, entry.Header.RegionSectionId),
+                regions?.Resolve(entry.Header.RegionSectionId, indexBase)
+                    ?? $"SECTION {entry.Header.RegionSectionId}",
                 entry.Header))
             .ToList();
 
@@ -304,9 +313,6 @@ public static class Program
         Console.WriteLine("If colours look wrong in places, the primary/secondary tileset split");
         Console.WriteLine("may differ on this cartridge — try --tileset-split emerald.");
     }
-
-    private static string NameFor(RegionNameTable? regions, byte sectionId) =>
-        regions is null ? $"SECTION {sectionId}" : regions[sectionId];
 
     /// <summary>
     /// Works out which maps to render: everything, a name match, or specific

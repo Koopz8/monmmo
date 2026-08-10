@@ -23,7 +23,7 @@ The project layout enforces the rest:
 | `src/Core` | Shared game model | Referenced by **both** the client and, later, the server |
 | `src/RomExtract` | Cartridge reading | **Client-only.** The server must never reference this |
 | `src/Tools/RomDump` | CLI harness | Development tool for inspecting a cartridge |
-| `tests/RomExtract.Tests` | Test suite | 112 tests, no cartridge required |
+| `tests/RomExtract.Tests` | Test suite | 124 tests, no cartridge required |
 
 When the server project lands, the one rule to hold is that its dependency graph
 must not contain `RomExtract`. That way the legal posture is guaranteed by the build
@@ -91,8 +91,10 @@ This extractor searches for **structure** instead:
   layout. That shape is specific enough that nothing else in the image matches it at
   length, and it yields the game's own `(bank, map)` numbering rather than an index
   into a table whose boundaries had to be guessed.
-- **Region names** — entries of `{x, y, width, height, name}` where the coordinates
-  are small and the pointer resolves to decodable upper-case text.
+- **Region names** — both `{x, y, width, height, name}` records and bare arrays of
+  text pointers are scanned, then ranked by how many entries read like places. An
+  image holds several long runs of text pointers; the location table is the one whose
+  *contents* are place names, not the longest or the first.
 
 A candidate must produce at least 100 consecutive well-formed entries to be accepted.
 The result: the extractor either finds tables that genuinely satisfy the format's

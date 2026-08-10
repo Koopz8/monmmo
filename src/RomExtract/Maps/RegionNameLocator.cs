@@ -15,7 +15,27 @@ public sealed record RegionNameTable(int Offset, string Shape, IReadOnlyList<str
     public int PlaceWordScore => Names.Count(RegionNameLocator.ReadsLikeAPlace);
 
     public string this[int index] =>
-        index >= 0 && index < Names.Count ? Names[index] : $"SECTION {index}";
+        index >= 0 && index < Names.Count && Names[index].Length > 0
+            ? Names[index]
+            : $"SECTION {index}";
+
+    /// <summary>
+    /// Works out what section id corresponds to the table's first entry.
+    /// <para>
+    /// Section ids are not guaranteed to start at zero — a game sharing its codebase
+    /// with another region carries that region's ids first, so the local ones begin
+    /// partway up. When every id would fall off the end of the table, the lowest id in
+    /// use is the one that lines up with the first name.
+    /// </para>
+    /// </summary>
+    public int InferIndexBase(IReadOnlyCollection<int> sectionIds)
+    {
+        if (sectionIds.Count == 0) return 0;
+        return sectionIds.Max() < Count ? 0 : sectionIds.Min();
+    }
+
+    /// <summary>Resolves a section id through the base returned by <see cref="InferIndexBase"/>.</summary>
+    public string Resolve(int sectionId, int indexBase) => this[sectionId - indexBase];
 
     public override string ToString() =>
         $"0x{Address:X8}  {Count,4} names, {PlaceWordScore,3} place-like  ({Shape})" +
@@ -35,6 +55,15 @@ public sealed record RegionNameTable(int Offset, string Shape, IReadOnlyList<str
 public static class RegionNameLocator
 {
     private const int MinimumRun = 32;
+
+    /// <summary>
+    /// How many consecutive unusable slots a name table may contain before the run is
+    /// considered over. Real tables leave gaps where a section was cut or is unnamed.
+    /// </summary>
+    private const int MaxConsecutiveDeadEntries = 8;
+
+    /// <summary>Fraction of a run's slots that must actually hold a name.</summary>
+    private const double MinimumPopulatedFraction = 0.75;
 
     /// <summary>Longest a place name is expected to be, used to bound a speculative read.</summary>
     private const int MaxNameBytes = 24;
@@ -66,6 +95,7 @@ public static class RegionNameLocator
         return candidates
             .OrderByDescending(c => c.PlaceWordScore)
             .ThenByDescending(c => c.Count)
+            .ThenBy(c => c.Offset)
             .FirstOrDefault();
     }
 
@@ -88,12 +118,37 @@ public static class RegionNameLocator
 
         for (int offset = 0; offset + stride * MinimumRun <= rom.Length; offset += 4)
         {
+            if (ReadName(rom, offset, nameFieldOffset, stride) is null) continue;
+
             var names = new List<string>();
+            int consecutiveDead = 0;
 
-            while (ReadName(rom, offset + names.Count * stride, nameFieldOffset, stride) is { } name)
-                names.Add(name);
+            while (offset + (names.Count + 1) * stride <= rom.Length)
+            {
+                string? name = ReadName(rom, offset + names.Count * stride, nameFieldOffset, stride);
 
+                if (name is null)
+                {
+                    // Step over a dead slot rather than ending the table on it. The
+                    // placeholder keeps every later name at its own section id.
+                    if (++consecutiveDead > MaxConsecutiveDeadEntries) break;
+                    names.Add(string.Empty);
+                }
+                else
+                {
+                    consecutiveDead = 0;
+                    names.Add(name);
+                }
+            }
+
+            while (names.Count > 0 && names[^1].Length == 0) names.RemoveAt(names.Count - 1);
             if (names.Count < MinimumRun) continue;
+
+            // A run that is mostly holes is not a table. Reading a record-shaped table
+            // at the wrong stride produces exactly that — name, gap, name, gap — and
+            // without this it outscores the real thing by being twice as long.
+            int populated = names.Count(n => n.Length > 0);
+            if (populated < names.Count * MinimumPopulatedFraction) continue;
 
             found.Add(new RegionNameTable(offset, shape, names));
             offset += names.Count * stride - 4;

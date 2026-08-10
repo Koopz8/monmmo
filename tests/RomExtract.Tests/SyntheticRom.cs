@@ -87,6 +87,9 @@ public sealed class SyntheticRom
 
     public static string DecoyNameFor(int index) => $"EXIT {index:D2}";
 
+    /// <summary>An unnamed section mid-table, as real images contain.</summary>
+    public const int DeadRegionNameIndex = 47;
+
     public const int BankCount = 8;
     public const int MapsPerBank = 5;
     public const int RegionLocationCount = 64;
@@ -268,7 +271,10 @@ public sealed class SyntheticRom
             _data[entry + 1] = (byte)(i % 14);
             _data[entry + 2] = 1;
             _data[entry + 3] = 1;
-            WriteU32(entry + 4, Rom.BaseAddress + (uint)textAt);
+
+            // One slot left unnamed, so the scan has to step over it rather than
+            // treating it as the end of the table.
+            WriteU32(entry + 4, i == DeadRegionNameIndex ? 0u : Rom.BaseAddress + (uint)textAt);
         }
     }
 

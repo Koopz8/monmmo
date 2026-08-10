@@ -111,7 +111,10 @@ public class RegionNameTests
         RegionNameTable names = Locate();
 
         for (int i = 0; i < SyntheticRom.RegionLocationCount; i++)
+        {
+            if (i == SyntheticRom.DeadRegionNameIndex) continue;
             Assert.Equal(SyntheticRom.RegionNameFor(i), names[i]);
+        }
     }
 
     [Fact]
@@ -177,5 +180,50 @@ public class RegionNameTests
     public void JudgesWhetherANameReadsLikeAPlace(string candidate, bool expected)
     {
         Assert.Equal(expected, RegionNameLocator.ReadsLikeAPlace(candidate));
+    }
+
+    [Fact]
+    public void StepsOverDeadSlotsInsteadOfSplittingTheTable()
+    {
+        // Regression: a gap in the name table used to end the run, leaving the table
+        // split in two with only the first fragment kept — and every section id past
+        // the gap unnamed.
+        RegionNameTable names = Locate();
+
+        Assert.Equal(SyntheticRom.RegionLocationCount, names.Count);
+        Assert.Equal(string.Empty, names.Names[SyntheticRom.DeadRegionNameIndex]);
+        Assert.Equal(
+            SyntheticRom.RegionNameFor(SyntheticRom.DeadRegionNameIndex + 1),
+            names[SyntheticRom.DeadRegionNameIndex + 1]);
+    }
+
+    [Fact]
+    public void UnnamedSlotsFallBackToTheirSectionId()
+    {
+        Assert.StartsWith("SECTION", Locate()[SyntheticRom.DeadRegionNameIndex]);
+    }
+
+    [Fact]
+    public void AlignsTheFirstNameWithTheLowestSectionIdInUse()
+    {
+        // A game sharing a codebase with another region carries that region's section
+        // ids first, so the local ones start partway up and would otherwise all fall
+        // off the end of the table.
+        var table = new RegionNameTable(0, "test", ["PALLET TOWN", "VIRIDIAN CITY", "PEWTER CITY"]);
+
+        int indexBase = table.InferIndexBase([88, 89, 90]);
+
+        Assert.Equal(88, indexBase);
+        Assert.Equal("PALLET TOWN", table.Resolve(88, indexBase));
+        Assert.Equal("PEWTER CITY", table.Resolve(90, indexBase));
+    }
+
+    [Fact]
+    public void LeavesTheBaseAtZeroWhenEverySectionIdAlreadyFits()
+    {
+        var table = new RegionNameTable(0, "test", ["A TOWN", "B TOWN", "C TOWN"]);
+
+        Assert.Equal(0, table.InferIndexBase([0, 1, 2]));
+        Assert.Equal("A TOWN", table.Resolve(0, 0));
     }
 }
