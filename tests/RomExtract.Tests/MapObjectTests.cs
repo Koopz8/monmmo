@@ -160,3 +160,76 @@ public class ObjectsBlockMovementTests
         Assert.Equal(Direction.Up, player.Facing);
     }
 }
+
+/// <summary>
+/// The grid the client predicts against.
+/// <para>
+/// People are as solid as walls but they are not part of a map's collision data — they
+/// are placed on top of it. A client predicting against bare map collision walks
+/// through somebody, gets corrected, and disagrees with the server from then on.
+/// </para>
+/// </summary>
+public class CollisionWithPeopleTests
+{
+    private static CollisionGrid Open(int width = 4, int height = 4) =>
+        new(width, height, new byte[width * height]);
+
+    [Fact]
+    public void ASquareWithSomebodyOnItIsNotWalkable()
+    {
+        CollisionGrid grid = Open().With([new GridPosition(1, 2)]);
+
+        Assert.False(grid.IsWalkable(new GridPosition(1, 2)));
+        Assert.True(grid.IsWalkable(new GridPosition(1, 1)));
+    }
+
+    [Fact]
+    public void TheOriginalGridIsLeftAlone()
+    {
+        // Shared with whatever else holds it — the map is loaded once and the people
+        // change with the map, not with the grid.
+        CollisionGrid original = Open();
+        CollisionGrid blocked = original.With([new GridPosition(0, 0)]);
+
+        Assert.True(original.IsWalkable(new GridPosition(0, 0)));
+        Assert.False(blocked.IsWalkable(new GridPosition(0, 0)));
+    }
+
+    [Fact]
+    public void SomebodyOutsideTheMapIsIgnoredRatherThanThrowing()
+    {
+        // Real cartridges place objects beyond a map's edge; extraction drops those,
+        // but nothing here should depend on that having happened.
+        CollisionGrid grid = Open().With([new GridPosition(99, 99), new GridPosition(-1, 0)]);
+
+        Assert.True(grid.IsWalkable(new GridPosition(0, 0)));
+    }
+
+    [Fact]
+    public void WhatTheClientPredictsMatchesWhatTheServerAllows()
+    {
+        // The two have to agree square for square. Where they do not, a player walks
+        // somewhere the server will not let them be.
+        var people = new[]
+        {
+            new MapObject(1, 5, 1, 1, Direction.Down, 0, false),
+            new MapObject(2, 6, 3, 0, Direction.Up, 7, false),
+        };
+
+        MapData map = new("3.0", "PALLET TOWN", 4, 4, new byte[16]) { Objects = people };
+
+        CollisionGrid predicted = map.ToGrid().With(people.Select(o => o.Square));
+
+        for (int y = 0; y < map.Height; y++)
+        {
+            for (int x = 0; x < map.Width; x++)
+            {
+                var square = new GridPosition(x, y);
+
+                bool serverAllows = map.ToGrid().IsWalkable(square) && map.ObjectAt(square) is null;
+
+                Assert.Equal(serverAllows, predicted.IsWalkable(square));
+            }
+        }
+    }
+}

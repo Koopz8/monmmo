@@ -1,3 +1,4 @@
+using PokeMmo.Core.World;
 using PokeMmo.RomExtract.Maps;
 using Raylib_cs;
 
@@ -21,10 +22,21 @@ public sealed class MapView : IDisposable
     {
         _library = library;
         Map = first;
+        Collision = WithPeople(first);
         _texture = Upload(first);
     }
 
     public LoadedMap Map { get; private set; }
+
+    /// <summary>
+    /// The map's walkability with its people made solid.
+    /// <para>
+    /// Built here because the client predicts every step against it. The server counts
+    /// people as blocking; a client predicting against bare map collision would walk
+    /// straight through somebody, be corrected, and spend the rest of the map arguing.
+    /// </para>
+    /// </summary>
+    public CollisionGrid Collision { get; private set; } = null!;
 
     public Texture2D Texture => _texture;
 
@@ -44,10 +56,14 @@ public sealed class MapView : IDisposable
         Raylib.UnloadTexture(_texture);
 
         Map = loaded;
+        Collision = WithPeople(loaded);
         _texture = Upload(loaded);
 
         return true;
     }
+
+    private static CollisionGrid WithPeople(LoadedMap map) =>
+        map.Collision.With(map.Objects.Select(o => o.Square));
 
     private static Texture2D Upload(LoadedMap map)
     {

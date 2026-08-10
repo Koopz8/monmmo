@@ -145,7 +145,7 @@ public static class Program
         CharacterSprite? sprite = sprites.For(CharacterSprite.DefaultGraphicsId);
 
         var player = new WalkingCharacter();
-        player.Place(view.Map.Collision, view.Map.Collision.FirstWalkable());
+        player.Place(view.Collision, view.Collision.FirstWalkable());
 
         var camera = new Camera2D
         {
@@ -157,6 +157,12 @@ public static class Program
         BattleScreen? battle = null;
         int balls = settings.Balls;
 
+        // Where the server last said we are, when that disagreed with where we think we
+        // are. Held rather than applied on the spot: a correction almost always arrives
+        // mid-step, and snapping a character sideways through a stride looks worse than
+        // the half-square of error it fixes.
+        GridPosition? correction = null;
+
         // Time until the client may next ask the server about an edge it cannot
         // predict. Without it, holding a direction into an edge would send a request
         // every frame and be rate-limited into uselessness.
@@ -166,7 +172,7 @@ public static class Program
         {
             float delta = Raylib.GetFrameTime();
 
-            ApplyServerMessages(network, others, player, view, data, ref battle, ref balls);
+            ApplyServerMessages(network, others, player, view, data, ref battle, ref balls, ref correction);
 
             // A battle suspends the overworld entirely: the server is running it, and
             // walking on meanwhile would put the two sides out of step.
@@ -190,6 +196,15 @@ public static class Program
                 continue;
             }
 
+            // Applied between steps, which is the only moment it can be applied without
+            // tearing the animation. Dropping it instead — which is what happened before
+            // — leaves the client a square ahead of the server for good.
+            if (!player.IsStepping && correction is { } square)
+            {
+                if (square != player.Square) player.Place(view.Collision, square);
+                correction = null;
+            }
+
             bool wasStepping = player.IsStepping;
             Direction? input = ReadDirection();
             player.Update(delta, input);
@@ -206,7 +221,7 @@ public static class Program
             else if (!player.IsStepping &&
                      input is { } wanted &&
                      edgeCooldown <= 0f &&
-                     view.Map.Collision.LeavesGrid(player.Square, wanted))
+                     view.Collision.LeavesGrid(player.Square, wanted))
             {
                 // The one step the client cannot predict: it has no idea what is on the
                 // next map, or whether there is one. Ask, stand still, and let the
@@ -276,7 +291,8 @@ public static class Program
         MapView view,
         GameData data,
         ref BattleScreen? battle,
-        ref int balls)
+        ref int balls,
+        ref GridPosition? correction)
     {
         foreach (NetMessage message in network.Drain())
         {
@@ -287,7 +303,7 @@ public static class Program
                     // decides where you actually are, and it is usually somewhere else.
                     if (view.SwitchTo(welcome.MapId)) Raylib.SetWindowTitle($"MonMMO — {view.Map.Name}");
 
-                    player.Place(view.Map.Collision, new GridPosition(welcome.X, welcome.Y));
+                    player.Place(view.Collision, new GridPosition(welcome.X, welcome.Y));
                     balls = welcome.Balls;
                     break;
 
@@ -308,19 +324,20 @@ public static class Program
 
                     if (view.SwitchTo(changed.MapId))
                     {
-                        player.Place(view.Map.Collision, new GridPosition(changed.X, changed.Y));
+                        player.Place(view.Collision, new GridPosition(changed.X, changed.Y));
                         Raylib.SetWindowTitle($"MonMMO — {view.Map.Name}");
                     }
 
                     break;
 
-                case PlayerMoved mine when !player.IsStepping:
-                    var confirmed = new GridPosition(mine.X, mine.Y);
-                    if (confirmed != player.Square) player.Place(view.Map.Collision, confirmed);
+                case PlayerMoved mine when mine.PlayerId == network.PlayerId:
+                    // The server's answer about us. Where it agrees this costs nothing;
+                    // where it does not, this is the only thing that puts us back.
+                    correction = new GridPosition(mine.X, mine.Y);
                     break;
 
                 case MoveRejected rejected:
-                    player.Place(view.Map.Collision, new GridPosition(rejected.X, rejected.Y));
+                    correction = new GridPosition(rejected.X, rejected.Y);
                     break;
 
                 case PlayerLeft left:

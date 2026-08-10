@@ -74,6 +74,29 @@ public sealed class CollisionGrid
     /// starting square when the way is blocked or off the edge of the map.
     /// </summary>
     /// <summary>
+    /// The same map with extra squares made solid.
+    /// <para>
+    /// People are as solid as walls but they are not part of a map's collision data —
+    /// they are placed on top of it. The client predicts every step against a grid, so
+    /// anything the server treats as blocking has to be in that grid or the two will
+    /// disagree about where the player is standing.
+    /// </para>
+    /// </summary>
+    public CollisionGrid With(IEnumerable<GridPosition> blocked)
+    {
+        var copy = new byte[Width * Height];
+        _collision.CopyTo(copy, 0);
+
+        foreach (GridPosition square in blocked)
+        {
+            if (!Contains(square)) continue;
+            copy[square.Y * Width + square.X] = 1;
+        }
+
+        return new CollisionGrid(Width, Height, copy);
+    }
+
+    /// <summary>
     /// True when a step would leave the map entirely, rather than hit something solid
     /// on it.
     /// <para>
