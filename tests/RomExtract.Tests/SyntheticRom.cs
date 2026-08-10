@@ -1,5 +1,6 @@
 using PokeMmo.RomExtract;
 using PokeMmo.RomExtract.Graphics;
+using PokeMmo.RomExtract.Maps;
 
 namespace PokeMmo.RomExtract.Tests;
 
@@ -50,6 +51,22 @@ public sealed class SyntheticRom
     private const int TestBackSpriteBlobOffset = 0x032000;
     private const int ShinyPaletteBlobOffset = 0x033000;
 
+    // --- map data ---------------------------------------------------------------
+    // Placed well clear of the species tables so a stray scan cannot confuse the two.
+
+    public const int TilesetTilesOffset = 0x040000;
+    public const int TilesetPalettesOffset = 0x041000;
+    public const int TilesetMetatilesOffset = 0x042000;
+    public const int TilesetRecordOffset = 0x043000;
+    public const int MapBlocksOffset = 0x044000;
+    public const int MapLayoutOffset = 0x045000;
+    public const int MapLayoutTableOffset = 0x046000;
+
+    public const int MapWidth = 10;
+    public const int MapHeight = 8;
+    public const int MapLayoutTableLength = 64;
+    public const int MetatileCount = 64;
+
     /// <summary>The species index whose sprite and palette are distinctive and asserted against.</summary>
     public const int TestSpecies = 1;
 
@@ -84,6 +101,88 @@ public sealed class SyntheticRom
         WriteGraphicsBlobs();
         WritePicTables();
         WritePaletteTables();
+        WriteMapData();
+    }
+
+    /// <summary>Palette 0 of the synthetic tileset — what a rendered map is checked against.</summary>
+    public Rgba32[] ExpectedTilesetPalette { get; } = BuildTilesetPalette();
+
+    /// <summary>The metatile drawn at a given map square, and therefore its colour index.</summary>
+    public static int MetatileAt(int blockX, int blockY) => (blockX + blockY) % 16;
+
+    /// <summary>
+    /// Builds a complete, if minimal, map: a tileset whose tiles are flat colour, a
+    /// metatile per colour, a block grid, a layout record and a pointer table.
+    /// <para>
+    /// Flat-colour tiles are deliberate. Every map square renders as one solid 16x16
+    /// block, so a rendering test can assert exact pixel colours — which catches tile
+    /// ordering, palette selection, layer compositing and block indexing all at once.
+    /// </para>
+    /// </summary>
+    private void WriteMapData()
+    {
+        // Tile n is filled with colour index n % 16. Tile 0 is therefore all colour 0,
+        // which the top metatile layer treats as transparent.
+        for (int tile = 0; tile < MetatileCount; tile++)
+        {
+            byte nibble = (byte)(tile % 16);
+            byte packed = (byte)(nibble | (nibble << 4));
+
+            for (int i = 0; i < 32; i++)
+                _data[TilesetTilesOffset + tile * 32 + i] = packed;
+        }
+
+        byte[] palette = GbaPalette.ToBytes(ExpectedTilesetPalette);
+        for (int p = 0; p < TilesetRecord.PaletteCount; p++)
+            palette.CopyTo(_data, TilesetPalettesOffset + p * GbaPalette.SizeBytes);
+
+        // Metatile m draws tile m across its whole bottom layer, and tile 0 — all
+        // transparent — across its top layer.
+        for (int m = 0; m < MetatileCount; m++)
+        {
+            for (int entry = 0; entry < 8; entry++)
+            {
+                ushort value = entry < 4 ? (ushort)m : (ushort)0;
+                WriteU16(TilesetMetatilesOffset + (m * 8 + entry) * 2, value);
+            }
+        }
+
+        _data[TilesetRecordOffset] = 0;     // not compressed
+        _data[TilesetRecordOffset + 1] = 0; // primary
+        WriteU32(TilesetRecordOffset + 4, Rom.BaseAddress + TilesetTilesOffset);
+        WriteU32(TilesetRecordOffset + 8, Rom.BaseAddress + TilesetPalettesOffset);
+        WriteU32(TilesetRecordOffset + 12, Rom.BaseAddress + TilesetMetatilesOffset);
+
+        for (int y = 0; y < MapHeight; y++)
+        {
+            for (int x = 0; x < MapWidth; x++)
+                WriteU16(MapBlocksOffset + (y * MapWidth + x) * 2, (ushort)MetatileAt(x, y));
+        }
+
+        WriteU32(MapLayoutOffset, MapWidth);
+        WriteU32(MapLayoutOffset + 4, MapHeight);
+        WriteU32(MapLayoutOffset + 8, Rom.BaseAddress + MapBlocksOffset);   // border
+        WriteU32(MapLayoutOffset + 12, Rom.BaseAddress + MapBlocksOffset);  // blocks
+        WriteU32(MapLayoutOffset + 16, Rom.BaseAddress + TilesetRecordOffset);
+        WriteU32(MapLayoutOffset + 20, 0);                                  // no secondary tileset
+        _data[MapLayoutOffset + 24] = 2;
+        _data[MapLayoutOffset + 25] = 2;
+
+        for (int i = 0; i < MapLayoutTableLength; i++)
+            WriteU32(MapLayoutTableOffset + i * 4, Rom.BaseAddress + MapLayoutOffset);
+    }
+
+    private static Rgba32[] BuildTilesetPalette()
+    {
+        var colors = new Rgba32[GbaPalette.ColorCount];
+
+        for (int i = 0; i < colors.Length; i++)
+        {
+            // Map tiles are opaque, colour 0 included.
+            colors[i] = new Rgba32(Expand5(i * 2), Expand5(31 - i), Expand5((i * 3) % 32), 255);
+        }
+
+        return colors;
     }
 
     public byte[] Bytes => _data;

@@ -72,6 +72,13 @@ public sealed class Rom
         return (int)(address - BaseAddress);
     }
 
+    /// <summary>
+    /// Converts a cartridge address to a file offset, or returns null when it does not
+    /// land inside the image. For speculative reads where a bad pointer is an expected
+    /// outcome rather than a bug.
+    /// </summary>
+    public int? ToOffsetOrNull(uint address) => IsRomAddress(address) ? (int)(address - BaseAddress) : null;
+
     public byte ReadU8(int offset) => _data[offset];
 
     public ushort ReadU16(int offset) => (ushort)(_data[offset] | (_data[offset + 1] << 8));

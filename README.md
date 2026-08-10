@@ -1,7 +1,7 @@
-# Milestone 0 — cartridge extractor
+# Cartridge extractor
 
 Reads a player-supplied Generation III cartridge and turns it into engine-native
-data: base stats, species names, and decoded 64x64 sprites as PNGs.
+data: base stats, species names, decoded 64x64 sprites, and rendered maps.
 
 This is the first milestone of the client. It exists to retire the riskiest unknown
 in the whole project — *can we actually read the player's file?* — before any effort
@@ -23,7 +23,7 @@ The project layout enforces the rest:
 | `src/Core` | Shared game model | Referenced by **both** the client and, later, the server |
 | `src/RomExtract` | Cartridge reading | **Client-only.** The server must never reference this |
 | `src/Tools/RomDump` | CLI harness | Development tool for inspecting a cartridge |
-| `tests/RomExtract.Tests` | Test suite | 80 tests, no cartridge required |
+| `tests/RomExtract.Tests` | Test suite | 93 tests, no cartridge required |
 
 When the server project lands, the one rule to hold is that its dependency graph
 must not contain `RomExtract`. That way the legal posture is guaranteed by the build
@@ -45,9 +45,18 @@ out/
   tables.json      where every data table was found, and how
   species.json     the full base-stat table with decoded names
   sprites/001.png  decoded 64x64 sprites, transparent background
+  maps/000.png     rendered maps
 ```
 
-Options: `--shiny`, `--back`, `--no-sprites`, `--diagnose`, `--tile-order row|column`.
+Options: `--shiny`, `--back`, `--no-sprites`, `--diagnose`, `--tile-order row|column`,
+`--list-maps`, `--map <list>`, `--tileset-split firered|emerald`.
+
+To see what maps the cartridge holds, and render one:
+
+```bash
+dotnet run --project src/Tools/RomDump -- your.gba --out ./out --no-sprites --list-maps
+dotnet run --project src/Tools/RomDump -- your.gba --out ./out --no-sprites --map 0
+```
 
 ---
 
@@ -70,6 +79,10 @@ This extractor searches for **structure** instead:
 - **Palette tables** — same idea with `{pointer, tag, 0}`. The tag base is read from
   each run's own first entry rather than assumed to be zero, because the shiny table
   offsets every tag by a constant.
+- **Map layouts** — a layout record is two small positive dimensions followed by
+  pointers that must land in the cartridge, with block data that must fit inside it.
+  The layout *table* is then a long run of pointers each targeting one of those
+  records, of which at least three quarters must resolve.
 
 A candidate must produce at least 100 consecutive well-formed entries to be accepted.
 The result: the extractor either finds tables that genuinely satisfy the format's
@@ -148,8 +161,29 @@ were identified from that output rather than guessed at.
 
 ---
 
+## Maps
+
+A map square is a **metatile**: a 2x2 grid of 8x8 tiles, drawn twice — once for the
+bottom layer, then again for the top layer with colour 0 left transparent so terrain
+shows through. Each tile reference carries its own palette index and horizontal and
+vertical flip flags.
+
+Two tilesets are in play at once, primary and secondary, and tile, metatile and
+palette slots form a single shared index space split between them. Those split points
+are per-game constants, so they live in `TilesetSplit` and can be swapped with
+`--tileset-split` rather than edited — a wrong split produces a recognisably wrong
+picture rather than an error, and being able to flip it makes that a one-word
+experiment instead of a code change.
+
+The synthetic cartridge carries a complete map: a tileset whose tiles are flat
+colour, one metatile per colour, a block grid, a layout record and a pointer table.
+Flat colour is deliberate — every square renders as one solid 16x16 block, so the
+tests assert exact pixel colours and catch tile ordering, palette selection, layer
+compositing and block indexing all at once.
+
+---
+
 ## Next
 
-Milestone 1: render a town from the cartridge's map data and walk around it
-single-player. That needs map header, tileset, and block-data extraction — the same
-signature-scanning approach extends to those tables.
+A Godot 4 client that renders an extracted map and lets you walk around it, then the
+authoritative server underneath it.

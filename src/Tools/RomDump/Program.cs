@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using PokeMmo.Core.Data;
 using PokeMmo.RomExtract;
 using PokeMmo.RomExtract.Graphics;
+using PokeMmo.RomExtract.Maps;
 
 namespace PokeMmo.Tools.RomDump;
 
@@ -97,6 +98,9 @@ public static class Program
 
         if (!options.SkipSprites)
             WriteSprites(extractor, options, speciesCount);
+
+        if (options.ListMaps || options.Maps.Length > 0)
+            WriteMaps(rom, options);
 
         Console.WriteLine();
         Console.WriteLine($"Done. Output in {Path.GetFullPath(options.OutputDirectory)}");
@@ -198,6 +202,63 @@ public static class Program
         }
     }
 
+    private static void WriteMaps(Rom rom, Options options)
+    {
+        Console.WriteLine();
+        Console.WriteLine("Locating maps");
+
+        MapLayoutTable? table = MapLocator.Locate(rom, Console.WriteLine);
+
+        if (table is null)
+        {
+            Console.Error.WriteLine("  no map layout table found");
+            return;
+        }
+
+        Console.WriteLine();
+        Console.WriteLine($"  {table}");
+
+        if (options.ListMaps)
+        {
+            Console.WriteLine();
+            Console.WriteLine("Layouts");
+
+            foreach ((int index, MapLayoutRecord layout) in table.Valid)
+                Console.WriteLine($"  [{index,4}] {layout}");
+        }
+
+        if (options.Maps.Length == 0) return;
+
+        string mapDirectory = Path.Combine(options.OutputDirectory, "maps");
+        Directory.CreateDirectory(mapDirectory);
+
+        Console.WriteLine();
+
+        foreach (int index in options.Maps)
+        {
+            try
+            {
+                MapLayoutRecord layout = table.Layouts.ElementAtOrDefault(index)
+                    ?? throw new InvalidOperationException($"layout {index} did not resolve");
+
+                RenderedMap rendered = MapRenderer.Create(rom, layout, options.Split).Render(layout);
+
+                string path = Path.Combine(mapDirectory, $"{index:D3}.png");
+                File.WriteAllBytes(path, rendered.ToPng());
+
+                Console.WriteLine($"Wrote {path} ({rendered.Width}x{rendered.Height})");
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"  map {index}: {ex.Message}");
+            }
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("If colours look wrong in places, the primary/secondary tileset split");
+        Console.WriteLine("may differ on this cartridge — try --tileset-split emerald.");
+    }
+
     private static void PrintUsage()
     {
         Console.WriteLine("""
@@ -213,6 +274,10 @@ public static class Program
               --back                 use the back-sprite table
               --tile-order <o>       row (default) or column
               --no-sprites           dump data tables only
+              --list-maps            list every map layout the cartridge holds
+              --map <list>           comma-separated layout indices to render as PNGs
+              --tileset-split <g>    firered (default) or emerald — how tile, metatile
+                                     and palette slots divide between the two tilesets
               --diagnose             report every candidate table run and dump raw
                                      entries, for investigating an unexpected layout
 
@@ -229,6 +294,9 @@ public static class Program
         public bool Back { get; private init; }
         public bool SkipSprites { get; private init; }
         public bool Diagnose { get; private init; }
+        public bool ListMaps { get; private init; }
+        public int[] Maps { get; private init; } = [];
+        public TilesetSplit Split { get; private init; } = TilesetSplit.FireRed;
         public TileOrder TileOrder { get; private init; } = TileOrder.RowMajor;
 
         public static Options Parse(string[] args)
@@ -239,7 +307,9 @@ public static class Program
 
             string output = "out";
             int[] species = [1, 4, 7];
-            bool shiny = false, back = false, skip = false, diagnose = false;
+            bool shiny = false, back = false, skip = false, diagnose = false, listMaps = false;
+            int[] maps = [];
+            TilesetSplit split = TilesetSplit.FireRed;
             TileOrder order = TileOrder.RowMajor;
 
             for (int i = 1; i < args.Length; i++)
@@ -267,6 +337,21 @@ public static class Program
                     case "--diagnose":
                         diagnose = true;
                         break;
+                    case "--list-maps":
+                        listMaps = true;
+                        break;
+                    case "--map":
+                        maps = Next(args, ref i, "--map")
+                            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                            .Select(int.Parse)
+                            .ToArray();
+                        break;
+                    case "--tileset-split":
+                        string game = Next(args, ref i, "--tileset-split");
+                        split = game.StartsWith("em", StringComparison.OrdinalIgnoreCase)
+                            ? TilesetSplit.Emerald
+                            : TilesetSplit.FireRed;
+                        break;
                     case "--tile-order":
                         string value = Next(args, ref i, "--tile-order");
                         order = value.StartsWith("col", StringComparison.OrdinalIgnoreCase)
@@ -287,6 +372,9 @@ public static class Program
                 Back = back,
                 SkipSprites = skip,
                 Diagnose = diagnose,
+                ListMaps = listMaps,
+                Maps = maps,
+                Split = split,
                 TileOrder = order,
             };
         }
