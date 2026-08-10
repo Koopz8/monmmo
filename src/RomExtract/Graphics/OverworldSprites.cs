@@ -69,6 +69,34 @@ public sealed record ObjectGraphicsInfo(
 
     /// <summary>Sizes the hardware can draw a sprite at.</summary>
     private static bool IsSpriteDimension(int value) => value is 8 or 16 or 32 or 64;
+
+    /// <summary>
+    /// Why the bytes at an offset are not a record.
+    /// <para>
+    /// Exists for one question that a located address alone cannot answer: whether the
+    /// entries just before a run were rejected for a good reason, or by a check that is
+    /// too strict. A table found eight entries late is not a failure anyone would
+    /// notice — it just makes every graphics id somebody else's.
+    /// </para>
+    /// </summary>
+    public static string Explain(Rom rom, int offset)
+    {
+        if (offset < 0 || offset + RecordSizeBytes > rom.Length) return "outside the image";
+
+        int size = rom.ReadU16(offset + 6);
+        int width = (short)rom.ReadU16(offset + 8);
+        int height = (short)rom.ReadU16(offset + 10);
+
+        if (!IsSpriteDimension(width)) return $"width {width} is not a sprite size";
+        if (!IsSpriteDimension(height)) return $"height {height} is not a sprite size";
+        if (size != width * height / 2) return $"size {size} is not {width}x{height} at 4bpp ({width * height / 2})";
+
+        if (!rom.IsRomAddress(rom.ReadU32(offset + 28))) return "images is not a pointer";
+        if (!rom.IsRomAddress(rom.ReadU32(offset + 16))) return "oam is not a pointer";
+        if (!rom.IsRomAddress(rom.ReadU32(offset + 24))) return "anims is not a pointer";
+
+        return "reads as a record";
+    }
 }
 
 /// <summary>

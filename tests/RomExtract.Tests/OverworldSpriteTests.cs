@@ -125,6 +125,27 @@ public class OverworldSpriteTests
     }
 
     [Fact]
+    public void SaysWhySomethingIsNotARecord()
+    {
+        // The check that identifies this table is arithmetic across three fields, so
+        // the explanation has to name which field disagreed — "not a record" would
+        // leave a table found a few entries late indistinguishable from one found
+        // correctly.
+        Rom rom = Fixture.ToRom();
+
+        int record = GraphicsTable(rom);
+
+        Assert.Contains("reads as a record", ObjectGraphicsInfo.Explain(
+            rom, rom.ToOffsetOrNull(rom.ReadU32(record))!.Value));
+
+        // Somewhere that is definitely not one: the middle of the map collision data.
+        string why = ObjectGraphicsInfo.Explain(rom, SyntheticRom.MapBlocksOffset);
+
+        Assert.DoesNotContain("reads as a record", why);
+        Assert.NotEmpty(why);
+    }
+
+    [Fact]
     public void FindsThePaletteTableByItsTagRange()
     {
         // Overworld palette tags do not count from anywhere — they are identifiers in

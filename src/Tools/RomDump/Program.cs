@@ -650,6 +650,8 @@ public static class Program
         foreach (var size in sizes.Take(5))
             Console.WriteLine($"    {size.Key,-7} {size.Count()} sprites");
 
+        ExplainWhatCameBefore(rom, table);
+
         var frameCounts = records
             .Where(r => r is not null)
             .Select(r => OverworldSprites.ReadFrames(rom, r!, boundaries).Count)
@@ -670,7 +672,7 @@ public static class Program
 
         int written = 0;
 
-        for (int index = 0; index < records.Count && written < 4; index++)
+        for (int index = 0; index < records.Count && written < 12; index++)
         {
             if (records[index] is not { } info) continue;
 
@@ -685,8 +687,45 @@ public static class Program
                 PngWriter.Write(path, frames[frame].Width, frames[frame].Height, frames[frame].ToRgba(palette));
             }
 
-            Console.WriteLine($"  wrote sprite {index}: {info.Width}x{info.Height}, {frames.Count} frames");
+            Console.WriteLine(
+                $"  wrote sprite {index,3}: {info.Width}x{info.Height}, {frames.Count} frames, " +
+                $"palette tag 0x{info.PaletteTag:X4}");
             written++;
+        }
+    }
+
+    /// <summary>
+    /// Says why the entries before a located table were not part of it.
+    /// <para>
+    /// A table found a few entries late reads as a complete success — the records are
+    /// real, the pictures decode, and every graphics id is quietly wrong by that many.
+    /// The only way to tell is to look at what was rejected and why.
+    /// </para>
+    /// </summary>
+    private static void ExplainWhatCameBefore(Rom rom, int table)
+    {
+        Console.WriteLine("  entries immediately before the run:");
+
+        for (int back = 8; back >= 1; back--)
+        {
+            int at = table - back * 4;
+            if (at < 0) continue;
+
+            uint pointer = rom.ReadU32(at);
+
+            if (pointer == 0)
+            {
+                Console.WriteLine($"    -{back}: zero");
+                continue;
+            }
+
+            if (rom.ToOffsetOrNull(pointer) is not { } target)
+            {
+                Console.WriteLine($"    -{back}: 0x{pointer:X8} is not a ROM address");
+                continue;
+            }
+
+            Console.WriteLine($"    -{back}: -> 0x{pointer:X8}  {ObjectGraphicsInfo.Explain(rom, target)}");
         }
     }
 
