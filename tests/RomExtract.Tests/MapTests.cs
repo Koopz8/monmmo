@@ -1,5 +1,6 @@
 using PokeMmo.RomExtract;
 using PokeMmo.RomExtract.Graphics;
+using PokeMmo.Core.World;
 using PokeMmo.RomExtract.Maps;
 
 namespace PokeMmo.RomExtract.Tests;
@@ -225,5 +226,86 @@ public class MapRenderingTests
         MapLayoutRecord broken = layout with { PrimaryTilesetPointer = layout.BlocksPointer };
 
         Assert.Throws<InvalidDataException>(() => MapRenderer.Create(rom, broken));
+    }
+}
+
+public class MetatileBehaviourTests
+{
+    private static readonly SyntheticRom Synthetic = new();
+
+    private static (Rom Rom, MapLayoutRecord Layout) Open()
+    {
+        Rom rom = Synthetic.ToRom();
+        return (rom, MapLocator.Locate(rom)!.Valid.First().Layout);
+    }
+
+    [Fact]
+    public void TellsTheAttributesApartFromTheCallbackByTheirLowBit()
+    {
+        // The two trailing fields differ in order between games, so they are
+        // identified by what they point at: a function pointer has bit 0 set to
+        // select the instruction set, a data pointer does not.
+        (Rom rom, MapLayoutRecord layout) = Open();
+        TilesetRecord tileset = TilesetRecord.TryParse(rom, layout.PrimaryTilesetPointer)!;
+
+        Assert.Equal(
+            Rom.BaseAddress + SyntheticRom.TilesetAttributesOffset,
+            tileset.MetatileAttributesPointer);
+
+        Assert.Equal(0u, tileset.MetatileAttributesPointer & 1);
+    }
+
+    [Fact]
+    public void ReadsEverySquaresBehaviour()
+    {
+        (Rom rom, MapLayoutRecord layout) = Open();
+        byte[] behaviours = layout.ReadBehaviours(rom);
+
+        for (int y = 0; y < layout.Height; y++)
+        {
+            for (int x = 0; x < layout.Width; x++)
+            {
+                byte expected = SyntheticRom.BehaviourOfMetatile(SyntheticRom.MetatileAt(x, y));
+                Assert.Equal(expected, behaviours[y * layout.Width + x]);
+            }
+        }
+    }
+
+    [Fact]
+    public void GrassSquaresAreFoundWhereTheyWereWritten()
+    {
+        (Rom rom, MapLayoutRecord layout) = Open();
+        byte[] behaviours = layout.ReadBehaviours(rom);
+
+        int grass = behaviours.Count(MetatileBehaviour.IsEncounterGrass);
+
+        Assert.True(grass > 0);
+        Assert.Equal(
+            behaviours.Where((_, i) =>
+                MetatileBehaviour.IsEncounterGrass(
+                    SyntheticRom.BehaviourOfMetatile(
+                        SyntheticRom.MetatileAt(i % layout.Width, i / layout.Width)))).Count(),
+            grass);
+    }
+
+    [Fact]
+    public void TheWrongStrideSilentlyReturnsSomethingElse()
+    {
+        // Regression: this is the failure mode that cost the most time. Reading at
+        // the wrong stride throws nothing and produces plausible-looking counts — it
+        // just answers about a different metatile.
+        (Rom rom, MapLayoutRecord layout) = Open();
+
+        byte[] correct = layout.ReadBehaviours(rom);
+        byte[] halfStride = layout.ReadBehaviours(rom, attributeStride: 2);
+
+        Assert.NotEqual(correct, halfStride);
+    }
+
+    [Fact]
+    public void TheStrideComesFromTheGameNotAGuess()
+    {
+        Assert.Equal(4, TilesetSplit.FireRed.AttributeStride);
+        Assert.Equal(2, TilesetSplit.Emerald.AttributeStride);
     }
 }

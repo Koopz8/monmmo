@@ -1,5 +1,6 @@
 using PokeMmo.RomExtract;
 using PokeMmo.RomExtract.Graphics;
+using PokeMmo.Core.World;
 using PokeMmo.RomExtract.Maps;
 
 namespace PokeMmo.RomExtract.Tests;
@@ -61,6 +62,18 @@ public sealed class SyntheticRom
     public const int MapBlocksOffset = 0x044000;
     public const int MapLayoutOffset = 0x045000;
     public const int MapLayoutTableOffset = 0x046000;
+    public const int TilesetAttributesOffset = 0x047000;
+
+    /// <summary>
+    /// Bytes per metatile in the attributes table, matching the real cartridge. The
+    /// stride is the whole point of this fixture: reading it wrongly does not fail,
+    /// it silently returns a neighbouring metatile's behaviour.
+    /// </summary>
+    public const int AttributeStride = 4;
+
+    /// <summary>The behaviour written for a given metatile — every third one is grass.</summary>
+    public static byte BehaviourOfMetatile(int metatile) =>
+        metatile % 3 == 0 ? MetatileBehaviour.TallGrass : MetatileBehaviour.Normal;
 
     public const int MapWidth = 10;
     public const int MapHeight = 8;
@@ -192,11 +205,20 @@ public sealed class SyntheticRom
             }
         }
 
+        for (int m = 0; m < MetatileCount; m++)
+            _data[TilesetAttributesOffset + m * AttributeStride] = BehaviourOfMetatile(m);
+
         _data[TilesetRecordOffset] = 0;     // not compressed
         _data[TilesetRecordOffset + 1] = 0; // primary
         WriteU32(TilesetRecordOffset + 4, Rom.BaseAddress + TilesetTilesOffset);
         WriteU32(TilesetRecordOffset + 8, Rom.BaseAddress + TilesetPalettesOffset);
         WriteU32(TilesetRecordOffset + 12, Rom.BaseAddress + TilesetMetatilesOffset);
+
+        // Attributes are a data pointer; the callback beside them is a function
+        // pointer, which on this hardware carries a set low bit. That difference is
+        // how the two are told apart, so the fixture has to model it.
+        WriteU32(TilesetRecordOffset + 16, Rom.BaseAddress + TilesetAttributesOffset);
+        WriteU32(TilesetRecordOffset + 20, Rom.BaseAddress + TilesetRecordOffset + 1);
 
         for (int y = 0; y < MapHeight; y++)
         {

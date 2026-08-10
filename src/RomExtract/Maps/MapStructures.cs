@@ -12,11 +12,20 @@ namespace PokeMmo.RomExtract.Maps;
 /// code change into a one-word experiment.
 /// </para>
 /// </summary>
-public sealed record TilesetSplit(int Tiles, int Metatiles, int Palettes)
+public sealed record TilesetSplit(int Tiles, int Metatiles, int Palettes, int AttributeStride)
 {
-    public static readonly TilesetSplit FireRed = new(Tiles: 640, Metatiles: 640, Palettes: 7);
+    /// <summary>
+    /// FireRed packs metatile attributes into 32 bits — behaviour, terrain, encounter
+    /// type and layer type in one word. Confirmed by drawing Route 1's grass: at four
+    /// bytes per metatile it forms solid rectangular patches, and at two it aliases
+    /// into single squares along the map edges.
+    /// </summary>
+    public static readonly TilesetSplit FireRed =
+        new(Tiles: 640, Metatiles: 640, Palettes: 7, AttributeStride: 4);
 
-    public static readonly TilesetSplit Emerald = new(Tiles: 512, Metatiles: 512, Palettes: 6);
+    /// <summary>Emerald stores 16-bit attributes instead.</summary>
+    public static readonly TilesetSplit Emerald =
+        new(Tiles: 512, Metatiles: 512, Palettes: 6, AttributeStride: 2);
 }
 
 /// <summary>
@@ -106,9 +115,16 @@ public sealed record MapLayoutRecord(
     /// value is a per-game constant worth confirming against a real image before
     /// anything depends on it.
     /// </summary>
-    public byte[] ReadBehaviours(Rom rom, TilesetSplit? split = null, int attributeStride = 2)
+    /// <param name="attributeStride">
+    /// Overrides the stride from <paramref name="split"/>. Only for diagnostics —
+    /// reading at the wrong stride does not fail, it silently returns a neighbouring
+    /// metatile's behaviour, so being able to compare interpretations side by side is
+    /// what identified the right one.
+    /// </param>
+    public byte[] ReadBehaviours(Rom rom, TilesetSplit? split = null, int? attributeStride = null)
     {
         TilesetSplit chosen = split ?? TilesetSplit.FireRed;
+        int stride = attributeStride ?? chosen.AttributeStride;
 
         TilesetRecord? primary = TilesetRecord.TryParse(rom, PrimaryTilesetPointer);
         TilesetRecord? secondary = SecondaryTilesetPointer == 0
@@ -126,7 +142,7 @@ public sealed record MapLayoutRecord(
                 ? (primary, metatile)
                 : (secondary, metatile - chosen.Metatiles);
 
-            behaviours[i] = tileset?.ReadBehaviour(rom, local, attributeStride) ?? 0;
+            behaviours[i] = tileset?.ReadBehaviour(rom, local, stride) ?? 0;
         }
 
         return behaviours;
@@ -246,7 +262,7 @@ public sealed record TilesetRecord(
     /// neighbouring metatile's behaviour, which looks like terrain scattered in the
     /// wrong places rather than an error.
     /// </param>
-    public byte ReadBehaviour(Rom rom, int localIndex, int attributeStride = 2)
+    public byte ReadBehaviour(Rom rom, int localIndex, int attributeStride = 4)
     {
         if (MetatileAttributesPointer == 0) return 0;
         if (rom.ToOffsetOrNull(MetatileAttributesPointer) is not { } offset) return 0;
