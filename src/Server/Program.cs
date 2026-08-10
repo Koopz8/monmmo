@@ -24,6 +24,7 @@ public static class Program
         string worldPath = ArgumentValue(args, "--world") ?? "world.dat";
         string startingMap = ArgumentValue(args, "--map") ?? "pallet town";
         int port = int.TryParse(ArgumentValue(args, "--port"), out int parsed) ? parsed : DefaultPort;
+        bool verbose = args.Contains("--verbose");
 
         if (!File.Exists(worldPath))
         {
@@ -65,7 +66,7 @@ public static class Program
 
         ReportEncounterReadiness(game.Map);
 
-        await new GameServer(game).RunAsync(port);
+        await new GameServer(game, verbose).RunAsync(port);
         return 0;
     }
 
@@ -110,7 +111,7 @@ public static class Program
 }
 
 /// <summary>Accepts connections and fans messages out to them.</summary>
-public sealed class GameServer(GameWorld world)
+public sealed class GameServer(GameWorld world, bool verbose = false)
 {
     private readonly ConcurrentDictionary<int, MessageChannel> _channels = new();
     private readonly Stopwatch _clock = Stopwatch.StartNew();
@@ -200,6 +201,17 @@ public sealed class GameServer(GameWorld world)
                             // and at a typical rate most steps in grass do fail.
                             if (!met && world.GrassSteps > grassBefore)
                                 Console.WriteLine($"~ #{playerId} stepped in grass ({world.GrassSteps} so far, nothing appeared)");
+
+                            // With --verbose, every step is reported with the square it
+                            // landed on and what that square is. Silence otherwise says
+                            // nothing: a client that never sends a move and a player
+                            // who never crosses grass look the same.
+                            if (verbose && world.Find(playerId) is { } walker)
+                            {
+                                Console.WriteLine(
+                                    $"  #{playerId} {move.Direction} -> {walker.Square} " +
+                                    $"behaviour 0x{world.Map.BehaviourAt(walker.Square):X2}");
+                            }
 
                             await DispatchAsync(result, playerId, cancellationToken).ConfigureAwait(false);
                             break;
