@@ -63,6 +63,13 @@ public sealed class GameWorld(WorldData world, string startingMapId, uint encoun
     /// </summary>
     public CollisionGrid Grid => _grid ??= Map.ToGrid();
 
+    /// <summary>
+    /// How many steps have landed on an encounter square. Counted because a server
+    /// that never rolls and a server that rolls and misses look identical otherwise,
+    /// and at a typical rate most steps in grass do miss.
+    /// </summary>
+    public int GrassSteps { get; private set; }
+
     public int PlayerCount
     {
         get { lock (_gate) return _players.Count; }
@@ -156,14 +163,18 @@ public sealed class GameWorld(WorldData world, string startingMapId, uint encoun
             // The encounter roll is the server's, not the client's — otherwise a
             // modified client could simply decline to meet anything, or meet whatever
             // it liked.
-            if (Map.IsEncounterSquare(destination) &&
-                WildEncounters.RollStep(_rng, Map.Encounters!.Land) is { } encounter)
+            if (Map.IsEncounterSquare(destination))
             {
-                player.InBattle = true;
+                GrassSteps++;
 
-                send.Add(new Outgoing(
-                    new WildEncounterStarted(encounter.Species, encounter.Level, _rng.State),
-                    OnlyTo: playerId));
+                if (WildEncounters.RollStep(_rng, Map.Encounters!.Land) is { } encounter)
+                {
+                    player.InBattle = true;
+
+                    send.Add(new Outgoing(
+                        new WildEncounterStarted(encounter.Species, encounter.Level, _rng.State),
+                        OnlyTo: playerId));
+                }
             }
 
             return send;

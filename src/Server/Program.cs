@@ -180,16 +180,26 @@ public sealed class GameServer(GameWorld world)
                             break;
 
                         case MoveRequest move when playerId != 0:
+                            int grassBefore = world.GrassSteps;
                             List<Outgoing> result = world.Move(playerId, move.Direction, Now);
+
+                            bool met = false;
 
                             foreach (Outgoing outgoing in result)
                             {
                                 if (outgoing.Message is WildEncounterStarted encounter)
                                 {
+                                    met = true;
                                     Console.WriteLine(
                                         $"! #{playerId} met species {encounter.Species} at level {encounter.Level}");
                                 }
                             }
+
+                            // Reporting the misses too is the only way to tell "grass
+                            // is not being detected" from "the roll simply failed",
+                            // and at a typical rate most steps in grass do fail.
+                            if (!met && world.GrassSteps > grassBefore)
+                                Console.WriteLine($"~ #{playerId} stepped in grass ({world.GrassSteps} so far, nothing appeared)");
 
                             await DispatchAsync(result, playerId, cancellationToken).ConfigureAwait(false);
                             break;
