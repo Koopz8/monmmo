@@ -107,6 +107,9 @@ public static class Program
         if (options.DumpMoves)
             WriteMoves(rom, options.OutputDirectory);
 
+        if (options.DumpEncounters)
+            WriteEncounters(rom, options);
+
         if (!string.IsNullOrEmpty(options.ExportWorldPath))
             ExportWorld(rom, options.ExportWorldPath);
 
@@ -422,6 +425,70 @@ public static class Program
         }
     }
 
+    private static void WriteEncounters(Rom rom, Options options)
+    {
+        Console.WriteLine();
+        Console.WriteLine("Locating encounters");
+
+        List<Core.World.MapEncounters> encounters = EncounterExtractor.Extract(rom, Console.WriteLine);
+
+        if (encounters.Count == 0) return;
+
+        string path = Path.Combine(options.OutputDirectory, "encounters.json");
+        File.WriteAllText(path, JsonSerializer.Serialize(encounters, Json));
+        Console.WriteLine($"Wrote {path}");
+
+        Console.WriteLine();
+        Console.WriteLine("Spot check (land tables):");
+
+        foreach (Core.World.MapEncounters map in encounters.Where(m => m.Land is not null).Take(3))
+        {
+            Console.WriteLine($"  map {map.MapId}, rate {map.Land!.Rate}");
+
+            foreach (Core.World.WildSlot slot in map.Land.Slots.Take(4))
+                Console.WriteLine($"    {slot}");
+        }
+
+        ReportBehaviours(rom, options);
+    }
+
+    /// <summary>
+    /// Counts how often each metatile behaviour appears on a map.
+    /// <para>
+    /// Which behaviour value means "tall grass" is a per-game constant, and guessing
+    /// it is how the last several bugs happened. A histogram against a map whose
+    /// layout is already known says which value it is, rather than assuming.
+    /// </para>
+    /// </summary>
+    private static void ReportBehaviours(Rom rom, Options options)
+    {
+        MapBankTable? banks = MapBankLocator.Locate(rom);
+        if (banks is null) return;
+
+        RegionNameTable? names = RegionNameLocator.Locate(rom);
+        List<int> sectionIds = banks.AllMaps.Select(m => (int)m.Header.RegionSectionId).ToList();
+        int indexBase = names?.InferIndexBase(sectionIds) ?? 0;
+
+        string wanted = string.IsNullOrEmpty(options.MapNameFilter) ? "route 1" : options.MapNameFilter;
+
+        var match = banks.AllMaps
+            .Where(m => (names?.Resolve(m.Header.RegionSectionId, indexBase) ?? "")
+                .Contains(wanted, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(m => m.Header.Layout.BlockCount)
+            .FirstOrDefault();
+
+        if (match.Header is null) return;
+
+        byte[] behaviours = match.Header.Layout.ReadBehaviours(rom, options.Split);
+
+        Console.WriteLine();
+        Console.WriteLine($"Metatile behaviours on {names?.Resolve(match.Header.RegionSectionId, indexBase)} " +
+                          $"({match.Bank}.{match.Map}), most common first:");
+
+        foreach (var group in behaviours.GroupBy(b => b).OrderByDescending(g => g.Count()).Take(8))
+            Console.WriteLine($"  0x{group.Key:X2}  {group.Count(),5} squares");
+    }
+
     /// <summary>
     /// Writes the collision-only world file the server runs on. Dimensions and
     /// walkability only — no graphics, no text, nothing redistributable.
@@ -457,6 +524,8 @@ public static class Program
                                      or "all" to render every map
               --map-name <text>      render every map whose name contains this text
               --moves                dump the move table with names and categories
+              --encounters           dump wild encounter tables, and report metatile
+                                     behaviours for a map (use --map-name to choose)
               --export-world <path>  write the collision-only world file the server
                                      runs on (no graphics, no text)
               --tileset-split <g>    firered (default) or emerald — how tile, metatile
@@ -484,6 +553,7 @@ public static class Program
         public TilesetSplit Split { get; private init; } = TilesetSplit.FireRed;
         public string? ExportWorldPath { get; private init; }
         public bool DumpMoves { get; private init; }
+        public bool DumpEncounters { get; private init; }
         public TileOrder TileOrder { get; private init; } = TileOrder.RowMajor;
 
         public static Options Parse(string[] args)
@@ -500,7 +570,7 @@ public static class Program
             string? nameFilter = null;
             TilesetSplit split = TilesetSplit.FireRed;
             string? exportWorld = null;
-            bool dumpMoves = false;
+            bool dumpMoves = false, dumpEncounters = false;
             TileOrder order = TileOrder.RowMajor;
 
             for (int i = 1; i < args.Length; i++)
@@ -551,6 +621,9 @@ public static class Program
                     case "--moves":
                         dumpMoves = true;
                         break;
+                    case "--encounters":
+                        dumpEncounters = true;
+                        break;
                     case "--tileset-split":
                         string game = Next(args, ref i, "--tileset-split");
                         split = game.StartsWith("em", StringComparison.OrdinalIgnoreCase)
@@ -584,6 +657,7 @@ public static class Program
                 Split = split,
                 ExportWorldPath = exportWorld,
                 DumpMoves = dumpMoves,
+                DumpEncounters = dumpEncounters,
                 TileOrder = order,
             };
         }

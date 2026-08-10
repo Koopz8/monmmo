@@ -101,6 +101,38 @@ public sealed record MapLayoutRecord(
     }
 
     /// <summary>
+    /// The behaviour byte of every square, which is what says where wild encounters
+    /// can happen. Exported raw rather than interpreted, because the meaning of each
+    /// value is a per-game constant worth confirming against a real image before
+    /// anything depends on it.
+    /// </summary>
+    public byte[] ReadBehaviours(Rom rom, TilesetSplit? split = null)
+    {
+        TilesetSplit chosen = split ?? TilesetSplit.FireRed;
+
+        TilesetRecord? primary = TilesetRecord.TryParse(rom, PrimaryTilesetPointer);
+        TilesetRecord? secondary = SecondaryTilesetPointer == 0
+            ? null
+            : TilesetRecord.TryParse(rom, SecondaryTilesetPointer);
+
+        ushort[] blocks = ReadBlocks(rom);
+        var behaviours = new byte[blocks.Length];
+
+        for (int i = 0; i < blocks.Length; i++)
+        {
+            int metatile = new MapBlock(blocks[i]).MetatileId;
+
+            (TilesetRecord? tileset, int local) = metatile < chosen.Metatiles
+                ? (primary, metatile)
+                : (secondary, metatile - chosen.Metatiles);
+
+            behaviours[i] = tileset?.ReadBehaviour(rom, local) ?? 0;
+        }
+
+        return behaviours;
+    }
+
+    /// <summary>
     /// Builds the walkability grid for this map from the collision bits already
     /// carried by each block.
     /// </summary>
@@ -144,7 +176,8 @@ public sealed record TilesetRecord(
     bool IsSecondary,
     uint TilesPointer,
     uint PalettesPointer,
-    uint MetatilesPointer)
+    uint MetatilesPointer,
+    uint MetatileAttributesPointer)
 {
     public const int SizeBytes = 24;
 
@@ -172,7 +205,47 @@ public sealed record TilesetRecord(
         if (!rom.IsRomAddress(tiles) || !rom.IsRomAddress(palettes) || !rom.IsRomAddress(metatiles))
             return null;
 
-        return new TilesetRecord(offset, compressed == 1, secondary == 1, tiles, palettes, metatiles);
+        return new TilesetRecord(
+            offset, compressed == 1, secondary == 1, tiles, palettes, metatiles,
+            FindAttributes(rom, offset));
+    }
+
+    /// <summary>
+    /// Picks out the metatile attributes from the record's last two fields.
+    /// <para>
+    /// Those two fields are the attributes and a callback, and games disagree about
+    /// which comes first — so rather than guess, tell them apart by what they point at.
+    /// A callback is a function, and function pointers on this hardware carry a set low
+    /// bit to select the instruction set; a data pointer is aligned and even. The odd
+    /// one is the callback, the other is the attributes.
+    /// </para>
+    /// </summary>
+    private static uint FindAttributes(Rom rom, int offset)
+    {
+        uint first = rom.ReadU32(offset + 16);
+        uint second = rom.ReadU32(offset + 20);
+
+        bool firstIsCode = (first & 1) != 0;
+        bool secondIsCode = (second & 1) != 0;
+
+        if (firstIsCode && !secondIsCode) return rom.IsRomAddress(second) ? second : 0;
+        if (!firstIsCode && rom.IsRomAddress(first)) return first;
+
+        return rom.IsRomAddress(second) && !secondIsCode ? second : 0;
+    }
+
+    /// <summary>
+    /// The behaviour byte of a metatile — what the square <em>is</em>, as opposed to
+    /// what it looks like. Tall grass, water, ledges and doors are all distinguished
+    /// here rather than by appearance.
+    /// </summary>
+    public byte ReadBehaviour(Rom rom, int localIndex)
+    {
+        if (MetatileAttributesPointer == 0) return 0;
+        if (rom.ToOffsetOrNull(MetatileAttributesPointer) is not { } offset) return 0;
+
+        int at = offset + localIndex * 2;
+        return at + 2 <= rom.Length ? (byte)(rom.ReadU16(at) & 0xFF) : (byte)0;
     }
 
     /// <summary>
