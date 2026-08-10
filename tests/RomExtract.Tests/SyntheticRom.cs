@@ -24,7 +24,14 @@ public sealed class SyntheticRom
     public const int FrontPicTableOffset = 0x008000;
     public const int BackPicTableOffset = 0x00A000;
     public const int NormalPaletteTableOffset = 0x00C000;
-    public const int ShinyPaletteTableOffset = 0x00E000;
+
+    /// <summary>
+    /// Deliberately placed immediately after the normal palette table, with no gap.
+    /// The real cartridge lays these two out back-to-back, and a scanner that skips
+    /// past a completed run by the wrong amount will step over this table's first
+    /// entry and never find it.
+    /// </summary>
+    public const int ShinyPaletteTableOffset = NormalPaletteTableOffset + SpeciesCount * 8;
 
     private const int TestSpriteBlobOffset = 0x010000;
     private const int FillerSpriteBlobOffset = 0x020000;
@@ -86,10 +93,48 @@ public sealed class SyntheticRom
     {
         for (int i = 0; i < SpeciesCount; i++)
         {
-            byte[] encoded = GameText.Encode(NameFor(i), GameText.SpeciesNameLength);
+            byte[] encoded = EncodeNameAsCartridgeWould(NameFor(i));
             encoded.CopyTo(_data, SpeciesNamesOffset + i * GameText.SpeciesNameLength);
         }
     }
+
+    /// <summary>
+    /// Encodes a name the way the cartridge actually stores it, rather than by calling
+    /// the production encoder.
+    /// <para>
+    /// The name table is a fixed-width array initialised from string literals, so any
+    /// space after the terminator is <em>zero</em> fill — not more terminator bytes.
+    /// The fixture must model that independently; reusing the production encoder here
+    /// would only ever confirm that the code agrees with itself.
+    /// </para>
+    /// </summary>
+    private static byte[] EncodeNameAsCartridgeWould(string name)
+    {
+        var buffer = new byte[GameText.SpeciesNameLength]; // zero-filled
+
+        int i = 0;
+        foreach (char c in name)
+        {
+            if (i >= GameText.SpeciesNameLength - 1) break;
+            buffer[i++] = EncodeCharAsCartridgeWould(c);
+        }
+
+        buffer[i] = GameText.Terminator;
+        return buffer;
+    }
+
+    private static byte EncodeCharAsCartridgeWould(char c) => c switch
+    {
+        >= 'A' and <= 'Z' => (byte)(0xBB + (c - 'A')),
+        >= 'a' and <= 'z' => (byte)(0xD5 + (c - 'a')),
+        >= '0' and <= '9' => (byte)(0xA1 + (c - '0')),
+        '.' => 0xAD,
+        '-' => 0xAE,
+        '’' => 0xB4,
+        '♂' => 0xB5,
+        '♀' => 0xB6,
+        _ => 0x00,
+    };
 
     private void WriteBaseStats()
     {

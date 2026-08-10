@@ -39,6 +39,33 @@ public class TableLocatorTests
     }
 
     [Fact]
+    public void FindsATableThatBeginsImmediatelyAfterAnother()
+    {
+        // Regression: the shiny palette table starts at the very next byte after the
+        // normal one. A scanner that resumed four bytes past a completed run stepped
+        // over this table's first entry, then latched onto unrelated data further on.
+        RomTables tables = Locate();
+
+        Assert.Equal(
+            SyntheticRom.NormalPaletteTableOffset + SyntheticRom.SpeciesCount * 8,
+            SyntheticRom.ShinyPaletteTableOffset);
+
+        Assert.Equal(SyntheticRom.ShinyPaletteTableOffset, tables.ShinyPalettes?.Offset);
+        Assert.Equal(SyntheticRom.SpeciesCount, tables.ShinyPalettes!.EntryCount);
+    }
+
+    [Fact]
+    public void FindsTheNameTableDespiteZeroPaddingAfterTheTerminator()
+    {
+        // Regression: names are zero-filled past the terminator, so a full-width
+        // search key never matched and every species came out unnamed.
+        RomTables tables = Locate();
+
+        Assert.NotNull(tables.SpeciesNames);
+        Assert.Equal(SyntheticRom.SpeciesNamesOffset, tables.SpeciesNames!.Offset);
+    }
+
+    [Fact]
     public void FindsNothingInAnImageThatHasNoTables()
     {
         // A cartridge-sized buffer of noise must not yield confident false positives.

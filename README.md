@@ -104,6 +104,24 @@ it must be **rejected**. Those are what stop the scanner from being confidently 
 
 ---
 
+## Field notes
+
+Run against a real FireRed (US) rev 0 image whose SHA-1 matched pret's published
+hash. Two bugs surfaced that the synthetic fixture had not caught, because the
+fixture encoded assumptions rather than the cartridge's actual layout:
+
+- **Name records are zero-filled past the terminator**, not padded with more
+  terminator bytes. The full-width search key therefore matched nothing and every
+  species came out unnamed. The anchor is now the characters plus the terminator and
+  stops there.
+- **Tables sit back-to-back.** After completing a run the scanner resumed four bytes
+  too far, stepping over the next table's first entry — so the shiny palette table
+  was missed and the scanner latched onto unrelated data further along.
+
+The fixture now models both properties, and both failures are pinned by regression
+tests. The lesson worth keeping: a fixture built from the same assumptions as the
+code under test only ever proves the code agrees with itself.
+
 ## The one thing that needs a real cartridge to confirm
 
 Sprite **tile ordering**. A 64x64 sprite is 64 tiles in a linear run, and both

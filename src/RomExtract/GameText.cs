@@ -62,11 +62,19 @@ public static class GameText
         return Punctuation.TryGetValue(b, out char c) ? c : '?';
     }
 
-    /// <summary>Encodes ASCII text into the cartridge character set, terminated and padded to <paramref name="fieldWidth"/>.</summary>
+    /// <summary>
+    /// Encodes text into the cartridge character set as a fixed-width record.
+    /// <para>
+    /// The name is followed by a single terminator, and any remaining space is
+    /// <em>zero</em> fill. That matters: these tables are fixed-width arrays
+    /// initialised from string literals, so the compiler zero-fills the tail rather
+    /// than repeating the terminator. Assuming otherwise makes byte-exact searches
+    /// for a known record silently fail to match.
+    /// </para>
+    /// </summary>
     public static byte[] Encode(string text, int fieldWidth)
     {
-        var buffer = new byte[fieldWidth];
-        buffer.AsSpan().Fill(Terminator);
+        var buffer = new byte[fieldWidth]; // zero-filled by default
 
         int i = 0;
         foreach (char c in text)
@@ -75,6 +83,26 @@ public static class GameText
             buffer[i++] = EncodeChar(c);
         }
 
+        buffer[i] = Terminator;
+        return buffer;
+    }
+
+    /// <summary>
+    /// Encodes text as a search key: the characters plus the terminator, and nothing
+    /// after it.
+    /// <para>
+    /// Used to locate a known record inside a table without depending on how the tail
+    /// of the field happens to be padded, which varies between tables and revisions.
+    /// </para>
+    /// </summary>
+    public static byte[] EncodeAnchor(string text)
+    {
+        var buffer = new byte[text.Length + 1];
+
+        for (int i = 0; i < text.Length; i++)
+            buffer[i] = EncodeChar(text[i]);
+
+        buffer[^1] = Terminator;
         return buffer;
     }
 

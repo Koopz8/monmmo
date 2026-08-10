@@ -48,6 +48,32 @@ public class GameTextTests
     }
 
     [Fact]
+    public void EncodingZeroFillsAfterTheTerminator()
+    {
+        // Regression: these tables are fixed-width arrays initialised from string
+        // literals, so the tail is zero fill. Padding with more terminators produced
+        // a search key that matched nothing on a real cartridge.
+        byte[] encoded = GameText.Encode("BULBASAUR", GameText.SpeciesNameLength);
+
+        Assert.Equal(GameText.Terminator, encoded[9]);
+        Assert.Equal(0x00, encoded[10]);
+    }
+
+    [Fact]
+    public void AnchorEncodingStopsRightAfterTheTerminator()
+    {
+        byte[] anchor = GameText.EncodeAnchor("BULBASAUR");
+
+        Assert.Equal(10, anchor.Length);
+        Assert.Equal(GameText.Terminator, anchor[^1]);
+
+        // The anchor must be a prefix of the real record regardless of how the
+        // remaining field width is padded.
+        byte[] record = GameText.Encode("BULBASAUR", GameText.SpeciesNameLength);
+        Assert.Equal(anchor, record[..anchor.Length]);
+    }
+
+    [Fact]
     public void EncodingTruncatesRatherThanOverflowingTheField()
     {
         byte[] encoded = GameText.Encode("ABCDEFGHIJKLMNOP", GameText.SpeciesNameLength);

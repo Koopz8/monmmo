@@ -85,7 +85,10 @@ public static class TableLocator
     /// </summary>
     private static TableLocation? LocateSpeciesNames(Rom rom, Action<string> log)
     {
-        byte[] anchor = GameText.Encode("BULBASAUR", GameText.SpeciesNameLength);
+        // Anchor on the characters plus the terminator only. The bytes after the
+        // terminator are zero fill, not more terminators, so a full-width key
+        // would never match.
+        byte[] anchor = GameText.EncodeAnchor("BULBASAUR");
 
         foreach (int match in rom.FindAll(anchor))
         {
@@ -209,7 +212,11 @@ public static class TableLocator
                     found.Count == 0 ? "FrontPics" : "BackPics", offset, entrySize, run,
                     $"run of {run} sized/tagged entries"));
 
-                offset += run * entrySize;
+                // Resume exactly at the first byte past this table, not four bytes
+                // beyond it. These tables sit back-to-back on the cartridge, and the
+                // loop's own increment supplies the remaining step — overshooting here
+                // skips the next table's first entry and loses the table entirely.
+                offset += run * entrySize - 4;
             }
         }
 
@@ -248,7 +255,11 @@ public static class TableLocator
                     found.Count == 0 ? "NormalPalettes" : "ShinyPalettes", offset, entrySize, run,
                     $"run of {run} tagged entries"));
 
-                offset += run * entrySize;
+                // Resume exactly at the first byte past this table, not four bytes
+                // beyond it. These tables sit back-to-back on the cartridge, and the
+                // loop's own increment supplies the remaining step — overshooting here
+                // skips the next table's first entry and loses the table entirely.
+                offset += run * entrySize - 4;
             }
         }
 
