@@ -300,3 +300,180 @@ public class ServerBoundaryTests
         Assert.Contains("Core", referenced);
     }
 }
+
+/// <summary>Encounters as the server decides them.</summary>
+public class ServerEncounterTests
+{
+    /// <summary>A 4x3 map, entirely open, with grass along the bottom row.</summary>
+    private static GameWorld GrassyWorld(int rate = 100, uint seed = 1)
+    {
+        var behaviours = new byte[12];
+        for (int x = 0; x < 4; x++) behaviours[2 * 4 + x] = MetatileBehaviour.TallGrass;
+
+        var map = new MapData("3.19", "ROUTE 1", 4, 3, new byte[12])
+        {
+            Behaviours = behaviours,
+            Encounters = new MapEncounters("3.19", Land: new EncounterTable(
+                EncounterKind.Land,
+                rate,
+                Enumerable.Range(0, 12).Select(i => new WildSlot(16, 2, 5)).ToList())),
+        };
+
+        return new GameWorld(new WorldData([map]), "3.19", seed);
+    }
+
+    private static ServerPlayer PlayerAt(GameWorld world, int x, int y)
+    {
+        (ServerPlayer player, _) = world.Join("Mason");
+        player.Square = new GridPosition(x, y);
+        player.LastStepAt = double.NegativeInfinity;
+        return player;
+    }
+
+    /// <summary>
+    /// Steps into the grass repeatedly until something appears. Even at the highest
+    /// rate an encounter is a coin flip per step, so a single-step assertion would be
+    /// flaky by construction.
+    /// </summary>
+    private static (WildEncounterStarted? Encounter, Outgoing? Message) WalkUntilEncounter(
+        GameWorld world, ServerPlayer player, int maxSteps = 40)
+    {
+        double now = 0;
+
+        for (int step = 0; step < maxSteps; step++)
+        {
+            player.Square = new GridPosition(step % 4, 1);
+            player.LastStepAt = double.NegativeInfinity;
+            now += 1;
+
+            foreach (Outgoing outgoing in world.Move(player.Id, Direction.Down, now))
+                if (outgoing.Message is WildEncounterStarted encounter) return (encounter, outgoing);
+        }
+
+        return (null, null);
+    }
+
+    [Fact]
+    public void SteppingIntoGrassCanStartAnEncounter()
+    {
+        GameWorld world = GrassyWorld();
+        ServerPlayer player = PlayerAt(world, 0, 1);
+
+        (WildEncounterStarted? encounter, _) = WalkUntilEncounter(world, player);
+
+        Assert.NotNull(encounter);
+        Assert.Equal(16, encounter!.Species);
+        Assert.InRange(encounter.Level, 2, 5);
+    }
+
+    [Fact]
+    public void AnEncounterIsToldOnlyToThePlayerWhoWalkedIntoIt()
+    {
+        GameWorld world = GrassyWorld();
+        ServerPlayer player = PlayerAt(world, 0, 1);
+
+        (_, Outgoing? message) = WalkUntilEncounter(world, player);
+
+        Assert.NotNull(message);
+        Assert.Equal(player.Id, message!.OnlyTo);
+    }
+
+    [Fact]
+    public void WalkingOnOrdinaryGroundMeetsNothing()
+    {
+        GameWorld world = GrassyWorld();
+        ServerPlayer player = PlayerAt(world, 0, 0);
+
+        // Moving along the top row, which carries no grass, however many steps.
+        double now = 0;
+
+        for (int step = 0; step < 200; step++)
+        {
+            player.Square = new GridPosition(0, 0);
+            player.LastStepAt = double.NegativeInfinity;
+            now += 1;
+
+            Assert.DoesNotContain(world.Move(player.Id, Direction.Right, now),
+                o => o.Message is WildEncounterStarted);
+        }
+    }
+
+    [Fact]
+    public void AMapWithoutEncounterTablesNeverStartsOne()
+    {
+        var behaviours = new byte[4];
+        behaviours[0] = MetatileBehaviour.TallGrass;
+
+        var map = new MapData("3.0", "PALLET TOWN", 2, 2, new byte[4]) { Behaviours = behaviours };
+        var world = new GameWorld(new WorldData([map]), "3.0");
+
+        (ServerPlayer player, _) = world.Join("Mason");
+        player.Square = new GridPosition(1, 0);
+        player.LastStepAt = double.NegativeInfinity;
+
+        Assert.DoesNotContain(world.Move(player.Id, Direction.Left, 10),
+            o => o.Message is WildEncounterStarted);
+    }
+
+    [Fact]
+    public void ARateOfZeroMeansGrassIsJustGrass()
+    {
+        GameWorld world = GrassyWorld(rate: 0);
+        ServerPlayer player = PlayerAt(world, 0, 1);
+
+        (WildEncounterStarted? encounter, _) = WalkUntilEncounter(world, player, maxSteps: 200);
+
+        Assert.Null(encounter);
+    }
+
+    [Fact]
+    public void TheEncounterSeedTravelsWithTheMessage()
+    {
+        // The client resolves the battle itself from this seed, so it has to arrive.
+        GameWorld world = GrassyWorld();
+        ServerPlayer player = PlayerAt(world, 0, 1);
+
+        (WildEncounterStarted? encounter, _) = WalkUntilEncounter(world, player);
+
+        Assert.NotNull(encounter);
+        Assert.NotEqual(0u, encounter!.Seed);
+    }
+
+    [Fact]
+    public void TheSameServerSeedProducesTheSameEncounters()
+    {
+        static List<string> Walk(uint seed)
+        {
+            GameWorld world = GrassyWorld(rate: 30, seed: seed);
+            (ServerPlayer player, _) = world.Join("Mason");
+
+            var met = new List<string>();
+            double now = 0;
+
+            for (int step = 0; step < 60; step++)
+            {
+                player.Square = new GridPosition(step % 4, 1);
+                player.LastStepAt = double.NegativeInfinity;
+                now += 1;
+
+                foreach (Outgoing outgoing in world.Move(player.Id, Direction.Down, now))
+                    if (outgoing.Message is WildEncounterStarted e) met.Add($"{e.Species}@{e.Level}");
+            }
+
+            return met;
+        }
+
+        Assert.Equal(Walk(1234), Walk(1234));
+    }
+
+    [Fact]
+    public void APlayerIsMarkedAsBattlingWhenSomethingAppears()
+    {
+        GameWorld world = GrassyWorld();
+        ServerPlayer player = PlayerAt(world, 0, 1);
+
+        WalkUntilEncounter(world, player);
+
+        Assert.True(world.Find(player.Id)!.InBattle);
+    }
+}

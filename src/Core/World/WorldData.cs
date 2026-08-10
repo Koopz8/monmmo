@@ -2,10 +2,32 @@ using System.Text;
 
 namespace PokeMmo.Core.World;
 
-/// <summary>One map's identity, size and walkability. No graphics.</summary>
+/// <summary>One map's identity, size, walkability and encounters. No graphics.</summary>
 public sealed record MapData(string Id, string Name, int Width, int Height, byte[] Collision)
 {
+    /// <summary>
+    /// What each square is — grass, ledge, ordinary ground. Empty when unknown, in
+    /// which case the map simply has no encounter squares.
+    /// </summary>
+    public byte[] Behaviours { get; init; } = [];
+
+    public MapEncounters? Encounters { get; init; }
+
     public CollisionGrid ToGrid() => new(Width, Height, Collision);
+
+    public byte BehaviourAt(GridPosition square)
+    {
+        if (Behaviours.Length == 0) return MetatileBehaviour.Normal;
+        if (square.X < 0 || square.X >= Width || square.Y < 0 || square.Y >= Height)
+            return MetatileBehaviour.Normal;
+
+        int index = square.Y * Width + square.X;
+        return index < Behaviours.Length ? Behaviours[index] : MetatileBehaviour.Normal;
+    }
+
+    /// <summary>True when standing on this square can start a wild encounter.</summary>
+    public bool IsEncounterSquare(GridPosition square) =>
+        Encounters?.Land is { IsUsable: true } && MetatileBehaviour.IsEncounterGrass(BehaviourAt(square));
 }
 
 /// <summary>
@@ -28,7 +50,7 @@ public sealed class WorldData
     /// <summary>Identifies the format, so a wrong or stale file fails loudly.</summary>
     private static readonly byte[] Magic = "MONWORLD"u8.ToArray();
 
-    private const int Version = 1;
+    private const int Version = 2;
 
     private readonly Dictionary<string, MapData> _maps;
 
@@ -64,6 +86,11 @@ public sealed class WorldData
             writer.Write(map.Height);
             writer.Write(map.Collision.Length);
             writer.Write(map.Collision);
+
+            writer.Write(map.Behaviours.Length);
+            writer.Write(map.Behaviours);
+
+            WriteEncounters(writer, map.Encounters);
         }
     }
 
@@ -105,10 +132,78 @@ public sealed class WorldData
             if (width <= 0 || height <= 0 || collisionLength != width * height)
                 throw new InvalidDataException($"Map '{id}' has inconsistent dimensions.");
 
-            maps.Add(new MapData(id, name, width, height, reader.ReadBytes(collisionLength)));
+            byte[] collision = reader.ReadBytes(collisionLength);
+
+            int behaviourLength = reader.ReadInt32();
+
+            if (behaviourLength != 0 && behaviourLength != width * height)
+                throw new InvalidDataException($"Map '{id}' has {behaviourLength} behaviours for {width * height} squares.");
+
+            byte[] behaviours = reader.ReadBytes(behaviourLength);
+
+            maps.Add(new MapData(id, name, width, height, collision)
+            {
+                Behaviours = behaviours,
+                Encounters = ReadEncounters(reader, id),
+            });
         }
 
         return new WorldData(maps);
+    }
+
+    private static void WriteEncounters(BinaryWriter writer, MapEncounters? encounters)
+    {
+        writer.Write(encounters is not null);
+        if (encounters is null) return;
+
+        foreach (EncounterKind kind in Enum.GetValues<EncounterKind>())
+        {
+            EncounterTable? table = encounters.For(kind);
+            writer.Write(table is not null);
+            if (table is null) continue;
+
+            writer.Write(table.Rate);
+            writer.Write(table.Slots.Count);
+
+            foreach (WildSlot slot in table.Slots)
+            {
+                writer.Write(slot.Species);
+                writer.Write(slot.MinLevel);
+                writer.Write(slot.MaxLevel);
+            }
+        }
+    }
+
+    private static MapEncounters? ReadEncounters(BinaryReader reader, string mapId)
+    {
+        if (!reader.ReadBoolean()) return null;
+
+        var tables = new Dictionary<EncounterKind, EncounterTable>();
+
+        foreach (EncounterKind kind in Enum.GetValues<EncounterKind>())
+        {
+            if (!reader.ReadBoolean()) continue;
+
+            int rate = reader.ReadInt32();
+            int slotCount = reader.ReadInt32();
+
+            if (rate is < 0 or > 100 || slotCount is < 0 or > 64)
+                throw new InvalidDataException($"Map '{mapId}' has an implausible encounter table.");
+
+            var slots = new List<WildSlot>(slotCount);
+
+            for (int i = 0; i < slotCount; i++)
+                slots.Add(new WildSlot(reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32()));
+
+            tables[kind] = new EncounterTable(kind, rate, slots);
+        }
+
+        return new MapEncounters(
+            mapId,
+            tables.GetValueOrDefault(EncounterKind.Land),
+            tables.GetValueOrDefault(EncounterKind.Water),
+            tables.GetValueOrDefault(EncounterKind.RockSmash),
+            tables.GetValueOrDefault(EncounterKind.Fishing));
     }
 
     public static WorldData Load(string path)

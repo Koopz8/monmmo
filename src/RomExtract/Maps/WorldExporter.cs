@@ -24,6 +24,11 @@ public static class WorldExporter
         List<int> sectionIds = banks.AllMaps.Select(m => (int)m.Header.RegionSectionId).ToList();
         int indexBase = names?.InferIndexBase(sectionIds) ?? 0;
 
+        Dictionary<string, MapEncounters> encounters = EncounterExtractor
+            .Extract(rom, log)
+            .GroupBy(e => e.MapId)
+            .ToDictionary(g => g.Key, g => g.First());
+
         var maps = new List<MapData>();
 
         foreach ((int bank, int number, MapHeaderRecord header) in banks.AllMaps)
@@ -39,12 +44,20 @@ public static class WorldExporter
                         collision[y * grid.Width + x] = grid.CollisionAt(new GridPosition(x, y));
                 }
 
+                string id = MapId(bank, number);
+
                 maps.Add(new MapData(
-                    MapId(bank, number),
+                    id,
                     names?.Resolve(header.RegionSectionId, indexBase) ?? $"SECTION {header.RegionSectionId}",
                     grid.Width,
                     grid.Height,
-                    collision));
+                    collision)
+                {
+                    // Behaviours are what tell the server which squares are grass, and
+                    // are a byte a square — still no graphics, text or audio.
+                    Behaviours = header.Layout.ReadBehaviours(rom),
+                    Encounters = encounters.GetValueOrDefault(id),
+                });
             }
             catch (Exception ex)
             {
@@ -53,7 +66,8 @@ public static class WorldExporter
             }
         }
 
-        log?.Invoke($"  exported {maps.Count} maps");
+        int withEncounters = maps.Count(m => m.Encounters is not null);
+        log?.Invoke($"  exported {maps.Count} maps, {withEncounters} with encounters");
         return new WorldData(maps);
     }
 

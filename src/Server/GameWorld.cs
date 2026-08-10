@@ -1,3 +1,4 @@
+using PokeMmo.Core.Battle;
 using PokeMmo.Core.Net;
 using PokeMmo.Core.World;
 
@@ -12,6 +13,9 @@ public sealed record ServerPlayer(int Id, string Name)
 
     /// <summary>When this player last completed a step, in server seconds.</summary>
     public double LastStepAt { get; set; } = double.NegativeInfinity;
+
+    /// <summary>True while this player is in a battle and should not be walking.</summary>
+    public bool InBattle { get; set; }
 
     public PlayerAppeared ToAppeared() => new(Id, Name, Square.X, Square.Y, Facing);
 }
@@ -32,8 +36,10 @@ public sealed record Outgoing(NetMessage Message, int? OnlyTo = null, int? Excep
 /// without sleeping.
 /// </para>
 /// </summary>
-public sealed class GameWorld(WorldData world, string startingMapId)
+public sealed class GameWorld(WorldData world, string startingMapId, uint encounterSeed = 1)
 {
+    private readonly BattleRng _rng = new(encounterSeed);
+
     /// <summary>
     /// Shortest interval between a player's steps. A client walking at the normal pace
     /// stays comfortably under this; one sending moves in a loop does not.
@@ -142,7 +148,25 @@ public sealed class GameWorld(WorldData world, string startingMapId)
             player.Square = destination;
             player.LastStepAt = nowSeconds;
 
-            return [new Outgoing(new PlayerMoved(playerId, destination.X, destination.Y, player.Facing))];
+            var send = new List<Outgoing>
+            {
+                new(new PlayerMoved(playerId, destination.X, destination.Y, player.Facing)),
+            };
+
+            // The encounter roll is the server's, not the client's — otherwise a
+            // modified client could simply decline to meet anything, or meet whatever
+            // it liked.
+            if (Map.IsEncounterSquare(destination) &&
+                WildEncounters.RollStep(_rng, Map.Encounters!.Land) is { } encounter)
+            {
+                player.InBattle = true;
+
+                send.Add(new Outgoing(
+                    new WildEncounterStarted(encounter.Species, encounter.Level, _rng.State),
+                    OnlyTo: playerId));
+            }
+
+            return send;
         }
     }
 
