@@ -137,6 +137,11 @@ public static class Program
     {
         using var view = new MapView(library, first);
 
+        // The cartridge's own walking figure, if it can be read. A rectangle is the
+        // fallback rather than a failure: a client that will not start because it could
+        // not find a sprite table is worse than one that draws a box.
+        using CharacterSprite? sprite = CharacterSprite.Load(data.Rom, CharacterSprite.DefaultGraphicsId);
+
         var player = new WalkingCharacter();
         player.Place(view.Map.Collision, view.Map.Collision.FirstWalkable());
 
@@ -222,11 +227,17 @@ public static class Program
             foreach (RemoteCharacter other in others.Values)
             {
                 (float x, float y) = other.PixelPosition;
-                DrawPlayer(x, y, other.Facing, new Color(120, 200, 255, 255));
+
+                if (sprite is not null) sprite.Draw(x, y, other.Facing, other.IsMoving, other.Id);
+                else DrawPlayer(x, y, other.Facing, new Color(120, 200, 255, 255));
+
                 DrawNameTag(other.Name, x, y);
             }
 
-            DrawPlayer(playerX, playerY, player.Facing);
+            if (sprite is not null)
+                sprite.Draw(playerX, playerY, player.Facing, player.IsStepping, player.StepsTaken);
+            else
+                DrawPlayer(playerX, playerY, player.Facing);
             Raylib.EndMode2D();
 
             DrawStatus(view.Map, player, network, others.Count);

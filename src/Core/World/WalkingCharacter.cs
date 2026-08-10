@@ -35,6 +35,16 @@ public sealed class WalkingCharacter
     /// <summary>How many steps have completed. Useful for driving a walk animation.</summary>
     public int StepsTaken { get; private set; }
 
+    /// <summary>
+    /// How far through the current step, from zero to one.
+    /// <para>
+    /// Exposed so a renderer can pick a walking frame from it. The alternative is a
+    /// renderer keeping its own timer, which would drift from the movement it is
+    /// supposed to be drawing.
+    /// </para>
+    /// </summary>
+    public float StepProgress => _stepProgress;
+
     public void Place(CollisionGrid grid, GridPosition start)
     {
         _grid = grid;
