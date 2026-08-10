@@ -214,6 +214,17 @@ public sealed class SyntheticRom
     /// </summary>
     public const int DeadOverworldIndex = 17;
 
+    /// <summary>
+    /// Indices whose size field is written in pixels rather than bytes.
+    /// <para>
+    /// Both conventions appear in the same real table, and the first two entries use
+    /// the less common one — which is exactly how six records were cut off the front
+    /// of it. Putting them at the start here means a check that only allows bytes
+    /// cannot pass.
+    /// </para>
+    /// </summary>
+    public static bool OverworldSizeInPixels(int index) => index is 0 or 1 or 40;
+
     public static int OverworldPaletteTagFor(int index) =>
         OverworldFirstPaletteTag + index % OverworldPaletteCount;
 
@@ -598,7 +609,9 @@ public sealed class SyntheticRom
             WriteU16(record, (ushort)(0xFFFF - index));                        // tile tag
             WriteU16(record + 2, (ushort)OverworldPaletteTagFor(index));       // palette tag
             WriteU16(record + 4, (ushort)OverworldPaletteTagFor(index));
-            WriteU16(record + 6, frameBytes);
+            WriteU16(record + 6, (ushort)(OverworldSizeInPixels(index)
+                ? OverworldWidth * OverworldHeight
+                : frameBytes));
             WriteU16(record + 8, OverworldWidth);
             WriteU16(record + 10, OverworldHeight);
             _data[record + 12] = (byte)(index % 16);                           // packed flags
@@ -621,7 +634,10 @@ public sealed class SyntheticRom
                 for (int i = 0; i < frameBytes; i++) _data[pixels + i] = packed;
 
                 WriteU32(frameList + frame * 8, Rom.BaseAddress + (uint)pixels);
-                WriteU16(frameList + frame * 8 + 4, frameBytes);
+
+                WriteU16(frameList + frame * 8 + 4, (ushort)(OverworldSizeInPixels(index)
+                    ? OverworldWidth * OverworldHeight
+                    : frameBytes));
             }
 
             // No terminator, and the next list starts immediately after this one. That

@@ -43,7 +43,7 @@ public sealed record ObjectGraphicsInfo(
         int height = (short)rom.ReadU16(offset + 10);
 
         if (!IsSpriteDimension(width) || !IsSpriteDimension(height)) return null;
-        if (size != width * height / 2) return null;
+        if (!IsPlausibleSize(size, width, height)) return null;
 
         byte packed = rom.ReadU8(offset + 12);
         int paletteSlot = packed & 0x0F;
@@ -71,6 +71,20 @@ public sealed record ObjectGraphicsInfo(
     private static bool IsSpriteDimension(int value) => value is 8 or 16 or 32 or 64;
 
     /// <summary>
+    /// Whether a record's stated size agrees with its dimensions.
+    /// <para>
+    /// Two conventions appear in the same table. Most records state bytes at four bits
+    /// a pixel — 256 for a 16x32 — and some state the pixel count, 512 for the same
+    /// sprite. Demanding only the first is what cut six records off the front of this
+    /// table: the scan started after them, every graphics id shifted, and nothing
+    /// failed. The check still ties size to dimensions, which is what gives it its
+    /// discriminating power; it just allows both units.
+    /// </para>
+    /// </summary>
+    private static bool IsPlausibleSize(int size, int width, int height) =>
+        size == width * height / 2 || size == width * height;
+
+    /// <summary>
     /// Why the bytes at an offset are not a record.
     /// <para>
     /// Exists for one question that a located address alone cannot answer: whether the
@@ -89,7 +103,9 @@ public sealed record ObjectGraphicsInfo(
 
         if (!IsSpriteDimension(width)) return $"width {width} is not a sprite size";
         if (!IsSpriteDimension(height)) return $"height {height} is not a sprite size";
-        if (size != width * height / 2) return $"size {size} is not {width}x{height} at 4bpp ({width * height / 2})";
+
+        if (!IsPlausibleSize(size, width, height))
+            return $"size {size} is neither {width * height / 2} nor {width * height} for {width}x{height}";
 
         if (!rom.IsRomAddress(rom.ReadU32(offset + 28))) return "images is not a pointer";
         if (!rom.IsRomAddress(rom.ReadU32(offset + 16))) return "oam is not a pointer";
@@ -246,10 +262,14 @@ public static class OverworldSprites
             if (rom.ToOffsetOrNull(rom.ReadU32(entry)) is not { } pixels) break;
 
             int size = rom.ReadU16(entry + 4);
-            if (size != info.ExpectedFrameBytes) break;
-            if (pixels + size > rom.Length) break;
 
-            frames.Add(TileDecoder.Decode4Bpp(rom.Slice(pixels, size), info.Width, info.Height));
+            // A frame states its size in whichever unit its record used. The pixels are
+            // four bits each either way, so only the byte count is ever read.
+            if (size != info.ExpectedFrameBytes && size != info.Width * info.Height) break;
+            if (pixels + info.ExpectedFrameBytes > rom.Length) break;
+
+            frames.Add(TileDecoder.Decode4Bpp(
+                rom.Slice(pixels, info.ExpectedFrameBytes), info.Width, info.Height));
         }
 
         return frames;

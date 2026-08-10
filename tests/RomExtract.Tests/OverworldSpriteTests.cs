@@ -32,17 +32,51 @@ public class OverworldSpriteTests
     }
 
     [Fact]
-    public void TheRecordedSizeIsTheDimensionsAtFourBitsAPixel()
+    public void TheRecordedSizeAgreesWithTheDimensionsInEitherUnit()
     {
-        // This relationship is what identifies the table. Nearly anything can look like
-        // a pointer; very little accidentally satisfies arithmetic across three fields.
+        // Two conventions appear in one table: most records state bytes at four bits a
+        // pixel, some state the pixel count. Demanding only the first cut six records
+        // off the front of the real table — the scan started after them, every graphics
+        // id shifted, and nothing failed.
         Rom rom = Fixture.ToRom();
 
         List<ObjectGraphicsInfo?> records =
             OverworldSprites.ReadGraphics(rom, GraphicsTable(rom), SyntheticRom.OverworldCount);
 
         foreach (ObjectGraphicsInfo? info in records.Where(r => r is not null))
-            Assert.Equal(info!.ExpectedFrameBytes, info.SizeBytes);
+        {
+            Assert.True(
+                info!.SizeBytes == info.ExpectedFrameBytes || info.SizeBytes == info.Width * info.Height,
+                $"size {info.SizeBytes} for {info.Width}x{info.Height}");
+        }
+    }
+
+    [Fact]
+    public void ATableBeginningWithTheLessCommonSizeUnitIsStillFoundAtItsStart()
+    {
+        // The whole point. The fixture's first two records state size in pixels, so a
+        // locator that only allows bytes would begin two entries late and quietly hand
+        // every sprite the wrong graphics id.
+        Rom rom = Fixture.ToRom();
+
+        Assert.True(SyntheticRom.OverworldSizeInPixels(0));
+        Assert.Equal(SyntheticRom.OverworldTableOffset, OverworldSprites.LocateGraphicsTable(rom));
+    }
+
+    [Fact]
+    public void FramesSizedInPixelsStillDecode()
+    {
+        Rom rom = Fixture.ToRom();
+
+        List<ObjectGraphicsInfo?> records =
+            OverworldSprites.ReadGraphics(rom, GraphicsTable(rom), SyntheticRom.OverworldCount);
+
+        Dictionary<int, int> boundaries = OverworldSprites.FrameListBoundaries(rom, records);
+
+        List<IndexedImage> frames = OverworldSprites.ReadFrames(rom, records[0]!, boundaries);
+
+        Assert.Equal(SyntheticRom.OverworldFrameCount, frames.Count);
+        Assert.Equal(SyntheticRom.OverworldPixelFor(0, 0), frames[0][0, 0]);
     }
 
     [Fact]
