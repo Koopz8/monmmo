@@ -39,6 +39,17 @@ public static class MapLocator
     /// </summary>
     private const double MinimumValidFraction = 0.75;
 
+    /// <summary>
+    /// How many consecutive unusable entries a table may contain before the run is
+    /// considered over.
+    /// <para>
+    /// Real tables contain dead slots — a null pointer for a layout that was cut, or
+    /// one that fails validation. Treating the first of those as the end of the table
+    /// truncates it and, worse, shifts every index in whatever run is found next.
+    /// </para>
+    /// </summary>
+    private const int MaxConsecutiveDeadEntries = 4;
+
     public static MapLayoutTable? Locate(Rom rom, Action<string>? log = null)
     {
         MapLayoutTable? best = null;
@@ -52,17 +63,32 @@ public static class MapLocator
             var layouts = new List<MapLayoutRecord?>();
             int valid = 0;
 
+            int consecutiveDead = 0;
+
             for (int i = 0; offset + (i + 1) * 4 <= rom.Length; i++)
             {
                 uint pointer = rom.ReadU32(offset + i * 4);
-                if (!rom.IsRomAddress(pointer)) break;
 
-                MapLayoutRecord? layout = MapLayoutRecord.TryParse(rom, rom.ToOffset(pointer));
+                MapLayoutRecord? layout = rom.ToOffsetOrNull(pointer) is { } target
+                    ? MapLayoutRecord.TryParse(rom, target)
+                    : null;
+
+                if (layout is null)
+                {
+                    // Step over an isolated dead slot rather than ending the table on
+                    // it. The null is kept so every later index stays where it belongs.
+                    if (++consecutiveDead > MaxConsecutiveDeadEntries) break;
+                }
+                else
+                {
+                    consecutiveDead = 0;
+                    valid++;
+                }
+
                 layouts.Add(layout);
-                if (layout is not null) valid++;
 
-                // Stop once the run stops being mostly layouts; a few dead entries in
-                // the middle are normal, a tail of unrelated pointers is not.
+                // Stop once the run stops being mostly layouts; scattered dead entries
+                // are normal, a tail of unrelated data is not.
                 if (layouts.Count >= 8 && valid < layouts.Count * MinimumValidFraction) break;
             }
 

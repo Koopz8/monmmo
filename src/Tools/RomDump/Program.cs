@@ -99,7 +99,7 @@ public static class Program
         if (!options.SkipSprites)
             WriteSprites(extractor, options, speciesCount);
 
-        if (options.ListMaps || options.Maps.Length > 0)
+        if (options.ListMaps || options.Maps.Length > 0 || options.RenderAllMaps)
             WriteMaps(rom, options);
 
         Console.WriteLine();
@@ -218,45 +218,104 @@ public static class Program
         Console.WriteLine();
         Console.WriteLine($"  {table}");
 
+        // Several table slots can point at the same layout, so collapse to one entry
+        // per distinct record before listing or rendering anything.
+        List<(int Index, MapLayoutRecord Layout)> distinct = table.Valid
+            .GroupBy(entry => entry.Layout.Offset)
+            .Select(group => group.First())
+            .OrderBy(entry => entry.Index)
+            .ToList();
+
+        string listPath = WriteMapList(options.OutputDirectory, distinct);
+
+        Console.WriteLine();
+        Console.WriteLine($"  {distinct.Count} distinct layouts across {table.Valid.Count()} table slots");
+        Console.WriteLine($"  Wrote {listPath}");
+
         if (options.ListMaps)
         {
             Console.WriteLine();
-            Console.WriteLine("Layouts");
+            Console.WriteLine($"Largest layouts (the full list is in {Path.GetFileName(listPath)}):");
 
-            foreach ((int index, MapLayoutRecord layout) in table.Valid)
+            foreach ((int index, MapLayoutRecord layout) in distinct
+                         .OrderByDescending(e => e.Layout.BlockCount)
+                         .Take(PreviewCount))
+            {
                 Console.WriteLine($"  [{index,4}] {layout}");
+            }
         }
 
-        if (options.Maps.Length == 0) return;
+        if (options.Maps.Length == 0 && !options.RenderAllMaps) return;
 
         string mapDirectory = Path.Combine(options.OutputDirectory, "maps");
         Directory.CreateDirectory(mapDirectory);
 
-        Console.WriteLine();
+        List<(int Index, MapLayoutRecord Layout)> toRender = options.RenderAllMaps
+            ? distinct
+            : options.Maps
+                .Select(i => (Index: i, Layout: table.Layouts.ElementAtOrDefault(i)))
+                .Where(e => e.Layout is not null)
+                .Select(e => (e.Index, e.Layout!))
+                .ToList();
 
-        foreach (int index in options.Maps)
+        Console.WriteLine();
+        int written = 0, failed = 0;
+
+        foreach ((int index, MapLayoutRecord layout) in toRender)
         {
             try
             {
-                MapLayoutRecord layout = table.Layouts.ElementAtOrDefault(index)
-                    ?? throw new InvalidOperationException($"layout {index} did not resolve");
-
                 RenderedMap rendered = MapRenderer.Create(rom, layout, options.Split).Render(layout);
+                File.WriteAllBytes(Path.Combine(mapDirectory, $"{index:D3}.png"), rendered.ToPng());
+                written++;
 
-                string path = Path.Combine(mapDirectory, $"{index:D3}.png");
-                File.WriteAllBytes(path, rendered.ToPng());
-
-                Console.WriteLine($"Wrote {path} ({rendered.Width}x{rendered.Height})");
+                // Rendering every map is hundreds of files; report progress rather
+                // than a line each.
+                if (!options.RenderAllMaps)
+                    Console.WriteLine($"Wrote {mapDirectory}{Path.DirectorySeparatorChar}{index:D3}.png ({rendered.Width}x{rendered.Height})");
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"  map {index}: {ex.Message}");
+                failed++;
+                if (!options.RenderAllMaps) Console.Error.WriteLine($"  map {index}: {ex.Message}");
             }
         }
+
+        if (options.RenderAllMaps)
+            Console.WriteLine($"Rendered {written} maps into {mapDirectory}{(failed > 0 ? $" ({failed} failed)" : "")}");
 
         Console.WriteLine();
         Console.WriteLine("If colours look wrong in places, the primary/secondary tileset split");
         Console.WriteLine("may differ on this cartridge — try --tileset-split emerald.");
+    }
+
+    /// <summary>How many layouts to preview on the console before deferring to the file.</summary>
+    private const int PreviewCount = 20;
+
+    /// <summary>
+    /// Writes the layout list to disk. The console listing is a preview only: a real
+    /// cartridge holds hundreds of layouts, which scrolls out of a terminal's buffer
+    /// and leaves nothing to search through afterwards.
+    /// </summary>
+    private static string WriteMapList(string outputDirectory, List<(int Index, MapLayoutRecord Layout)> layouts)
+    {
+        Directory.CreateDirectory(outputDirectory);
+        string path = Path.Combine(outputDirectory, "maps.json");
+
+        var report = layouts.Select(entry => new
+        {
+            index = entry.Index,
+            address = $"0x{entry.Layout.Address:X8}",
+            widthBlocks = entry.Layout.Width,
+            heightBlocks = entry.Layout.Height,
+            widthPixels = entry.Layout.Width * MapRenderer.BlockPixels,
+            heightPixels = entry.Layout.Height * MapRenderer.BlockPixels,
+            primaryTileset = $"0x{entry.Layout.PrimaryTilesetPointer:X8}",
+            secondaryTileset = $"0x{entry.Layout.SecondaryTilesetPointer:X8}",
+        });
+
+        File.WriteAllText(path, JsonSerializer.Serialize(report, Json));
+        return path;
     }
 
     private static void PrintUsage()
@@ -275,7 +334,8 @@ public static class Program
               --tile-order <o>       row (default) or column
               --no-sprites           dump data tables only
               --list-maps            list every map layout the cartridge holds
-              --map <list>           comma-separated layout indices to render as PNGs
+              --map <list>           comma-separated layout indices to render as PNGs,
+                                     or "all" to render every distinct layout
               --tileset-split <g>    firered (default) or emerald — how tile, metatile
                                      and palette slots divide between the two tilesets
               --diagnose             report every candidate table run and dump raw
@@ -296,6 +356,7 @@ public static class Program
         public bool Diagnose { get; private init; }
         public bool ListMaps { get; private init; }
         public int[] Maps { get; private init; } = [];
+        public bool RenderAllMaps { get; private init; }
         public TilesetSplit Split { get; private init; } = TilesetSplit.FireRed;
         public TileOrder TileOrder { get; private init; } = TileOrder.RowMajor;
 
@@ -308,6 +369,7 @@ public static class Program
             string output = "out";
             int[] species = [1, 4, 7];
             bool shiny = false, back = false, skip = false, diagnose = false, listMaps = false;
+            bool renderAll = false;
             int[] maps = [];
             TilesetSplit split = TilesetSplit.FireRed;
             TileOrder order = TileOrder.RowMajor;
@@ -341,10 +403,18 @@ public static class Program
                         listMaps = true;
                         break;
                     case "--map":
-                        maps = Next(args, ref i, "--map")
-                            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                            .Select(int.Parse)
-                            .ToArray();
+                        string list = Next(args, ref i, "--map");
+                        if (list.Equals("all", StringComparison.OrdinalIgnoreCase))
+                        {
+                            renderAll = true;
+                        }
+                        else
+                        {
+                            maps = list
+                                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                                .Select(int.Parse)
+                                .ToArray();
+                        }
                         break;
                     case "--tileset-split":
                         string game = Next(args, ref i, "--tileset-split");
@@ -374,6 +444,7 @@ public static class Program
                 Diagnose = diagnose,
                 ListMaps = listMaps,
                 Maps = maps,
+                RenderAllMaps = renderAll,
                 Split = split,
                 TileOrder = order,
             };

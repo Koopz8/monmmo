@@ -23,7 +23,7 @@ The project layout enforces the rest:
 | `src/Core` | Shared game model | Referenced by **both** the client and, later, the server |
 | `src/RomExtract` | Cartridge reading | **Client-only.** The server must never reference this |
 | `src/Tools/RomDump` | CLI harness | Development tool for inspecting a cartridge |
-| `tests/RomExtract.Tests` | Test suite | 93 tests, no cartridge required |
+| `tests/RomExtract.Tests` | Test suite | 95 tests, no cartridge required |
 
 When the server project lands, the one rule to hold is that its dependency graph
 must not contain `RomExtract`. That way the legal posture is guaranteed by the build
@@ -45,6 +45,7 @@ out/
   tables.json      where every data table was found, and how
   species.json     the full base-stat table with decoded names
   sprites/001.png  decoded 64x64 sprites, transparent background
+  maps.json        every distinct map layout, with dimensions and tileset pointers
   maps/000.png     rendered maps
 ```
 
@@ -57,6 +58,9 @@ To see what maps the cartridge holds, and render one:
 dotnet run --project src/Tools/RomDump -- your.gba --out ./out --no-sprites --list-maps
 dotnet run --project src/Tools/RomDump -- your.gba --out ./out --no-sprites --map 0
 ```
+
+`--map all` renders every distinct layout at once, which is the practical way to find
+a particular place: render the lot, then look through `out/maps/`.
 
 ---
 
@@ -82,7 +86,8 @@ This extractor searches for **structure** instead:
 - **Map layouts** — a layout record is two small positive dimensions followed by
   pointers that must land in the cartridge, with block data that must fit inside it.
   The layout *table* is then a long run of pointers each targeting one of those
-  records, of which at least three quarters must resolve.
+  records, of which at least three quarters must resolve. Isolated dead slots are
+  stepped over rather than treated as the end of the table, so indices stay aligned.
 
 A candidate must produce at least 100 consecutive well-formed entries to be accepted.
 The result: the extractor either finds tables that genuinely satisfy the format's

@@ -19,12 +19,39 @@ public class MapLocatorTests
     }
 
     [Fact]
-    public void ResolvesEveryPointerToTheLayoutItTargets()
+    public void ResolvesEveryLivePointerToTheLayoutItTargets()
     {
         MapLayoutTable table = MapLocator.Locate(Synthetic.ToRom())!;
 
-        Assert.Equal(SyntheticRom.MapLayoutTableLength, table.Valid.Count());
+        Assert.Equal(SyntheticRom.MapLayoutTableLength - 1, table.Valid.Count());
         Assert.All(table.Valid, x => Assert.Equal(SyntheticRom.MapLayoutOffset, x.Layout.Offset));
+    }
+
+    [Fact]
+    public void StepsOverADeadSlotInsteadOfEndingTheTableOnIt()
+    {
+        // Regression: a single null entry used to terminate the run. On a real image
+        // that truncated the table at the dead slot and left the remainder to be found
+        // as a separate run — with every index in it shifted.
+        MapLayoutTable table = MapLocator.Locate(Synthetic.ToRom())!;
+
+        Assert.Equal(SyntheticRom.MapLayoutTableLength, table.EntryCount);
+        Assert.Null(table.Layouts[SyntheticRom.DeadLayoutTableIndex]);
+
+        // Entries on both sides of the dead slot are present, at their own indices.
+        Assert.NotNull(table.Layouts[SyntheticRom.DeadLayoutTableIndex - 1]);
+        Assert.NotNull(table.Layouts[SyntheticRom.DeadLayoutTableIndex + 1]);
+        Assert.NotNull(table.Layouts[SyntheticRom.MapLayoutTableLength - 1]);
+    }
+
+    [Fact]
+    public void StillEndsTheTableAtASustainedRunOfDeadEntries()
+    {
+        // Tolerance has to be bounded, or a table would run on into whatever follows it.
+        var data = new byte[0x20000];
+        MapLayoutTable? table = MapLocator.Locate(new Rom(data));
+
+        Assert.Null(table);
     }
 
     [Fact]

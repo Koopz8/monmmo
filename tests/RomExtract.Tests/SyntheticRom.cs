@@ -65,6 +65,9 @@ public sealed class SyntheticRom
     public const int MapWidth = 10;
     public const int MapHeight = 8;
     public const int MapLayoutTableLength = 64;
+
+    /// <summary>A null slot planted mid-table, mirroring the dead entries real images carry.</summary>
+    public const int DeadLayoutTableIndex = 40;
     public const int MetatileCount = 64;
 
     /// <summary>The species index whose sprite and palette are distinctive and asserted against.</summary>
@@ -169,7 +172,12 @@ public sealed class SyntheticRom
         _data[MapLayoutOffset + 25] = 2;
 
         for (int i = 0; i < MapLayoutTableLength; i++)
-            WriteU32(MapLayoutTableOffset + i * 4, Rom.BaseAddress + MapLayoutOffset);
+        {
+            // A dead slot mid-table, as real images contain. Ending the run here would
+            // truncate the table and shift every index after it.
+            bool dead = i == DeadLayoutTableIndex;
+            WriteU32(MapLayoutTableOffset + i * 4, dead ? 0u : Rom.BaseAddress + MapLayoutOffset);
+        }
     }
 
     private static Rgba32[] BuildTilesetPalette()
