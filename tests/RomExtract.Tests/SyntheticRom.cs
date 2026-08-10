@@ -74,13 +74,35 @@ public sealed class SyntheticRom
     public const int MapGroupsOffset = 0x052000;
     public const int RegionNameTextOffset = 0x053000;
     public const int RegionMapEntriesOffset = 0x054000;
+    public const int DecoyNameTextOffset = 0x055000;
+    public const int DecoyNamePointersOffset = 0x056000;
+
+    /// <summary>
+    /// A decoy run of text pointers carrying names that are not places, standing in
+    /// for the run a real image contains. It exists so the tests prove the locator
+    /// picks the location table by its contents rather than by being the first or
+    /// longest run of text pointers it happens to find.
+    /// </summary>
+    public const int DecoyNameCount = 52;
+
+    public static string DecoyNameFor(int index) => $"EXIT {index:D2}";
 
     public const int BankCount = 8;
     public const int MapsPerBank = 5;
     public const int RegionLocationCount = 64;
 
-    /// <summary>The name written into the region map table for a given section id.</summary>
-    public static string RegionNameFor(int index) => $"AREA {index:D2}";
+    /// <summary>
+    /// The name written into the region map table for a given section id. Modelled on
+    /// real place names, because "reads like a place" is what distinguishes this table
+    /// from the other runs of text pointers in an image.
+    /// </summary>
+    public static string RegionNameFor(int index) => index switch
+    {
+        0 => "PALLET TOWN",
+        1 => "VIRIDIAN CITY",
+        2 => "VIRIDIAN FOREST",
+        _ => $"ROUTE {index:D2}",
+    };
 
     /// <summary>Which region section a given map is tagged with.</summary>
     public static int RegionSectionFor(int bank, int map) => (bank * MapsPerBank + map) % RegionLocationCount;
@@ -227,6 +249,13 @@ public sealed class SyntheticRom
             WriteU32(
                 MapGroupsOffset + bank * 4,
                 Rom.BaseAddress + (uint)(BankArraysOffset + bank * MapsPerBank * 4));
+        }
+
+        for (int i = 0; i < DecoyNameCount; i++)
+        {
+            int decoyText = DecoyNameTextOffset + i * 16;
+            EncodeTextAsCartridgeWould(DecoyNameFor(i), 16).CopyTo(_data, decoyText);
+            WriteU32(DecoyNamePointersOffset + i * 4, Rom.BaseAddress + (uint)decoyText);
         }
 
         for (int i = 0; i < RegionLocationCount; i++)

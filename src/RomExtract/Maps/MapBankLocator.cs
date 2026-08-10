@@ -133,35 +133,4 @@ public static class MapBankLocator
         return maps;
     }
 
-    /// <summary>
-    /// Finds the region map table, which turns a header's region-section id into a
-    /// name. Entries are {x, y, width, height, name}, so a genuine table is a long run
-    /// of small coordinates paired with pointers to decodable text.
-    /// </summary>
-    public static List<RegionMapLocation> LocateRegionNames(Rom rom, Action<string>? log = null)
-    {
-        const int minimumRun = 40;
-        var best = new List<RegionMapLocation>();
-
-        for (int offset = 0; offset + RegionMapLocation.SizeBytes * minimumRun <= rom.Length; offset += 4)
-        {
-            var run = new List<RegionMapLocation>();
-
-            while (RegionMapLocation.TryParse(
-                       rom, offset + run.Count * RegionMapLocation.SizeBytes, run.Count) is { } entry)
-            {
-                run.Add(entry);
-            }
-
-            if (run.Count < minimumRun) continue;
-
-            log?.Invoke($"  region names: run of {run.Count} entries at 0x{Rom.BaseAddress + (uint)offset:X8} (first: {run[0].Name})");
-
-            if (run.Count > best.Count) best = run;
-
-            offset += run.Count * RegionMapLocation.SizeBytes - 4;
-        }
-
-        return best;
-    }
 }

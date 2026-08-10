@@ -236,11 +236,13 @@ public static class Program
             return;
         }
 
-        List<RegionMapLocation> regions = MapBankLocator.LocateRegionNames(rom, Console.WriteLine);
+        RegionNameTable? regions = RegionNameLocator.Locate(rom, Console.WriteLine);
 
         Console.WriteLine();
         Console.WriteLine($"  {banks}");
-        Console.WriteLine($"  {regions.Count} region names");
+        Console.WriteLine(regions is null
+            ? "  no region name table found — maps will be labelled by section id"
+            : $"  region names: {regions}");
 
         List<NamedMap> maps = banks.AllMaps
             .Select(entry => new NamedMap(
@@ -303,8 +305,8 @@ public static class Program
         Console.WriteLine("may differ on this cartridge — try --tileset-split emerald.");
     }
 
-    private static string NameFor(List<RegionMapLocation> regions, byte sectionId) =>
-        sectionId < regions.Count ? regions[sectionId].Name : $"SECTION {sectionId}";
+    private static string NameFor(RegionNameTable? regions, byte sectionId) =>
+        regions is null ? $"SECTION {sectionId}" : regions[sectionId];
 
     /// <summary>
     /// Works out which maps to render: everything, a name match, or specific

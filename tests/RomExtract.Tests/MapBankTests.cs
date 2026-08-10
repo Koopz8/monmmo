@@ -94,21 +94,51 @@ public class RegionNameTests
 {
     private static readonly SyntheticRom Synthetic = new();
 
-    [Fact]
-    public void FindsTheRegionMapTable()
-    {
-        List<RegionMapLocation> names = MapBankLocator.LocateRegionNames(Synthetic.ToRom());
+    private static RegionNameTable Locate() => RegionNameLocator.Locate(Synthetic.ToRom())!;
 
+    [Fact]
+    public void FindsTheLocationTable()
+    {
+        RegionNameTable names = Locate();
+
+        Assert.Equal(SyntheticRom.RegionMapEntriesOffset, names.Offset);
         Assert.Equal(SyntheticRom.RegionLocationCount, names.Count);
     }
 
     [Fact]
     public void DecodesEveryLocationName()
     {
-        List<RegionMapLocation> names = MapBankLocator.LocateRegionNames(Synthetic.ToRom());
+        RegionNameTable names = Locate();
 
         for (int i = 0; i < SyntheticRom.RegionLocationCount; i++)
-            Assert.Equal(SyntheticRom.RegionNameFor(i), names[i].Name);
+            Assert.Equal(SyntheticRom.RegionNameFor(i), names[i]);
+    }
+
+    [Fact]
+    public void PrefersThePlaceNameTableOverAnotherRunOfTextPointers()
+    {
+        // Regression: the image also holds a run of text pointers whose contents are
+        // not places. Picking by length or by address found that one instead.
+        RegionNameTable names = Locate();
+
+        Assert.NotEqual(SyntheticRom.DecoyNamePointersOffset, names.Offset);
+        Assert.DoesNotContain(names.Names, n => n.StartsWith("EXIT"));
+        Assert.Contains("PALLET TOWN", names.Names);
+    }
+
+    [Fact]
+    public void ScansBothTableShapes()
+    {
+        List<RegionNameTable> candidates = RegionNameLocator.ScanCandidates(Synthetic.ToRom());
+
+        Assert.Contains(candidates, c => c.Shape == "pointer array");
+        Assert.Contains(candidates, c => c.Shape == "x,y,w,h + name");
+    }
+
+    [Fact]
+    public void FallsBackToASectionIdWhenAnIndexIsOutOfRange()
+    {
+        Assert.Equal("SECTION 999", Locate()[999]);
     }
 
     [Fact]
@@ -116,12 +146,12 @@ public class RegionNameTests
     {
         Rom rom = Synthetic.ToRom();
         MapBankTable table = MapBankLocator.Locate(rom)!;
-        List<RegionMapLocation> names = MapBankLocator.LocateRegionNames(rom);
+        RegionNameTable names = RegionNameLocator.Locate(rom)!;
 
         foreach ((int bank, int map, MapHeaderRecord header) in table.AllMaps)
         {
             string expected = SyntheticRom.RegionNameFor(SyntheticRom.RegionSectionFor(bank, map));
-            Assert.Equal(expected, names[header.RegionSectionId].Name);
+            Assert.Equal(expected, names[header.RegionSectionId]);
         }
     }
 
@@ -135,6 +165,17 @@ public class RegionNameTests
     [InlineData("1234", false)]
     public void JudgesWhetherTextLooksLikeALocationName(string candidate, bool expected)
     {
-        Assert.Equal(expected, RegionMapLocation.LooksLikeLocationName(candidate));
+        Assert.Equal(expected, RegionNameLocator.LooksLikeLocationName(candidate));
+    }
+
+    [Theory]
+    [InlineData("PALLET TOWN", true)]
+    [InlineData("VIRIDIAN FOREST", true)]
+    [InlineData("ROUTE 22", true)]
+    [InlineData("EXIT", false)]
+    [InlineData("CANCEL", false)]
+    public void JudgesWhetherANameReadsLikeAPlace(string candidate, bool expected)
+    {
+        Assert.Equal(expected, RegionNameLocator.ReadsLikeAPlace(candidate));
     }
 }
