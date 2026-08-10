@@ -116,6 +116,9 @@ public static class Program
         if (!string.IsNullOrEmpty(options.ExportRulesPath))
             ExportRules(rom, options.ExportRulesPath);
 
+        if (options.DumpOverworld)
+            WriteOverworldSprites(rom, options.OutputDirectory);
+
         Console.WriteLine();
         Console.WriteLine($"Done. Output in {Path.GetFullPath(options.OutputDirectory)}");
         return 0;
@@ -612,6 +615,81 @@ public static class Program
             $"({rules.SpeciesCount} species, {rules.MoveCount} moves, no names)");
     }
 
+    /// <summary>
+    /// Reads the little figures that walk around a map, and writes a few out.
+    /// <para>
+    /// A new table locator is only ever really tested against a real cartridge, so this
+    /// reports what it found in enough detail to tell "found the wrong run" from "found
+    /// nothing" from "found it" — a count, the dimensions, and pictures to look at.
+    /// </para>
+    /// </summary>
+    private static void WriteOverworldSprites(Rom rom, string outputDirectory)
+    {
+        Console.WriteLine();
+        Console.WriteLine("Overworld sprites");
+
+        if (OverworldSprites.LocateGraphicsTable(rom, Console.WriteLine) is not { } table)
+        {
+            Console.WriteLine("  no graphics table found");
+            return;
+        }
+
+        int? palettes = OverworldSprites.LocatePaletteTable(rom, Console.WriteLine);
+
+        List<ObjectGraphicsInfo?> records = OverworldSprites.ReadGraphics(rom, table, 256);
+        Dictionary<int, int> boundaries = OverworldSprites.FrameListBoundaries(rom, records);
+
+        int found = records.Count(r => r is not null);
+        Console.WriteLine($"  {found} graphics records of {records.Count} slots");
+
+        var sizes = records
+            .Where(r => r is not null)
+            .GroupBy(r => $"{r!.Width}x{r.Height}")
+            .OrderByDescending(g => g.Count());
+
+        foreach (var size in sizes.Take(5))
+            Console.WriteLine($"    {size.Key,-7} {size.Count()} sprites");
+
+        var frameCounts = records
+            .Where(r => r is not null)
+            .Select(r => OverworldSprites.ReadFrames(rom, r!, boundaries).Count)
+            .GroupBy(c => c)
+            .OrderByDescending(g => g.Count());
+
+        foreach (var count in frameCounts.Take(5))
+            Console.WriteLine($"    {count.Key} frames: {count.Count()} sprites");
+
+        if (palettes is null)
+        {
+            Console.WriteLine("  no palette table found — sprites will have no colour");
+            return;
+        }
+
+        string directory = Path.Combine(outputDirectory, "overworld");
+        Directory.CreateDirectory(directory);
+
+        int written = 0;
+
+        for (int index = 0; index < records.Count && written < 4; index++)
+        {
+            if (records[index] is not { } info) continue;
+
+            List<IndexedImage> frames = OverworldSprites.ReadFrames(rom, info, boundaries);
+            if (frames.Count == 0) continue;
+
+            if (OverworldSprites.PaletteForTag(rom, palettes.Value, info.PaletteTag) is not { } palette) continue;
+
+            for (int frame = 0; frame < frames.Count && frame < 3; frame++)
+            {
+                string path = Path.Combine(directory, $"{index:D3}_{frame}.png");
+                PngWriter.Write(path, frames[frame].Width, frames[frame].Height, frames[frame].ToRgba(palette));
+            }
+
+            Console.WriteLine($"  wrote sprite {index}: {info.Width}x{info.Height}, {frames.Count} frames");
+            written++;
+        }
+    }
+
     private static void PrintUsage()
     {
         Console.WriteLine("""
@@ -635,6 +713,8 @@ public static class Program
               --encounters           dump wild encounter tables
               --behaviours <name>    report metatile behaviours for a named map
                                      (implies --encounters, does not render anything)
+              --overworld            report the overworld sprite tables and write a
+                                     few of the walking figures as PNGs
               --export-rules <path>  write the rules file the server resolves battles
                                      against: base stats, move power, catch rates and
                                      learnsets, with no names of any kind
@@ -666,6 +746,8 @@ public static class Program
         public string? ExportWorldPath { get; private init; }
 
         public string? ExportRulesPath { get; private init; }
+
+        public bool DumpOverworld { get; private init; }
         public bool DumpMoves { get; private init; }
         public bool DumpEncounters { get; private init; }
         public string? BehaviourMap { get; private init; }
@@ -686,6 +768,7 @@ public static class Program
             TilesetSplit split = TilesetSplit.FireRed;
             string? exportWorld = null;
             string? exportRules = null;
+            bool overworld = false;
             bool dumpMoves = false, dumpEncounters = false;
             string? behaviourMap = null;
             TileOrder order = TileOrder.RowMajor;
@@ -738,6 +821,9 @@ public static class Program
                     case "--export-rules":
                         exportRules = Next(args, ref i, "--export-rules");
                         break;
+                    case "--overworld":
+                        overworld = true;
+                        break;
                     case "--moves":
                         dumpMoves = true;
                         break;
@@ -781,6 +867,7 @@ public static class Program
                 Split = split,
                 ExportWorldPath = exportWorld,
                 ExportRulesPath = exportRules,
+                DumpOverworld = overworld,
                 DumpMoves = dumpMoves,
                 DumpEncounters = dumpEncounters,
                 BehaviourMap = behaviourMap,

@@ -186,6 +186,40 @@ public sealed class SyntheticRom
 
     public const int MapCount = BankCount * MapsPerBank;
 
+    // --- overworld sprites -------------------------------------------------------
+
+    public const int OverworldTableOffset = 0x080000;
+    public const int OverworldRecordsOffset = 0x081000;
+    public const int OverworldFrameListsOffset = 0x084000;
+    public const int OverworldPixelsOffset = 0x088000;
+    public const int OverworldPaletteTableOffset = 0x090000;
+    public const int OverworldPaletteDataOffset = 0x091000;
+
+    public const int OverworldCount = 80;
+
+    /// <summary>A walking figure: three facings by three steps.</summary>
+    public const int OverworldFrameCount = 9;
+
+    public const int OverworldWidth = 16;
+    public const int OverworldHeight = 32;
+
+    /// <summary>Overworld palettes are tagged in a fixed range rather than counted from zero.</summary>
+    public const int OverworldFirstPaletteTag = 0x1100;
+
+    public const int OverworldPaletteCount = 12;
+
+    /// <summary>
+    /// One graphics id left null, as real tables contain. Keeping the hole is what
+    /// stops every id after it shifting by one.
+    /// </summary>
+    public const int DeadOverworldIndex = 17;
+
+    public static int OverworldPaletteTagFor(int index) =>
+        OverworldFirstPaletteTag + index % OverworldPaletteCount;
+
+    /// <summary>The colour a given sprite's given frame is filled with.</summary>
+    public static byte OverworldPixelFor(int index, int frame) => (byte)((index + frame) % 16);
+
     // --- learnsets ---------------------------------------------------------------
 
     public const int LearnsetTableOffset = 0x060000;
@@ -268,6 +302,7 @@ public sealed class SyntheticRom
         WriteMapData();
         WriteMapHeadersAndBanks();
         WriteLearnsets();
+        WriteOverworldSprites();
     }
 
     /// <summary>Palette 0 of the synthetic tileset — what a rendered map is checked against.</summary>
@@ -534,6 +569,81 @@ public sealed class SyntheticRom
 
         WriteU32(record, (uint)(connections.Count + 1));
         WriteU32(record + 4, Rom.BaseAddress + (uint)table);
+    }
+
+    /// <summary>
+    /// Writes the overworld graphics table: pointers to 36-byte records, each naming a
+    /// frame list, and a palette table tagged in the overworld range.
+    /// <para>
+    /// The record's <c>size</c> field is written as width times height at four bits a
+    /// pixel, because that relationship is what identifies the table. A fixture that
+    /// wrote an arbitrary size would let a locator that ignores the check pass.
+    /// </para>
+    /// </summary>
+    private void WriteOverworldSprites()
+    {
+        const int frameBytes = OverworldWidth * OverworldHeight / 2;
+
+        for (int index = 0; index < OverworldCount; index++)
+        {
+            if (index == DeadOverworldIndex)
+            {
+                WriteU32(OverworldTableOffset + index * 4, 0);
+                continue;
+            }
+
+            int record = OverworldRecordsOffset + index * ObjectGraphicsInfo.RecordSizeBytes;
+            int frameList = OverworldFrameListsOffset + index * OverworldFrameCount * 8;
+
+            WriteU16(record, (ushort)(0xFFFF - index));                        // tile tag
+            WriteU16(record + 2, (ushort)OverworldPaletteTagFor(index));       // palette tag
+            WriteU16(record + 4, (ushort)OverworldPaletteTagFor(index));
+            WriteU16(record + 6, frameBytes);
+            WriteU16(record + 8, OverworldWidth);
+            WriteU16(record + 10, OverworldHeight);
+            _data[record + 12] = (byte)(index % 16);                           // packed flags
+            _data[record + 13] = 1;                                            // tracks
+
+            WriteU32(record + 16, Rom.BaseAddress + (uint)record);             // oam
+            WriteU32(record + 20, 0);                                          // subsprites
+            WriteU32(record + 24, Rom.BaseAddress + (uint)record);             // anims
+            WriteU32(record + 28, Rom.BaseAddress + (uint)frameList);
+            WriteU32(record + 32, 0);                                          // affine anims
+
+            for (int frame = 0; frame < OverworldFrameCount; frame++)
+            {
+                int pixels = OverworldPixelsOffset + (index * OverworldFrameCount + frame) * frameBytes;
+                byte colour = OverworldPixelFor(index, frame);
+
+                // Flat fill, so a decoding test can assert an exact colour everywhere
+                // and catch tile ordering, nibble order and stride in one assertion.
+                byte packed = (byte)(colour | (colour << 4));
+                for (int i = 0; i < frameBytes; i++) _data[pixels + i] = packed;
+
+                WriteU32(frameList + frame * 8, Rom.BaseAddress + (uint)pixels);
+                WriteU16(frameList + frame * 8 + 4, frameBytes);
+            }
+
+            // No terminator, and the next list starts immediately after this one. That
+            // is how the cartridge lays them out, and it is why a reader cannot find
+            // the end by looking for something that is not a frame — the next list is
+            // frames too, of exactly the same size.
+
+            WriteU32(OverworldTableOffset + index * 4, Rom.BaseAddress + (uint)record);
+        }
+
+        for (int i = 0; i < OverworldPaletteCount; i++)
+        {
+            int colours = OverworldPaletteDataOffset + i * GbaPalette.SizeBytes;
+            byte[] palette = GbaPalette.ToBytes(BuildPalette(seed: 40 + i));
+
+            palette.CopyTo(_data, colours);
+
+            int entry = OverworldPaletteTableOffset + i * 8;
+            WriteU32(entry, Rom.BaseAddress + (uint)colours);
+            WriteU16(entry + 4, (ushort)(OverworldFirstPaletteTag + i));
+            WriteU16(entry + 6, 0);
+        }
     }
 
     private static byte[] EncodeTextAsCartridgeWould(string text, int fieldWidth)
