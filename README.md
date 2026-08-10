@@ -23,7 +23,8 @@ The project layout enforces the rest:
 | `src/Core` | Shared game model | Referenced by **both** the client and, later, the server |
 | `src/RomExtract` | Cartridge reading | **Client-only.** The server must never reference this |
 | `src/Tools/RomDump` | CLI harness | Development tool for inspecting a cartridge |
-| `tests/RomExtract.Tests` | Test suite | 124 tests, no cartridge required |
+| `src/Client` | The game client | Window, input, drawing. No engine, no editor |
+| `tests/RomExtract.Tests` | Test suite | 147 tests, no cartridge required |
 
 When the server project lands, the one rule to hold is that its dependency graph
 must not contain `RomExtract`. That way the legal posture is guaranteed by the build

@@ -27,3 +27,7 @@ TestResults/
 .vscode/
 *.swp
 .DS_Store
+
+# Client configuration — points at the player's own cartridge.
+client.json
+.godot/

@@ -99,6 +99,21 @@ public sealed record MapLayoutRecord(
 
         return blocks;
     }
+
+    /// <summary>
+    /// Builds the walkability grid for this map from the collision bits already
+    /// carried by each block.
+    /// </summary>
+    public Core.World.CollisionGrid ReadCollision(Rom rom)
+    {
+        ushort[] blocks = ReadBlocks(rom);
+        var collision = new byte[blocks.Length];
+
+        for (int i = 0; i < blocks.Length; i++)
+            collision[i] = (byte)new MapBlock(blocks[i]).Collision;
+
+        return new Core.World.CollisionGrid(Width, Height, collision);
+    }
 }
 
 /// <summary>One entry of a map's block data.</summary>
