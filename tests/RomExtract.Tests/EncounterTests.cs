@@ -178,3 +178,72 @@ public class WildEncounterTests
         Assert.Single(map.All);
     }
 }
+
+public class MapNameMatchTests
+{
+    [Fact]
+    public void AnExactNameBeatsALongerOneContainingIt()
+    {
+        // The bug this exists for: "route 1" is a substring of "ROUTE 17", so plain
+        // containment hands back the wrong route.
+        string[] maps = ["ROUTE 17", "ROUTE 1", "ROUTE 11"];
+
+        Assert.Equal("ROUTE 1", MapNameMatch.Rank(maps, m => m, "route 1").First());
+    }
+
+    [Fact]
+    public void ScoresExactAboveWholeWordAboveSubstring()
+    {
+        Assert.Equal(MapNameMatch.Exact, MapNameMatch.Score("ROUTE 1", "route 1"));
+        Assert.Equal(MapNameMatch.WholeWord, MapNameMatch.Score("ROUTE 1 NORTH", "route 1"));
+        Assert.Equal(MapNameMatch.Contains, MapNameMatch.Score("ROUTE 17", "route 1"));
+        Assert.Equal(MapNameMatch.NoMatch, MapNameMatch.Score("PALLET TOWN", "route 1"));
+    }
+
+    [Fact]
+    public void MatchingIsCaseAndWhitespaceInsensitive()
+    {
+        Assert.Equal(MapNameMatch.Exact, MapNameMatch.Score("PALLET TOWN", "  pallet town "));
+    }
+
+    [Fact]
+    public void SizeBreaksTiesSoTheOutdoorMapWins()
+    {
+        (string Name, int Size)[] maps =
+        [
+            ("PALLET TOWN", 130),   // an interior
+            ("PALLET TOWN", 480),   // the town itself
+        ];
+
+        Assert.Equal(480, MapNameMatch.Rank(maps, m => m.Name, "pallet town", m => m.Size).First().Size);
+    }
+
+    [Fact]
+    public void NonMatchesAreLeftOut()
+    {
+        string[] maps = ["PALLET TOWN", "VIRIDIAN CITY"];
+
+        Assert.Empty(MapNameMatch.Rank(maps, m => m, "cinnabar"));
+        Assert.False(MapNameMatch.Matches("PALLET TOWN", "cinnabar"));
+    }
+
+    [Fact]
+    public void AnEmptyQueryMatchesNothing()
+    {
+        Assert.Equal(MapNameMatch.NoMatch, MapNameMatch.Score("PALLET TOWN", ""));
+        Assert.Equal(MapNameMatch.NoMatch, MapNameMatch.Score("PALLET TOWN", "   "));
+    }
+
+    [Fact]
+    public void WorldDataUsesTheSameRule()
+    {
+        var world = new WorldData(
+        [
+            new MapData("3.17", "ROUTE 17", 10, 10, new byte[100]),
+            new MapData("3.1", "ROUTE 1", 5, 5, new byte[25]),
+        ]);
+
+        // Route 17 is the larger map, so only exact-match ranking picks Route 1.
+        Assert.Equal("3.1", world.FindByName("route 1")!.Id);
+    }
+}

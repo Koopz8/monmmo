@@ -334,8 +334,8 @@ public static class Program
 
         if (!string.IsNullOrEmpty(options.MapNameFilter))
         {
-            List<NamedMap> matched = maps
-                .Where(m => m.Name.Contains(options.MapNameFilter, StringComparison.OrdinalIgnoreCase))
+            List<NamedMap> matched = Core.World.MapNameMatch
+                .Rank(maps, m => m.Name, options.MapNameFilter, m => m.Header.Layout.BlockCount)
                 .ToList();
 
             if (matched.Count == 0)
@@ -438,18 +438,60 @@ public static class Program
         File.WriteAllText(path, JsonSerializer.Serialize(encounters, Json));
         Console.WriteLine($"Wrote {path}");
 
+        ReportNamedEncounters(rom, options, encounters);
+        ReportBehaviours(rom, options);
+    }
+
+    /// <summary>
+    /// Prints the encounter table for a named map, and for a couple of others, with
+    /// species names rather than numbers — the only way to tell at a glance whether
+    /// the table found is the right one.
+    /// </summary>
+    private static void ReportNamedEncounters(
+        Rom rom, Options options, List<Core.World.MapEncounters> encounters)
+    {
+        MapBankTable? banks = MapBankLocator.Locate(rom);
+        if (banks is null) return;
+
+        RegionNameTable? names = RegionNameLocator.Locate(rom);
+        List<int> sectionIds = banks.AllMaps.Select(m => (int)m.Header.RegionSectionId).ToList();
+        int indexBase = names?.InferIndexBase(sectionIds) ?? 0;
+
+        Dictionary<string, string> mapNames = banks.AllMaps.ToDictionary(
+            m => WorldExporter.MapId(m.Bank, m.Map),
+            m => names?.Resolve(m.Header.RegionSectionId, indexBase) ?? $"SECTION {m.Header.RegionSectionId}");
+
+        List<SpeciesData> species = RomExtractor.Open(rom).ExtractSpecies();
+
+        string SpeciesName(int index) =>
+            index >= 0 && index < species.Count && species[index].Name.Length > 0
+                ? species[index].Name
+                : $"#{index}";
+
+        string wanted = options.BehaviourMap ?? "route 1";
+
+        var withLand = encounters
+            .Where(e => e.Land is not null && mapNames.ContainsKey(e.MapId))
+            .Select(e => (Encounters: e, Name: mapNames[e.MapId]))
+            .ToList();
+
+        var chosen = Core.World.MapNameMatch
+            .Rank(withLand, x => x.Name, wanted)
+            .Concat(withLand)
+            .DistinctBy(x => x.Encounters.MapId)
+            .Take(3)
+            .ToList();
+
         Console.WriteLine();
         Console.WriteLine("Spot check (land tables):");
 
-        foreach (Core.World.MapEncounters map in encounters.Where(m => m.Land is not null).Take(3))
+        foreach ((Core.World.MapEncounters map, string name) in chosen)
         {
-            Console.WriteLine($"  map {map.MapId}, rate {map.Land!.Rate}");
+            Console.WriteLine($"  {name} ({map.MapId}), rate {map.Land!.Rate}");
 
-            foreach (Core.World.WildSlot slot in map.Land.Slots.Take(4))
-                Console.WriteLine($"    {slot}");
+            foreach (Core.World.WildSlot slot in map.Land.Slots.Take(5))
+                Console.WriteLine($"    {SpeciesName(slot.Species),-12} L{slot.MinLevel}-{slot.MaxLevel}");
         }
-
-        ReportBehaviours(rom, options);
     }
 
     /// <summary>
@@ -469,13 +511,14 @@ public static class Program
         List<int> sectionIds = banks.AllMaps.Select(m => (int)m.Header.RegionSectionId).ToList();
         int indexBase = names?.InferIndexBase(sectionIds) ?? 0;
 
-        string wanted = string.IsNullOrEmpty(options.MapNameFilter) ? "route 1" : options.MapNameFilter;
+        // Its own option, so asking for an encounter report does not also render maps.
+        string wanted = options.BehaviourMap ?? "route 1";
 
-        var match = banks.AllMaps
-            .Where(m => (names?.Resolve(m.Header.RegionSectionId, indexBase) ?? "")
-                .Contains(wanted, StringComparison.OrdinalIgnoreCase))
-            .OrderByDescending(m => m.Header.Layout.BlockCount)
-            .FirstOrDefault();
+        var match = Core.World.MapNameMatch.Rank(
+            banks.AllMaps,
+            m => names?.Resolve(m.Header.RegionSectionId, indexBase) ?? "",
+            wanted,
+            m => m.Header.Layout.BlockCount).FirstOrDefault();
 
         if (match.Header is null) return;
 
@@ -524,8 +567,9 @@ public static class Program
                                      or "all" to render every map
               --map-name <text>      render every map whose name contains this text
               --moves                dump the move table with names and categories
-              --encounters           dump wild encounter tables, and report metatile
-                                     behaviours for a map (use --map-name to choose)
+              --encounters           dump wild encounter tables
+              --behaviours <name>    report metatile behaviours for a named map
+                                     (implies --encounters, does not render anything)
               --export-world <path>  write the collision-only world file the server
                                      runs on (no graphics, no text)
               --tileset-split <g>    firered (default) or emerald — how tile, metatile
@@ -554,6 +598,7 @@ public static class Program
         public string? ExportWorldPath { get; private init; }
         public bool DumpMoves { get; private init; }
         public bool DumpEncounters { get; private init; }
+        public string? BehaviourMap { get; private init; }
         public TileOrder TileOrder { get; private init; } = TileOrder.RowMajor;
 
         public static Options Parse(string[] args)
@@ -571,6 +616,7 @@ public static class Program
             TilesetSplit split = TilesetSplit.FireRed;
             string? exportWorld = null;
             bool dumpMoves = false, dumpEncounters = false;
+            string? behaviourMap = null;
             TileOrder order = TileOrder.RowMajor;
 
             for (int i = 1; i < args.Length; i++)
@@ -624,6 +670,10 @@ public static class Program
                     case "--encounters":
                         dumpEncounters = true;
                         break;
+                    case "--behaviours":
+                        behaviourMap = Next(args, ref i, "--behaviours");
+                        dumpEncounters = true;
+                        break;
                     case "--tileset-split":
                         string game = Next(args, ref i, "--tileset-split");
                         split = game.StartsWith("em", StringComparison.OrdinalIgnoreCase)
@@ -658,6 +708,7 @@ public static class Program
                 ExportWorldPath = exportWorld,
                 DumpMoves = dumpMoves,
                 DumpEncounters = dumpEncounters,
+                BehaviourMap = behaviourMap,
                 TileOrder = order,
             };
         }

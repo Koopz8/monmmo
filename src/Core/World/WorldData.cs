@@ -41,12 +41,12 @@ public sealed class WorldData
 
     public MapData? Find(string id) => _maps.GetValueOrDefault(id);
 
-    /// <summary>Finds a map by name, preferring the largest when several share one.</summary>
+    /// <summary>
+    /// Finds a map by name, preferring an exact match and then the largest — so
+    /// "route 1" cannot quietly resolve to Route 17.
+    /// </summary>
     public MapData? FindByName(string name) =>
-        _maps.Values
-            .Where(m => m.Name.Contains(name, StringComparison.OrdinalIgnoreCase))
-            .OrderByDescending(m => m.Width * m.Height)
-            .FirstOrDefault();
+        MapNameMatch.Rank(_maps.Values, m => m.Name, name, m => m.Width * m.Height).FirstOrDefault();
 
     public void Save(Stream output)
     {

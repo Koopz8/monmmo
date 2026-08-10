@@ -88,13 +88,13 @@ public static class WorldLoader
 
         if (!string.IsNullOrWhiteSpace(mapName) && names is not null)
         {
-            // Prefer the largest match, which is the outdoor map rather than one of
+            // Exact names win, then the largest — the outdoor map rather than one of
             // the interiors that share its name.
-            var matches = all
-                .Where(m => names.Resolve(m.Header.RegionSectionId, indexBase)
-                    .Contains(mapName, StringComparison.OrdinalIgnoreCase))
-                .OrderByDescending(m => m.Header.Layout.BlockCount)
-                .ToList();
+            var matches = Core.World.MapNameMatch.Rank(
+                all,
+                m => names.Resolve(m.Header.RegionSectionId, indexBase),
+                mapName,
+                m => m.Header.Layout.BlockCount).ToList();
 
             if (matches.Count > 0) return matches[0];
 
