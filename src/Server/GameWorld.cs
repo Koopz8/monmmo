@@ -540,10 +540,17 @@ public sealed class GameWorld
 
             List<BattleEvent> events = battle.ResolveTurn(action, new BattleAction.UseMove(0));
 
-            // Experience is awarded before the update goes out, so a level-up reads as
-            // part of the turn that earned it rather than arriving after the battle.
+            // Slotted in ahead of the closing event rather than appended, because the
+            // games pay out between "it fainted" and the end of the battle. Appending
+            // put it after "You won the battle!", which reads backwards and is the
+            // easiest line in a battle to press past without reading.
             if (battle.IsOver && battle.Winner == Side.Player && !battle.OpponentCaught)
-                events.AddRange(AwardExperience(player, battle));
+            {
+                List<BattleEvent> payout = AwardExperience(player, battle);
+
+                int ended = events.FindIndex(e => e is BattleEvent.Ended);
+                events.InsertRange(ended < 0 ? events.Count : ended, payout);
+            }
 
             var send = new List<Outgoing>
             {

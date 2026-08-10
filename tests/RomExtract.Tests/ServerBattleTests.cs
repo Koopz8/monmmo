@@ -247,6 +247,14 @@ public class ServerBattleTests
         // Sent with the turn that earned it, not after the battle, so a level-up reads
         // as part of the fight.
         Assert.Contains(events, e => e is BattleEvent.ExperienceGained);
+
+        // And before the battle closes. Appended after "You won the battle!" it reads
+        // backwards, and that is the easiest line in a battle to press past unread.
+        int gained = events.FindIndex(e => e is BattleEvent.ExperienceGained);
+        int ended = events.FindIndex(e => e is BattleEvent.Ended);
+
+        Assert.True(gained >= 0 && ended >= 0);
+        Assert.True(gained < ended, "the payout was announced after the battle ended");
     }
 
     [Fact]

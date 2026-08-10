@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
+using PokeMmo.Core.Battle;
 using PokeMmo.Core.Data;
 using PokeMmo.Core.Net;
 using PokeMmo.Core.World;
@@ -364,6 +365,24 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
 
                             foreach (Outgoing outgoing in battleResult)
                             {
+                                if (outgoing.Message is BattleUpdate battleUpdate)
+                                {
+                                    foreach (BattleEvent battleEvent in battleUpdate.Events)
+                                    {
+                                        // Said out loud because "I saw no experience" and
+                                        // "no experience was awarded" are different
+                                        // problems with the same symptom.
+                                        if (battleEvent is BattleEvent.ExperienceGained gained)
+                                            Console.WriteLine($"+ #{playerId} gained {gained.Amount} exp");
+
+                                        if (battleEvent is BattleEvent.LevelledUp grew)
+                                            Console.WriteLine($"^ #{playerId} reached level {grew.Level}");
+
+                                        if (battleEvent is BattleEvent.MoveLearned learned)
+                                            Console.WriteLine($"^ #{playerId} learned move {learned.MoveId}");
+                                    }
+                                }
+
                                 if (outgoing.Message is not BattleFinished finished) continue;
 
                                 Console.WriteLine(
