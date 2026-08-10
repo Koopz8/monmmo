@@ -282,9 +282,12 @@ public static class TableLocator
             .OrderBy(r => r.Offset)
             .ToList();
 
+        TableLocation? front = fullSized.ElementAtOrDefault(0);
+        TableLocation? back = fullSized.ElementAtOrDefault(1);
+
         return (
-            fullSized.ElementAtOrDefault(0) with { Name = "FrontPics" },
-            fullSized.ElementAtOrDefault(1) is { } back ? back with { Name = "BackPics" } : null);
+            front is null ? null : front with { Name = "FrontPics" },
+            back is null ? null : back with { Name = "BackPics" });
     }
 
     /// <summary>
