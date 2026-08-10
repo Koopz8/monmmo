@@ -33,14 +33,30 @@ public static class Program
 
         if (!settings.IsUsable)
         {
-            ShowMessageWindow(
-                "No cartridge configured.",
-                $"Put the path to your own .gba file in {ClientSettings.FileName}",
-                Path.Combine(directory, ClientSettings.FileName),
-                "",
-                "or run:  monmmo --rom <path to your .gba> --map \"pallet town\"",
-                "",
-                "The file is read locally and never leaves this machine.");
+            // Two different problems that used to share one message. "No cartridge
+            // configured" is misleading when a path was given and simply is not there
+            // — the answer to one is to set a path, and to the other is to check the
+            // one already set.
+            ShowMessageWindow(string.IsNullOrWhiteSpace(settings.RomPath)
+                ?
+                [
+                    "No cartridge configured.",
+                    $"Put the path to your own .gba file in {ClientSettings.FileName}",
+                    Path.Combine(directory, ClientSettings.FileName),
+                    "",
+                    "or run:  monmmo --rom <path to your .gba>",
+                    "",
+                    "The file is read locally and never leaves this machine.",
+                ]
+                :
+                [
+                    "That cartridge is not there.",
+                    "",
+                    settings.RomPath,
+                    "",
+                    "Check the path, or set it once in:",
+                    Path.Combine(directory, ClientSettings.FileName),
+                ]);
 
             return 1;
         }
