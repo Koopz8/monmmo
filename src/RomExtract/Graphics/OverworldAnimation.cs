@@ -5,12 +5,24 @@ namespace PokeMmo.RomExtract.Graphics;
 /// <summary>
 /// Which frame of a walking sprite to draw.
 /// <para>
-/// The layout is the cartridge's, and it is worth writing down because it is not the
-/// obvious one: the first three frames are the three facings standing still, then two
-/// more sets of three for the two halves of a stride. Facing right is not stored at
-/// all — it is the left-facing frame drawn mirrored, which halves the sprite data and
-/// is why every character in these games parts their hair on whichever side you are
-/// looking from.
+/// The layout is the cartridge's, and it is worth writing down exactly, because there
+/// are two plausible ways to arrange nine frames and only one of them is right:
+/// </para>
+/// <code>
+///   0  facing down, still        3  down, step one     4  down, step two
+///   1  facing up, still          5  up, step one       6  up, step two
+///   2  facing left, still        7  left, step one     8  left, step two
+/// </code>
+/// <para>
+/// Grouped by direction, not by stride. Reading it the other way — three facings per
+/// stride — produces frames that are all real and all in range, and a character who
+/// alternates between facing toward you and away from you on every step. It looks
+/// like spinning, and nothing about it looks like an out-of-bounds read.
+/// </para>
+/// <para>
+/// Facing right is not stored at all: it is the left-facing frame drawn mirrored,
+/// which halves the sprite data and is why every character in these games parts their
+/// hair on whichever side you happen to be looking from.
 /// </para>
 /// </summary>
 public static class OverworldAnimation
@@ -38,10 +50,11 @@ public static class OverworldAnimation
 
         if (!walking) return (row, mirror);
 
-        // Frames 3-5 are one half of the stride and 6-8 the other.
-        int half = ((stride % 2) + 2) % 2;
+        // Two walking frames per direction, laid out together: 3 and 4 are down, 5 and
+        // 6 are up, 7 and 8 are left.
+        int foot = ((stride % 2) + 2) % 2;
 
-        return (3 + row + half * 3, mirror);
+        return (3 + row * 2 + foot, mirror);
     }
 
     /// <summary>True when a sprite has enough frames to be animated as a walker.</summary>

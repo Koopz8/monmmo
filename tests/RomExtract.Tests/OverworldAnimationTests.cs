@@ -41,6 +41,57 @@ public class OverworldAnimationTests
         Assert.Equal(first, OverworldAnimation.FrameFor(Direction.Down, true, 2).Frame);
     }
 
+    /// <summary>
+    /// The exact frame numbers, which is the only assertion that could have caught the
+    /// layout being wrong.
+    /// <para>
+    /// Nine frames can be arranged two plausible ways — grouped by direction, or three
+    /// facings per stride. Both keep every frame in range and both animate. The wrong
+    /// one gives you a character who faces toward you on one step and away on the next,
+    /// which reads as spinning. Every test here that checked ranges, differences and
+    /// cycles passed under both.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData(Direction.Down, 0, 3, 4)]
+    [InlineData(Direction.Up, 1, 5, 6)]
+    [InlineData(Direction.Left, 2, 7, 8)]
+    [InlineData(Direction.Right, 2, 7, 8)]
+    public void BothWalkingFramesBelongToTheDirectionBeingWalked(
+        Direction facing, int still, int firstFoot, int secondFoot)
+    {
+        Assert.Equal(still, OverworldAnimation.FrameFor(facing, walking: false, stride: 0).Frame);
+        Assert.Equal(firstFoot, OverworldAnimation.FrameFor(facing, walking: true, stride: 0).Frame);
+        Assert.Equal(secondFoot, OverworldAnimation.FrameFor(facing, walking: true, stride: 1).Frame);
+    }
+
+    [Fact]
+    public void NoTwoDirectionsShareAWalkingFrame()
+    {
+        // Worth being honest about what this does and does not catch. It would not have
+        // found the spinning: the wrong layout also handed out six distinct frames,
+        // just the wrong six. Only the exact indices above could catch that. This
+        // guards a different mistake — an arithmetic slip that makes two directions
+        // collide — and it is kept for that alone.
+        var seen = new Dictionary<int, Direction>();
+
+        foreach (Direction facing in new[] { Direction.Down, Direction.Up, Direction.Left })
+        {
+            for (int stride = 0; stride < 2; stride++)
+            {
+                int frame = OverworldAnimation.FrameFor(facing, walking: true, stride).Frame;
+
+                Assert.False(
+                    seen.TryGetValue(frame, out Direction other),
+                    $"{facing} and {other} both use frame {frame}");
+
+                seen[frame] = facing;
+            }
+        }
+
+        Assert.Equal(6, seen.Count);
+    }
+
     [Fact]
     public void ANegativeStrideStillPicksAValidFrame()
     {
