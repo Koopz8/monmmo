@@ -25,7 +25,7 @@ The project layout enforces the rest:
 | `src/Tools/RomDump` | CLI harness | Development tool for inspecting a cartridge |
 | `src/Client` | The game client | Window, input, drawing. No engine, no editor |
 | `src/Server` | Authoritative server | **Core only.** Never references `RomExtract` |
-| `tests/RomExtract.Tests` | Test suite | 198 tests, no cartridge required |
+| `tests/RomExtract.Tests` | Test suite | 270 tests, no cartridge required |
 
 The server does not read cartridges. It learns the world from a **collision-only**
 file an operator exports from their own image — map ids, names, dimensions and one

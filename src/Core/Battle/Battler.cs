@@ -1,0 +1,152 @@
+using PokeMmo.Core.Data;
+
+namespace PokeMmo.Core.Battle;
+
+/// <summary>Non-volatile status. Only one at a time.</summary>
+public enum StatusCondition
+{
+    None,
+    Poison,
+    Burn,
+    Paralysis,
+    Sleep,
+    Freeze,
+}
+
+/// <summary>
+/// One creature as it exists inside a battle: its computed stats, its current state,
+/// and the stat stages it has accumulated.
+/// </summary>
+public sealed class Battler
+{
+    private readonly Dictionary<Stat, int> _stages = [];
+
+    public Battler(SpeciesData species, int level, Nature nature = Nature.Hardy, string? nickname = null)
+    {
+        Species = species;
+        Level = level;
+        Nature = nature;
+        Name = nickname ?? species.Name;
+
+        MaxHp = Stats.Hp(species.BaseHp, level);
+        CurrentHp = MaxHp;
+
+        Attack = Stats.Other(Stat.Attack, species.BaseAttack, level, nature);
+        Defense = Stats.Other(Stat.Defense, species.BaseDefense, level, nature);
+        Speed = Stats.Other(Stat.Speed, species.BaseSpeed, level, nature);
+        SpAttack = Stats.Other(Stat.SpAttack, species.BaseSpAttack, level, nature);
+        SpDefense = Stats.Other(Stat.SpDefense, species.BaseSpDefense, level, nature);
+    }
+
+    public SpeciesData Species { get; }
+    public string Name { get; }
+    public int Level { get; }
+    public Nature Nature { get; }
+
+    public int MaxHp { get; }
+    public int CurrentHp { get; private set; }
+
+    public int Attack { get; }
+    public int Defense { get; }
+    public int Speed { get; }
+    public int SpAttack { get; }
+    public int SpDefense { get; }
+
+    /// <summary>The moves this battler knows, in slot order.</summary>
+    public List<MoveData> Moves { get; } = [];
+
+    public StatusCondition Status { get; set; }
+
+    /// <summary>Turns of sleep remaining, counted down at the start of each of this battler's turns.</summary>
+    public int SleepTurns { get; set; }
+
+    public PokemonType Type1 => Species.Type1;
+    public PokemonType Type2 => Species.Type2;
+
+    public bool HasFainted => CurrentHp <= 0;
+
+    public int StageOf(Stat stat) => _stages.GetValueOrDefault(stat);
+
+    /// <summary>Adjusts a stat stage, clamped to the -6..+6 range. Returns the change actually applied.</summary>
+    public int ChangeStage(Stat stat, int delta)
+    {
+        int before = StageOf(stat);
+        int after = Math.Clamp(before + delta, -Stats.MaxStage, Stats.MaxStage);
+        _stages[stat] = after;
+        return after - before;
+    }
+
+    public void ResetStages() => _stages.Clear();
+
+    /// <summary>
+    /// A battle stat with its stage applied. Critical hits ignore stages that would
+    /// help the defender or hinder the attacker, which is what
+    /// <paramref name="ignoreUnfavourableStages"/> models.
+    /// </summary>
+    public int EffectiveStat(Stat stat, bool ignoreUnfavourableStages = false)
+    {
+        int raw = stat switch
+        {
+            Stat.Attack => Attack,
+            Stat.Defense => Defense,
+            Stat.Speed => Speed,
+            Stat.SpAttack => SpAttack,
+            Stat.SpDefense => SpDefense,
+            _ => 0,
+        };
+
+        int stage = StageOf(stat);
+
+        if (ignoreUnfavourableStages)
+        {
+            bool isAttacking = stat is Stat.Attack or Stat.SpAttack;
+            if (isAttacking && stage < 0) stage = 0;
+            if (!isAttacking && stage > 0) stage = 0;
+        }
+
+        int value = Stats.ApplyStage(raw, stage);
+
+        // Paralysis quarters Speed. Burn halves Attack, but that belongs with the
+        // damage calculation rather than here, so a burned battler still moves at its
+        // normal speed.
+        if (stat == Stat.Speed && Status == StatusCondition.Paralysis) value /= 4;
+
+        return Math.Max(1, value);
+    }
+
+    public int TakeDamage(int amount)
+    {
+        int dealt = Math.Clamp(amount, 0, CurrentHp);
+        CurrentHp -= dealt;
+        return dealt;
+    }
+
+    public int Heal(int amount)
+    {
+        int healed = Math.Clamp(amount, 0, MaxHp - CurrentHp);
+        CurrentHp += healed;
+        return healed;
+    }
+
+    /// <summary>Applies a status, which only sticks if the battler is currently clear.</summary>
+    public bool TryApplyStatus(StatusCondition status, int sleepTurns = 0)
+    {
+        if (Status != StatusCondition.None || HasFainted) return false;
+
+        Status = status;
+        if (status == StatusCondition.Sleep) SleepTurns = Math.Max(1, sleepTurns);
+
+        return true;
+    }
+
+    /// <summary>The move in a slot, or null when the slot is empty or out of range.</summary>
+    public MoveData? MoveAt(int slot) => slot >= 0 && slot < Moves.Count ? Moves[slot] : null;
+
+    public Battler Knowing(params MoveData[] moves)
+    {
+        Moves.AddRange(moves);
+        return this;
+    }
+
+    public override string ToString() => $"{Name} L{Level} {CurrentHp}/{MaxHp}";
+}

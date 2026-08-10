@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using PokeMmo.Core.Battle;
 using PokeMmo.Core.Data;
 using PokeMmo.RomExtract;
 using PokeMmo.RomExtract.Graphics;
@@ -102,6 +103,9 @@ public static class Program
         if (options.ListMaps || options.Maps.Length > 0 || options.RenderAllMaps
             || !string.IsNullOrEmpty(options.MapNameFilter))
             WriteMaps(rom, options);
+
+        if (options.DumpMoves)
+            WriteMoves(rom, options.OutputDirectory);
 
         if (!string.IsNullOrEmpty(options.ExportWorldPath))
             ExportWorld(rom, options.ExportWorldPath);
@@ -387,6 +391,37 @@ public static class Program
         return path;
     }
 
+    private static void WriteMoves(Rom rom, string outputDirectory)
+    {
+        Console.WriteLine();
+        Console.WriteLine("Locating moves");
+
+        List<MoveData> moves;
+
+        try
+        {
+            moves = MoveExtractor.Extract(rom, Console.WriteLine);
+        }
+        catch (InvalidDataException ex)
+        {
+            Console.Error.WriteLine($"  {ex.Message}");
+            return;
+        }
+
+        string path = Path.Combine(outputDirectory, "moves.json");
+        File.WriteAllText(path, JsonSerializer.Serialize(moves, Json));
+        Console.WriteLine($"Wrote {path} ({moves.Count} moves)");
+
+        Console.WriteLine();
+        Console.WriteLine("Spot check:");
+
+        // Familiar moves at known indices, so a wrong anchor is obvious at a glance.
+        foreach (int id in new[] { 1, 2, 57, 63, 85 })
+        {
+            if (id < moves.Count) Console.WriteLine($"  #{id,3} {moves[id]} [{moves[id].Category}]");
+        }
+    }
+
     /// <summary>
     /// Writes the collision-only world file the server runs on. Dimensions and
     /// walkability only — no graphics, no text, nothing redistributable.
@@ -421,6 +456,7 @@ public static class Program
               --map <list>           comma-separated bank.map addresses to render,
                                      or "all" to render every map
               --map-name <text>      render every map whose name contains this text
+              --moves                dump the move table with names and categories
               --export-world <path>  write the collision-only world file the server
                                      runs on (no graphics, no text)
               --tileset-split <g>    firered (default) or emerald — how tile, metatile
@@ -447,6 +483,7 @@ public static class Program
         public bool RenderAllMaps { get; private init; }
         public TilesetSplit Split { get; private init; } = TilesetSplit.FireRed;
         public string? ExportWorldPath { get; private init; }
+        public bool DumpMoves { get; private init; }
         public TileOrder TileOrder { get; private init; } = TileOrder.RowMajor;
 
         public static Options Parse(string[] args)
@@ -463,6 +500,7 @@ public static class Program
             string? nameFilter = null;
             TilesetSplit split = TilesetSplit.FireRed;
             string? exportWorld = null;
+            bool dumpMoves = false;
             TileOrder order = TileOrder.RowMajor;
 
             for (int i = 1; i < args.Length; i++)
@@ -510,6 +548,9 @@ public static class Program
                     case "--export-world":
                         exportWorld = Next(args, ref i, "--export-world");
                         break;
+                    case "--moves":
+                        dumpMoves = true;
+                        break;
                     case "--tileset-split":
                         string game = Next(args, ref i, "--tileset-split");
                         split = game.StartsWith("em", StringComparison.OrdinalIgnoreCase)
@@ -542,6 +583,7 @@ public static class Program
                 MapNameFilter = nameFilter,
                 Split = split,
                 ExportWorldPath = exportWorld,
+                DumpMoves = dumpMoves,
                 TileOrder = order,
             };
         }
