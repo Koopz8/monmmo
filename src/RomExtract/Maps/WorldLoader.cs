@@ -16,6 +16,9 @@ public sealed record LoadedMap(
     byte[] Rgba,
     CollisionGrid Collision)
 {
+    /// <summary>People and things standing on this map.</summary>
+    public IReadOnlyList<MapObject> Objects { get; init; } = [];
+
     /// <summary>The map as a PNG, which is the simplest thing for a renderer to consume.</summary>
     public byte[] ToPng() => Graphics.PngWriter.ToArray(PixelWidth, PixelHeight, Rgba);
 }

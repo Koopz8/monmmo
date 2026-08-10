@@ -19,6 +19,13 @@ public sealed record MapData(string Id, string Name, int Width, int Height, byte
     /// <summary>Doors, stairs and cave mouths on this map.</summary>
     public IReadOnlyList<Warp> Warps { get; init; } = [];
 
+    /// <summary>People and other things standing on this map.</summary>
+    public IReadOnlyList<MapObject> Objects { get; init; } = [];
+
+    /// <summary>Whatever is standing on a square, if anything.</summary>
+    public MapObject? ObjectAt(GridPosition square) =>
+        Objects.FirstOrDefault(o => o.X == square.X && o.Y == square.Y);
+
     public CollisionGrid ToGrid() => new(Width, Height, Collision);
 
     /// <summary>The warp on a square, if there is one.</summary>
@@ -63,7 +70,7 @@ public sealed class WorldData
     /// <summary>Identifies the format, so a wrong or stale file fails loudly.</summary>
     private static readonly byte[] Magic = "MONWORLD"u8.ToArray();
 
-    private const int Version = 3;
+    private const int Version = 4;
 
     private readonly Dictionary<string, MapData> _maps;
 
@@ -157,6 +164,7 @@ public sealed class WorldData
 
             MapEncounters? mapEncounters = ReadEncounters(reader, id);
             (IReadOnlyList<MapConnection> connections, IReadOnlyList<Warp> warps) = ReadLinks(reader, id);
+            IReadOnlyList<MapObject> objects = ReadObjects(reader, id);
 
             maps.Add(new MapData(id, name, width, height, collision)
             {
@@ -164,6 +172,7 @@ public sealed class WorldData
                 Encounters = mapEncounters,
                 Connections = connections,
                 Warps = warps,
+                Objects = objects,
             });
         }
 
@@ -189,6 +198,19 @@ public sealed class WorldData
             writer.Write(warp.Y);
             writer.Write(warp.TargetWarpId);
             writer.Write(warp.TargetMapId);
+        }
+
+        writer.Write(map.Objects.Count);
+
+        foreach (MapObject entry in map.Objects)
+        {
+            writer.Write(entry.LocalId);
+            writer.Write(entry.GraphicsId);
+            writer.Write(entry.X);
+            writer.Write(entry.Y);
+            writer.Write((int)entry.Facing);
+            writer.Write(entry.MovementType);
+            writer.Write(entry.IsTrainer);
         }
     }
 
@@ -227,6 +249,33 @@ public sealed class WorldData
             warps.Add(new Warp(reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32(), reader.ReadString()));
 
         return (connections, warps);
+    }
+
+    private static IReadOnlyList<MapObject> ReadObjects(BinaryReader reader, string mapId)
+    {
+        int count = reader.ReadInt32();
+
+        if (count is < 0 or > 1024)
+            throw new InvalidDataException($"Map '{mapId}' claims {count} objects.");
+
+        var objects = new List<MapObject>(count);
+
+        for (int i = 0; i < count; i++)
+        {
+            int localId = reader.ReadInt32();
+            int graphicsId = reader.ReadInt32();
+            int x = reader.ReadInt32();
+            int y = reader.ReadInt32();
+            int facing = reader.ReadInt32();
+
+            if (!Enum.IsDefined(typeof(Direction), facing))
+                throw new InvalidDataException($"Map '{mapId}' has an object facing {facing}.");
+
+            objects.Add(new MapObject(
+                localId, graphicsId, x, y, (Direction)facing, reader.ReadInt32(), reader.ReadBoolean()));
+        }
+
+        return objects;
     }
 
     private static void WriteEncounters(BinaryWriter writer, MapEncounters? encounters)

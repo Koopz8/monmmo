@@ -73,6 +73,8 @@ public sealed class MapLibrary
             .Create(_rom, entry.Header.Layout)
             .Render(entry.Header.Layout);
 
+        CollisionGrid collision = entry.Header.Layout.ReadCollision(_rom);
+
         return new LoadedMap(
             NameOf(entry.Header),
             entry.Bank,
@@ -80,7 +82,13 @@ public sealed class MapLibrary
             picture.Width,
             picture.Height,
             picture.Rgba,
-            entry.Header.Layout.ReadCollision(_rom));
+            collision)
+        {
+            // Read here rather than sent by the server. The client has the cartridge,
+            // and both sides deriving them from the same image is the arrangement
+            // collision already uses.
+            Objects = MapLinkExtractor.ReadObjects(_rom, entry.Header, collision.Width, collision.Height),
+        };
     }
 
     private string NameOf(MapHeaderRecord header) =>

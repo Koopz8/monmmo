@@ -268,7 +268,7 @@ public sealed class GameWorld
             if (!grid.Contains(wanted))
                 return StepAcrossEdge(player, direction, nowSeconds);
 
-            if (!grid.IsWalkable(wanted))
+            if (!grid.IsWalkable(wanted) || IsOccupied(player.MapId, wanted))
             {
                 // Blocked is not an error: the client predicted the same thing and is
                 // already standing still, facing the wall. Everyone else still needs
@@ -315,7 +315,7 @@ public sealed class GameWorld
         GridPosition arrival = AcrossEdge(player.Square, side, map, target, connection.Offset);
         CollisionGrid targetGrid = GridFor(target.Id);
 
-        if (!targetGrid.IsWalkable(arrival))
+        if (!targetGrid.IsWalkable(arrival) || IsOccupied(target.Id, arrival))
         {
             // The neighbour exists but that particular square is solid. Treat it as the
             // wall it is rather than dropping the player into it.
@@ -354,6 +354,17 @@ public sealed class GameWorld
         ConnectionSide.Left => new GridPosition(target.Width - 1, from.Y - offset),
         _ => new GridPosition(0, from.Y - offset),
     };
+
+    /// <summary>
+    /// True when somebody is standing on a square.
+    /// <para>
+    /// The people on a map are as solid as its walls, and this has to be the server's
+    /// answer rather than the client's — the client draws them from its own cartridge
+    /// and could simply decline to.
+    /// </para>
+    /// </summary>
+    private bool IsOccupied(string mapId, GridPosition square) =>
+        _world.Find(mapId)?.ObjectAt(square) is not null;
 
     /// <summary>Standing still, announced so everyone still sees the turn.</summary>
     private Outgoing Stay(ServerPlayer player) =>

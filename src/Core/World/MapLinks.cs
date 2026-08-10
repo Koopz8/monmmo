@@ -39,3 +39,40 @@ public sealed record Warp(int X, int Y, int TargetWarpId, string TargetMapId)
 
     public GridPosition Square => new(X, Y);
 }
+
+/// <summary>
+/// Somebody standing on a map: a person, a sign-poster, a rooted tree.
+/// <para>
+/// Called an object event on the cartridge, which covers anything that occupies a
+/// square and is not scenery. Only what is needed to place one and draw it is kept —
+/// the script that decides what it says is a separate problem, and a large one.
+/// </para>
+/// </summary>
+public sealed record MapObject(
+    int LocalId,
+    int GraphicsId,
+    int X,
+    int Y,
+    Direction Facing,
+    int MovementType,
+    bool IsTrainer)
+{
+    public GridPosition Square => new(X, Y);
+
+    /// <summary>
+    /// Which way one of these starts out looking.
+    /// <para>
+    /// The movement type says both how it moves and where it faces to begin with.
+    /// Wandering in a direction and standing still facing it are different numbers
+    /// with the same starting look, which is why both map to the same facing here.
+    /// </para>
+    /// </summary>
+    public static Direction FacingFor(int movementType) => movementType switch
+    {
+        3 or 7 => Direction.Up,
+        4 or 8 => Direction.Down,
+        5 or 9 => Direction.Left,
+        6 or 10 => Direction.Right,
+        _ => Direction.Down,
+    };
+}

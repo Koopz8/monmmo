@@ -59,6 +59,7 @@ public static class WorldExporter
                     Encounters = encounters.GetValueOrDefault(id),
                     Connections = MapLinkExtractor.ReadConnections(rom, header, log),
                     Warps = MapLinkExtractor.ReadWarps(rom, header, grid.Width, grid.Height, log),
+                    Objects = MapLinkExtractor.ReadObjects(rom, header, grid.Width, grid.Height, log),
                 });
             }
             catch (Exception ex)
@@ -73,7 +74,11 @@ public static class WorldExporter
         int connections = maps.Sum(m => m.Connections.Count);
 
         log?.Invoke($"  exported {maps.Count} maps, {withEncounters} with encounters");
+        int objects = maps.Sum(m => m.Objects.Count);
+        int trainers = maps.Sum(m => m.Objects.Count(o => o.IsTrainer));
+
         log?.Invoke($"  {warps} warps, {connections} edge connections");
+        log?.Invoke($"  {objects} objects, {trainers} of them trainers");
 
         ReportDanglingLinks(maps, log);
 

@@ -18,6 +18,11 @@ public static class MapLinkExtractor
 
     private const int WarpSizeBytes = 8;
 
+    /// <summary>An object-event template: ids, a square, movement, a script and a flag.</summary>
+    private const int ObjectSizeBytes = 24;
+
+    private const int MaxObjects = 64;
+
     private const int ConnectionSizeBytes = 12;
 
     /// <summary>
@@ -72,6 +77,60 @@ public static class MapLinkExtractor
         }
 
         return warps;
+    }
+
+    /// <summary>
+    /// Reads the people and things standing on a map.
+    /// <para>
+    /// The same events record the warps come from, and the <em>first</em> of its four
+    /// counts and pointers rather than the second. Reading the wrong pair here gives a
+    /// plausible number of plausible-looking objects standing in the wrong places,
+    /// which is the same trap as the warps and worth naming twice.
+    /// </para>
+    /// </summary>
+    public static List<MapObject> ReadObjects(Rom rom, MapHeaderRecord header, int width, int height, Action<string>? log = null)
+    {
+        var objects = new List<MapObject>();
+
+        if (header.EventsPointer == 0) return objects;
+        if (rom.ToOffsetOrNull(header.EventsPointer) is not { } events) return objects;
+        if (events + EventsPointersOffset + 4 > rom.Length) return objects;
+
+        int count = rom.ReadU8(events);
+        if (count is 0 or > MaxObjects) return objects;
+
+        uint pointer = rom.ReadU32(events + EventsPointersOffset);
+        if (rom.ToOffsetOrNull(pointer) is not { } table) return objects;
+        if (table + count * ObjectSizeBytes > rom.Length) return objects;
+
+        for (int i = 0; i < count; i++)
+        {
+            int at = table + i * ObjectSizeBytes;
+
+            int localId = rom.ReadU8(at);
+            int graphicsId = rom.ReadU8(at + 1);
+            int x = (short)rom.ReadU16(at + 4);
+            int y = (short)rom.ReadU16(at + 6);
+            int movementType = rom.ReadU8(at + 9);
+            int trainerType = rom.ReadU16(at + 12);
+
+            if (x < 0 || x >= width || y < 0 || y >= height)
+            {
+                log?.Invoke($"    object {i} at ({x}, {y}) is outside a {width}x{height} map — dropped");
+                continue;
+            }
+
+            objects.Add(new MapObject(
+                localId,
+                graphicsId,
+                x,
+                y,
+                MapObject.FacingFor(movementType),
+                movementType,
+                trainerType != 0));
+        }
+
+        return objects;
     }
 
     /// <summary>

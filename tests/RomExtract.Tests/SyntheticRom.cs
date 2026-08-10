@@ -151,6 +151,23 @@ public sealed class SyntheticRom
     /// </summary>
     public const int MapWithAStrayWarp = 7;
 
+    public const int MapObjectsOffset = 0x078000;
+
+    private const int ObjectsStride = 128;
+
+    /// <summary>The objects written for a map, which is what extraction is checked against.</summary>
+    public static List<MapObject> ObjectsFor(int index)
+    {
+        if (index == MapWithoutEvents) return [];
+
+        return
+        [
+            new MapObject(1, 5 + index % 20, 3, 2, Direction.Up, 7, false),
+            new MapObject(2, 9 + index % 20, 6, 5, Direction.Left, 9, true),
+            new MapObject(3, 1, 8, 6, Direction.Down, 0, false),
+        ];
+    }
+
     public static int MapIndex(int bank, int map) => bank * MapsPerBank + map;
 
     public static string MapIdAt(int index) => $"{index / MapsPerBank}.{index % MapsPerBank}";
@@ -418,6 +435,7 @@ public sealed class SyntheticRom
                 WriteU32(header + 8, 0);   // scripts
                 WriteU32(header + 12, Rom.BaseAddress + (uint)(MapConnectionRecordOffset + index * ConnectionRecordStride));
 
+                WriteObjectsFor(index);
                 WriteWarpsFor(index);
                 WriteConnectionsFor(index);
                 WriteU16(header + 16, (ushort)(100 + index));       // music
@@ -519,12 +537,10 @@ public sealed class SyntheticRom
 
         int events = MapEventsOffset + index * EventsStride;
 
-        _data[events] = 3;                  // object events, deliberately not the warps
         _data[events + 1] = (byte)written;
         _data[events + 2] = 1;              // coord events
         _data[events + 3] = 2;              // background events
 
-        WriteU32(events + 4, Rom.BaseAddress + (uint)(MapWarpsOffset + 0x1000));  // objects, elsewhere
         WriteU32(events + 8, Rom.BaseAddress + (uint)table);
         WriteU32(events + 12, 0);
         WriteU32(events + 16, 0);
@@ -540,6 +556,50 @@ public sealed class SyntheticRom
         _data[at + 5] = (byte)warp.TargetWarpId;
         _data[at + 6] = byte.Parse(parts[1]);           // map number
         _data[at + 7] = byte.Parse(parts[0]);           // bank
+    }
+
+    /// <summary>
+    /// Writes the object-event templates and the first of the events record's four
+    /// counts and pointers.
+    /// <para>
+    /// Objects and warps are different pairs in the same record, and the pair a reader
+    /// picks is the whole difference between people standing where they should and
+    /// people standing where the doors are.
+    /// </para>
+    /// </summary>
+    private void WriteObjectsFor(int index)
+    {
+        if (index == MapWithoutEvents) return;
+
+        List<MapObject> objects = ObjectsFor(index);
+        int table = MapObjectsOffset + index * ObjectsStride;
+
+        for (int i = 0; i < objects.Count; i++)
+        {
+            MapObject entry = objects[i];
+            int at = table + i * 24;
+
+            _data[at] = (byte)entry.LocalId;
+            _data[at + 1] = (byte)entry.GraphicsId;
+            WriteU16(at + 4, (ushort)entry.X);
+            WriteU16(at + 6, (ushort)entry.Y);
+            _data[at + 8] = 0;                                  // elevation
+            _data[at + 9] = (byte)entry.MovementType;
+            WriteU16(at + 12, (ushort)(entry.IsTrainer ? 1 : 0));
+            WriteU32(at + 16, Rom.BaseAddress + (uint)table);   // script
+        }
+
+        // One object beyond the map's own edge, which extraction should drop.
+        int stray = table + objects.Count * 24;
+        _data[stray] = 9;
+        _data[stray + 1] = 3;
+        WriteU16(stray + 4, MapWidth + 5);
+        WriteU16(stray + 6, 1);
+
+        int events = MapEventsOffset + index * EventsStride;
+
+        _data[events] = (byte)(objects.Count + 1);
+        WriteU32(events + 4, Rom.BaseAddress + (uint)table);
     }
 
     /// <summary>

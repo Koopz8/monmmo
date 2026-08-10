@@ -137,10 +137,12 @@ public static class Program
     {
         using var view = new MapView(library, first);
 
-        // The cartridge's own walking figure, if it can be read. A rectangle is the
+        // The cartridge's own walking figures, if they can be read. A rectangle is the
         // fallback rather than a failure: a client that will not start because it could
         // not find a sprite table is worse than one that draws a box.
-        using CharacterSprite? sprite = CharacterSprite.Load(data.Rom, CharacterSprite.DefaultGraphicsId);
+        using var sprites = new CharacterSprites(data.Rom);
+
+        CharacterSprite? sprite = sprites.For(CharacterSprite.DefaultGraphicsId);
 
         var player = new WalkingCharacter();
         player.Place(view.Map.Collision, view.Map.Collision.FirstWalkable());
@@ -223,6 +225,19 @@ public static class Program
 
             Raylib.BeginMode2D(camera);
             Raylib.DrawTexture(view.Texture, 0, 0, Color.White);
+
+            // Drawn before the players, so anyone standing in front of somebody is in
+            // front of them rather than behind.
+            foreach (MapObject standing in view.Map.Objects)
+            {
+                float ox = standing.X * WalkingCharacter.SquarePixels;
+                float oy = standing.Y * WalkingCharacter.SquarePixels;
+
+                if (sprites.For(standing.GraphicsId) is { } theirs)
+                    theirs.Draw(ox, oy, standing.Facing, walking: false, stride: 0);
+                else
+                    DrawPlayer(ox, oy, standing.Facing, new Color(200, 180, 140, 255));
+            }
 
             foreach (RemoteCharacter other in others.Values)
             {

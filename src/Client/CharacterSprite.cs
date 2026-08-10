@@ -1,5 +1,6 @@
 using PokeMmo.Core.World;
 using PokeMmo.RomExtract;
+using PokeMmo.RomExtract.Maps;
 using PokeMmo.RomExtract.Graphics;
 using Raylib_cs;
 
@@ -35,21 +36,15 @@ public sealed class CharacterSprite : IDisposable
     public int FrameCount => _frames.Count;
 
     /// <summary>
-    /// Loads a sprite, or returns null when this cartridge has nothing usable at that
-    /// id — in which case the caller should draw whatever it drew before.
+    /// Loads a sprite from an already-located table, or returns null when this
+    /// cartridge has nothing usable at that id.
     /// </summary>
-    public static CharacterSprite? Load(Rom rom, int graphicsId)
+    public static CharacterSprite? Load(Rom rom, OverworldSpriteTables tables, int graphicsId)
     {
-        if (OverworldSprites.LocateGraphicsTable(rom) is not { } table) return null;
-        if (OverworldSprites.LocatePaletteTable(rom) is not { } paletteTable) return null;
+        if (tables.Records.ElementAtOrDefault(graphicsId) is not { } info) return null;
+        if (OverworldSprites.PaletteForTag(rom, tables.PaletteTable, info.PaletteTag) is not { } palette) return null;
 
-        List<ObjectGraphicsInfo?> records = OverworldSprites.ReadGraphics(rom, table, graphicsId + 1);
-
-        if (graphicsId >= records.Count || records[graphicsId] is not { } info) return null;
-        if (OverworldSprites.PaletteForTag(rom, paletteTable, info.PaletteTag) is not { } palette) return null;
-
-        List<IndexedImage> images = OverworldSprites.ReadFrames(
-            rom, info, OverworldSprites.FrameListBoundaries(rom, records));
+        List<IndexedImage> images = OverworldSprites.ReadFrames(rom, info, tables.Boundaries);
 
         if (!OverworldAnimation.CanWalk(images.Count)) return null;
 
@@ -99,5 +94,71 @@ public sealed class CharacterSprite : IDisposable
     {
         foreach (Texture2D frame in _frames) Raylib.UnloadTexture(frame);
         _frames.Clear();
+    }
+}
+
+/// <summary>The located sprite tables, so nothing has to scan the cartridge twice.</summary>
+public sealed record OverworldSpriteTables(
+    int PaletteTable,
+    IReadOnlyList<ObjectGraphicsInfo?> Records,
+    IReadOnlyDictionary<int, int> Boundaries)
+{
+    /// <summary>Every graphics id a cartridge could name. The real table holds 151.</summary>
+    private const int MaxGraphicsIds = 256;
+
+    public static OverworldSpriteTables? Locate(Rom rom)
+    {
+        if (OverworldSprites.LocateGraphicsTable(rom) is not { } table) return null;
+        if (OverworldSprites.LocatePaletteTable(rom) is not { } palettes) return null;
+
+        List<ObjectGraphicsInfo?> records = OverworldSprites.ReadGraphics(rom, table, MaxGraphicsIds);
+
+        return new OverworldSpriteTables(
+            palettes, records, OverworldSprites.FrameListBoundaries(rom, records));
+    }
+}
+
+/// <summary>
+/// Sprites by graphics id, loaded once each.
+/// <para>
+/// A map can hold a dozen people and several maps share the same faces, so loading is
+/// worth doing once. Ids with no usable sprite are remembered as nothing, or every
+/// frame would retry one.
+/// </para>
+/// <para>
+/// The tables are located once here rather than per sprite. Locating means walking
+/// sixteen megabytes, and doing that once per person on a map would stall visibly
+/// every time somebody opened a door.
+/// </para>
+/// </summary>
+public sealed class CharacterSprites : IDisposable
+{
+    private readonly Rom _rom;
+    private readonly OverworldSpriteTables? _tables;
+    private readonly Dictionary<int, CharacterSprite?> _byGraphicsId = [];
+
+    public CharacterSprites(Rom rom)
+    {
+        _rom = rom;
+        _tables = OverworldSpriteTables.Locate(rom);
+    }
+
+    public bool IsUsable => _tables is not null;
+
+    public CharacterSprite? For(int graphicsId)
+    {
+        if (_tables is null) return null;
+        if (_byGraphicsId.TryGetValue(graphicsId, out CharacterSprite? cached)) return cached;
+
+        CharacterSprite? sprite = CharacterSprite.Load(_rom, _tables, graphicsId);
+
+        _byGraphicsId[graphicsId] = sprite;
+        return sprite;
+    }
+
+    public void Dispose()
+    {
+        foreach (CharacterSprite? sprite in _byGraphicsId.Values) sprite?.Dispose();
+        _byGraphicsId.Clear();
     }
 }
