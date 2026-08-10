@@ -99,7 +99,8 @@ public static class Program
         if (!options.SkipSprites)
             WriteSprites(extractor, options, speciesCount);
 
-        if (options.ListMaps || options.Maps.Length > 0 || options.RenderAllMaps)
+        if (options.ListMaps || options.Maps.Length > 0 || options.RenderAllMaps
+            || !string.IsNullOrEmpty(options.MapNameFilter))
             WriteMaps(rom, options);
 
         Console.WriteLine();
@@ -202,86 +203,99 @@ public static class Program
         }
     }
 
+    /// <summary>How many maps to preview on the console before deferring to the file.</summary>
+    private const int PreviewCount = 20;
+
+    /// <summary>One map, as the game itself addresses it.</summary>
+    private sealed record NamedMap(int Bank, int Map, string Name, MapHeaderRecord Header)
+    {
+        /// <summary>A filename that sorts by bank and map but is still readable.</summary>
+        public string FileName
+        {
+            get
+            {
+                var slug = new string(Name.Select(c => char.IsLetterOrDigit(c) ? c : '_').ToArray()).Trim('_');
+                return $"{Bank:D2}-{Map:D2}{(slug.Length > 0 ? "_" + slug : "")}.png";
+            }
+        }
+
+        public override string ToString() =>
+            $"[{Bank,2}.{Map,-2}] {Name,-18} {Header.Layout}";
+    }
+
     private static void WriteMaps(Rom rom, Options options)
     {
         Console.WriteLine();
         Console.WriteLine("Locating maps");
 
-        MapLayoutTable? table = MapLocator.Locate(rom, Console.WriteLine);
+        MapBankTable? banks = MapBankLocator.Locate(rom, Console.WriteLine);
 
-        if (table is null)
+        if (banks is null)
         {
-            Console.Error.WriteLine("  no map layout table found");
+            Console.Error.WriteLine("  no map bank table found");
             return;
         }
 
-        Console.WriteLine();
-        Console.WriteLine($"  {table}");
+        List<RegionMapLocation> regions = MapBankLocator.LocateRegionNames(rom, Console.WriteLine);
 
-        // Several table slots can point at the same layout, so collapse to one entry
-        // per distinct record before listing or rendering anything.
-        List<(int Index, MapLayoutRecord Layout)> distinct = table.Valid
-            .GroupBy(entry => entry.Layout.Offset)
-            .Select(group => group.First())
-            .OrderBy(entry => entry.Index)
+        Console.WriteLine();
+        Console.WriteLine($"  {banks}");
+        Console.WriteLine($"  {regions.Count} region names");
+
+        List<NamedMap> maps = banks.AllMaps
+            .Select(entry => new NamedMap(
+                entry.Bank,
+                entry.Map,
+                NameFor(regions, entry.Header.RegionSectionId),
+                entry.Header))
             .ToList();
 
-        string listPath = WriteMapList(options.OutputDirectory, distinct);
-
-        Console.WriteLine();
-        Console.WriteLine($"  {distinct.Count} distinct layouts across {table.Valid.Count()} table slots");
+        string listPath = WriteMapList(options.OutputDirectory, maps);
         Console.WriteLine($"  Wrote {listPath}");
 
         if (options.ListMaps)
         {
             Console.WriteLine();
-            Console.WriteLine($"Largest layouts (the full list is in {Path.GetFileName(listPath)}):");
+            Console.WriteLine($"Largest maps (the full list is in {Path.GetFileName(listPath)}):");
 
-            foreach ((int index, MapLayoutRecord layout) in distinct
-                         .OrderByDescending(e => e.Layout.BlockCount)
-                         .Take(PreviewCount))
-            {
-                Console.WriteLine($"  [{index,4}] {layout}");
-            }
+            foreach (NamedMap map in maps.OrderByDescending(m => m.Header.Layout.BlockCount).Take(PreviewCount))
+                Console.WriteLine($"  {map}");
         }
 
-        if (options.Maps.Length == 0 && !options.RenderAllMaps) return;
+        List<NamedMap> toRender = SelectMaps(maps, options);
+        if (toRender.Count == 0) return;
 
         string mapDirectory = Path.Combine(options.OutputDirectory, "maps");
         Directory.CreateDirectory(mapDirectory);
 
-        List<(int Index, MapLayoutRecord Layout)> toRender = options.RenderAllMaps
-            ? distinct
-            : options.Maps
-                .Select(i => (Index: i, Layout: table.Layouts.ElementAtOrDefault(i)))
-                .Where(e => e.Layout is not null)
-                .Select(e => (e.Index, e.Layout!))
-                .ToList();
-
         Console.WriteLine();
         int written = 0, failed = 0;
 
-        foreach ((int index, MapLayoutRecord layout) in toRender)
+        foreach (NamedMap map in toRender)
         {
             try
             {
-                RenderedMap rendered = MapRenderer.Create(rom, layout, options.Split).Render(layout);
-                File.WriteAllBytes(Path.Combine(mapDirectory, $"{index:D3}.png"), rendered.ToPng());
+                RenderedMap rendered = MapRenderer
+                    .Create(rom, map.Header.Layout, options.Split)
+                    .Render(map.Header.Layout);
+
+                File.WriteAllBytes(Path.Combine(mapDirectory, map.FileName), rendered.ToPng());
                 written++;
 
-                // Rendering every map is hundreds of files; report progress rather
-                // than a line each.
-                if (!options.RenderAllMaps)
-                    Console.WriteLine($"Wrote {mapDirectory}{Path.DirectorySeparatorChar}{index:D3}.png ({rendered.Width}x{rendered.Height})");
+                // Rendering everything is hundreds of files; report progress instead
+                // of a line each.
+                if (toRender.Count <= PreviewCount)
+                    Console.WriteLine($"Wrote {map.FileName} ({rendered.Width}x{rendered.Height})");
             }
             catch (Exception ex)
             {
                 failed++;
-                if (!options.RenderAllMaps) Console.Error.WriteLine($"  map {index}: {ex.Message}");
+                if (toRender.Count <= PreviewCount)
+                    Console.Error.WriteLine($"  {map.Bank}.{map.Map}: {ex.Message}");
             }
         }
 
-        if (options.RenderAllMaps)
+        if (toRender.Count > PreviewCount)
             Console.WriteLine($"Rendered {written} maps into {mapDirectory}{(failed > 0 ? $" ({failed} failed)" : "")}");
 
         Console.WriteLine();
@@ -289,29 +303,73 @@ public static class Program
         Console.WriteLine("may differ on this cartridge — try --tileset-split emerald.");
     }
 
-    /// <summary>How many layouts to preview on the console before deferring to the file.</summary>
-    private const int PreviewCount = 20;
+    private static string NameFor(List<RegionMapLocation> regions, byte sectionId) =>
+        sectionId < regions.Count ? regions[sectionId].Name : $"SECTION {sectionId}";
 
     /// <summary>
-    /// Writes the layout list to disk. The console listing is a preview only: a real
-    /// cartridge holds hundreds of layouts, which scrolls out of a terminal's buffer
-    /// and leaves nothing to search through afterwards.
+    /// Works out which maps to render: everything, a name match, or specific
+    /// <c>bank.map</c> addresses.
     /// </summary>
-    private static string WriteMapList(string outputDirectory, List<(int Index, MapLayoutRecord Layout)> layouts)
+    private static List<NamedMap> SelectMaps(List<NamedMap> maps, Options options)
+    {
+        if (options.RenderAllMaps) return maps;
+
+        if (!string.IsNullOrEmpty(options.MapNameFilter))
+        {
+            List<NamedMap> matched = maps
+                .Where(m => m.Name.Contains(options.MapNameFilter, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            if (matched.Count == 0)
+                Console.Error.WriteLine($"  no map name contains '{options.MapNameFilter}'");
+
+            return matched;
+        }
+
+        var selected = new List<NamedMap>();
+
+        foreach (string spec in options.Maps)
+        {
+            string[] parts = spec.Split('.');
+
+            NamedMap? match = parts.Length == 2
+                && int.TryParse(parts[0], out int bank)
+                && int.TryParse(parts[1], out int number)
+                    ? maps.FirstOrDefault(m => m.Bank == bank && m.Map == number)
+                    : int.TryParse(spec, out int flat) ? maps.ElementAtOrDefault(flat) : null;
+
+            if (match is null) Console.Error.WriteLine($"  no map matches '{spec}'");
+            else selected.Add(match);
+        }
+
+        return selected;
+    }
+
+    /// <summary>
+    /// Writes the map list to disk. The console listing is a preview only: a real
+    /// cartridge holds hundreds of maps, which scrolls out of a terminal's buffer and
+    /// leaves nothing to search through afterwards.
+    /// </summary>
+    private static string WriteMapList(string outputDirectory, List<NamedMap> maps)
     {
         Directory.CreateDirectory(outputDirectory);
         string path = Path.Combine(outputDirectory, "maps.json");
 
-        var report = layouts.Select(entry => new
+        var report = maps.Select(map => new
         {
-            index = entry.Index,
-            address = $"0x{entry.Layout.Address:X8}",
-            widthBlocks = entry.Layout.Width,
-            heightBlocks = entry.Layout.Height,
-            widthPixels = entry.Layout.Width * MapRenderer.BlockPixels,
-            heightPixels = entry.Layout.Height * MapRenderer.BlockPixels,
-            primaryTileset = $"0x{entry.Layout.PrimaryTilesetPointer:X8}",
-            secondaryTileset = $"0x{entry.Layout.SecondaryTilesetPointer:X8}",
+            bank = map.Bank,
+            map = map.Map,
+            name = map.Name,
+            file = map.FileName,
+            header = $"0x{map.Header.Address:X8}",
+            layout = $"0x{map.Header.Layout.Address:X8}",
+            widthBlocks = map.Header.Layout.Width,
+            heightBlocks = map.Header.Layout.Height,
+            widthPixels = map.Header.Layout.Width * MapRenderer.BlockPixels,
+            heightPixels = map.Header.Layout.Height * MapRenderer.BlockPixels,
+            music = map.Header.Music,
+            mapType = map.Header.MapType,
+            regionSectionId = map.Header.RegionSectionId,
         });
 
         File.WriteAllText(path, JsonSerializer.Serialize(report, Json));
@@ -334,8 +392,9 @@ public static class Program
               --tile-order <o>       row (default) or column
               --no-sprites           dump data tables only
               --list-maps            list every map layout the cartridge holds
-              --map <list>           comma-separated layout indices to render as PNGs,
-                                     or "all" to render every distinct layout
+              --map <list>           comma-separated bank.map addresses to render,
+                                     or "all" to render every map
+              --map-name <text>      render every map whose name contains this text
               --tileset-split <g>    firered (default) or emerald — how tile, metatile
                                      and palette slots divide between the two tilesets
               --diagnose             report every candidate table run and dump raw
@@ -355,7 +414,8 @@ public static class Program
         public bool SkipSprites { get; private init; }
         public bool Diagnose { get; private init; }
         public bool ListMaps { get; private init; }
-        public int[] Maps { get; private init; } = [];
+        public string[] Maps { get; private init; } = [];
+        public string? MapNameFilter { get; private init; }
         public bool RenderAllMaps { get; private init; }
         public TilesetSplit Split { get; private init; } = TilesetSplit.FireRed;
         public TileOrder TileOrder { get; private init; } = TileOrder.RowMajor;
@@ -370,7 +430,8 @@ public static class Program
             int[] species = [1, 4, 7];
             bool shiny = false, back = false, skip = false, diagnose = false, listMaps = false;
             bool renderAll = false;
-            int[] maps = [];
+            string[] maps = [];
+            string? nameFilter = null;
             TilesetSplit split = TilesetSplit.FireRed;
             TileOrder order = TileOrder.RowMajor;
 
@@ -410,11 +471,11 @@ public static class Program
                         }
                         else
                         {
-                            maps = list
-                                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                                .Select(int.Parse)
-                                .ToArray();
+                            maps = list.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
                         }
+                        break;
+                    case "--map-name":
+                        nameFilter = Next(args, ref i, "--map-name");
                         break;
                     case "--tileset-split":
                         string game = Next(args, ref i, "--tileset-split");
@@ -445,6 +506,7 @@ public static class Program
                 ListMaps = listMaps,
                 Maps = maps,
                 RenderAllMaps = renderAll,
+                MapNameFilter = nameFilter,
                 Split = split,
                 TileOrder = order,
             };

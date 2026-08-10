@@ -68,6 +68,22 @@ public sealed class SyntheticRom
 
     /// <summary>A null slot planted mid-table, mirroring the dead entries real images carry.</summary>
     public const int DeadLayoutTableIndex = 40;
+
+    public const int MapHeadersOffset = 0x050000;
+    public const int BankArraysOffset = 0x051000;
+    public const int MapGroupsOffset = 0x052000;
+    public const int RegionNameTextOffset = 0x053000;
+    public const int RegionMapEntriesOffset = 0x054000;
+
+    public const int BankCount = 8;
+    public const int MapsPerBank = 5;
+    public const int RegionLocationCount = 64;
+
+    /// <summary>The name written into the region map table for a given section id.</summary>
+    public static string RegionNameFor(int index) => $"AREA {index:D2}";
+
+    /// <summary>Which region section a given map is tagged with.</summary>
+    public static int RegionSectionFor(int bank, int map) => (bank * MapsPerBank + map) % RegionLocationCount;
     public const int MetatileCount = 64;
 
     /// <summary>The species index whose sprite and palette are distinctive and asserted against.</summary>
@@ -105,6 +121,7 @@ public sealed class SyntheticRom
         WritePicTables();
         WritePaletteTables();
         WriteMapData();
+        WriteMapHeadersAndBanks();
     }
 
     /// <summary>Palette 0 of the synthetic tileset — what a rendered map is checked against.</summary>
@@ -178,6 +195,67 @@ public sealed class SyntheticRom
             bool dead = i == DeadLayoutTableIndex;
             WriteU32(MapLayoutTableOffset + i * 4, dead ? 0u : Rom.BaseAddress + MapLayoutOffset);
         }
+    }
+
+    /// <summary>
+    /// Writes map headers, the two-level bank table, and the region map table that
+    /// names each section.
+    /// </summary>
+    private void WriteMapHeadersAndBanks()
+    {
+        for (int bank = 0; bank < BankCount; bank++)
+        {
+            for (int map = 0; map < MapsPerBank; map++)
+            {
+                int index = bank * MapsPerBank + map;
+                int header = MapHeadersOffset + index * 28;
+
+                WriteU32(header, Rom.BaseAddress + MapLayoutOffset);
+                WriteU32(header + 4, 0);   // events
+                WriteU32(header + 8, 0);   // scripts
+                WriteU32(header + 12, 0);  // connections
+                WriteU16(header + 16, (ushort)(100 + index));       // music
+                WriteU16(header + 18, 1);                           // layout id
+                _data[header + 20] = (byte)RegionSectionFor(bank, map);
+                _data[header + 21] = 0;    // cave
+                _data[header + 22] = 0;    // weather
+                _data[header + 23] = 1;    // map type
+
+                WriteU32(BankArraysOffset + index * 4, Rom.BaseAddress + (uint)header);
+            }
+
+            WriteU32(
+                MapGroupsOffset + bank * 4,
+                Rom.BaseAddress + (uint)(BankArraysOffset + bank * MapsPerBank * 4));
+        }
+
+        for (int i = 0; i < RegionLocationCount; i++)
+        {
+            int textAt = RegionNameTextOffset + i * 16;
+            EncodeTextAsCartridgeWould(RegionNameFor(i), 16).CopyTo(_data, textAt);
+
+            int entry = RegionMapEntriesOffset + i * 8;
+            _data[entry] = (byte)(i % 20);
+            _data[entry + 1] = (byte)(i % 14);
+            _data[entry + 2] = 1;
+            _data[entry + 3] = 1;
+            WriteU32(entry + 4, Rom.BaseAddress + (uint)textAt);
+        }
+    }
+
+    private static byte[] EncodeTextAsCartridgeWould(string text, int fieldWidth)
+    {
+        var buffer = new byte[fieldWidth];
+
+        int i = 0;
+        foreach (char c in text)
+        {
+            if (i >= fieldWidth - 1) break;
+            buffer[i++] = c == ' ' ? (byte)0x00 : EncodeCharAsCartridgeWould(c);
+        }
+
+        buffer[i] = GameText.Terminator;
+        return buffer;
     }
 
     private static Rgba32[] BuildTilesetPalette()

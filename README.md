@@ -23,7 +23,7 @@ The project layout enforces the rest:
 | `src/Core` | Shared game model | Referenced by **both** the client and, later, the server |
 | `src/RomExtract` | Cartridge reading | **Client-only.** The server must never reference this |
 | `src/Tools/RomDump` | CLI harness | Development tool for inspecting a cartridge |
-| `tests/RomExtract.Tests` | Test suite | 95 tests, no cartridge required |
+| `tests/RomExtract.Tests` | Test suite | 112 tests, no cartridge required |
 
 When the server project lands, the one rule to hold is that its dependency graph
 must not contain `RomExtract`. That way the legal posture is guaranteed by the build
@@ -45,22 +45,23 @@ out/
   tables.json      where every data table was found, and how
   species.json     the full base-stat table with decoded names
   sprites/001.png  decoded 64x64 sprites, transparent background
-  maps.json        every distinct map layout, with dimensions and tileset pointers
-  maps/000.png     rendered maps
+  maps.json        every map, with its bank.map address, name and dimensions
+  maps/03-00_PALLET_TOWN.png   rendered maps
 ```
 
 Options: `--shiny`, `--back`, `--no-sprites`, `--diagnose`, `--tile-order row|column`,
-`--list-maps`, `--map <list>`, `--tileset-split firered|emerald`.
+`--list-maps`, `--map <list>`, `--map-name <text>`, `--tileset-split firered|emerald`.
 
 To see what maps the cartridge holds, and render one:
 
 ```bash
 dotnet run --project src/Tools/RomDump -- your.gba --out ./out --no-sprites --list-maps
-dotnet run --project src/Tools/RomDump -- your.gba --out ./out --no-sprites --map 0
+dotnet run --project src/Tools/RomDump -- your.gba --out ./out --no-sprites --map-name pallet
 ```
 
-`--map all` renders every distinct layout at once, which is the practical way to find
-a particular place: render the lot, then look through `out/maps/`.
+Maps are addressed the way the game addresses them, as `bank.map`, and named from the
+region map table — so `--map 3.0` and `--map-name pallet` both work, and rendered
+files come out as `03-00_PALLET_TOWN.png`. `--map all` renders everything.
 
 ---
 
@@ -85,9 +86,13 @@ This extractor searches for **structure** instead:
   offsets every tag by a constant.
 - **Map layouts** — a layout record is two small positive dimensions followed by
   pointers that must land in the cartridge, with block data that must fit inside it.
-  The layout *table* is then a long run of pointers each targeting one of those
-  records, of which at least three quarters must resolve. Isolated dead slots are
-  stepped over rather than treated as the end of the table, so indices stay aligned.
+- **Map banks** — two levels of indirection: a table of pointers, each to an array of
+  pointers, each to a map header whose own layout pointer must resolve to a valid
+  layout. That shape is specific enough that nothing else in the image matches it at
+  length, and it yields the game's own `(bank, map)` numbering rather than an index
+  into a table whose boundaries had to be guessed.
+- **Region names** — entries of `{x, y, width, height, name}` where the coordinates
+  are small and the pointer resolves to decodable upper-case text.
 
 A candidate must produce at least 100 consecutive well-formed entries to be accepted.
 The result: the extractor either finds tables that genuinely satisfy the format's
