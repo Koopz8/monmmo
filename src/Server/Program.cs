@@ -99,6 +99,42 @@ public static class Program
         {
             Console.WriteLine("  no land encounter table for this map — nothing will appear");
         }
+
+        if (grass > 0) ReportWhereTheGrassIs(map);
+    }
+
+    /// <summary>
+    /// Says where the grass actually is.
+    /// <para>
+    /// Knowing a map has 52 grass squares is useless if you cannot find them — a
+    /// player can wander a long way through a large map and touch none of them, which
+    /// looks exactly like encounters being broken.
+    /// </para>
+    /// </summary>
+    private static void ReportWhereTheGrassIs(MapData map)
+    {
+        var squares = new List<GridPosition>();
+
+        for (int y = 0; y < map.Height; y++)
+        {
+            for (int x = 0; x < map.Width; x++)
+            {
+                var square = new GridPosition(x, y);
+                if (MetatileBehaviour.IsEncounterGrass(map.BehaviourAt(square))) squares.Add(square);
+            }
+        }
+
+        if (squares.Count == 0) return;
+
+        int minX = squares.Min(s => s.X), maxX = squares.Max(s => s.X);
+        int minY = squares.Min(s => s.Y), maxY = squares.Max(s => s.Y);
+
+        Console.WriteLine($"  grass lies between ({minX}, {minY}) and ({maxX}, {maxY})");
+
+        // Row summaries are more use than a list of coordinates: grass comes in
+        // patches, and a row with a span is something you can walk to.
+        foreach (var row in squares.GroupBy(s => s.Y).OrderBy(g => g.Key).Take(8))
+            Console.WriteLine($"    y={row.Key,3}: x {row.Min(s => s.X)}-{row.Max(s => s.X)} ({row.Count()} squares)");
     }
 
     private static string? ArgumentValue(string[] args, string name)
