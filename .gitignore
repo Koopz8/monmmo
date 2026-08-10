@@ -1,0 +1,29 @@
+# --- Never commit cartridge images or anything derived from them -------------
+# This is the project's most important rule. The client ships no cartridge data;
+# every player supplies their own file and extraction happens locally.
+*.gba
+*.gbc
+*.gb
+*.nds
+*.sav
+*.srm
+
+# Extractor output — derived from a player's own cartridge, never redistributable.
+out/
+extracted/
+assets/extracted/
+
+# --- .NET --------------------------------------------------------------------
+bin/
+obj/
+*.user
+*.suo
+.vs/
+artifacts/
+TestResults/
+
+# --- Editors -----------------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+.DS_Store
