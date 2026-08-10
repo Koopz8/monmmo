@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
+using PokeMmo.Core.Data;
 using PokeMmo.Core.Net;
 using PokeMmo.Core.World;
 using PokeMmo.Server.Storage;
@@ -24,6 +25,7 @@ public static class Program
     {
         string worldPath = ArgumentValue(args, "--world") ?? "world.dat";
         string databasePath = ArgumentValue(args, "--db") ?? SqlitePlayerStore.DefaultFileName;
+        string rulesPath = ArgumentValue(args, "--rules") ?? "rules.dat";
         string startingMap = ArgumentValue(args, "--map") ?? "pallet town";
         int port = int.TryParse(ArgumentValue(args, "--port"), out int parsed) ? parsed : DefaultPort;
         bool verbose = args.Contains("--verbose");
@@ -72,11 +74,49 @@ public static class Program
         ReportStartingMapLinks(game);
         ReportEncounterReadiness(game.StartingMap);
 
+        ReportRules(rulesPath);
+
         using var store = new SqlitePlayerStore(databasePath);
         Console.WriteLine($"Accounts in {Path.GetFullPath(databasePath)}");
 
         await new GameServer(game, store, verbose).RunAsync(port);
         return 0;
+    }
+
+    /// <summary>
+    /// Loads the rules file if there is one, and says plainly when there is not.
+    /// <para>
+    /// Without it the server cannot decide a battle — it has no base stats and no
+    /// catch rates — so battles stay where they are, resolved by the client and taken
+    /// on trust. That is a thing to state at startup rather than leave someone to
+    /// infer.
+    /// </para>
+    /// </summary>
+    private static GameRules? ReportRules(string path)
+    {
+        if (!File.Exists(path))
+        {
+            Console.WriteLine($"No rules file at {Path.GetFullPath(path)} — battles stay client-side and are taken on trust");
+            Console.WriteLine("  generate one:  dotnet run --project src/Tools/RomDump -- your.gba --export-rules rules.dat");
+            return null;
+        }
+
+        try
+        {
+            GameRules rules = GameRules.Load(path);
+
+            Console.WriteLine(
+                $"Rules from {path}: {rules.SpeciesCount} species, " +
+                $"{rules.MoveCount} moves, {rules.LearnsetCount} learnsets");
+
+            return rules;
+        }
+        catch (InvalidDataException ex)
+        {
+            Console.WriteLine($"Could not read {path}: {ex.Message}");
+            Console.WriteLine("  battles stay client-side until this is re-exported");
+            return null;
+        }
     }
 
     /// <summary>

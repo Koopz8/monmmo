@@ -113,6 +113,9 @@ public static class Program
         if (!string.IsNullOrEmpty(options.ExportWorldPath))
             ExportWorld(rom, options.ExportWorldPath);
 
+        if (!string.IsNullOrEmpty(options.ExportRulesPath))
+            ExportRules(rom, options.ExportRulesPath);
+
         Console.WriteLine();
         Console.WriteLine($"Done. Output in {Path.GetFullPath(options.OutputDirectory)}");
         return 0;
@@ -596,6 +599,19 @@ public static class Program
         Console.WriteLine($"Wrote {Path.GetFullPath(path)} ({world.Count} maps, collision only)");
     }
 
+    private static void ExportRules(Rom rom, string path)
+    {
+        Console.WriteLine();
+        Console.WriteLine("Exporting rules");
+
+        Core.Data.GameRules rules = RulesExporter.Export(rom, Console.WriteLine);
+        rules.Save(path);
+
+        Console.WriteLine(
+            $"Wrote {Path.GetFullPath(path)} " +
+            $"({rules.SpeciesCount} species, {rules.MoveCount} moves, no names)");
+    }
+
     private static void PrintUsage()
     {
         Console.WriteLine("""
@@ -619,6 +635,9 @@ public static class Program
               --encounters           dump wild encounter tables
               --behaviours <name>    report metatile behaviours for a named map
                                      (implies --encounters, does not render anything)
+              --export-rules <path>  write the rules file the server resolves battles
+                                     against: base stats, move power, catch rates and
+                                     learnsets, with no names of any kind
               --export-world <path>  write the collision-only world file the server
                                      runs on (no graphics, no text)
               --tileset-split <g>    firered (default) or emerald — how tile, metatile
@@ -645,6 +664,8 @@ public static class Program
         public bool RenderAllMaps { get; private init; }
         public TilesetSplit Split { get; private init; } = TilesetSplit.FireRed;
         public string? ExportWorldPath { get; private init; }
+
+        public string? ExportRulesPath { get; private init; }
         public bool DumpMoves { get; private init; }
         public bool DumpEncounters { get; private init; }
         public string? BehaviourMap { get; private init; }
@@ -664,6 +685,7 @@ public static class Program
             string? nameFilter = null;
             TilesetSplit split = TilesetSplit.FireRed;
             string? exportWorld = null;
+            string? exportRules = null;
             bool dumpMoves = false, dumpEncounters = false;
             string? behaviourMap = null;
             TileOrder order = TileOrder.RowMajor;
@@ -713,6 +735,9 @@ public static class Program
                     case "--export-world":
                         exportWorld = Next(args, ref i, "--export-world");
                         break;
+                    case "--export-rules":
+                        exportRules = Next(args, ref i, "--export-rules");
+                        break;
                     case "--moves":
                         dumpMoves = true;
                         break;
@@ -755,6 +780,7 @@ public static class Program
                 MapNameFilter = nameFilter,
                 Split = split,
                 ExportWorldPath = exportWorld,
+                ExportRulesPath = exportRules,
                 DumpMoves = dumpMoves,
                 DumpEncounters = dumpEncounters,
                 BehaviourMap = behaviourMap,
