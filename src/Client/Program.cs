@@ -111,7 +111,9 @@ public static class Program
         };
 
         var others = new Dictionary<int, RemoteCharacter>();
+        var party = new Party();
         BattleScreen? battle = null;
+        int balls = settings.Balls;
 
         while (!Raylib.WindowShouldClose())
         {
@@ -123,7 +125,7 @@ public static class Program
             // decided it, and walking on while a battle is pending would put the two
             // sides out of step.
             if (encounter is not null && battle is null)
-                battle = StartBattle(data, settings, encounter, player);
+                battle = StartBattle(data, settings, encounter, party);
 
             if (battle is not null)
             {
@@ -134,6 +136,12 @@ public static class Program
 
                 if (battle.IsDismissed)
                 {
+                    balls = battle.Balls;
+
+                    // A caught creature joins the party. Nothing persists it yet, so
+                    // it lasts only as long as the client runs.
+                    if (battle.Caught is { } caught) party.TryAdd(caught);
+
                     battle.Unload();
                     battle = null;
                 }
@@ -240,14 +248,18 @@ public static class Program
     /// encounter, so every roll here matches what the server would compute.
     /// </summary>
     private static BattleScreen? StartBattle(
-        GameData data, ClientSettings settings, WildEncounterStarted encounter, WalkingCharacter player)
+        GameData data, ClientSettings settings, WildEncounterStarted encounter, Party party)
     {
         Battler? wild = PartyBuilder.BuildWild(data, encounter.Species, encounter.Level);
-        Battler? starter = PartyBuilder.BuildStarter(data, settings.StarterSpecies, settings.StarterLevel);
 
-        if (wild is null || starter is null) return null;
+        // Lead with whatever has been caught, falling back to the placeholder starter
+        // while the party is empty.
+        Battler? lead = party.Lead
+            ?? PartyBuilder.BuildStarter(data, settings.StarterSpecies, settings.StarterLevel);
 
-        return new BattleScreen(new Battle(starter, wild, encounter.Seed), data);
+        if (wild is null || lead is null) return null;
+
+        return new BattleScreen(new Battle(lead, wild, encounter.Seed), data, settings.Balls);
     }
 
     private static Direction? ReadDirection()

@@ -17,12 +17,18 @@ public sealed class GameData
 {
     private readonly Dictionary<(int Species, bool Back, bool Shiny), ExtractedSprite> _sprites = [];
 
-    private GameData(Rom rom, RomExtractor extractor, List<SpeciesData> species, List<MoveData> moves)
+    private GameData(
+        Rom rom,
+        RomExtractor extractor,
+        List<SpeciesData> species,
+        List<MoveData> moves,
+        Dictionary<int, Learnset> learnsets)
     {
         Rom = rom;
         Extractor = extractor;
         Species = species;
         Moves = moves;
+        Learnsets = learnsets;
     }
 
     public Rom Rom { get; }
@@ -32,6 +38,8 @@ public sealed class GameData
     public IReadOnlyList<SpeciesData> Species { get; }
 
     public IReadOnlyList<MoveData> Moves { get; }
+
+    public IReadOnlyDictionary<int, Learnset> Learnsets { get; }
 
     public static GameData Load(string romPath, Action<string>? log = null)
     {
@@ -53,7 +61,9 @@ public sealed class GameData
             moves = [];
         }
 
-        return new GameData(rom, extractor, species, moves);
+        Dictionary<int, Learnset> learnsets = LearnsetExtractor.Extract(rom, log);
+
+        return new GameData(rom, extractor, species, moves, learnsets);
     }
 
     public SpeciesData? SpeciesAt(int index) =>
@@ -61,6 +71,21 @@ public sealed class GameData
 
     public MoveData? MoveAt(int index) =>
         index >= 0 && index < Moves.Count ? Moves[index] : null;
+
+    /// <summary>
+    /// The moves a wild creature of this species and level would know — the last four
+    /// it would have learned. Empty when learnsets could not be read.
+    /// </summary>
+    public List<MoveData> MovesKnownAt(int species, int level)
+    {
+        if (!Learnsets.TryGetValue(species, out Learnset? learnset)) return [];
+
+        return learnset.MovesKnownAt(level)
+            .Select(MoveAt)
+            .Where(move => move is not null)
+            .Select(move => move!)
+            .ToList();
+    }
 
     /// <summary>Finds a move by name, for building a party without hardcoding indices.</summary>
     public MoveData? MoveNamed(string name) =>

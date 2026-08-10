@@ -11,7 +11,8 @@ internal static class TestMons
         PokemonType type1,
         PokemonType? type2 = null,
         int hp = 50, int attack = 50, int defense = 50,
-        int speed = 50, int spAttack = 50, int spDefense = 50) =>
+        int speed = 50, int spAttack = 50, int spDefense = 50,
+        int catchRate = 45) =>
         new()
         {
             Index = 1,
@@ -24,7 +25,7 @@ internal static class TestMons
             BaseSpDefense = (byte)spDefense,
             Type1 = type1,
             Type2 = type2 ?? type1,
-            CatchRate = 45,
+            CatchRate = (byte)catchRate,
             ExpYield = 64,
         };
 

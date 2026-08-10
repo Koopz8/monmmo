@@ -1,5 +1,6 @@
 using PokeMmo.RomExtract;
 using PokeMmo.RomExtract.Graphics;
+using PokeMmo.Core.Battle;
 using PokeMmo.Core.World;
 using PokeMmo.RomExtract.Maps;
 
@@ -124,6 +125,51 @@ public sealed class SyntheticRom
     public static int RegionSectionFor(int bank, int map) => (bank * MapsPerBank + map) % RegionLocationCount;
     public const int MetatileCount = 64;
 
+    // --- learnsets ---------------------------------------------------------------
+
+    public const int LearnsetTableOffset = 0x060000;
+
+    /// <summary>The shared terminator-only list the unused species slots point at.</summary>
+    public const int EmptyLearnsetOffset = 0x061000;
+
+    public const int LearnsetBlobsOffset = 0x062000;
+
+    /// <summary>Room per learnset. Generous, so the lists never run into each other.</summary>
+    public const int LearnsetStride = 64;
+
+    /// <summary>
+    /// The block of unused species indices this generation leaves between its two
+    /// halves. Every one of them points at a learnset containing nothing but the
+    /// terminator — a real shape, and one that has to be stepped over rather than
+    /// treated as the end of the table, or every species after it shifts by
+    /// twenty-five.
+    /// </summary>
+    public const int FirstUnusedSpecies = 252;
+
+    public const int LastUnusedSpecies = 276;
+
+    public static bool SpeciesHasLearnset(int species) =>
+        species is < FirstUnusedSpecies or > LastUnusedSpecies;
+
+    /// <summary>The learnset written for a species, which is what extraction is checked against.</summary>
+    public static List<LevelUpMove> LearnsetFor(int species)
+    {
+        var moves = new List<LevelUpMove>();
+        if (!SpeciesHasLearnset(species)) return moves;
+
+        int count = 1 + species % 6;
+
+        for (int i = 0; i < count; i++)
+        {
+            int level = 1 + i * 7 + species % 3;
+            int move = 1 + (species * 3 + i * 11) % 354;
+
+            moves.Add(new LevelUpMove(level, move));
+        }
+
+        return moves;
+    }
+
     /// <summary>The species index whose sprite and palette are distinctive and asserted against.</summary>
     public const int TestSpecies = 1;
 
@@ -160,6 +206,7 @@ public sealed class SyntheticRom
         WritePaletteTables();
         WriteMapData();
         WriteMapHeadersAndBanks();
+        WriteLearnsets();
     }
 
     /// <summary>Palette 0 of the synthetic tileset — what a rendered map is checked against.</summary>
@@ -297,6 +344,34 @@ public sealed class SyntheticRom
             // One slot left unnamed, so the scan has to step over it rather than
             // treating it as the end of the table.
             WriteU32(entry + 4, i == DeadRegionNameIndex ? 0u : Rom.BaseAddress + (uint)textAt);
+        }
+    }
+
+    /// <summary>
+    /// Writes the level-up table: one pointer per species, each leading to a list of
+    /// packed level-and-move words ending in 0xFFFF.
+    /// </summary>
+    private void WriteLearnsets()
+    {
+        WriteU16(EmptyLearnsetOffset, LevelUpMove.Terminator);
+
+        for (int species = 0; species < SpeciesCount; species++)
+        {
+            List<LevelUpMove> moves = LearnsetFor(species);
+
+            if (moves.Count == 0)
+            {
+                WriteU32(LearnsetTableOffset + species * 4, Rom.BaseAddress + EmptyLearnsetOffset);
+                continue;
+            }
+
+            int blob = LearnsetBlobsOffset + species * LearnsetStride;
+
+            for (int i = 0; i < moves.Count; i++)
+                WriteU16(blob + i * 2, moves[i].Encode());
+
+            WriteU16(blob + moves.Count * 2, LevelUpMove.Terminator);
+            WriteU32(LearnsetTableOffset + species * 4, Rom.BaseAddress + (uint)blob);
         }
     }
 

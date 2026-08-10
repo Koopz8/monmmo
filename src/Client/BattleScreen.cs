@@ -39,9 +39,10 @@ public sealed class BattleScreen
     private string _message = "";
     private int _selectedMove;
 
-    public BattleScreen(Battle battle, GameData data)
+    public BattleScreen(Battle battle, GameData data, int balls)
     {
         _battle = battle;
+        Balls = balls;
 
         (_wildSprite, _hasWildSprite) = LoadSprite(data, battle.Opponent.Species.Index, back: false);
         (_playerSprite, _hasPlayerSprite) = LoadSprite(data, battle.Player.Species.Index, back: true);
@@ -50,6 +51,12 @@ public sealed class BattleScreen
     }
 
     public BattlePhase Phase { get; private set; } = BattlePhase.ReadingMessages;
+
+    /// <summary>Balls remaining. A placeholder for a bag, which does not exist yet.</summary>
+    public int Balls { get; private set; }
+
+    /// <summary>Set when the opponent was caught, so the overworld can add it to the party.</summary>
+    public Battler? Caught { get; private set; }
 
     /// <summary>True once the battle is over and its last message has been read.</summary>
     public bool IsDismissed { get; private set; }
@@ -120,18 +127,39 @@ public sealed class BattleScreen
         if (Raylib.IsKeyPressed(KeyboardKey.Up) || Raylib.IsKeyPressed(KeyboardKey.W))
             _selectedMove = (_selectedMove - 1 + moveCount) % moveCount;
 
+        if (Raylib.IsKeyPressed(KeyboardKey.X))
+        {
+            ThrowBall();
+            return;
+        }
+
         if (!Confirmed()) return;
 
-        // The opponent's choice is uniform for now: without learnsets there is no
-        // sensible way to pick, and a wild creature picking at random is close enough
-        // to what the games do anyway.
-        int opponentMove = _battle.Opponent.Moves.Count > 0 ? 0 : 0;
+        TakeTurn(new BattleAction.UseMove(_selectedMove));
+    }
 
-        List<BattleEvent> events = _battle.ResolveTurn(
-            new BattleAction.UseMove(_selectedMove),
-            new BattleAction.UseMove(opponentMove));
+    private void ThrowBall()
+    {
+        if (Balls <= 0)
+        {
+            Say("You have no balls left!");
+            Phase = BattlePhase.ReadingMessages;
+            AdvanceMessage();
+            return;
+        }
+
+        Balls--;
+        Say("You threw a Poké Ball!");
+        TakeTurn(new BattleAction.ThrowBall(BallKind.Poke));
+    }
+
+    private void TakeTurn(BattleAction playerAction)
+    {
+        List<BattleEvent> events = _battle.ResolveTurn(playerAction, new BattleAction.UseMove(0));
 
         Say(BattleNarrator.Describe(events));
+
+        if (_battle.OpponentCaught) Caught = _battle.Opponent;
 
         Phase = BattlePhase.ReadingMessages;
         AdvanceMessage();
@@ -221,6 +249,11 @@ public sealed class BattleScreen
     private void DrawMoveMenu(int boxY)
     {
         Raylib.DrawText("Choose a move:", 52, boxY + 18, 20, new Color(96, 96, 96, 255));
+
+        Raylib.DrawText(
+            $"X: throw a ball ({Balls} left)",
+            Width - 340, boxY + 18, 20,
+            Balls > 0 ? new Color(96, 96, 96, 255) : new Color(180, 120, 120, 255));
 
         for (int i = 0; i < _battle.Player.Moves.Count; i++)
         {

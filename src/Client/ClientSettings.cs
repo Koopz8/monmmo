@@ -39,6 +39,9 @@ public sealed class ClientSettings
 
     public int StarterLevel { get; set; } = 5;
 
+    /// <summary>Balls carried. A placeholder for a bag, which does not exist yet.</summary>
+    public int Balls { get; set; } = 20;
+
     public bool IsUsable => !string.IsNullOrWhiteSpace(RomPath) && File.Exists(RomPath);
 
     /// <summary>

@@ -36,6 +36,12 @@ public abstract record BattleEvent
 
     public sealed record Fainted(Side Side, string Name) : BattleEvent;
 
+    /// <summary>
+    /// A ball was thrown. <paramref name="Shakes"/> is how many times it wobbled,
+    /// which is what tells a player how close they came.
+    /// </summary>
+    public sealed record BallThrown(string Target, int Shakes, bool Caught) : BattleEvent;
+
     /// <summary>The battle is over. A null winner means both sides fell in the same turn.</summary>
     public sealed record Ended(Side? Winner) : BattleEvent;
 }
@@ -46,6 +52,9 @@ public abstract record BattleAction
     public sealed record UseMove(int Slot) : BattleAction;
 
     public sealed record Struggle : BattleAction;
+
+    /// <summary>Throwing a ball uses the turn; the target still gets to act if it stays free.</summary>
+    public sealed record ThrowBall(BallKind Ball) : BattleAction;
 }
 
 /// <summary>
@@ -69,14 +78,19 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
 
     public int TurnNumber { get; private set; }
 
-    public bool IsOver => Player.HasFainted || Opponent.HasFainted;
+    /// <summary>True once the opponent has been caught, which ends the battle.</summary>
+    public bool OpponentCaught { get; private set; }
 
-    public Side? Winner => (Player.HasFainted, Opponent.HasFainted) switch
-    {
-        (false, true) => Side.Player,
-        (true, false) => Side.Opponent,
-        _ => null,
-    };
+    public bool IsOver => OpponentCaught || Player.HasFainted || Opponent.HasFainted;
+
+    public Side? Winner => OpponentCaught
+        ? Side.Player
+        : (Player.HasFainted, Opponent.HasFainted) switch
+        {
+            (false, true) => Side.Player,
+            (true, false) => Side.Opponent,
+            _ => null,
+        };
 
     public Battler Of(Side side) => side == Side.Player ? Player : Opponent;
 
@@ -136,6 +150,14 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         if (attacker.HasFainted) return;
         if (!CanAct(side, attacker, events)) return;
 
+        if (action is BattleAction.ThrowBall throwBall)
+        {
+            // Only a wild opponent can be caught, and throwing spends the turn whether
+            // or not it works.
+            ThrowAt(side, defender, throwBall.Ball, events);
+            return;
+        }
+
         MoveData? move = action is BattleAction.UseMove use ? attacker.MoveAt(use.Slot) : null;
         if (move is null) return;
 
@@ -163,6 +185,15 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
 
         if (defender.HasFainted)
             events.Add(new BattleEvent.Fainted(Other(side), defender.Name));
+    }
+
+    private void ThrowAt(Side thrower, Battler target, BallKind ball, List<BattleEvent> events)
+    {
+        CatchAttempt attempt = CatchCalculator.Throw(_rng, target, target.Species.CatchRate, ball);
+
+        events.Add(new BattleEvent.BallThrown(target.Name, attempt.Shakes, attempt.Caught));
+
+        if (attempt.Caught && thrower == Side.Player) OpponentCaught = true;
     }
 
     /// <summary>

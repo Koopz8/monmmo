@@ -35,6 +35,16 @@ public static class BattleNarrator
 
         BattleEvent.Fainted e => $"{e.Name} fainted!",
 
+        BattleEvent.BallThrown e => e.Caught
+            ? $"Gotcha! {e.Target} was caught!"
+            : e.Shakes switch
+            {
+                0 => "Oh no! It broke free!",
+                1 => "Aww! It appeared to be caught!",
+                2 => "Aargh! Almost had it!",
+                _ => "Gah! It was so close, too!",
+            },
+
         BattleEvent.Ended e => e.Winner switch
         {
             Side.Player => "You won the battle!",
