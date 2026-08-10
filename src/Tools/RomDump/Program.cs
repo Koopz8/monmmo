@@ -527,7 +527,7 @@ public static class Program
         // Both stride interpretations, drawn out. Real terrain forms solid patches;
         // a wrong stride scatters it, and the shape says which is which far faster
         // than any amount of reasoning about the format.
-        foreach (int stride in new[] { 1, 2 })
+        foreach (int stride in new[] { 1, 2, 4 })
         {
             byte[] behaviours = match.Header.Layout.ReadBehaviours(rom, options.Split, stride);
 
@@ -537,19 +537,30 @@ public static class Program
             foreach (var group in behaviours.GroupBy(b => b).OrderByDescending(g => g.Count()).Take(6))
                 Console.WriteLine($"  0x{group.Key:X2}  {group.Count(),5} squares");
 
-            DrawGrassMap(behaviours, match.Header.Layout.Width, match.Header.Layout.Height);
+            // Draw whichever value is most common after ordinary ground, whatever it
+            // turns out to be. Naming the grass constant in advance is what went wrong
+            // last time; the shape of the data can identify it instead.
+            byte candidate = behaviours
+                .Where(b => b != Core.World.MetatileBehaviour.Normal)
+                .GroupBy(b => b)
+                .OrderByDescending(g => g.Count())
+                .Select(g => g.Key)
+                .FirstOrDefault();
+
+            if (candidate != 0)
+                DrawBehaviourMap(behaviours, match.Header.Layout.Width, match.Header.Layout.Height, candidate);
         }
     }
 
     /// <summary>
-    /// Draws where the encounter squares are. Grass in the real games comes in solid
-    /// rectangular patches, so the picture immediately shows whether the data is
-    /// terrain or noise.
+    /// Draws where one behaviour value appears. Terrain in the real games comes in
+    /// solid rectangular patches, so the picture shows immediately whether a value is
+    /// real terrain or an artifact of reading the table wrongly.
     /// </summary>
-    private static void DrawGrassMap(byte[] behaviours, int width, int height)
+    private static void DrawBehaviourMap(byte[] behaviours, int width, int height, byte wanted)
     {
-        int grass = behaviours.Count(Core.World.MetatileBehaviour.IsEncounterGrass);
-        Console.WriteLine($"  {grass} encounter squares, '#' below:");
+        int count = behaviours.Count(b => b == wanted);
+        Console.WriteLine($"  0x{wanted:X2} appears on {count} squares, '#' below:");
 
         for (int y = 0; y < height; y++)
         {
@@ -563,7 +574,7 @@ public static class Program
                     ? behaviours[index]
                     : Core.World.MetatileBehaviour.Normal;
 
-                row.Append(Core.World.MetatileBehaviour.IsEncounterGrass(behaviour) ? '#' : '.');
+                row.Append(behaviour == wanted ? '#' : '.');
             }
 
             Console.WriteLine(row.ToString());
