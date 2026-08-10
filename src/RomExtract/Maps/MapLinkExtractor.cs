@@ -1,0 +1,135 @@
+using PokeMmo.Core.World;
+
+namespace PokeMmo.RomExtract.Maps;
+
+/// <summary>
+/// Reads the two things that join maps together: warps and edge connections.
+/// <para>
+/// Both hang off the map header, so nothing here needs locating — the headers were
+/// already found by structure, and these are fixed offsets within a record that has
+/// already proved itself. That is the payoff for having refused to hardcode addresses
+/// earlier: everything reachable from a located structure is free.
+/// </para>
+/// </summary>
+public static class MapLinkExtractor
+{
+    /// <summary>An events record: four counts, then four pointers.</summary>
+    private const int EventsPointersOffset = 4;
+
+    private const int WarpSizeBytes = 8;
+
+    private const int ConnectionSizeBytes = 12;
+
+    /// <summary>
+    /// More than any real map has. A count past this means the pointer is not an
+    /// events record at all, which is worth noticing rather than reading 60,000 warps.
+    /// </summary>
+    private const int MaxWarps = 128;
+
+    private const int MaxConnections = 32;
+
+    /// <summary>
+    /// Reads the warps on one map.
+    /// <para>
+    /// Warps land outside a map's bounds occasionally in real images — an artefact of
+    /// editing, and harmless to the games because nothing can stand there. They are
+    /// dropped, because a warp nobody can reach is not worth a server checking every
+    /// step against.
+    /// </para>
+    /// </summary>
+    public static List<Warp> ReadWarps(Rom rom, MapHeaderRecord header, int width, int height, Action<string>? log = null)
+    {
+        var warps = new List<Warp>();
+
+        if (header.EventsPointer == 0) return warps;
+        if (rom.ToOffsetOrNull(header.EventsPointer) is not { } events) return warps;
+        if (events + EventsPointersOffset + 8 > rom.Length) return warps;
+
+        int count = rom.ReadU8(events + 1);
+        if (count is 0 or > MaxWarps) return warps;
+
+        uint pointer = rom.ReadU32(events + EventsPointersOffset + 4);
+        if (rom.ToOffsetOrNull(pointer) is not { } table) return warps;
+        if (table + count * WarpSizeBytes > rom.Length) return warps;
+
+        for (int i = 0; i < count; i++)
+        {
+            int at = table + i * WarpSizeBytes;
+
+            int x = rom.ReadU16(at);
+            int y = rom.ReadU16(at + 2);
+            int targetWarp = rom.ReadU8(at + 5);
+            int targetMap = rom.ReadU8(at + 6);
+            int targetBank = rom.ReadU8(at + 7);
+
+            if (x < 0 || x >= width || y < 0 || y >= height)
+            {
+                log?.Invoke($"    warp {i} at ({x}, {y}) is outside a {width}x{height} map — dropped");
+                continue;
+            }
+
+            warps.Add(new Warp(x, y, targetWarp, WorldExporter.MapId(targetBank, targetMap)));
+        }
+
+        return warps;
+    }
+
+    /// <summary>
+    /// Reads the maps joined to this one's edges.
+    /// <para>
+    /// Dive and emerge connections are read and discarded. They join a surface map to
+    /// an underwater one, which is a Hoenn feature and not something walking off an
+    /// edge can reach.
+    /// </para>
+    /// </summary>
+    public static List<MapConnection> ReadConnections(Rom rom, MapHeaderRecord header, Action<string>? log = null)
+    {
+        var connections = new List<MapConnection>();
+
+        if (header.ConnectionsPointer == 0) return connections;
+        if (rom.ToOffsetOrNull(header.ConnectionsPointer) is not { } record) return connections;
+        if (record + 8 > rom.Length) return connections;
+
+        uint rawCount = rom.ReadU32(record);
+        if (rawCount is 0 or > MaxConnections) return connections;
+
+        int count = (int)rawCount;
+
+        if (rom.ToOffsetOrNull(rom.ReadU32(record + 4)) is not { } table) return connections;
+        if (table + count * ConnectionSizeBytes > rom.Length) return connections;
+
+        for (int i = 0; i < count; i++)
+        {
+            int at = table + i * ConnectionSizeBytes;
+
+            uint direction = rom.ReadU32(at);
+            int offset = (int)rom.ReadU32(at + 4);
+            int bank = rom.ReadU8(at + 8);
+            int number = rom.ReadU8(at + 9);
+
+            if (SideOf(direction) is not { } side)
+            {
+                if (direction is not (5 or 6)) log?.Invoke($"    connection {i} has direction {direction} — ignored");
+                continue;
+            }
+
+            connections.Add(new MapConnection(side, offset, WorldExporter.MapId(bank, number)));
+        }
+
+        return connections;
+    }
+
+    /// <summary>
+    /// The cartridge's direction numbering. One-based, and in an order that is not
+    /// the one anybody would choose — which is exactly why it is written down here
+    /// rather than assumed to match an enum's declaration order.
+    /// </summary>
+    private static ConnectionSide? SideOf(uint direction) => direction switch
+    {
+        1 => ConnectionSide.Down,
+        2 => ConnectionSide.Up,
+        3 => ConnectionSide.Left,
+        4 => ConnectionSide.Right,
+        _ => null,
+    };
+}

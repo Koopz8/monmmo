@@ -125,6 +125,67 @@ public sealed class SyntheticRom
     public static int RegionSectionFor(int bank, int map) => (bank * MapsPerBank + map) % RegionLocationCount;
     public const int MetatileCount = 64;
 
+    // --- warps and connections ---------------------------------------------------
+
+    public const int MapEventsOffset = 0x070000;
+    public const int MapWarpsOffset = 0x072000;
+    public const int MapConnectionRecordOffset = 0x074000;
+    public const int MapConnectionsOffset = 0x076000;
+
+    private const int EventsStride = 32;
+    private const int WarpsStride = 64;
+    private const int ConnectionRecordStride = 16;
+    private const int ConnectionsStride = 64;
+
+    /// <summary>
+    /// A map index with no events pointer at all, as plenty of real maps have. Reading
+    /// one has to produce no warps rather than reading whatever happens to sit at
+    /// address zero.
+    /// </summary>
+    public const int MapWithoutEvents = 3;
+
+    /// <summary>
+    /// A map carrying a warp placed outside its own bounds. Real images contain these
+    /// — leftovers from editing — and they should be dropped, not stored as squares
+    /// nobody can ever stand on.
+    /// </summary>
+    public const int MapWithAStrayWarp = 7;
+
+    public static int MapIndex(int bank, int map) => bank * MapsPerBank + map;
+
+    public static string MapIdAt(int index) => $"{index / MapsPerBank}.{index % MapsPerBank}";
+
+    /// <summary>The warps written for a map, which is what extraction is checked against.</summary>
+    public static List<Warp> WarpsFor(int index)
+    {
+        if (index == MapWithoutEvents) return [];
+
+        int total = MapCount;
+
+        var warps = new List<Warp>
+        {
+            new(1, 1, 0, MapIdAt((index + 1) % total)),
+            new(2, 3, 1, MapIdAt((index + total - 1) % total)),
+        };
+
+        // The stray one is written to the cartridge but is not expected back.
+        return warps;
+    }
+
+    /// <summary>The connections written for a map.</summary>
+    public static List<MapConnection> ConnectionsFor(int index)
+    {
+        int total = MapCount;
+
+        return
+        [
+            new(ConnectionSide.Down, index - 2, MapIdAt((index + 1) % total)),
+            new(ConnectionSide.Left, 0, MapIdAt((index + total - 1) % total)),
+        ];
+    }
+
+    public const int MapCount = BankCount * MapsPerBank;
+
     // --- learnsets ---------------------------------------------------------------
 
     public const int LearnsetTableOffset = 0x060000;
@@ -305,9 +366,14 @@ public sealed class SyntheticRom
                 int header = MapHeadersOffset + index * 28;
 
                 WriteU32(header, Rom.BaseAddress + MapLayoutOffset);
-                WriteU32(header + 4, 0);   // events
+                WriteU32(header + 4, index == MapWithoutEvents
+                    ? 0
+                    : Rom.BaseAddress + (uint)(MapEventsOffset + index * EventsStride));
                 WriteU32(header + 8, 0);   // scripts
-                WriteU32(header + 12, 0);  // connections
+                WriteU32(header + 12, Rom.BaseAddress + (uint)(MapConnectionRecordOffset + index * ConnectionRecordStride));
+
+                WriteWarpsFor(index);
+                WriteConnectionsFor(index);
                 WriteU16(header + 16, (ushort)(100 + index));       // music
                 WriteU16(header + 18, 1);                           // layout id
                 _data[header + 20] = (byte)RegionSectionFor(bank, map);
@@ -373,6 +439,101 @@ public sealed class SyntheticRom
             WriteU16(blob + moves.Count * 2, LevelUpMove.Terminator);
             WriteU32(LearnsetTableOffset + species * 4, Rom.BaseAddress + (uint)blob);
         }
+    }
+
+    /// <summary>
+    /// Writes an events record and its warp table.
+    /// <para>
+    /// The record is four counts followed by four pointers, and the warps are the
+    /// <em>second</em> of each — a layout worth modelling exactly, because reading the
+    /// object-event count and pointer instead would produce a plausible number of
+    /// plausible-looking warps from entirely the wrong table.
+    /// </para>
+    /// </summary>
+    private void WriteWarpsFor(int index)
+    {
+        if (index == MapWithoutEvents) return;
+
+        List<Warp> warps = WarpsFor(index);
+        int table = MapWarpsOffset + index * WarpsStride;
+        int written = 0;
+
+        foreach (Warp warp in warps)
+        {
+            WriteWarp(table + written * 8, warp);
+            written++;
+        }
+
+        // One map also gets a warp beyond its own edge, which extraction should drop.
+        if (index == MapWithAStrayWarp)
+        {
+            WriteWarp(table + written * 8, new Warp(MapWidth + 4, MapHeight + 4, 0, MapIdAt(0)));
+            written++;
+        }
+
+        int events = MapEventsOffset + index * EventsStride;
+
+        _data[events] = 3;                  // object events, deliberately not the warps
+        _data[events + 1] = (byte)written;
+        _data[events + 2] = 1;              // coord events
+        _data[events + 3] = 2;              // background events
+
+        WriteU32(events + 4, Rom.BaseAddress + (uint)(MapWarpsOffset + 0x1000));  // objects, elsewhere
+        WriteU32(events + 8, Rom.BaseAddress + (uint)table);
+        WriteU32(events + 12, 0);
+        WriteU32(events + 16, 0);
+    }
+
+    private void WriteWarp(int at, Warp warp)
+    {
+        string[] parts = warp.TargetMapId.Split('.');
+
+        WriteU16(at, (ushort)warp.X);
+        WriteU16(at + 2, (ushort)warp.Y);
+        _data[at + 4] = 0;                              // elevation
+        _data[at + 5] = (byte)warp.TargetWarpId;
+        _data[at + 6] = byte.Parse(parts[1]);           // map number
+        _data[at + 7] = byte.Parse(parts[0]);           // bank
+    }
+
+    /// <summary>
+    /// Writes a connections record: a count and a pointer, leading to twelve-byte
+    /// entries whose direction numbering is the cartridge's own and not this project's.
+    /// </summary>
+    private void WriteConnectionsFor(int index)
+    {
+        List<MapConnection> connections = ConnectionsFor(index);
+        int table = MapConnectionsOffset + index * ConnectionsStride;
+
+        for (int i = 0; i < connections.Count; i++)
+        {
+            MapConnection connection = connections[i];
+            string[] parts = connection.MapId.Split('.');
+            int at = table + i * 12;
+
+            WriteU32(at, connection.Side switch
+            {
+                ConnectionSide.Down => 1u,
+                ConnectionSide.Up => 2u,
+                ConnectionSide.Left => 3u,
+                _ => 4u,
+            });
+
+            WriteU32(at + 4, unchecked((uint)connection.Offset));
+            _data[at + 8] = byte.Parse(parts[0]);   // bank
+            _data[at + 9] = byte.Parse(parts[1]);   // map number
+        }
+
+        // A dive connection nobody can walk through, which must be read and discarded
+        // rather than turning into a fifth walkable edge.
+        int dive = table + connections.Count * 12;
+        WriteU32(dive, 5);
+        WriteU32(dive + 4, 0);
+
+        int record = MapConnectionRecordOffset + index * ConnectionRecordStride;
+
+        WriteU32(record, (uint)(connections.Count + 1));
+        WriteU32(record + 4, Rom.BaseAddress + (uint)table);
     }
 
     private static byte[] EncodeTextAsCartridgeWould(string text, int fieldWidth)

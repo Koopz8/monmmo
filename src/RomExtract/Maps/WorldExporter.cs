@@ -57,6 +57,8 @@ public static class WorldExporter
                     // are a byte a square — still no graphics, text or audio.
                     Behaviours = header.Layout.ReadBehaviours(rom),
                     Encounters = encounters.GetValueOrDefault(id),
+                    Connections = MapLinkExtractor.ReadConnections(rom, header, log),
+                    Warps = MapLinkExtractor.ReadWarps(rom, header, grid.Width, grid.Height, log),
                 });
             }
             catch (Exception ex)
@@ -67,8 +69,37 @@ public static class WorldExporter
         }
 
         int withEncounters = maps.Count(m => m.Encounters is not null);
+        int warps = maps.Sum(m => m.Warps.Count);
+        int connections = maps.Sum(m => m.Connections.Count);
+
         log?.Invoke($"  exported {maps.Count} maps, {withEncounters} with encounters");
+        log?.Invoke($"  {warps} warps, {connections} edge connections");
+
+        ReportDanglingLinks(maps, log);
+
         return new WorldData(maps);
+    }
+
+    /// <summary>
+    /// Says how many links point at maps that are not in the export.
+    /// <para>
+    /// Some are expected — a map that failed to read takes its neighbours' links with
+    /// it. What this catches is the other case: a whole-file misread where the numbers
+    /// look fine and every single link dangles, which a total on its own would hide.
+    /// </para>
+    /// </summary>
+    private static void ReportDanglingLinks(List<MapData> maps, Action<string>? log)
+    {
+        if (log is null) return;
+
+        var known = maps.Select(m => m.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        int danglingWarps = maps.Sum(m => m.Warps.Count(w => !known.Contains(w.TargetMapId)));
+        int danglingEdges = maps.Sum(m => m.Connections.Count(c => !known.Contains(c.MapId)));
+
+        if (danglingWarps == 0 && danglingEdges == 0) return;
+
+        log($"  {danglingWarps} warps and {danglingEdges} connections lead to maps that are not here");
     }
 
     /// <summary>The identifier both sides use for a map: the game's own bank and map numbers.</summary>

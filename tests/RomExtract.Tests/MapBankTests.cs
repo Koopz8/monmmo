@@ -60,7 +60,11 @@ public class MapBankTests
         Assert.Equal(100, header.Music);
         Assert.Equal(1, header.LayoutId);
         Assert.Equal(1, header.MapType);
-        Assert.Equal(0u, header.EventsPointer);
+
+        // Events and connections are optional in the record but present on this map;
+        // both have to survive as pointers, since warps and edges hang off them.
+        Assert.True(new SyntheticRom().ToRom().IsRomAddress(header.EventsPointer));
+        Assert.True(new SyntheticRom().ToRom().IsRomAddress(header.ConnectionsPointer));
     }
 
     [Fact]

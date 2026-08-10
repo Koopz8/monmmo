@@ -13,7 +13,20 @@ public sealed record MapData(string Id, string Name, int Width, int Height, byte
 
     public MapEncounters? Encounters { get; init; }
 
+    /// <summary>Neighbouring maps joined along this one's edges.</summary>
+    public IReadOnlyList<MapConnection> Connections { get; init; } = [];
+
+    /// <summary>Doors, stairs and cave mouths on this map.</summary>
+    public IReadOnlyList<Warp> Warps { get; init; } = [];
+
     public CollisionGrid ToGrid() => new(Width, Height, Collision);
+
+    /// <summary>The warp on a square, if there is one.</summary>
+    public Warp? WarpAt(GridPosition square) =>
+        Warps.FirstOrDefault(w => w.X == square.X && w.Y == square.Y);
+
+    public MapConnection? ConnectionOn(ConnectionSide side) =>
+        Connections.FirstOrDefault(c => c.Side == side);
 
     public byte BehaviourAt(GridPosition square)
     {
@@ -50,7 +63,7 @@ public sealed class WorldData
     /// <summary>Identifies the format, so a wrong or stale file fails loudly.</summary>
     private static readonly byte[] Magic = "MONWORLD"u8.ToArray();
 
-    private const int Version = 2;
+    private const int Version = 3;
 
     private readonly Dictionary<string, MapData> _maps;
 
@@ -91,6 +104,7 @@ public sealed class WorldData
             writer.Write(map.Behaviours);
 
             WriteEncounters(writer, map.Encounters);
+            WriteLinks(writer, map);
         }
     }
 
@@ -141,14 +155,78 @@ public sealed class WorldData
 
             byte[] behaviours = reader.ReadBytes(behaviourLength);
 
+            MapEncounters? mapEncounters = ReadEncounters(reader, id);
+            (IReadOnlyList<MapConnection> connections, IReadOnlyList<Warp> warps) = ReadLinks(reader, id);
+
             maps.Add(new MapData(id, name, width, height, collision)
             {
                 Behaviours = behaviours,
-                Encounters = ReadEncounters(reader, id),
+                Encounters = mapEncounters,
+                Connections = connections,
+                Warps = warps,
             });
         }
 
         return new WorldData(maps);
+    }
+
+    private static void WriteLinks(BinaryWriter writer, MapData map)
+    {
+        writer.Write(map.Connections.Count);
+
+        foreach (MapConnection connection in map.Connections)
+        {
+            writer.Write((int)connection.Side);
+            writer.Write(connection.Offset);
+            writer.Write(connection.MapId);
+        }
+
+        writer.Write(map.Warps.Count);
+
+        foreach (Warp warp in map.Warps)
+        {
+            writer.Write(warp.X);
+            writer.Write(warp.Y);
+            writer.Write(warp.TargetWarpId);
+            writer.Write(warp.TargetMapId);
+        }
+    }
+
+    /// <summary>
+    /// Reads links back, refusing counts that could only come from a corrupted file.
+    /// The bounds are generous — the point is to fail on a wrong file rather than to
+    /// allocate gigabytes from a bad length.
+    /// </summary>
+    private static (IReadOnlyList<MapConnection>, IReadOnlyList<Warp>) ReadLinks(BinaryReader reader, string mapId)
+    {
+        int connectionCount = reader.ReadInt32();
+
+        if (connectionCount is < 0 or > 64)
+            throw new InvalidDataException($"Map '{mapId}' claims {connectionCount} connections.");
+
+        var connections = new List<MapConnection>(connectionCount);
+
+        for (int i = 0; i < connectionCount; i++)
+        {
+            int side = reader.ReadInt32();
+
+            if (!Enum.IsDefined(typeof(ConnectionSide), side))
+                throw new InvalidDataException($"Map '{mapId}' has a connection on side {side}.");
+
+            connections.Add(new MapConnection((ConnectionSide)side, reader.ReadInt32(), reader.ReadString()));
+        }
+
+        int warpCount = reader.ReadInt32();
+
+        if (warpCount is < 0 or > 1024)
+            throw new InvalidDataException($"Map '{mapId}' claims {warpCount} warps.");
+
+        var warps = new List<Warp>(warpCount);
+
+        for (int i = 0; i < warpCount; i++)
+            warps.Add(new Warp(reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32(), reader.ReadString()));
+
+        return (connections, warps);
     }
 
     private static void WriteEncounters(BinaryWriter writer, MapEncounters? encounters)
