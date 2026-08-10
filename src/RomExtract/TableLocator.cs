@@ -8,6 +8,13 @@ public sealed record TableLocation(
     int EntryCount,
     string Method)
 {
+    /// <summary>
+    /// The tag carried by this table's first entry. Most tables tag entries with the
+    /// bare species index, but some offset every tag by a constant so two tables can
+    /// be resident in the sprite palette manager at once without colliding.
+    /// </summary>
+    public int TagBase { get; init; }
+
     /// <summary>The cartridge address this table would be referenced by in code.</summary>
     public uint Address => Rom.BaseAddress + (uint)Offset;
 
@@ -63,19 +70,17 @@ public static class TableLocator
         TableLocation? names = LocateSpeciesNames(rom, Log);
         TableLocation? stats = LocateBaseStats(rom, Log);
 
-        List<TableLocation> picTables = LocatePicTables(rom, Log);
-        List<TableLocation> paletteTables = LocatePaletteTables(rom, Log);
+        (TableLocation? front, TableLocation? back) = ChoosePicTables(ScanPicRuns(rom, MinimumRunLength, Log));
+        (TableLocation? normal, TableLocation? shiny) = ChoosePaletteTables(ScanPaletteRuns(rom, MinimumRunLength, Log));
 
         return new RomTables
         {
             SpeciesNames = names,
             BaseStats = stats,
-            // The front table precedes the back table in every Gen III layout.
-            FrontPics = picTables.ElementAtOrDefault(0),
-            BackPics = picTables.ElementAtOrDefault(1),
-            // Likewise the normal palettes precede the shiny palettes.
-            NormalPalettes = paletteTables.ElementAtOrDefault(0),
-            ShinyPalettes = paletteTables.ElementAtOrDefault(1),
+            FrontPics = front,
+            BackPics = back,
+            NormalPalettes = normal,
+            ShinyPalettes = shiny,
         };
     }
 
@@ -180,36 +185,41 @@ public static class TableLocator
     }
 
 
-    /// <summary>Decides whether the entry at <paramref name="entryOffset"/> is the <paramref name="expectedTag"/>-th member of a table.</summary>
-    private delegate bool EntryPredicate(Rom rom, int entryOffset, int expectedTag);
+    /// <summary>Reads the identifying tag from an entry. Its position depends on the table shape.</summary>
+    private delegate int TagReader(Rom rom, int entryOffset);
+
+    /// <summary>Checks the fields of an entry that do not vary with its index.</summary>
+    private delegate bool EntryValidator(Rom rom, int entryOffset);
 
     private const int TableEntrySize = 8;
 
-    /// <summary>
-    /// Sprite-sheet entry: {pointer, size, tag}. Mon pics are always 0x800 bytes and
-    /// tagged with the species index.
-    /// </summary>
-    private static bool IsPicEntry(Rom rom, int entryOffset, int expectedTag) =>
-        rom.IsRomAddress(rom.ReadU32(entryOffset))
-        && rom.ReadU16(entryOffset + 4) == MonPicSizeBytes
-        && rom.ReadU16(entryOffset + 6) == expectedTag;
+    // Sprite-sheet entry: {pointer, size, tag}. Mon pics are always 0x800 bytes.
+    private static bool IsPicEntry(Rom rom, int entry) =>
+        rom.IsRomAddress(rom.ReadU32(entry)) && rom.ReadU16(entry + 4) == MonPicSizeBytes;
+
+    private static int ReadPicTag(Rom rom, int entry) => rom.ReadU16(entry + 6);
+
+    // Sprite-palette entry: {pointer, tag, padding}. The trailing halfword is
+    // structure padding and is zero in every statically initialised table.
+    private static bool IsPaletteEntry(Rom rom, int entry) =>
+        rom.IsRomAddress(rom.ReadU32(entry)) && rom.ReadU16(entry + 6) == 0;
+
+    private static int ReadPaletteTag(Rom rom, int entry) => rom.ReadU16(entry + 4);
 
     /// <summary>
-    /// Sprite-palette entry: {pointer, tag, padding}. The trailing halfword is
-    /// structure padding and is zero in every statically initialised table.
-    /// </summary>
-    private static bool IsPaletteEntry(Rom rom, int entryOffset, int expectedTag) =>
-        rom.IsRomAddress(rom.ReadU32(entryOffset))
-        && rom.ReadU16(entryOffset + 4) == expectedTag
-        && rom.ReadU16(entryOffset + 6) == 0;
-
-    /// <summary>
-    /// Walks the whole image looking for runs of consecutive entries that satisfy
-    /// <paramref name="predicate"/> with tags counting up from zero.
+    /// Walks the image looking for runs of consecutive well-formed entries whose tags
+    /// increase by one.
+    /// <para>
+    /// The tag base is read from each candidate's first entry rather than assumed to be
+    /// zero. Some tables offset every tag by a constant, and demanding a zero base makes
+    /// the scanner walk straight past them — which is exactly how the shiny palette
+    /// table went missing while sitting in plain sight.
+    /// </para>
     /// </summary>
     private static List<TableLocation> ScanRuns(
         Rom rom,
-        EntryPredicate predicate,
+        EntryValidator isWellFormed,
+        TagReader readTag,
         int minimumRun,
         string label,
         Action<string>? log = null)
@@ -218,47 +228,93 @@ public static class TableLocator
 
         for (int offset = 0; offset + TableEntrySize * minimumRun <= rom.Length; offset += 4)
         {
+            if (!isWellFormed(rom, offset)) continue;
+
+            int tagBase = readTag(rom, offset);
             int run = 0;
+
             while (offset + (run + 1) * TableEntrySize <= rom.Length
-                   && predicate(rom, offset + run * TableEntrySize, run))
+                   && isWellFormed(rom, offset + run * TableEntrySize)
+                   && readTag(rom, offset + run * TableEntrySize) == tagBase + run)
             {
                 run++;
             }
 
             if (run < minimumRun) continue;
 
-            log?.Invoke($"  {label}: run of {run} entries at 0x{Rom.BaseAddress + (uint)offset:X8}");
-            found.Add(new TableLocation(label, offset, TableEntrySize, run, $"run of {run} tagged entries"));
+            string baseNote = tagBase == 0 ? "tags from 0" : $"tags from {tagBase}";
+            log?.Invoke($"  {label}: run of {run} entries at 0x{Rom.BaseAddress + (uint)offset:X8} ({baseNote})");
+
+            found.Add(new TableLocation(label, offset, TableEntrySize, run, $"run of {run} entries, {baseNote}")
+            {
+                TagBase = tagBase,
+            });
 
             // Resume exactly at the first byte past this table, not four bytes beyond
-            // it. Tables can sit back-to-back, and the loop's own increment supplies
-            // the remaining step — overshooting here would skip the next table's first
-            // entry and lose the table entirely.
+            // it. Tables sit back-to-back, and the loop's own increment supplies the
+            // remaining step — overshooting skips the next table's first entry.
             offset += run * TableEntrySize - 4;
         }
 
         return found;
     }
 
-    /// <summary>All sprite-sheet table candidates, longest-run-first ties broken by address.</summary>
+    /// <summary>All sprite-sheet table candidates, in address order.</summary>
     public static List<TableLocation> ScanPicRuns(Rom rom, int minimumRun = MinimumRunLength, Action<string>? log = null) =>
-        ScanRuns(rom, IsPicEntry, minimumRun, "pic table", log);
+        ScanRuns(rom, IsPicEntry, ReadPicTag, minimumRun, "pic table", log);
 
-    /// <summary>All sprite-palette table candidates.</summary>
+    /// <summary>All sprite-palette table candidates, in address order.</summary>
     public static List<TableLocation> ScanPaletteRuns(Rom rom, int minimumRun = MinimumRunLength, Action<string>? log = null) =>
-        ScanRuns(rom, IsPaletteEntry, minimumRun, "palette table", log);
+        ScanRuns(rom, IsPaletteEntry, ReadPaletteTag, minimumRun, "palette table", log);
 
-    private static List<TableLocation> LocatePicTables(Rom rom, Action<string> log) =>
-        Rename(ScanPicRuns(rom, MinimumRunLength, log), "FrontPics", "BackPics");
-
-    private static List<TableLocation> LocatePaletteTables(Rom rom, Action<string> log) =>
-        Rename(ScanPaletteRuns(rom, MinimumRunLength, log), "NormalPalettes", "ShinyPalettes");
-
-    private static List<TableLocation> Rename(List<TableLocation> runs, params string[] names)
+    /// <summary>
+    /// Picks the front and back sprite tables: the two longest runs, in address order.
+    /// Both are tagged by bare species index, so they cannot be told apart by tag base.
+    /// </summary>
+    private static (TableLocation? Front, TableLocation? Back) ChoosePicTables(List<TableLocation> runs)
     {
-        for (int i = 0; i < runs.Count && i < names.Length; i++)
-            runs[i] = runs[i] with { Name = names[i] };
+        if (runs.Count == 0) return (null, null);
 
-        return runs;
+        int longest = runs.Max(r => r.EntryCount);
+
+        List<TableLocation> fullSized = runs
+            .Where(r => r.EntryCount == longest)
+            .OrderBy(r => r.Offset)
+            .ToList();
+
+        return (
+            fullSized.ElementAtOrDefault(0) with { Name = "FrontPics" },
+            fullSized.ElementAtOrDefault(1) is { } back ? back with { Name = "BackPics" } : null);
+    }
+
+    /// <summary>
+    /// Picks the normal and shiny palette tables.
+    /// <para>
+    /// These are distinguished by <em>tag base</em> rather than by position: the normal
+    /// table tags entries with the bare species index, the shiny table offsets every tag
+    /// by a constant. That is a property of the data, whereas "whichever comes second"
+    /// is an assumption about layout — and there are other tagged palette tables in the
+    /// image (trainer sprites, for one) that would otherwise be mistaken for it.
+    /// </para>
+    /// </summary>
+    private static (TableLocation? Normal, TableLocation? Shiny) ChoosePaletteTables(List<TableLocation> runs)
+    {
+        TableLocation? normal = runs
+            .Where(r => r.TagBase == 0)
+            .OrderByDescending(r => r.EntryCount)
+            .ThenBy(r => r.Offset)
+            .FirstOrDefault();
+
+        if (normal is null) return (null, null);
+
+        TableLocation? shiny = runs
+            .Where(r => r.TagBase != 0 && r.Offset != normal.Offset)
+            .OrderByDescending(r => r.EntryCount == normal.EntryCount)
+            .ThenBy(r => Math.Abs((long)r.Offset - normal.Offset))
+            .FirstOrDefault();
+
+        return (
+            normal with { Name = "NormalPalettes" },
+            shiny is null ? null : shiny with { Name = "ShinyPalettes" });
     }
 }

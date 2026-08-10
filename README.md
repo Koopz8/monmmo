@@ -23,7 +23,7 @@ The project layout enforces the rest:
 | `src/Core` | Shared game model | Referenced by **both** the client and, later, the server |
 | `src/RomExtract` | Cartridge reading | **Client-only.** The server must never reference this |
 | `src/Tools/RomDump` | CLI harness | Development tool for inspecting a cartridge |
-| `tests/RomExtract.Tests` | Test suite | 74 tests, no cartridge required |
+| `tests/RomExtract.Tests` | Test suite | 80 tests, no cartridge required |
 
 When the server project lands, the one rule to hold is that its dependency graph
 must not contain `RomExtract`. That way the legal posture is guaranteed by the build
@@ -47,7 +47,7 @@ out/
   sprites/001.png  decoded 64x64 sprites, transparent background
 ```
 
-Options: `--shiny`, `--back`, `--no-sprites`, `--tile-order row|column`.
+Options: `--shiny`, `--back`, `--no-sprites`, `--diagnose`, `--tile-order row|column`.
 
 ---
 
@@ -64,10 +64,12 @@ This extractor searches for **structure** instead:
   produces `?` almost immediately.
 - **Base stats** — anchors on the ten-byte stat signature of species 1, then
   range-checks 200 following records (type ids ≤ 17, growth rate ≤ 5, egg groups ≤ 15).
-- **Sprite tables** — every mon pic entry is `{pointer, 0x800, species}`, so a real
-  table is a long run of entries whose tags count up from zero and whose pointers
-  land inside the cartridge.
-- **Palette tables** — same idea with `{pointer, species, 0}`.
+- **Sprite tables** — every mon pic entry is `{pointer, 0x800, tag}`, so a real table
+  is a long run of entries whose tags increase by one and whose pointers land inside
+  the cartridge.
+- **Palette tables** — same idea with `{pointer, tag, 0}`. The tag base is read from
+  each run's own first entry rather than assumed to be zero, because the shiny table
+  offsets every tag by a constant.
 
 A candidate must produce at least 100 consecutive well-formed entries to be accepted.
 The result: the extractor either finds tables that genuinely satisfy the format's
@@ -107,7 +109,7 @@ it must be **rejected**. Those are what stop the scanner from being confidently 
 ## Field notes
 
 Run against a real FireRed (US) rev 0 image whose SHA-1 matched pret's published
-hash. Two bugs surfaced that the synthetic fixture had not caught, because the
+hash. Three bugs surfaced that the synthetic fixture had not caught, because the
 fixture encoded assumptions rather than the cartridge's actual layout:
 
 - **Name records are zero-filled past the terminator**, not padded with more
@@ -117,21 +119,32 @@ fixture encoded assumptions rather than the cartridge's actual layout:
 - **Tables sit back-to-back.** After completing a run the scanner resumed four bytes
   too far, stepping over the next table's first entry — so the shiny palette table
   was missed and the scanner latched onto unrelated data further along.
+- **Shiny palette entries are tagged `species + 500`**, not by bare species index.
+  Requiring tags to count from zero made the scanner walk past the table while it sat
+  directly after the normal one, and latch onto the trainer palette table instead.
+  Runs now read their tag base from their own first entry, and the normal and shiny
+  tables are told apart by that base rather than by which one comes second.
 
-The fixture now models both properties, and both failures are pinned by regression
-tests. The lesson worth keeping: a fixture built from the same assumptions as the
-code under test only ever proves the code agrees with itself.
+The fixture now models all three properties — including a decoy zero-tagged palette
+table standing in for the trainer one — and every failure is pinned by a regression
+test. The lesson worth keeping: a fixture built from the same assumptions as the code
+under test only ever proves the code agrees with itself.
 
-## The one thing that needs a real cartridge to confirm
+**Sprite tile ordering is confirmed row-major** against the same image. The
+`--tile-order` flag stays for other cartridges, but the default is correct.
 
-Sprite **tile ordering**. A 64x64 sprite is 64 tiles in a linear run, and both
-row-major and column-major arrangements produce a correctly-sized image — so a wrong
-choice yields a scrambled picture rather than an error the tests could catch. The
-default is row-major.
+## Diagnosing an unfamiliar cartridge
 
-If the first sprite you decode comes out shuffled into 8-pixel blocks, re-run with
-`--tile-order column`. That is a one-word change, and once confirmed against a real
-cartridge the default can be fixed in `TileDecoder`.
+If the scan reports a table with an unexpected entry count, or misses one entirely:
+
+```bash
+dotnet run --project src/Tools/RomDump -- your.gba --out ./out --no-sprites --diagnose
+```
+
+That drops the run threshold to 16, lists every candidate run of both table shapes
+with its address range, length and tag base, and dumps the raw 8-byte records
+following each located table as `{pointer, halfword, halfword}`. All three bugs above
+were identified from that output rather than guessed at.
 
 ---
 

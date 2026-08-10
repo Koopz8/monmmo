@@ -33,6 +33,16 @@ public sealed class SyntheticRom
     /// </summary>
     public const int ShinyPaletteTableOffset = NormalPaletteTableOffset + SpeciesCount * 8;
 
+    /// <summary>
+    /// A shorter palette table tagged from zero, standing in for the trainer-sprite
+    /// palette table that also lives in a real image. It exists so the tests prove the
+    /// selector distinguishes the shiny table by tag base rather than by "whichever
+    /// palette-shaped run comes second".
+    /// </summary>
+    public const int DecoyPaletteTableOffset = ShinyPaletteTableOffset + SpeciesCount * 8 + 0x100;
+
+    public const int DecoyPaletteEntryCount = 148;
+
     private const int TestSpriteBlobOffset = 0x010000;
     private const int FillerSpriteBlobOffset = 0x020000;
     private const int TestPaletteBlobOffset = 0x030000;
@@ -42,6 +52,17 @@ public sealed class SyntheticRom
 
     /// <summary>The species index whose sprite and palette are distinctive and asserted against.</summary>
     public const int TestSpecies = 1;
+
+    /// <summary>
+    /// Shiny palette entries are tagged <c>species + 500</c> rather than by species
+    /// alone, so that a shiny palette and its normal counterpart can be resident in
+    /// the sprite palette manager at the same time without colliding.
+    /// <para>
+    /// Modelled here because it is what the real cartridge does, and because assuming
+    /// tags always start at zero is what made the scanner walk straight past this table.
+    /// </para>
+    /// </summary>
+    public const int ShinyTagBase = 500;
 
     private readonly byte[] _data = new byte[RomSize];
 
@@ -232,7 +253,15 @@ public sealed class SyntheticRom
             WritePaletteEntry(NormalPaletteTableOffset + i * 8, normal, i);
 
             uint shiny = Rom.BaseAddress + (uint)(i == TestSpecies ? ShinyPaletteBlobOffset : FillerPaletteBlobOffset);
-            WritePaletteEntry(ShinyPaletteTableOffset + i * 8, shiny, i);
+            WritePaletteEntry(ShinyPaletteTableOffset + i * 8, shiny, ShinyTagBase + i);
+        }
+
+        for (int i = 0; i < DecoyPaletteEntryCount; i++)
+        {
+            WritePaletteEntry(
+                DecoyPaletteTableOffset + i * 8,
+                Rom.BaseAddress + (uint)FillerPaletteBlobOffset,
+                i);
         }
     }
 

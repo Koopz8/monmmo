@@ -66,6 +66,32 @@ public class TableLocatorTests
     }
 
     [Fact]
+    public void FindsAShinyTableWhoseTagsDoNotStartAtZero()
+    {
+        // Regression: shiny palette entries are tagged species + 500. Requiring a zero
+        // tag base made the scanner walk straight past the table while it sat directly
+        // after the normal one.
+        RomTables tables = Locate();
+
+        Assert.Equal(SyntheticRom.ShinyPaletteTableOffset, tables.ShinyPalettes?.Offset);
+        Assert.Equal(SyntheticRom.ShinyTagBase, tables.ShinyPalettes?.TagBase);
+        Assert.Equal(0, tables.NormalPalettes?.TagBase);
+    }
+
+    [Fact]
+    public void DoesNotMistakeAnotherZeroTaggedPaletteTableForTheShinyOne()
+    {
+        // The image also holds a shorter palette table tagged from zero, standing in
+        // for the trainer-sprite table. Selecting "the second palette-shaped run" would
+        // pick the wrong one; selecting by tag base does not.
+        RomTables tables = Locate();
+
+        Assert.NotEqual(SyntheticRom.DecoyPaletteTableOffset, tables.ShinyPalettes?.Offset);
+        Assert.Equal(SyntheticRom.SpeciesCount, tables.ShinyPalettes?.EntryCount);
+        Assert.Equal(SyntheticRom.SpeciesCount, tables.NormalPalettes?.EntryCount);
+    }
+
+    [Fact]
     public void FindsNothingInAnImageThatHasNoTables()
     {
         // A cartridge-sized buffer of noise must not yield confident false positives.
