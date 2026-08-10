@@ -424,3 +424,120 @@ public class BattleTurnTests
         Assert.InRange(turns, 1, 199);
     }
 }
+
+public class BattleNarratorTests
+{
+    private static Battler Named(string name) =>
+        new(TestMons.Species(name, PokemonType.Normal), 5, nickname: name);
+
+    [Fact]
+    public void AnnouncesAMove()
+    {
+        Assert.Equal(
+            "PIDGEY used TACKLE!",
+            BattleNarrator.Describe(new BattleEvent.MoveUsed(Side.Opponent, "PIDGEY", "TACKLE")));
+    }
+
+    [Fact]
+    public void AnnouncesAMiss()
+    {
+        Assert.Contains("missed", BattleNarrator.Describe(
+            new BattleEvent.MoveMissed(Side.Player, "BULBASAUR", "TACKLE")));
+    }
+
+    [Fact]
+    public void MentionsEffectivenessOnlyWhenItIsNotNeutral()
+    {
+        // Saying "it's normally effective" every turn would be noise, which is why the
+        // games stay quiet about it.
+        var neutral = new DamageResult(12, false, 100, false);
+        var strong = new DamageResult(24, false, 200, false);
+        var weak = new DamageResult(6, false, 50, false);
+
+        Assert.DoesNotContain("effective", BattleNarrator.Describe(
+            new BattleEvent.DamageDealt(Side.Opponent, "PIDGEY", 12, 10, neutral)));
+
+        Assert.Contains("super effective", BattleNarrator.Describe(
+            new BattleEvent.DamageDealt(Side.Opponent, "PIDGEY", 24, 10, strong)));
+
+        Assert.Contains("not very effective", BattleNarrator.Describe(
+            new BattleEvent.DamageDealt(Side.Opponent, "PIDGEY", 6, 10, weak)));
+    }
+
+    [Fact]
+    public void CallsOutACriticalHit()
+    {
+        var critical = new DamageResult(30, true, 100, false);
+
+        Assert.StartsWith("A critical hit!", BattleNarrator.Describe(
+            new BattleEvent.DamageDealt(Side.Opponent, "PIDGEY", 30, 0, critical)));
+    }
+
+    [Fact]
+    public void ReportsTheDamageDone()
+    {
+        Assert.Contains("took 12 damage", BattleNarrator.Describe(
+            new BattleEvent.DamageDealt(Side.Opponent, "PIDGEY", 12, 5, new DamageResult(12, false, 100, false))));
+    }
+
+    [Theory]
+    [InlineData(StatusCondition.Sleep, "asleep")]
+    [InlineData(StatusCondition.Freeze, "frozen")]
+    [InlineData(StatusCondition.Paralysis, "paralysed")]
+    public void ExplainsWhyABattlerCouldNotMove(StatusCondition cause, string expected)
+    {
+        Assert.Contains(expected, BattleNarrator.Describe(
+            new BattleEvent.Immobilised(Side.Player, "BULBASAUR", cause)));
+    }
+
+    [Fact]
+    public void DistinguishesBurnFromPoison()
+    {
+        Assert.Contains("burn", BattleNarrator.Describe(
+            new BattleEvent.StatusHurt(Side.Player, "X", StatusCondition.Burn, 3, 10)));
+
+        Assert.Contains("poison", BattleNarrator.Describe(
+            new BattleEvent.StatusHurt(Side.Player, "X", StatusCondition.Poison, 3, 10)));
+    }
+
+    [Fact]
+    public void AnnouncesTheOutcome()
+    {
+        Assert.Contains("won", BattleNarrator.Describe(new BattleEvent.Ended(Side.Player)));
+        Assert.Contains("no more usable", BattleNarrator.Describe(new BattleEvent.Ended(Side.Opponent)));
+        Assert.Contains("draw", BattleNarrator.Describe(new BattleEvent.Ended(null)));
+    }
+
+    [Fact]
+    public void SkipsEventsWithNothingToSay()
+    {
+        var events = new List<BattleEvent>
+        {
+            new BattleEvent.MoveUsed(Side.Player, "A", "TACKLE"),
+            new BattleEvent.Fainted(Side.Opponent, "B"),
+        };
+
+        List<string> lines = BattleNarrator.Describe(events).ToList();
+
+        Assert.Equal(2, lines.Count);
+        Assert.All(lines, line => Assert.NotEmpty(line));
+    }
+
+    [Fact]
+    public void NarratesAWholeTurnInOrder()
+    {
+        var battle = new Battle(
+            new Battler(TestMons.Species("BULBASAUR", PokemonType.Grass), 5, nickname: "BULBASAUR")
+                .Knowing(TestMons.Tackle),
+            new Battler(TestMons.Species("PIDGEY", PokemonType.Flying), 3, nickname: "PIDGEY")
+                .Knowing(TestMons.Tackle),
+            seed: 4242);
+
+        List<string> lines = BattleNarrator
+            .Describe(battle.ResolveTurn(new BattleAction.UseMove(0), new BattleAction.UseMove(0)))
+            .ToList();
+
+        Assert.NotEmpty(lines);
+        Assert.Contains(lines, l => l.Contains("used TACKLE"));
+    }
+}

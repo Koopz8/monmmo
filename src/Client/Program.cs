@@ -1,5 +1,7 @@
+using PokeMmo.Core.Battle;
 using PokeMmo.Core.Net;
 using PokeMmo.Core.World;
+using PokeMmo.RomExtract;
 using PokeMmo.RomExtract.Maps;
 using Raylib_cs;
 
@@ -42,11 +44,15 @@ public static class Program
             return 1;
         }
 
+        GameData data;
         LoadedMap map;
 
         try
         {
-            map = WorldLoader.Load(settings.RomPath, settings.MapName, settings.MapAddress);
+            // Opened once: locating the tables scans the whole cartridge several
+            // times, which is fine at startup and not fine mid-encounter.
+            data = GameData.Load(settings.RomPath);
+            map = WorldLoader.Load(data.Rom, settings.MapName, settings.MapAddress);
         }
         catch (Exception ex)
         {
@@ -70,7 +76,7 @@ public static class Program
             }
         }
 
-        Run(map, network);
+        Run(data, map, network, settings);
         return 0;
     }
 
@@ -83,7 +89,7 @@ public static class Program
             : (value, 7777);
     }
 
-    private static void Run(LoadedMap map, NetworkClient network)
+    private static void Run(GameData data, LoadedMap map, NetworkClient network, ClientSettings settings)
     {
         Raylib.InitWindow(WindowWidth, WindowHeight, $"MonMMO — {map.Name}");
         Raylib.SetTargetFPS(60);
@@ -105,12 +111,35 @@ public static class Program
         };
 
         var others = new Dictionary<int, RemoteCharacter>();
+        BattleScreen? battle = null;
 
         while (!Raylib.WindowShouldClose())
         {
             float delta = Raylib.GetFrameTime();
 
-            ApplyServerMessages(network, others, player, map);
+            WildEncounterStarted? encounter = ApplyServerMessages(network, others, player, map);
+
+            // An encounter suspends the overworld entirely: the server has already
+            // decided it, and walking on while a battle is pending would put the two
+            // sides out of step.
+            if (encounter is not null && battle is null)
+                battle = StartBattle(data, settings, encounter, player);
+
+            if (battle is not null)
+            {
+                battle.Update();
+                Raylib.BeginDrawing();
+                battle.Draw();
+                Raylib.EndDrawing();
+
+                if (battle.IsDismissed)
+                {
+                    battle.Unload();
+                    battle = null;
+                }
+
+                continue;
+            }
 
             bool wasStepping = player.IsStepping;
             player.Update(delta, ReadDirection());
@@ -154,12 +183,17 @@ public static class Program
     /// predicted, so a position for us is only applied when it actually disagrees —
     /// otherwise every step would stutter as the confirmation arrived.
     /// </summary>
-    private static void ApplyServerMessages(
+    /// <summary>
+    /// Folds server messages into local state, returning an encounter if one arrived.
+    /// </summary>
+    private static WildEncounterStarted? ApplyServerMessages(
         NetworkClient network,
         Dictionary<int, RemoteCharacter> others,
         WalkingCharacter player,
         LoadedMap map)
     {
+        WildEncounterStarted? encounter = null;
+
         foreach (NetMessage message in network.Drain())
         {
             switch (message)
@@ -191,8 +225,29 @@ public static class Program
                 case PlayerLeft left:
                     others.Remove(left.PlayerId);
                     break;
+
+                case WildEncounterStarted started:
+                    encounter = started;
+                    break;
             }
         }
+
+        return encounter;
+    }
+
+    /// <summary>
+    /// Builds the battle the server has already rolled. The seed came with the
+    /// encounter, so every roll here matches what the server would compute.
+    /// </summary>
+    private static BattleScreen? StartBattle(
+        GameData data, ClientSettings settings, WildEncounterStarted encounter, WalkingCharacter player)
+    {
+        Battler? wild = PartyBuilder.BuildWild(data, encounter.Species, encounter.Level);
+        Battler? starter = PartyBuilder.BuildStarter(data, settings.StarterSpecies, settings.StarterLevel);
+
+        if (wild is null || starter is null) return null;
+
+        return new BattleScreen(new Battle(starter, wild, encounter.Seed), data);
     }
 
     private static Direction? ReadDirection()

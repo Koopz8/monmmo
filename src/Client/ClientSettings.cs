@@ -31,6 +31,14 @@ public sealed class ClientSettings
     /// <summary>Name other players see.</summary>
     public string PlayerName { get; set; } = "Player";
 
+    /// <summary>
+    /// The creature you battle with. A placeholder until there is a party system —
+    /// species 1 is the first starter.
+    /// </summary>
+    public int StarterSpecies { get; set; } = 1;
+
+    public int StarterLevel { get; set; } = 5;
+
     public bool IsUsable => !string.IsNullOrWhiteSpace(RomPath) && File.Exists(RomPath);
 
     /// <summary>
@@ -59,6 +67,14 @@ public sealed class ClientSettings
                     break;
                 case "--name":
                     settings.PlayerName = commandLineArgs[i + 1];
+                    break;
+                case "--starter":
+                    if (int.TryParse(commandLineArgs[i + 1], out int starter))
+                        settings.StarterSpecies = starter;
+                    break;
+                case "--starter-level":
+                    if (int.TryParse(commandLineArgs[i + 1], out int starterLevel))
+                        settings.StarterLevel = starterLevel;
                     break;
             }
         }

@@ -34,9 +34,15 @@ public static class WorldLoader
     /// Opens a cartridge and loads one map, chosen by <c>bank.map</c> address when
     /// given and by name otherwise.
     /// </summary>
-    public static LoadedMap Load(string romPath, string? mapName, string? mapAddress)
+    public static LoadedMap Load(string romPath, string? mapName, string? mapAddress) =>
+        Load(Rom.Load(romPath), mapName, mapAddress);
+
+    /// <summary>
+    /// Loads a map from an already-open cartridge. Locating the tables scans the whole
+    /// image several times, so the client opens it once and reuses it.
+    /// </summary>
+    public static LoadedMap Load(Rom rom, string? mapName, string? mapAddress)
     {
-        Rom rom = Rom.Load(romPath);
 
         MapBankTable banks = MapBankLocator.Locate(rom)
             ?? throw new InvalidDataException("No map bank table found. Is this a Generation III cartridge?");
