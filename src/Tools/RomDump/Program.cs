@@ -522,14 +522,52 @@ public static class Program
 
         if (match.Header is null) return;
 
-        byte[] behaviours = match.Header.Layout.ReadBehaviours(rom, options.Split);
+        string mapLabel = $"{names?.Resolve(match.Header.RegionSectionId, indexBase)} ({match.Bank}.{match.Map})";
 
-        Console.WriteLine();
-        Console.WriteLine($"Metatile behaviours on {names?.Resolve(match.Header.RegionSectionId, indexBase)} " +
-                          $"({match.Bank}.{match.Map}), most common first:");
+        // Both stride interpretations, drawn out. Real terrain forms solid patches;
+        // a wrong stride scatters it, and the shape says which is which far faster
+        // than any amount of reasoning about the format.
+        foreach (int stride in new[] { 1, 2 })
+        {
+            byte[] behaviours = match.Header.Layout.ReadBehaviours(rom, options.Split, stride);
 
-        foreach (var group in behaviours.GroupBy(b => b).OrderByDescending(g => g.Count()).Take(8))
-            Console.WriteLine($"  0x{group.Key:X2}  {group.Count(),5} squares");
+            Console.WriteLine();
+            Console.WriteLine($"Behaviours on {mapLabel} reading {stride} byte(s) per metatile:");
+
+            foreach (var group in behaviours.GroupBy(b => b).OrderByDescending(g => g.Count()).Take(6))
+                Console.WriteLine($"  0x{group.Key:X2}  {group.Count(),5} squares");
+
+            DrawGrassMap(behaviours, match.Header.Layout.Width, match.Header.Layout.Height);
+        }
+    }
+
+    /// <summary>
+    /// Draws where the encounter squares are. Grass in the real games comes in solid
+    /// rectangular patches, so the picture immediately shows whether the data is
+    /// terrain or noise.
+    /// </summary>
+    private static void DrawGrassMap(byte[] behaviours, int width, int height)
+    {
+        int grass = behaviours.Count(Core.World.MetatileBehaviour.IsEncounterGrass);
+        Console.WriteLine($"  {grass} encounter squares, '#' below:");
+
+        for (int y = 0; y < height; y++)
+        {
+            var row = new System.Text.StringBuilder("    ");
+
+            for (int x = 0; x < width; x++)
+            {
+                int index = y * width + x;
+
+                byte behaviour = index < behaviours.Length
+                    ? behaviours[index]
+                    : Core.World.MetatileBehaviour.Normal;
+
+                row.Append(Core.World.MetatileBehaviour.IsEncounterGrass(behaviour) ? '#' : '.');
+            }
+
+            Console.WriteLine(row.ToString());
+        }
     }
 
     /// <summary>

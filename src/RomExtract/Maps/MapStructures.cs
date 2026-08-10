@@ -106,7 +106,7 @@ public sealed record MapLayoutRecord(
     /// value is a per-game constant worth confirming against a real image before
     /// anything depends on it.
     /// </summary>
-    public byte[] ReadBehaviours(Rom rom, TilesetSplit? split = null)
+    public byte[] ReadBehaviours(Rom rom, TilesetSplit? split = null, int attributeStride = 2)
     {
         TilesetSplit chosen = split ?? TilesetSplit.FireRed;
 
@@ -126,7 +126,7 @@ public sealed record MapLayoutRecord(
                 ? (primary, metatile)
                 : (secondary, metatile - chosen.Metatiles);
 
-            behaviours[i] = tileset?.ReadBehaviour(rom, local) ?? 0;
+            behaviours[i] = tileset?.ReadBehaviour(rom, local, attributeStride) ?? 0;
         }
 
         return behaviours;
@@ -239,13 +239,23 @@ public sealed record TilesetRecord(
     /// what it looks like. Tall grass, water, ledges and doors are all distinguished
     /// here rather than by appearance.
     /// </summary>
-    public byte ReadBehaviour(Rom rom, int localIndex)
+    /// <param name="attributeStride">
+    /// Bytes per metatile in the attributes table. Games differ: some store a 16-bit
+    /// attribute word carrying behaviour plus layer information, others a single
+    /// behaviour byte. Reading at the wrong stride does not fail — it returns a
+    /// neighbouring metatile's behaviour, which looks like terrain scattered in the
+    /// wrong places rather than an error.
+    /// </param>
+    public byte ReadBehaviour(Rom rom, int localIndex, int attributeStride = 2)
     {
         if (MetatileAttributesPointer == 0) return 0;
         if (rom.ToOffsetOrNull(MetatileAttributesPointer) is not { } offset) return 0;
 
-        int at = offset + localIndex * 2;
-        return at + 2 <= rom.Length ? (byte)(rom.ReadU16(at) & 0xFF) : (byte)0;
+        int at = offset + localIndex * attributeStride;
+        if (at + attributeStride > rom.Length) return 0;
+
+        // The behaviour is the low byte either way; only the spacing differs.
+        return rom.ReadU8(at);
     }
 
     /// <summary>
