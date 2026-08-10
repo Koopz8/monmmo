@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace PokeMmo.Core.Battle;
 
 /// <summary>Which side of a battle. Zero is the player.</summary>
@@ -7,46 +9,69 @@ public enum Side
     Opponent = 1,
 }
 
-/// <summary>Something that happened during a turn, in the order it happened.</summary>
+/// <summary>
+/// Something that happened during a turn, in the order it happened.
+/// <para>
+/// Every event names its participants by <see cref="Side"/> and its moves by index —
+/// never by name. That is not brevity. These events are produced by the server, which
+/// has no cartridge and so has no names to give: it knows a battler is species 16 and
+/// a move is number 33, and the client turns those into "PIDGEY" and "TACKLE" using
+/// the image on the player's own machine. A single string in here would mean shipping
+/// cartridge text to a server, which is the one thing this project must not do.
+/// </para>
+/// </summary>
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "e")]
+[JsonDerivedType(typeof(MoveUsed), "used")]
+[JsonDerivedType(typeof(MoveMissed), "missed")]
+[JsonDerivedType(typeof(NoEffect), "noeffect")]
+[JsonDerivedType(typeof(Immobilised), "immobilised")]
+[JsonDerivedType(typeof(WokeUp), "woke")]
+[JsonDerivedType(typeof(DamageDealt), "damage")]
+[JsonDerivedType(typeof(StatusHurt), "statushurt")]
+[JsonDerivedType(typeof(Fainted), "fainted")]
+[JsonDerivedType(typeof(BallThrown), "ball")]
+[JsonDerivedType(typeof(Ended), "ended")]
 public abstract record BattleEvent
 {
-    public sealed record MoveUsed(Side Side, string Attacker, string Move) : BattleEvent;
+    public sealed record MoveUsed(Side Side, int MoveId) : BattleEvent;
 
-    public sealed record MoveMissed(Side Side, string Attacker, string Move) : BattleEvent;
+    public sealed record MoveMissed(Side Side, int MoveId) : BattleEvent;
 
-    public sealed record NoEffect(Side Side, string Target) : BattleEvent;
+    public sealed record NoEffect(Side Side) : BattleEvent;
 
-    public sealed record Immobilised(Side Side, string Name, StatusCondition Cause) : BattleEvent;
+    public sealed record Immobilised(Side Side, StatusCondition Cause) : BattleEvent;
 
-    public sealed record WokeUp(Side Side, string Name) : BattleEvent;
+    public sealed record WokeUp(Side Side) : BattleEvent;
 
     public sealed record DamageDealt(
         Side Side,
-        string Target,
         int Damage,
         int RemainingHp,
         DamageResult Detail) : BattleEvent;
 
     public sealed record StatusHurt(
         Side Side,
-        string Name,
         StatusCondition Status,
         int Damage,
         int RemainingHp) : BattleEvent;
 
-    public sealed record Fainted(Side Side, string Name) : BattleEvent;
+    public sealed record Fainted(Side Side) : BattleEvent;
 
     /// <summary>
     /// A ball was thrown. <paramref name="Shakes"/> is how many times it wobbled,
     /// which is what tells a player how close they came.
     /// </summary>
-    public sealed record BallThrown(string Target, int Shakes, bool Caught) : BattleEvent;
+    public sealed record BallThrown(Side Target, int Shakes, bool Caught) : BattleEvent;
 
     /// <summary>The battle is over. A null winner means both sides fell in the same turn.</summary>
     public sealed record Ended(Side? Winner) : BattleEvent;
 }
 
 /// <summary>What a side chose to do this turn.</summary>
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "a")]
+[JsonDerivedType(typeof(UseMove), "move")]
+[JsonDerivedType(typeof(Struggle), "struggle")]
+[JsonDerivedType(typeof(ThrowBall), "ball")]
 public abstract record BattleAction
 {
     public sealed record UseMove(int Slot) : BattleAction;
@@ -161,11 +186,11 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         MoveData? move = action is BattleAction.UseMove use ? attacker.MoveAt(use.Slot) : null;
         if (move is null) return;
 
-        events.Add(new BattleEvent.MoveUsed(side, attacker.Name, move.Name));
+        events.Add(new BattleEvent.MoveUsed(side, move.Id));
 
         if (!DamageCalculator.RollAccuracy(_rng, move, attacker, defender))
         {
-            events.Add(new BattleEvent.MoveMissed(side, attacker.Name, move.Name));
+            events.Add(new BattleEvent.MoveMissed(side, move.Id));
             return;
         }
 
@@ -176,22 +201,22 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
 
         if (result.NoEffect)
         {
-            events.Add(new BattleEvent.NoEffect(Other(side), defender.Name));
+            events.Add(new BattleEvent.NoEffect(Other(side)));
             return;
         }
 
         int dealt = defender.TakeDamage(result.Damage);
-        events.Add(new BattleEvent.DamageDealt(Other(side), defender.Name, dealt, defender.CurrentHp, result));
+        events.Add(new BattleEvent.DamageDealt(Other(side), dealt, defender.CurrentHp, result));
 
         if (defender.HasFainted)
-            events.Add(new BattleEvent.Fainted(Other(side), defender.Name));
+            events.Add(new BattleEvent.Fainted(Other(side)));
     }
 
     private void ThrowAt(Side thrower, Battler target, BallKind ball, List<BattleEvent> events)
     {
         CatchAttempt attempt = CatchCalculator.Throw(_rng, target, target.Species.CatchRate, ball);
 
-        events.Add(new BattleEvent.BallThrown(target.Name, attempt.Shakes, attempt.Caught));
+        events.Add(new BattleEvent.BallThrown(Other(thrower), attempt.Shakes, attempt.Caught));
 
         if (attempt.Caught && thrower == Side.Player) OpponentCaught = true;
     }
@@ -210,11 +235,11 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
                 if (battler.SleepTurns <= 0)
                 {
                     battler.Status = StatusCondition.None;
-                    events.Add(new BattleEvent.WokeUp(side, battler.Name));
+                    events.Add(new BattleEvent.WokeUp(side));
                     return true;
                 }
 
-                events.Add(new BattleEvent.Immobilised(side, battler.Name, StatusCondition.Sleep));
+                events.Add(new BattleEvent.Immobilised(side, StatusCondition.Sleep));
                 return false;
 
             case StatusCondition.Freeze:
@@ -225,11 +250,11 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
                     return true;
                 }
 
-                events.Add(new BattleEvent.Immobilised(side, battler.Name, StatusCondition.Freeze));
+                events.Add(new BattleEvent.Immobilised(side, StatusCondition.Freeze));
                 return false;
 
             case StatusCondition.Paralysis when _rng.Chance(25):
-                events.Add(new BattleEvent.Immobilised(side, battler.Name, StatusCondition.Paralysis));
+                events.Add(new BattleEvent.Immobilised(side, StatusCondition.Paralysis));
                 return false;
 
             default:
@@ -250,9 +275,9 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             int damage = Math.Max(1, battler.MaxHp / 16);
             int dealt = battler.TakeDamage(damage);
 
-            events.Add(new BattleEvent.StatusHurt(side, battler.Name, battler.Status, dealt, battler.CurrentHp));
+            events.Add(new BattleEvent.StatusHurt(side, battler.Status, dealt, battler.CurrentHp));
 
-            if (battler.HasFainted) events.Add(new BattleEvent.Fainted(side, battler.Name));
+            if (battler.HasFainted) events.Add(new BattleEvent.Fainted(side));
         }
     }
 }

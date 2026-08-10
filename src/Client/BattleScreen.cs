@@ -30,6 +30,7 @@ public sealed class BattleScreen
     private const int SpriteScale = 3;
 
     private readonly Battle _battle;
+    private readonly BattleNames _names;
     private readonly Texture2D _wildSprite;
     private readonly Texture2D _playerSprite;
     private readonly bool _hasWildSprite;
@@ -43,6 +44,13 @@ public sealed class BattleScreen
     {
         _battle = battle;
         Balls = balls;
+
+        // The one place names enter a battle. Everything below this line works in
+        // sides and move indices, exactly as the server does.
+        _names = new BattleNames(
+            battle.Player.Name,
+            $"the wild {battle.Opponent.Name}",
+            id => data.MoveAt(id)?.Name ?? $"move {id}");
 
         (_wildSprite, _hasWildSprite) = LoadSprite(data, battle.Opponent.Species.Index, back: false);
         (_playerSprite, _hasPlayerSprite) = LoadSprite(data, battle.Player.Species.Index, back: true);
@@ -157,7 +165,7 @@ public sealed class BattleScreen
     {
         List<BattleEvent> events = _battle.ResolveTurn(playerAction, new BattleAction.UseMove(0));
 
-        Say(BattleNarrator.Describe(events));
+        Say(BattleNarrator.Describe(events, _names));
 
         if (_battle.OpponentCaught) Caught = _battle.Opponent;
 

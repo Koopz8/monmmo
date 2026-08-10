@@ -170,7 +170,7 @@ public class CatchingInBattleTests
 
         Assert.False(battle.OpponentCaught);
         Assert.Contains(events, e => e is BattleEvent.BallThrown { Caught: false });
-        Assert.Contains(events, e => e is BattleEvent.MoveUsed { Attacker: "WILD" });
+        Assert.Contains(events, e => e is BattleEvent.MoveUsed { Side: Side.Opponent });
     }
 
     [Fact]
@@ -188,9 +188,19 @@ public class CatchingInBattleTests
     [Fact]
     public void TheNarratorReadsTheShakeCount()
     {
-        Assert.Equal("Oh no! It broke free!", BattleNarrator.Describe(new BattleEvent.BallThrown("WILD", 0, false)));
-        Assert.Equal("Aargh! Almost had it!", BattleNarrator.Describe(new BattleEvent.BallThrown("WILD", 2, false)));
-        Assert.Equal("Gotcha! WILD was caught!", BattleNarrator.Describe(new BattleEvent.BallThrown("WILD", 4, true)));
+        var names = new BattleNames("MINE", "WILD", id => $"move {id}");
+
+        Assert.Equal(
+            "Oh no! It broke free!",
+            BattleNarrator.Describe(new BattleEvent.BallThrown(Side.Opponent, 0, false), names));
+
+        Assert.Equal(
+            "Aargh! Almost had it!",
+            BattleNarrator.Describe(new BattleEvent.BallThrown(Side.Opponent, 2, false), names));
+
+        Assert.Equal(
+            "Gotcha! WILD was caught!",
+            BattleNarrator.Describe(new BattleEvent.BallThrown(Side.Opponent, 4, true), names));
     }
 }
 

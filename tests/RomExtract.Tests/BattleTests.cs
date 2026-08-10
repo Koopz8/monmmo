@@ -428,22 +428,28 @@ public class BattleTurnTests
 
 public class BattleNarratorTests
 {
-    private static Battler Named(string name) =>
-        new(TestMons.Species(name, PokemonType.Normal), 5, nickname: name);
+    /// <summary>
+    /// Names for the two sides and for moves. Events carry neither, because the server
+    /// that will produce them has neither — so narration takes them as an argument.
+    /// </summary>
+    private static readonly BattleNames Names =
+        new("BULBASAUR", "PIDGEY", id => id == 33 ? "TACKLE" : $"move {id}");
+
+    private const int Tackle = 33;
 
     [Fact]
     public void AnnouncesAMove()
     {
         Assert.Equal(
             "PIDGEY used TACKLE!",
-            BattleNarrator.Describe(new BattleEvent.MoveUsed(Side.Opponent, "PIDGEY", "TACKLE")));
+            BattleNarrator.Describe(new BattleEvent.MoveUsed(Side.Opponent, Tackle), Names));
     }
 
     [Fact]
     public void AnnouncesAMiss()
     {
         Assert.Contains("missed", BattleNarrator.Describe(
-            new BattleEvent.MoveMissed(Side.Player, "BULBASAUR", "TACKLE")));
+            new BattleEvent.MoveMissed(Side.Player, Tackle), Names));
     }
 
     [Fact]
@@ -456,13 +462,13 @@ public class BattleNarratorTests
         var weak = new DamageResult(6, false, 50, false);
 
         Assert.DoesNotContain("effective", BattleNarrator.Describe(
-            new BattleEvent.DamageDealt(Side.Opponent, "PIDGEY", 12, 10, neutral)));
+            new BattleEvent.DamageDealt(Side.Opponent, 12, 10, neutral), Names));
 
         Assert.Contains("super effective", BattleNarrator.Describe(
-            new BattleEvent.DamageDealt(Side.Opponent, "PIDGEY", 24, 10, strong)));
+            new BattleEvent.DamageDealt(Side.Opponent, 24, 10, strong), Names));
 
         Assert.Contains("not very effective", BattleNarrator.Describe(
-            new BattleEvent.DamageDealt(Side.Opponent, "PIDGEY", 6, 10, weak)));
+            new BattleEvent.DamageDealt(Side.Opponent, 6, 10, weak), Names));
     }
 
     [Fact]
@@ -471,14 +477,14 @@ public class BattleNarratorTests
         var critical = new DamageResult(30, true, 100, false);
 
         Assert.StartsWith("A critical hit!", BattleNarrator.Describe(
-            new BattleEvent.DamageDealt(Side.Opponent, "PIDGEY", 30, 0, critical)));
+            new BattleEvent.DamageDealt(Side.Opponent, 30, 0, critical), Names));
     }
 
     [Fact]
     public void ReportsTheDamageDone()
     {
         Assert.Contains("took 12 damage", BattleNarrator.Describe(
-            new BattleEvent.DamageDealt(Side.Opponent, "PIDGEY", 12, 5, new DamageResult(12, false, 100, false))));
+            new BattleEvent.DamageDealt(Side.Opponent, 12, 5, new DamageResult(12, false, 100, false)), Names));
     }
 
     [Theory]
@@ -488,25 +494,25 @@ public class BattleNarratorTests
     public void ExplainsWhyABattlerCouldNotMove(StatusCondition cause, string expected)
     {
         Assert.Contains(expected, BattleNarrator.Describe(
-            new BattleEvent.Immobilised(Side.Player, "BULBASAUR", cause)));
+            new BattleEvent.Immobilised(Side.Player, cause), Names));
     }
 
     [Fact]
     public void DistinguishesBurnFromPoison()
     {
         Assert.Contains("burn", BattleNarrator.Describe(
-            new BattleEvent.StatusHurt(Side.Player, "X", StatusCondition.Burn, 3, 10)));
+            new BattleEvent.StatusHurt(Side.Player, StatusCondition.Burn, 3, 10), Names));
 
         Assert.Contains("poison", BattleNarrator.Describe(
-            new BattleEvent.StatusHurt(Side.Player, "X", StatusCondition.Poison, 3, 10)));
+            new BattleEvent.StatusHurt(Side.Player, StatusCondition.Poison, 3, 10), Names));
     }
 
     [Fact]
     public void AnnouncesTheOutcome()
     {
-        Assert.Contains("won", BattleNarrator.Describe(new BattleEvent.Ended(Side.Player)));
-        Assert.Contains("no more usable", BattleNarrator.Describe(new BattleEvent.Ended(Side.Opponent)));
-        Assert.Contains("draw", BattleNarrator.Describe(new BattleEvent.Ended(null)));
+        Assert.Contains("won", BattleNarrator.Describe(new BattleEvent.Ended(Side.Player), Names));
+        Assert.Contains("no more usable", BattleNarrator.Describe(new BattleEvent.Ended(Side.Opponent), Names));
+        Assert.Contains("draw", BattleNarrator.Describe(new BattleEvent.Ended(null), Names));
     }
 
     [Fact]
@@ -514,11 +520,11 @@ public class BattleNarratorTests
     {
         var events = new List<BattleEvent>
         {
-            new BattleEvent.MoveUsed(Side.Player, "A", "TACKLE"),
-            new BattleEvent.Fainted(Side.Opponent, "B"),
+            new BattleEvent.MoveUsed(Side.Player, Tackle),
+            new BattleEvent.Fainted(Side.Opponent),
         };
 
-        List<string> lines = BattleNarrator.Describe(events).ToList();
+        List<string> lines = BattleNarrator.Describe(events, Names).ToList();
 
         Assert.Equal(2, lines.Count);
         Assert.All(lines, line => Assert.NotEmpty(line));
@@ -535,7 +541,9 @@ public class BattleNarratorTests
             seed: 4242);
 
         List<string> lines = BattleNarrator
-            .Describe(battle.ResolveTurn(new BattleAction.UseMove(0), new BattleAction.UseMove(0)))
+            .Describe(
+                battle.ResolveTurn(new BattleAction.UseMove(0), new BattleAction.UseMove(0)),
+                new BattleNames("BULBASAUR", "PIDGEY", id => TestMons.Tackle.Name))
             .ToList();
 
         Assert.NotEmpty(lines);
