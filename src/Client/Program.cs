@@ -151,6 +151,11 @@ public static class Program
         BattleScreen? battle = null;
         int balls = settings.Balls;
 
+        // Time until the client may next ask the server about an edge it cannot
+        // predict. Without it, holding a direction into an edge would send a request
+        // every frame and be rate-limited into uselessness.
+        float edgeCooldown = 0f;
+
         while (!Raylib.WindowShouldClose())
         {
             float delta = Raylib.GetFrameTime();
@@ -190,12 +195,29 @@ public static class Program
             }
 
             bool wasStepping = player.IsStepping;
-            player.Update(delta, ReadDirection());
+            Direction? input = ReadDirection();
+            player.Update(delta, input);
+
+            edgeCooldown = Math.Max(0f, edgeCooldown - delta);
 
             // Tell the server the moment a step begins, not when it finishes — it is
             // already predicted locally, so waiting would add a round trip of lag to
             // every square.
-            if (!wasStepping && player.IsStepping) network.SendMove(player.Facing);
+            if (!wasStepping && player.IsStepping)
+            {
+                network.SendMove(player.Facing);
+            }
+            else if (!player.IsStepping &&
+                     input is { } wanted &&
+                     edgeCooldown <= 0f &&
+                     view.Map.Collision.LeavesGrid(player.Square, wanted))
+            {
+                // The one step the client cannot predict: it has no idea what is on the
+                // next map, or whether there is one. Ask, stand still, and let the
+                // answer arrive as a map change or as nothing at all.
+                network.SendMove(wanted);
+                edgeCooldown = WalkingCharacter.StepSeconds;
+            }
 
             foreach (RemoteCharacter other in others.Values) other.Update(delta);
 

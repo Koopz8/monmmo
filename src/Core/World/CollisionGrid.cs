@@ -73,6 +73,18 @@ public sealed class CollisionGrid
     /// Applies one step. Returns false and leaves <paramref name="destination"/> at the
     /// starting square when the way is blocked or off the edge of the map.
     /// </summary>
+    /// <summary>
+    /// True when a step would leave the map entirely, rather than hit something solid
+    /// on it.
+    /// <para>
+    /// Walking alone the two are the same and neither moves you. Online they are
+    /// completely different: a wall is a wall, but the edge of a map may be the way
+    /// onto the next one, and only the server knows which. A client that treats both
+    /// as simply blocked can never travel — it does not even ask.
+    /// </para>
+    /// </summary>
+    public bool LeavesGrid(GridPosition from, Direction direction) => !Contains(from.Step(direction));
+
     public bool TryStep(GridPosition from, Direction direction, out GridPosition destination)
     {
         GridPosition target = from.Step(direction);

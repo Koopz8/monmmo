@@ -262,6 +262,33 @@ public class TravelTests
     }
 
     [Fact]
+    public void AStepOffTheMapIsBlockedButIsNotAWall()
+    {
+        // The distinction the client needs and did not have. TryStep refuses both, so
+        // a client that only sends a move when a step actually starts never tells the
+        // server it tried to leave — and travel is impossible without the server ever
+        // being asked.
+        var grid = new CollisionGrid(3, 3, new byte[9]);
+
+        Assert.False(grid.TryStep(new GridPosition(1, 0), Direction.Up, out _));
+        Assert.True(grid.LeavesGrid(new GridPosition(1, 0), Direction.Up));
+
+        Assert.False(grid.LeavesGrid(new GridPosition(1, 1), Direction.Up));
+    }
+
+    [Fact]
+    public void ASolidSquareInsideTheMapIsAWallAndNotAnEdge()
+    {
+        var collision = new byte[9];
+        collision[1] = 1;   // (1, 0) is solid
+
+        var grid = new CollisionGrid(3, 3, collision);
+
+        Assert.False(grid.TryStep(new GridPosition(1, 1), Direction.Up, out _));
+        Assert.False(grid.LeavesGrid(new GridPosition(1, 1), Direction.Up));
+    }
+
+    [Fact]
     public void AnEdgeThatRefusesSaysWhy()
     {
         // Three different situations feel identical to a player — they walk into what
