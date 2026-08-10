@@ -213,6 +213,10 @@ public sealed class GameWorld
     {
         lock (_gate)
         {
+            // Cleared per step, not per refusal: sticky state would have the server
+            // reporting the same reason over and over long after it stopped applying.
+            LastEdgeRefusal = null;
+
             if (!_players.TryGetValue(playerId, out ServerPlayer? player))
                 return [new Outgoing(new Rejected("Not in the world."), OnlyTo: playerId)];
 
@@ -265,12 +269,16 @@ public sealed class GameWorld
         MapData map = _world.Find(player.MapId) ?? StartingMap;
         ConnectionSide side = SideFor(direction);
 
-        if (map.ConnectionOn(side) is not { } connection ||
-            _world.Find(connection.MapId) is not { } target)
+        if (map.ConnectionOn(side) is not { } connection)
         {
-            return [new Outgoing(
-                new PlayerMoved(player.Id, player.Square.X, player.Square.Y, player.Facing),
-                OnMap: player.MapId)];
+            LastEdgeRefusal = $"{side} edge of {map.Id}: no connection";
+            return [Stay(player)];
+        }
+
+        if (_world.Find(connection.MapId) is not { } target)
+        {
+            LastEdgeRefusal = $"{side} edge of {map.Id}: {connection.MapId} is not in this world";
+            return [Stay(player)];
         }
 
         GridPosition arrival = AcrossEdge(player.Square, side, map, target, connection.Offset);
@@ -280,9 +288,11 @@ public sealed class GameWorld
         {
             // The neighbour exists but that particular square is solid. Treat it as the
             // wall it is rather than dropping the player into it.
-            return [new Outgoing(
-                new PlayerMoved(player.Id, player.Square.X, player.Square.Y, player.Facing),
-                OnMap: player.MapId)];
+            LastEdgeRefusal =
+                $"{side} edge of {map.Id} from {player.Square}: {target.Id} {arrival} is solid " +
+                $"(offset {connection.Offset}, target {target.Width}x{target.Height})";
+
+            return [Stay(player)];
         }
 
         player.LastStepAt = nowSeconds;
@@ -313,6 +323,21 @@ public sealed class GameWorld
         ConnectionSide.Left => new GridPosition(target.Width - 1, from.Y - offset),
         _ => new GridPosition(0, from.Y - offset),
     };
+
+    /// <summary>Standing still, announced so everyone still sees the turn.</summary>
+    private Outgoing Stay(ServerPlayer player) =>
+        new(new PlayerMoved(player.Id, player.Square.X, player.Square.Y, player.Facing), OnMap: player.MapId);
+
+    /// <summary>
+    /// Why the last attempt to walk off an edge did not move anyone.
+    /// <para>
+    /// An edge with no neighbour, a neighbour that is not in the world, and an arrival
+    /// square that is solid all look identical from the player's side — they walk into
+    /// what feels like a wall. Only the server can tell them apart, so it writes down
+    /// which it was.
+    /// </para>
+    /// </summary>
+    public string? LastEdgeRefusal { get; private set; }
 
     private static ConnectionSide SideFor(Direction direction) => direction switch
     {

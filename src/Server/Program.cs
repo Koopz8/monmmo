@@ -69,6 +69,7 @@ public static class Program
             $"{game.StartingMap.Width}x{game.StartingMap.Height}");
 
         ReportWorldLinks(world);
+        ReportStartingMapLinks(game);
         ReportEncounterReadiness(game.StartingMap);
 
         using var store = new SqlitePlayerStore(databasePath);
@@ -98,6 +99,50 @@ public static class Program
         }
 
         Console.WriteLine($"  {warps} warps and {connections} edge connections across {world.Count} maps");
+    }
+
+    /// <summary>
+    /// Says where you can actually leave the starting map from.
+    /// <para>
+    /// A player who walks into an edge and stops has no way to tell an edge with no
+    /// neighbour from one whose arrival square is solid from a bug in the arithmetic.
+    /// All three look like walking into a wall, and only the server knows which it is.
+    /// </para>
+    /// </summary>
+    private static void ReportStartingMapLinks(GameWorld game)
+    {
+        MapData map = game.StartingMap;
+
+        if (map.Connections.Count == 0)
+            Console.WriteLine("  no edge connections on this map — its edges are all walls");
+
+        foreach (MapConnection connection in map.Connections)
+        {
+            if (game.MapOf(connection.MapId) is not { } target)
+            {
+                Console.WriteLine($"  {connection.Side,-5} -> {connection.MapId} (not in this world)");
+                continue;
+            }
+
+            // Walk the whole shared edge and count how much of the far side can be
+            // stood on. Zero means the connection exists and nobody can ever use it.
+            int usable = 0;
+            bool vertical = connection.Side is ConnectionSide.Up or ConnectionSide.Down;
+            int length = vertical ? map.Width : map.Height;
+
+            for (int i = 0; i < length; i++)
+            {
+                GridPosition from = vertical ? new GridPosition(i, 0) : new GridPosition(0, i);
+                GridPosition arrival = GameWorld.AcrossEdge(from, connection.Side, map, target, connection.Offset);
+
+                if (game.GridOf(target.Id).IsWalkable(arrival)) usable++;
+            }
+
+            Console.WriteLine(
+                $"  {connection.Side,-5} -> {target.Id} {target.Name} " +
+                $"({target.Width}x{target.Height}, offset {connection.Offset}) " +
+                $"{usable} of {length} land somewhere walkable");
+        }
     }
 
     /// <summary>
@@ -317,6 +362,11 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                                     Console.WriteLine(
                                         $"> #{playerId} moved to {changed.MapId} at ({changed.X}, {changed.Y})");
                                 }
+                            }
+
+                            if (world.LastEdgeRefusal is { } refusal)
+                            {
+                                Console.WriteLine($"| #{playerId} could not cross: {refusal}");
                             }
 
                             if (verbose && world.Find(playerId) is { } walker)

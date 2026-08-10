@@ -262,6 +262,44 @@ public class TravelTests
     }
 
     [Fact]
+    public void AnEdgeThatRefusesSaysWhy()
+    {
+        // Three different situations feel identical to a player — they walk into what
+        // seems like a wall — and only the server can tell them apart.
+        GameWorld world = World();
+        ServerPlayer player = JoinAt(world, "Mason", Town, 0, 2);
+
+        Step(world, player, Direction.Left, 10);
+        Assert.Contains("no connection", world.LastEdgeRefusal);
+
+        Step(world, player, Direction.Right, 20);
+        Assert.Null(world.LastEdgeRefusal);
+    }
+
+    [Fact]
+    public void ASolidArrivalSquareIsNamedRatherThanJustBlocked()
+    {
+        var collision = new byte[4 * 2];
+        collision[0] = 1;   // (0, 0) — the square you would land on — is solid
+
+        MapData town = Open(Town, "PALLET TOWN", 4, 2) with
+        {
+            Connections = [new MapConnection(ConnectionSide.Down, 0, Route)],
+        };
+
+        MapData route = new(Route, "ROUTE 1", 4, 2, collision);
+
+        var world = new GameWorld(new WorldData([town, route]), Town);
+        ServerPlayer player = JoinAt(world, "Mason", Town, 0, 1);
+
+        world.Move(player.Id, Direction.Down, 10);
+
+        Assert.Equal(Town, player.MapId);
+        Assert.Contains("is solid", world.LastEdgeRefusal);
+        Assert.Contains(Route, world.LastEdgeRefusal);
+    }
+
+    [Fact]
     public void ADoorOnTheFarSideOfAnEdgeStillWorks()
     {
         // Arriving across an edge is ordinary walking, so a warp on the square you

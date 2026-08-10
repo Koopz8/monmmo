@@ -248,7 +248,10 @@ public static class Program
             switch (message)
             {
                 case Welcome welcome:
-                    view.SwitchTo(welcome.MapId);
+                    // The title was set from whatever client.json asked for; the server
+                    // decides where you actually are, and it is usually somewhere else.
+                    if (view.SwitchTo(welcome.MapId)) Raylib.SetWindowTitle($"MonMMO — {view.Map.Name}");
+
                     player.Place(view.Map.Collision, new GridPosition(welcome.X, welcome.Y));
                     balls = welcome.Balls;
 
