@@ -40,11 +40,12 @@ public static class Program
         }
 
         WorldData world = WorldData.Load(worldPath);
+        GameRules? rules = ReportRules(rulesPath);
         GameWorld game;
 
         try
         {
-            game = new GameWorld(world, startingMap);
+            game = new GameWorld(world, startingMap, rules);
         }
         catch (ArgumentException)
         {
@@ -74,8 +75,6 @@ public static class Program
         ReportStartingMapLinks(game);
         ReportEncounterReadiness(game.StartingMap);
 
-        ReportRules(rulesPath);
-
         using var store = new SqlitePlayerStore(databasePath);
         Console.WriteLine($"Accounts in {Path.GetFullPath(databasePath)}");
 
@@ -96,7 +95,7 @@ public static class Program
     {
         if (!File.Exists(path))
         {
-            Console.WriteLine($"No rules file at {Path.GetFullPath(path)} — battles stay client-side and are taken on trust");
+            Console.WriteLine($"No rules file at {Path.GetFullPath(path)} — encounters are disabled");
             Console.WriteLine("  generate one:  dotnet run --project src/Tools/RomDump -- your.gba --export-rules rules.dat");
             return null;
         }
@@ -114,7 +113,7 @@ public static class Program
         catch (InvalidDataException ex)
         {
             Console.WriteLine($"Could not read {path}: {ex.Message}");
-            Console.WriteLine("  battles stay client-side until this is re-exported");
+            Console.WriteLine("  encounters are disabled until this is re-exported");
             return null;
         }
     }
@@ -360,13 +359,24 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                             await DispatchAsync(welcome, playerId, cancellationToken).ConfigureAwait(false);
                             break;
 
-                        case SaveRequest save when playerId != 0:
-                            if (world.UpdateSave(playerId, save.Balls, save.Party) && world.Snapshot(playerId) is { } state)
+                        case BattleTurn turn when playerId != 0:
+                            List<Outgoing> battleResult = world.TakeBattleTurn(playerId, turn.Action);
+
+                            foreach (Outgoing outgoing in battleResult)
                             {
-                                await store.SaveAsync(accountId, state, cancellationToken).ConfigureAwait(false);
-                                Console.WriteLine($"= #{playerId} saved, {state.Party.Count} in party, {state.Balls} balls");
+                                if (outgoing.Message is not BattleFinished finished) continue;
+
+                                Console.WriteLine(
+                                    $"= #{playerId} battle over: {finished.Winner?.ToString() ?? "draw"}" +
+                                    $"{(finished.Caught ? ", caught it" : "")}, {finished.Party.Count} in party");
+
+                                // Written the moment a battle ends rather than on
+                                // disconnect, because disconnects are not always polite.
+                                if (world.Snapshot(playerId) is { } state)
+                                    await store.SaveAsync(accountId, state, cancellationToken).ConfigureAwait(false);
                             }
 
+                            await DispatchAsync(battleResult, playerId, cancellationToken).ConfigureAwait(false);
                             break;
 
                         case MoveRequest move when playerId != 0:
@@ -377,11 +387,12 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
 
                             foreach (Outgoing outgoing in result)
                             {
-                                if (outgoing.Message is WildEncounterStarted encounter)
+                                if (outgoing.Message is BattleStarted started)
                                 {
                                     met = true;
                                     Console.WriteLine(
-                                        $"! #{playerId} met species {encounter.Species} at level {encounter.Level}");
+                                        $"! #{playerId} met species {started.Opponent.Species} " +
+                                        $"at level {started.Opponent.Level}");
                                 }
                             }
 

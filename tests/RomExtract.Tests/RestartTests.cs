@@ -26,7 +26,8 @@ public class RestartTests : IDisposable
         var collision = new byte[12];
         collision[2] = 1;   // a wall at (2, 0)
 
-        return new GameWorld(new WorldData([new MapData("3.0", "PALLET TOWN", 4, 3, collision)]), "3.0");
+        return new GameWorld(
+            new WorldData([new MapData("3.0", "PALLET TOWN", 4, 3, collision)]), "3.0", TestRules.All);
     }
 
     /// <summary>Runs a server for the duration of one block of work, then stops it.</summary>
@@ -65,9 +66,9 @@ public class RestartTests : IDisposable
     }
 
     [Fact]
-    public async Task ACaughtCreatureSurvivesARestart()
+    public async Task YourPartySurvivesARestart()
     {
-        var caught = new SavedMon(16, 3, null, 9, StatusCondition.None, Nature.Bold, [33, 45]);
+        SavedMon starter = null!;
 
         await WithServerAsync(async port =>
         {
@@ -78,12 +79,12 @@ public class RestartTests : IDisposable
             await channel.SendAsync(new RegisterRequest("Mason", "a-good-password"));
 
             Welcome welcome = await ExpectAsync<Welcome>(channel);
-            Assert.Empty(welcome.Party);
 
-            await channel.SendAsync(new SaveRequest(19, [caught]));
+            // Registration hands out a starter, so a party is never empty and the
+            // server never has to invent a battler in the middle of a battle.
+            starter = Assert.Single(welcome.Party);
 
-            // Give the save a moment to land before pulling the socket out from under
-            // it — the client sends and forgets, deliberately.
+            socket.Close();
             await Task.Delay(300);
         });
 
@@ -99,8 +100,7 @@ public class RestartTests : IDisposable
 
             Welcome welcome = await ExpectAsync<Welcome>(channel);
 
-            Assert.Equal(19, welcome.Balls);
-            Assert.Equal(caught, Assert.Single(welcome.Party));
+            Assert.Equal(starter, Assert.Single(welcome.Party));
         });
     }
 

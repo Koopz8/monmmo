@@ -319,7 +319,7 @@ public class ServerEncounterTests
                 Enumerable.Range(0, 12).Select(i => new WildSlot(16, 2, 5)).ToList())),
         };
 
-        return new GameWorld(new WorldData([map]), "3.19", seed);
+        return new GameWorld(new WorldData([map]), "3.19", TestRules.All, seed);
     }
 
     private static ServerPlayer PlayerAt(GameWorld world, int x, int y)
@@ -335,7 +335,7 @@ public class ServerEncounterTests
     /// rate an encounter is a coin flip per step, so a single-step assertion would be
     /// flaky by construction.
     /// </summary>
-    private static (WildEncounterStarted? Encounter, Outgoing? Message) WalkUntilEncounter(
+    private static (BattleStarted? Encounter, Outgoing? Message) WalkUntilEncounter(
         GameWorld world, ServerPlayer player, int maxSteps = 40)
     {
         double now = 0;
@@ -347,7 +347,7 @@ public class ServerEncounterTests
             now += 1;
 
             foreach (Outgoing outgoing in world.Move(player.Id, Direction.Down, now))
-                if (outgoing.Message is WildEncounterStarted encounter) return (encounter, outgoing);
+                if (outgoing.Message is BattleStarted encounter) return (encounter, outgoing);
         }
 
         return (null, null);
@@ -359,11 +359,11 @@ public class ServerEncounterTests
         GameWorld world = GrassyWorld();
         ServerPlayer player = PlayerAt(world, 0, 1);
 
-        (WildEncounterStarted? encounter, _) = WalkUntilEncounter(world, player);
+        (BattleStarted? encounter, _) = WalkUntilEncounter(world, player);
 
         Assert.NotNull(encounter);
-        Assert.Equal(16, encounter!.Species);
-        Assert.InRange(encounter.Level, 2, 5);
+        Assert.Equal(16, encounter!.Opponent.Species);
+        Assert.InRange(encounter.Opponent.Level, 2, 5);
     }
 
     [Fact]
@@ -394,7 +394,7 @@ public class ServerEncounterTests
             now += 1;
 
             Assert.DoesNotContain(world.Move(player.Id, Direction.Right, now),
-                o => o.Message is WildEncounterStarted);
+                o => o.Message is BattleStarted);
         }
     }
 
@@ -405,14 +405,14 @@ public class ServerEncounterTests
         behaviours[0] = MetatileBehaviour.TallGrass;
 
         var map = new MapData("3.0", "PALLET TOWN", 2, 2, new byte[4]) { Behaviours = behaviours };
-        var world = new GameWorld(new WorldData([map]), "3.0");
+        var world = new GameWorld(new WorldData([map]), "3.0", TestRules.All);
 
         (ServerPlayer player, _) = world.Join("Mason");
         player.Square = new GridPosition(1, 0);
         player.LastStepAt = double.NegativeInfinity;
 
         Assert.DoesNotContain(world.Move(player.Id, Direction.Left, 10),
-            o => o.Message is WildEncounterStarted);
+            o => o.Message is BattleStarted);
     }
 
     [Fact]
@@ -421,22 +421,29 @@ public class ServerEncounterTests
         GameWorld world = GrassyWorld(rate: 0);
         ServerPlayer player = PlayerAt(world, 0, 1);
 
-        (WildEncounterStarted? encounter, _) = WalkUntilEncounter(world, player, maxSteps: 200);
+        (BattleStarted? encounter, _) = WalkUntilEncounter(world, player, maxSteps: 200);
 
         Assert.Null(encounter);
     }
 
     [Fact]
-    public void TheEncounterSeedTravelsWithTheMessage()
+    public void AnEncounterArrivesReadyToDraw()
     {
-        // The client resolves the battle itself from this seed, so it has to arrive.
+        // No seed any more: the server resolves the battle, so what the client needs
+        // is both sides as they stand, not the means to compute them itself.
         GameWorld world = GrassyWorld();
         ServerPlayer player = PlayerAt(world, 0, 1);
 
-        (WildEncounterStarted? encounter, _) = WalkUntilEncounter(world, player);
+        (BattleStarted? encounter, _) = WalkUntilEncounter(world, player);
 
         Assert.NotNull(encounter);
-        Assert.NotEqual(0u, encounter!.Seed);
+        Assert.True(encounter!.Opponent.MaxHp > 0);
+        Assert.Equal(encounter.Opponent.MaxHp, encounter.Opponent.CurrentHp);
+        Assert.NotEmpty(encounter.Opponent.Moves);
+
+        // And the player's own side, rebuilt from the starter their account was given.
+        Assert.True(encounter.You.MaxHp > 0);
+        Assert.NotEmpty(encounter.You.Moves);
     }
 
     [Fact]
@@ -457,7 +464,7 @@ public class ServerEncounterTests
                 now += 1;
 
                 foreach (Outgoing outgoing in world.Move(player.Id, Direction.Down, now))
-                    if (outgoing.Message is WildEncounterStarted e) met.Add($"{e.Species}@{e.Level}");
+                    if (outgoing.Message is BattleStarted e) met.Add($"{e.Opponent.Species}@{e.Opponent.Level}");
             }
 
             return met;

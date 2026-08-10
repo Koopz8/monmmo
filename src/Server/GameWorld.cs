@@ -1,4 +1,5 @@
 using PokeMmo.Core.Battle;
+using PokeMmo.Core.Data;
 using PokeMmo.Core.Net;
 using PokeMmo.Core.Save;
 using PokeMmo.Core.World;
@@ -17,8 +18,18 @@ public sealed record ServerPlayer(int Id, long AccountId, string Name)
     /// <summary>When this player last completed a step, in server seconds.</summary>
     public double LastStepAt { get; set; } = double.NegativeInfinity;
 
+    /// <summary>
+    /// The battle this player is in, held by the server.
+    /// <para>
+    /// The server owns it because the server is the only side that should decide what
+    /// happened. The client keeps the same battle code and can predict a turn, exactly
+    /// as it predicts a step, but what it predicts is never what is recorded.
+    /// </para>
+    /// </summary>
+    public Battle? Battle { get; set; }
+
     /// <summary>True while this player is in a battle and should not be walking.</summary>
-    public bool InBattle { get; set; }
+    public bool InBattle => Battle is not null;
 
     public int Balls { get; set; } = SavedCharacter.StartingBalls;
 
@@ -71,10 +82,13 @@ public sealed class GameWorld
 
     private int _nextPlayerId = 1;
 
-    public GameWorld(WorldData world, string startingMapId, uint encounterSeed = 1)
+    private readonly BattleFactory? _battles;
+
+    public GameWorld(WorldData world, string startingMapId, GameRules? rules = null, uint encounterSeed = 1)
     {
         _world = world;
         _rng = new BattleRng(encounterSeed);
+        _battles = rules is null ? null : new BattleFactory(rules);
 
         StartingMap = world.Find(startingMapId)
             ?? world.FindByName(startingMapId)
@@ -142,13 +156,23 @@ public sealed class GameWorld
         lock (_gate) return _players.GetValueOrDefault(playerId)?.MapId;
     }
 
+    /// <summary>True when this server has the numbers to decide a battle itself.</summary>
+    public bool CanResolveBattles => _battles is not null;
+
     /// <summary>Where a brand new character starts, and what it starts with.</summary>
     public SavedCharacter FreshCharacter()
     {
         lock (_gate)
         {
             GridPosition spawn = FindSpawn(StartingMap.Id);
-            return SavedCharacter.Fresh(StartingMap.Id, spawn.X, spawn.Y);
+            SavedCharacter fresh = SavedCharacter.Fresh(StartingMap.Id, spawn.X, spawn.Y);
+
+            // A starter at registration rather than one conjured at the first
+            // encounter, so a party is never empty and the server never has to invent
+            // a battler in the middle of a battle.
+            return _battles?.Starter() is { } starter
+                ? fresh with { Party = [starter] }
+                : fresh;
         }
     }
 
@@ -435,12 +459,94 @@ public sealed class GameWorld
         GrassSteps++;
 
         if (WildEncounters.RollStep(_rng, map.Encounters!.Land) is not { } encounter) return;
+        if (_battles is null) return;
 
-        player.InBattle = true;
+        if (_battles.Wild(encounter.Species, encounter.Level) is not { } wild) return;
+        if (LeadBattler(player) is not { } lead) return;
+
+        player.Battle = new Battle(lead, wild, _rng.State);
 
         send.Add(new Outgoing(
-            new WildEncounterStarted(encounter.Species, encounter.Level, _rng.State),
+            new BattleStarted(BattleFactory.View(lead), BattleFactory.View(wild), player.Balls),
             OnlyTo: player.Id));
+    }
+
+    /// <summary>The first party member still standing, rebuilt from what was saved.</summary>
+    private Battler? LeadBattler(ServerPlayer player)
+    {
+        if (_battles is null) return null;
+
+        foreach (SavedMon saved in player.Party)
+        {
+            if (_battles.Restore(saved) is { } battler && !battler.HasFainted) return battler;
+        }
+
+        return player.Party.Count > 0 ? _battles.Restore(player.Party[0]) : null;
+    }
+
+    /// <summary>
+    /// Resolves one turn of a battle.
+    /// <para>
+    /// The opponent's choice is made here too. A wild creature using its first move
+    /// every turn is not much of an opponent, but it is the server's decision rather
+    /// than something a client could ask for, which is the part that matters.
+    /// </para>
+    /// </summary>
+    public List<Outgoing> TakeBattleTurn(int playerId, BattleAction action)
+    {
+        lock (_gate)
+        {
+            if (!_players.TryGetValue(playerId, out ServerPlayer? player) || player.Battle is not { } battle)
+                return [new Outgoing(new Rejected("You are not in a battle."), OnlyTo: playerId)];
+
+            // Throwing is refused here rather than trusted: the count is the server's.
+            if (action is BattleAction.ThrowBall && player.Balls <= 0)
+                action = new BattleAction.UseMove(0);
+            else if (action is BattleAction.ThrowBall) player.Balls--;
+
+            List<BattleEvent> events = battle.ResolveTurn(action, new BattleAction.UseMove(0));
+
+            var send = new List<Outgoing>
+            {
+                new(
+                    new BattleUpdate(events, battle.Player.CurrentHp, battle.Opponent.CurrentHp, player.Balls),
+                    OnlyTo: playerId),
+            };
+
+            if (!battle.IsOver) return send;
+
+            send.Add(new Outgoing(FinishBattle(player, battle), OnlyTo: playerId));
+            return send;
+        }
+    }
+
+    /// <summary>
+    /// Closes a battle and writes its consequences into the party.
+    /// <para>
+    /// Health and status carry out of a battle, and anything caught joins the party —
+    /// both decided here, from the battle the server ran, rather than reported by the
+    /// client afterwards.
+    /// </para>
+    /// </summary>
+    private BattleFinished FinishBattle(ServerPlayer player, Battle battle)
+    {
+        Side? winner = battle.Winner;
+        bool caught = battle.OpponentCaught;
+
+        // The lead was rebuilt from a save, so what happened to it has to be written
+        // back to that save rather than to the battler, which is about to be discarded.
+        if (player.Party.Count > 0)
+        {
+            int lead = player.Party.FindIndex(m => m.Species == battle.Player.Species.Index);
+            if (lead >= 0) player.Party[lead] = BattleFactory.Save(battle.Player);
+        }
+
+        if (caught && player.Party.Count < Party.MaxSize)
+            player.Party.Add(BattleFactory.Save(battle.Opponent));
+
+        player.Battle = null;
+
+        return new BattleFinished(winner, caught, player.Balls, [.. player.Party]);
     }
 
     /// <summary>
@@ -491,7 +597,6 @@ public sealed class GameWorld
 
             player.Balls = Math.Clamp(balls, 0, 999);
             player.Party = [.. party.Take(Party.MaxSize)];
-            player.InBattle = false;
 
             return true;
         }

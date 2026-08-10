@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using PokeMmo.Core.Battle;
 using PokeMmo.Core.Save;
 using PokeMmo.Core.World;
 
@@ -15,7 +16,7 @@ namespace PokeMmo.Core.Net;
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "t")]
 [JsonDerivedType(typeof(RegisterRequest), "register")]
 [JsonDerivedType(typeof(LoginRequest), "login")]
-[JsonDerivedType(typeof(SaveRequest), "save")]
+[JsonDerivedType(typeof(BattleTurn), "turn")]
 [JsonDerivedType(typeof(MoveRequest), "move")]
 [JsonDerivedType(typeof(Welcome), "welcome")]
 [JsonDerivedType(typeof(AuthFailed), "authfailed")]
@@ -24,7 +25,9 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(PlayerMoved), "moved")]
 [JsonDerivedType(typeof(PlayerLeft), "left")]
 [JsonDerivedType(typeof(MoveRejected), "rejected")]
-[JsonDerivedType(typeof(WildEncounterStarted), "encounter")]
+[JsonDerivedType(typeof(BattleStarted), "battlestart")]
+[JsonDerivedType(typeof(BattleUpdate), "battleupdate")]
+[JsonDerivedType(typeof(BattleFinished), "battleend")]
 [JsonDerivedType(typeof(Rejected), "error")]
 public abstract record NetMessage;
 
@@ -47,17 +50,13 @@ public sealed record LoginRequest(string Username, string Password) : NetMessage
 public sealed record MoveRequest(Direction Direction) : NetMessage;
 
 /// <summary>
-/// Reports the party after a battle, so the server can store it.
+/// What the player chose to do this turn.
 /// <para>
-/// This is a temporary trust gap and worth naming: battles resolve on the client, so
-/// the client is telling the server what it caught. It is fine while the only player
-/// is the person running the server, and it has to close before anyone else plays.
-/// Closing it means resolving battles server-side, which needs base stats and catch
-/// rates the server does not have — a species export, the same arrangement as the
-/// world file.
+/// A request, not a result. The server holds the battle, rolls the dice and decides
+/// what happened — this says only what was asked for.
 /// </para>
 /// </summary>
-public sealed record SaveRequest(int Balls, IReadOnlyList<SavedMon> Party) : NetMessage;
+public sealed record BattleTurn(BattleAction Action) : NetMessage;
 
 // --- server to client --------------------------------------------------------
 
@@ -105,13 +104,47 @@ public sealed record PlayerLeft(int PlayerId) : NetMessage;
 public sealed record MoveRejected(int X, int Y, Direction Facing, string Reason) : NetMessage;
 
 /// <summary>
-/// Something appeared in the grass. Sent only to the player who stepped on it.
+/// One side of a battle, as the other end needs to draw it.
 /// <para>
-/// The seed travels with it so the client can resolve the battle locally and reach
-/// the same result the server will — the same replay arrangement used for combat.
+/// Numbers only, like everything else the server sends. The species index becomes a
+/// name and a sprite on the machine that has a cartridge.
 /// </para>
 /// </summary>
-public sealed record WildEncounterStarted(int Species, int Level, uint Seed) : NetMessage;
+public sealed record BattlerView(
+    int Species,
+    int Level,
+    string? Nickname,
+    int CurrentHp,
+    int MaxHp,
+    StatusCondition Status,
+    IReadOnlyList<int> Moves);
+
+/// <summary>Something appeared in the grass. Sent only to the player who stepped on it.</summary>
+public sealed record BattleStarted(BattlerView You, BattlerView Opponent, int Balls) : NetMessage;
+
+/// <summary>
+/// What happened this turn, and where both sides now stand.
+/// <para>
+/// Health is sent alongside the events rather than left to be derived from them. The
+/// events are what the player reads; these are what the bars draw from, and a client
+/// that has to reconstruct state by replaying a narrative will eventually disagree
+/// with the server about it.
+/// </para>
+/// </summary>
+public sealed record BattleUpdate(
+    IReadOnlyList<BattleEvent> Events,
+    int YourHp,
+    int OpponentHp,
+    int Balls) : NetMessage;
+
+/// <summary>
+/// The battle is over. Carries the party back because it may have just grown.
+/// </summary>
+public sealed record BattleFinished(
+    Side? Winner,
+    bool Caught,
+    int Balls,
+    IReadOnlyList<SavedMon> Party) : NetMessage;
 
 /// <summary>The request could not be honoured at all.</summary>
 public sealed record Rejected(string Reason) : NetMessage;

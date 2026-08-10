@@ -1,5 +1,5 @@
 using PokeMmo.Core.Battle;
-using PokeMmo.Core.Data;
+using PokeMmo.Core.Net;
 using PokeMmo.RomExtract;
 using PokeMmo.RomExtract.Graphics;
 using Raylib_cs;
@@ -11,16 +11,21 @@ public enum BattlePhase
 {
     ReadingMessages,
     ChoosingMove,
+    WaitingForServer,
     Finished,
 }
 
 /// <summary>
 /// A wild battle, drawn.
 /// <para>
-/// Everything decided here comes from <c>Core.Battle</c> — this class owns layout,
-/// input and pacing, and nothing about how a battle works. The messages come from
-/// <see cref="BattleNarrator"/> for the same reason: the wording is worth testing, and
-/// a renderer is a poor place to keep it.
+/// This screen decides nothing. The server holds the battle, rolls every die and says
+/// what happened; this shows it. Health comes down alongside the events rather than
+/// being derived from them, because a client that reconstructs state by replaying a
+/// narrative will eventually disagree with the server about it.
+/// </para>
+/// <para>
+/// The one thing that happens here and nowhere else is naming. Events arrive as sides
+/// and move indices, and the player's own cartridge turns them into words.
 /// </para>
 /// </summary>
 public sealed class BattleScreen
@@ -29,8 +34,10 @@ public sealed class BattleScreen
     private const int Height = 640;
     private const int SpriteScale = 3;
 
-    private readonly Battle _battle;
+    private readonly GameData _data;
     private readonly BattleNames _names;
+    private readonly List<string> _moveNames = [];
+
     private readonly Texture2D _wildSprite;
     private readonly Texture2D _playerSprite;
     private readonly bool _hasWildSprite;
@@ -40,34 +47,47 @@ public sealed class BattleScreen
     private string _message = "";
     private int _selectedMove;
 
-    public BattleScreen(Battle battle, GameData data, int balls)
+    private BattlerView _you;
+    private BattlerView _opponent;
+
+    public BattleScreen(BattleStarted start, GameData data)
     {
-        _battle = battle;
-        Balls = balls;
+        _data = data;
+        _you = start.You;
+        _opponent = start.Opponent;
+        Balls = start.Balls;
 
-        // The one place names enter a battle. Everything below this line works in
-        // sides and move indices, exactly as the server does.
-        _names = new BattleNames(
-            battle.Player.Name,
-            $"the wild {battle.Opponent.Name}",
-            id => data.MoveAt(id)?.Name ?? $"move {id}");
+        string yourName = start.You.Nickname ?? data.SpeciesAt(start.You.Species)?.Name ?? "Your side";
+        string wildName = data.SpeciesAt(start.Opponent.Species)?.Name ?? "the wild one";
 
-        (_wildSprite, _hasWildSprite) = LoadSprite(data, battle.Opponent.Species.Index, back: false);
-        (_playerSprite, _hasPlayerSprite) = LoadSprite(data, battle.Player.Species.Index, back: true);
+        _names = new BattleNames(yourName, $"the wild {wildName}", id => data.MoveAt(id)?.Name ?? $"move {id}");
 
-        Say($"A wild {battle.Opponent.Name} appeared!");
+        foreach (int moveId in start.You.Moves)
+            _moveNames.Add(data.MoveAt(moveId)?.Name ?? $"move {moveId}");
+
+        (_wildSprite, _hasWildSprite) = LoadSprite(data, start.Opponent.Species, back: false);
+        (_playerSprite, _hasPlayerSprite) = LoadSprite(data, start.You.Species, back: true);
+
+        Say($"A wild {wildName} appeared!");
     }
 
     public BattlePhase Phase { get; private set; } = BattlePhase.ReadingMessages;
 
-    /// <summary>Balls remaining. A placeholder for a bag, which does not exist yet.</summary>
+    /// <summary>Balls remaining, as the server counts them.</summary>
     public int Balls { get; private set; }
-
-    /// <summary>Set when the opponent was caught, so the overworld can add it to the party.</summary>
-    public Battler? Caught { get; private set; }
 
     /// <summary>True once the battle is over and its last message has been read.</summary>
     public bool IsDismissed { get; private set; }
+
+    /// <summary>An action the player chose, for the game loop to send. Cleared once taken.</summary>
+    public BattleAction? PendingAction { get; private set; }
+
+    public BattleAction? TakePendingAction()
+    {
+        BattleAction? action = PendingAction;
+        PendingAction = null;
+        return action;
+    }
 
     private static (Texture2D Texture, bool Loaded) LoadSprite(GameData data, int species, bool back)
     {
@@ -84,10 +104,30 @@ public sealed class BattleScreen
 
     private void Say(string line) => _pending.Enqueue(line);
 
-    private void Say(IEnumerable<string> lines)
+    /// <summary>Folds a turn's result in: what to read, and where both sides now stand.</summary>
+    public void Apply(BattleUpdate update)
     {
-        foreach (string line in lines) _pending.Enqueue(line);
+        foreach (string line in BattleNarrator.Describe(update.Events, _names))
+            _pending.Enqueue(line);
+
+        _you = _you with { CurrentHp = update.YourHp };
+        _opponent = _opponent with { CurrentHp = update.OpponentHp };
+        Balls = update.Balls;
+
+        Phase = BattlePhase.ReadingMessages;
+        AdvanceMessage();
     }
+
+    /// <summary>The battle is over; everything still queued is read before it closes.</summary>
+    public void Apply(BattleFinished finished)
+    {
+        Balls = finished.Balls;
+        IsOver = true;
+
+        if (_pending.Count == 0 && _message.Length == 0) Phase = BattlePhase.Finished;
+    }
+
+    private bool IsOver { get; set; }
 
     public void Update()
     {
@@ -99,6 +139,9 @@ public sealed class BattleScreen
 
             case BattlePhase.ChoosingMove:
                 ChooseMove();
+                break;
+
+            case BattlePhase.WaitingForServer:
                 break;
 
             case BattlePhase.Finished:
@@ -120,74 +163,63 @@ public sealed class BattleScreen
             return;
         }
 
-        // Messages exhausted: either the battle is over, or it is the player's turn.
-        Phase = _battle.IsOver ? BattlePhase.Finished : BattlePhase.ChoosingMove;
+        // Messages exhausted: the battle is over, or it is the player's turn again.
+        Phase = IsOver ? BattlePhase.Finished : BattlePhase.ChoosingMove;
     }
 
     private void ChooseMove()
     {
-        int moveCount = _battle.Player.Moves.Count;
-        if (moveCount == 0) return;
+        if (_moveNames.Count == 0) return;
 
         if (Raylib.IsKeyPressed(KeyboardKey.Down) || Raylib.IsKeyPressed(KeyboardKey.S))
-            _selectedMove = (_selectedMove + 1) % moveCount;
+            _selectedMove = (_selectedMove + 1) % _moveNames.Count;
 
         if (Raylib.IsKeyPressed(KeyboardKey.Up) || Raylib.IsKeyPressed(KeyboardKey.W))
-            _selectedMove = (_selectedMove - 1 + moveCount) % moveCount;
+            _selectedMove = (_selectedMove - 1 + _moveNames.Count) % _moveNames.Count;
 
         if (Raylib.IsKeyPressed(KeyboardKey.X))
         {
-            ThrowBall();
+            if (Balls <= 0)
+            {
+                Say("You have no balls left!");
+                Phase = BattlePhase.ReadingMessages;
+                AdvanceMessage();
+                return;
+            }
+
+            Choose(new BattleAction.ThrowBall(BallKind.Poke));
             return;
         }
 
-        if (!Confirmed()) return;
-
-        TakeTurn(new BattleAction.UseMove(_selectedMove));
+        if (Confirmed()) Choose(new BattleAction.UseMove(_selectedMove));
     }
 
-    private void ThrowBall()
+    /// <summary>
+    /// Hands an action to the game loop and waits. Nothing is predicted here: a battle
+    /// is turn-based, so a round trip costs nothing worth the risk of showing a player
+    /// a result the server then contradicts.
+    /// </summary>
+    private void Choose(BattleAction action)
     {
-        if (Balls <= 0)
-        {
-            Say("You have no balls left!");
-            Phase = BattlePhase.ReadingMessages;
-            AdvanceMessage();
-            return;
-        }
-
-        Balls--;
-        Say("You threw a Poké Ball!");
-        TakeTurn(new BattleAction.ThrowBall(BallKind.Poke));
-    }
-
-    private void TakeTurn(BattleAction playerAction)
-    {
-        List<BattleEvent> events = _battle.ResolveTurn(playerAction, new BattleAction.UseMove(0));
-
-        Say(BattleNarrator.Describe(events, _names));
-
-        if (_battle.OpponentCaught) Caught = _battle.Opponent;
-
-        Phase = BattlePhase.ReadingMessages;
-        AdvanceMessage();
+        PendingAction = action;
+        Phase = BattlePhase.WaitingForServer;
     }
 
     public void Draw()
     {
         Raylib.ClearBackground(new Color(248, 248, 232, 255));
 
-        DrawCombatant(_battle.Opponent, _wildSprite, _hasWildSprite,
+        DrawCombatant(_opponent, _names.Of(Side.Opponent), _wildSprite, _hasWildSprite,
             spriteX: Width - 260, spriteY: 60, boxX: 40, boxY: 60, showHp: false);
 
-        DrawCombatant(_battle.Player, _playerSprite, _hasPlayerSprite,
+        DrawCombatant(_you, _names.Of(Side.Player), _playerSprite, _hasPlayerSprite,
             spriteX: 90, spriteY: 250, boxX: Width - 380, boxY: 250, showHp: true);
 
         DrawMessageBox();
     }
 
     private void DrawCombatant(
-        Battler battler, Texture2D sprite, bool hasSprite,
+        BattlerView battler, string name, Texture2D sprite, bool hasSprite,
         int spriteX, int spriteY, int boxX, int boxY, bool showHp)
     {
         if (hasSprite)
@@ -205,7 +237,7 @@ public sealed class BattleScreen
         Raylib.DrawRectangle(boxX, boxY, boxWidth, boxHeight, new Color(255, 255, 255, 230));
         Raylib.DrawRectangleLines(boxX, boxY, boxWidth, boxHeight, new Color(64, 64, 64, 255));
 
-        Raylib.DrawText($"{battler.Name}", boxX + 14, boxY + 10, 22, Color.Black);
+        Raylib.DrawText(name, boxX + 14, boxY + 10, 22, Color.Black);
         Raylib.DrawText($"L{battler.Level}", boxX + boxWidth - 60, boxY + 10, 22, Color.Black);
 
         DrawHealthBar(battler, boxX + 14, boxY + 44, boxWidth - 28);
@@ -214,7 +246,7 @@ public sealed class BattleScreen
             Raylib.DrawText($"{battler.CurrentHp}/{battler.MaxHp}", boxX + boxWidth - 110, boxY + 54, 16, Color.Black);
     }
 
-    private static void DrawHealthBar(Battler battler, int x, int y, int width)
+    private static void DrawHealthBar(BattlerView battler, int x, int y, int width)
     {
         Raylib.DrawRectangle(x, y, width, 10, new Color(80, 80, 80, 255));
 
@@ -250,7 +282,13 @@ public sealed class BattleScreen
 
         Raylib.DrawText(_message, 52, boxY + 30, 24, Color.Black);
 
-        string prompt = Phase == BattlePhase.Finished ? "Press Z to return" : "Press Z";
+        string prompt = Phase switch
+        {
+            BattlePhase.Finished => "Press Z to return",
+            BattlePhase.WaitingForServer => "...",
+            _ => "Press Z",
+        };
+
         Raylib.DrawText(prompt, Width - 220, boxY + boxHeight - 34, 18, new Color(120, 120, 120, 255));
     }
 
@@ -263,23 +301,20 @@ public sealed class BattleScreen
             Width - 340, boxY + 18, 20,
             Balls > 0 ? new Color(96, 96, 96, 255) : new Color(180, 120, 120, 255));
 
-        for (int i = 0; i < _battle.Player.Moves.Count; i++)
+        for (int i = 0; i < _moveNames.Count; i++)
         {
-            MoveData move = _battle.Player.Moves[i];
             int y = boxY + 48 + i * 26;
-
             bool selected = i == _selectedMove;
+
             if (selected) Raylib.DrawText(">", 52, y, 22, Color.Black);
 
             Raylib.DrawText(
-                $"{move.Name}",
+                _moveNames[i],
                 76, y, 22,
                 selected ? Color.Black : new Color(110, 110, 110, 255));
 
-            Raylib.DrawText(
-                $"{move.Type}",
-                300, y + 3, 18,
-                new Color(140, 140, 140, 255));
+            if (_data.MoveAt(_you.Moves[i]) is { } move)
+                Raylib.DrawText($"{move.Type}", 300, y + 3, 18, new Color(140, 140, 140, 255));
         }
     }
 

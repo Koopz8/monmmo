@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using System.Net.Sockets;
+using PokeMmo.Core.Battle;
 using PokeMmo.Core.Net;
-using PokeMmo.Core.Save;
 using PokeMmo.Core.World;
 
 namespace PokeMmo.Client;
@@ -119,11 +119,8 @@ public sealed class NetworkClient : IDisposable
     /// </summary>
     public void SendMove(Direction direction) => Send(new MoveRequest(direction));
 
-    /// <summary>
-    /// Reports the party after a battle. Sent the moment a battle ends rather than on
-    /// disconnect, because disconnects are not always polite.
-    /// </summary>
-    public void SendSave(int balls, IReadOnlyList<SavedMon> party) => Send(new SaveRequest(balls, party));
+    /// <summary>What the player chose this turn. The server decides what it does.</summary>
+    public void SendBattleAction(BattleAction action) => Send(new BattleTurn(action));
 
     private void Send(NetMessage message)
     {

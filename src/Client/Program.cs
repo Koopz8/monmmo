@@ -147,7 +147,6 @@ public static class Program
         };
 
         var others = new Dictionary<int, RemoteCharacter>();
-        var party = new Party();
         BattleScreen? battle = null;
         int balls = settings.Balls;
 
@@ -160,18 +159,16 @@ public static class Program
         {
             float delta = Raylib.GetFrameTime();
 
-            WildEncounterStarted? encounter =
-                ApplyServerMessages(network, others, player, view, data, party, ref balls);
+            ApplyServerMessages(network, others, player, view, data, ref battle, ref balls);
 
-            // An encounter suspends the overworld entirely: the server has already
-            // decided it, and walking on while a battle is pending would put the two
-            // sides out of step.
-            if (encounter is not null && battle is null)
-                battle = StartBattle(data, settings, encounter, party, balls);
-
+            // A battle suspends the overworld entirely: the server is running it, and
+            // walking on meanwhile would put the two sides out of step.
             if (battle is not null)
             {
                 battle.Update();
+
+                if (battle.TakePendingAction() is { } action) network.SendBattleAction(action);
+
                 Raylib.BeginDrawing();
                 battle.Draw();
                 Raylib.EndDrawing();
@@ -179,14 +176,6 @@ public static class Program
                 if (battle.IsDismissed)
                 {
                     balls = battle.Balls;
-
-                    if (battle.Caught is { } caught) party.TryAdd(caught);
-
-                    // Sent every time a battle ends, not only when something was
-                    // caught: health and status changed too, and a disconnect a moment
-                    // later should not undo them.
-                    network.SendSave(balls, party.Members.Select(PartyBuilder.ToSaved).ToList());
-
                     battle.Unload();
                     battle = null;
                 }
@@ -254,17 +243,15 @@ public static class Program
     /// <summary>
     /// Folds server messages into local state, returning an encounter if one arrived.
     /// </summary>
-    private static WildEncounterStarted? ApplyServerMessages(
+    private static void ApplyServerMessages(
         NetworkClient network,
         Dictionary<int, RemoteCharacter> others,
         WalkingCharacter player,
         MapView view,
         GameData data,
-        Party party,
+        ref BattleScreen? battle,
         ref int balls)
     {
-        WildEncounterStarted? encounter = null;
-
         foreach (NetMessage message in network.Drain())
         {
             switch (message)
@@ -276,12 +263,6 @@ public static class Program
 
                     player.Place(view.Map.Collision, new GridPosition(welcome.X, welcome.Y));
                     balls = welcome.Balls;
-
-                    // The server kept numbers; this is where the cartridge on this
-                    // machine turns them back into something with a name and a sprite.
-                    foreach (SavedMon saved in welcome.Party)
-                        if (PartyBuilder.Restore(data, saved) is { } restored) party.TryAdd(restored);
-
                     break;
 
                 case PlayerAppeared appeared when appeared.PlayerId != network.PlayerId:
@@ -320,32 +301,20 @@ public static class Program
                     others.Remove(left.PlayerId);
                     break;
 
-                case WildEncounterStarted started:
-                    encounter = started;
+                case BattleStarted started:
+                    battle = new BattleScreen(started, data);
+                    break;
+
+                case BattleUpdate update:
+                    battle?.Apply(update);
+                    break;
+
+                case BattleFinished finished:
+                    battle?.Apply(finished);
+                    balls = finished.Balls;
                     break;
             }
         }
-
-        return encounter;
-    }
-
-    /// <summary>
-    /// Builds the battle the server has already rolled. The seed came with the
-    /// encounter, so every roll here matches what the server would compute.
-    /// </summary>
-    private static BattleScreen? StartBattle(
-        GameData data, ClientSettings settings, WildEncounterStarted encounter, Party party, int balls)
-    {
-        Battler? wild = PartyBuilder.BuildWild(data, encounter.Species, encounter.Level);
-
-        // Lead with whatever has been caught, falling back to the placeholder starter
-        // while the party is empty.
-        Battler? lead = party.Lead
-            ?? PartyBuilder.BuildStarter(data, settings.StarterSpecies, settings.StarterLevel);
-
-        if (wild is null || lead is null) return null;
-
-        return new BattleScreen(new Battle(lead, wild, encounter.Seed), data, balls);
     }
 
     private static Direction? ReadDirection()

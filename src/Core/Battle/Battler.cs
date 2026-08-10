@@ -26,6 +26,7 @@ public sealed class Battler
         Species = species;
         Level = level;
         Nature = nature;
+        Nickname = nickname;
         Name = nickname ?? species.Name;
 
         MaxHp = Stats.Hp(species.BaseHp, level);
@@ -39,6 +40,17 @@ public sealed class Battler
     }
 
     public SpeciesData Species { get; }
+
+    /// <summary>
+    /// The name a player gave this one, or null.
+    /// <para>
+    /// Kept separate from <see cref="Name"/> because the server holds species with no
+    /// names at all: it has to be able to store and return a nickname without ever
+    /// being able to fall back to a species name it does not have.
+    /// </para>
+    /// </summary>
+    public string? Nickname { get; }
+
     public string Name { get; }
     public int Level { get; }
     public Nature Nature { get; }

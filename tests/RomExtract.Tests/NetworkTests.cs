@@ -54,7 +54,16 @@ public class MessageChannelTests
         [
             new RegisterRequest("Mason", "a-good-password"),
             new LoginRequest("Mason", "a-good-password"),
-            new SaveRequest(12, [new SavedMon(25, 7, "Sparky", 14, StatusCondition.Paralysis, Nature.Timid, [1, 2, 3])]),
+            new BattleTurn(new BattleAction.UseMove(2)),
+            new BattleTurn(new BattleAction.ThrowBall(BallKind.Great)),
+            new BattleStarted(
+                new BattlerView(1, 5, "Bulby", 19, 20, StatusCondition.None, [33]),
+                new BattlerView(16, 3, null, 11, 11, StatusCondition.None, [33, 45]),
+                12),
+            new BattleUpdate(
+                [new BattleEvent.MoveUsed(Side.Player, 33), new BattleEvent.Fainted(Side.Opponent)],
+                19, 0, 12),
+            new BattleFinished(Side.Player, true, 11, [new SavedMon(16, 3, null, 1, StatusCondition.None, Nature.Bold, [33])]),
             new MoveRequest(Direction.Left),
             new Welcome(7, "3.0", 12, 5, Direction.Up, 20, [new SavedMon(1, 5, null, 19, StatusCondition.None, Nature.Hardy, [33])]),
             new PlayerAppeared(9, "Someone", 1, 2, Direction.Right),
