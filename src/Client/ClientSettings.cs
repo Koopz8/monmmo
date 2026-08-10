@@ -25,6 +25,12 @@ public sealed class ClientSettings
     /// <summary>Optional exact address, as <c>bank.map</c>. Takes precedence over the name.</summary>
     public string? MapAddress { get; set; }
 
+    /// <summary>Server to join, as <c>host</c> or <c>host:port</c>. Empty plays alone.</summary>
+    public string Server { get; set; } = "";
+
+    /// <summary>Name other players see.</summary>
+    public string PlayerName { get; set; } = "Player";
+
     public bool IsUsable => !string.IsNullOrWhiteSpace(RomPath) && File.Exists(RomPath);
 
     /// <summary>
@@ -47,6 +53,12 @@ public sealed class ClientSettings
                     break;
                 case "--at":
                     settings.MapAddress = commandLineArgs[i + 1];
+                    break;
+                case "--server":
+                    settings.Server = commandLineArgs[i + 1];
+                    break;
+                case "--name":
+                    settings.PlayerName = commandLineArgs[i + 1];
                     break;
             }
         }

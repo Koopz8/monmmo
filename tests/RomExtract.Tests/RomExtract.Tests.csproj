@@ -24,6 +24,7 @@
     <ProjectReference Include="..\..\src\RomExtract\RomExtract.csproj" />
     <ProjectReference Include="..\..\src\Core\Core.csproj" />
     <ProjectReference Include="..\..\src\Tools\RomDump\RomDump.csproj" />
+    <ProjectReference Include="..\..\src\Server\Server.csproj" />
   </ItemGroup>
 
 </Project>

@@ -1,3 +1,4 @@
+using PokeMmo.Core.Net;
 using PokeMmo.Core.World;
 using PokeMmo.RomExtract.Maps;
 using Raylib_cs;
@@ -53,11 +54,36 @@ public static class Program
             return 1;
         }
 
-        Run(map);
+        using var network = new NetworkClient();
+
+        if (!string.IsNullOrWhiteSpace(settings.Server))
+        {
+            try
+            {
+                (string host, int port) = ParseServer(settings.Server);
+                network.ConnectAsync(host, port, settings.PlayerName).GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                ShowMessageWindow("Could not reach the server.", "", ex.Message);
+                return 1;
+            }
+        }
+
+        Run(map, network);
         return 0;
     }
 
-    private static void Run(LoadedMap map)
+    private static (string Host, int Port) ParseServer(string value)
+    {
+        string[] parts = value.Split(':');
+
+        return parts.Length == 2 && int.TryParse(parts[1], out int port)
+            ? (parts[0], port)
+            : (value, 7777);
+    }
+
+    private static void Run(LoadedMap map, NetworkClient network)
     {
         Raylib.InitWindow(WindowWidth, WindowHeight, $"MonMMO — {map.Name}");
         Raylib.SetTargetFPS(60);
@@ -78,9 +104,23 @@ public static class Program
             Zoom = ViewZoom,
         };
 
+        var others = new Dictionary<int, RemoteCharacter>();
+
         while (!Raylib.WindowShouldClose())
         {
-            player.Update(Raylib.GetFrameTime(), ReadDirection());
+            float delta = Raylib.GetFrameTime();
+
+            ApplyServerMessages(network, others, player, map);
+
+            bool wasStepping = player.IsStepping;
+            player.Update(delta, ReadDirection());
+
+            // Tell the server the moment a step begins, not when it finishes — it is
+            // already predicted locally, so waiting would add a round trip of lag to
+            // every square.
+            if (!wasStepping && player.IsStepping) network.SendMove(player.Facing);
+
+            foreach (RemoteCharacter other in others.Values) other.Update(delta);
 
             (float playerX, float playerY) = player.PixelPosition;
             camera.Target = ClampView(playerX, playerY, map);
@@ -90,15 +130,69 @@ public static class Program
 
             Raylib.BeginMode2D(camera);
             Raylib.DrawTexture(texture, 0, 0, Color.White);
+
+            foreach (RemoteCharacter other in others.Values)
+            {
+                (float x, float y) = other.PixelPosition;
+                DrawPlayer(x, y, other.Facing, new Color(120, 200, 255, 255));
+                DrawNameTag(other.Name, x, y);
+            }
+
             DrawPlayer(playerX, playerY, player.Facing);
             Raylib.EndMode2D();
 
-            DrawStatus(map, player);
+            DrawStatus(map, player, network, others.Count);
             Raylib.EndDrawing();
         }
 
         Raylib.UnloadTexture(texture);
         Raylib.CloseWindow();
+    }
+
+    /// <summary>
+    /// Folds anything the server has said into local state. Our own movement is
+    /// predicted, so a position for us is only applied when it actually disagrees —
+    /// otherwise every step would stutter as the confirmation arrived.
+    /// </summary>
+    private static void ApplyServerMessages(
+        NetworkClient network,
+        Dictionary<int, RemoteCharacter> others,
+        WalkingCharacter player,
+        LoadedMap map)
+    {
+        foreach (NetMessage message in network.Drain())
+        {
+            switch (message)
+            {
+                case Welcome welcome:
+                    player.Place(map.Collision, new GridPosition(welcome.X, welcome.Y));
+                    break;
+
+                case PlayerAppeared appeared when appeared.PlayerId != network.PlayerId:
+                    others[appeared.PlayerId] = new RemoteCharacter(
+                        appeared.PlayerId, appeared.Name,
+                        new GridPosition(appeared.X, appeared.Y), appeared.Facing);
+                    break;
+
+                case PlayerMoved moved when moved.PlayerId != network.PlayerId:
+                    if (others.TryGetValue(moved.PlayerId, out RemoteCharacter? other))
+                        other.MoveTo(new GridPosition(moved.X, moved.Y), moved.Facing);
+                    break;
+
+                case PlayerMoved mine when !player.IsStepping:
+                    var confirmed = new GridPosition(mine.X, mine.Y);
+                    if (confirmed != player.Square) player.Place(map.Collision, confirmed);
+                    break;
+
+                case MoveRejected rejected:
+                    player.Place(map.Collision, new GridPosition(rejected.X, rejected.Y));
+                    break;
+
+                case PlayerLeft left:
+                    others.Remove(left.PlayerId);
+                    break;
+            }
+        }
     }
 
     private static Direction? ReadDirection()
@@ -137,11 +231,11 @@ public static class Program
     /// A placeholder character. The cartridge's own overworld sprites are a later job;
     /// this milestone is about movement.
     /// </summary>
-    private static void DrawPlayer(float x, float y, Direction facing)
+    private static void DrawPlayer(float x, float y, Direction facing, Color? body = null)
     {
         const int size = WalkingCharacter.SquarePixels;
 
-        Raylib.DrawRectangle((int)x + 2, (int)y + 1, size - 4, size - 2, new Color(248, 248, 248, 255));
+        Raylib.DrawRectangle((int)x + 2, (int)y + 1, size - 4, size - 2, body ?? new Color(248, 248, 248, 255));
         Raylib.DrawRectangleLines((int)x + 2, (int)y + 1, size - 4, size - 2, new Color(32, 32, 32, 255));
 
         (int dx, int dy) = facing switch
@@ -155,11 +249,24 @@ public static class Program
         Raylib.DrawCircle((int)x + size / 2 + dx, (int)y + size / 2 + dy, 2f, new Color(216, 72, 72, 255));
     }
 
-    private static void DrawStatus(LoadedMap map, WalkingCharacter player)
+    private static void DrawNameTag(string name, float x, float y)
     {
+        int width = Raylib.MeasureText(name, 8);
+        int left = (int)x + WalkingCharacter.SquarePixels / 2 - width / 2;
+
+        Raylib.DrawText(name, left + 1, (int)y - 8, 8, Color.Black);
+        Raylib.DrawText(name, left, (int)y - 9, 8, Color.White);
+    }
+
+    private static void DrawStatus(LoadedMap map, WalkingCharacter player, NetworkClient network, int others)
+    {
+        string connection = network.Failure is { } failure
+            ? $"   offline: {failure}"
+            : network.IsConnected ? $"   online, {others} others" : "";
+
         string line = $"{map.Name}  ({map.Bank}.{map.Number})   " +
                       $"{player.Square.X},{player.Square.Y}   " +
-                      $"{map.Collision.Width}x{map.Collision.Height}";
+                      $"{map.Collision.Width}x{map.Collision.Height}{connection}";
 
         Raylib.DrawText(line, 13, 13, 20, Color.Black);
         Raylib.DrawText(line, 12, 12, 20, Color.White);

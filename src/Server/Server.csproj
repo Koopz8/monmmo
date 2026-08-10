@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>PokeMmo.Server</RootNamespace>
+    <AssemblyName>monmmo-server</AssemblyName>
+  </PropertyGroup>
+
+  <!--
+    Core only. The server must never reference RomExtract: it learns the world from a
+    collision-only file an operator exports, not from a cartridge. Adding that
+    reference here would break the rule the whole project is built around.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\Core\Core.csproj" />
+  </ItemGroup>
+
+</Project>

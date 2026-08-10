@@ -103,6 +103,9 @@ public static class Program
             || !string.IsNullOrEmpty(options.MapNameFilter))
             WriteMaps(rom, options);
 
+        if (!string.IsNullOrEmpty(options.ExportWorldPath))
+            ExportWorld(rom, options.ExportWorldPath);
+
         Console.WriteLine();
         Console.WriteLine($"Done. Output in {Path.GetFullPath(options.OutputDirectory)}");
         return 0;
@@ -384,6 +387,21 @@ public static class Program
         return path;
     }
 
+    /// <summary>
+    /// Writes the collision-only world file the server runs on. Dimensions and
+    /// walkability only — no graphics, no text, nothing redistributable.
+    /// </summary>
+    private static void ExportWorld(Rom rom, string path)
+    {
+        Console.WriteLine();
+        Console.WriteLine("Exporting world");
+
+        Core.World.WorldData world = WorldExporter.Export(rom, Console.WriteLine);
+        world.Save(path);
+
+        Console.WriteLine($"Wrote {Path.GetFullPath(path)} ({world.Count} maps, collision only)");
+    }
+
     private static void PrintUsage()
     {
         Console.WriteLine("""
@@ -403,6 +421,8 @@ public static class Program
               --map <list>           comma-separated bank.map addresses to render,
                                      or "all" to render every map
               --map-name <text>      render every map whose name contains this text
+              --export-world <path>  write the collision-only world file the server
+                                     runs on (no graphics, no text)
               --tileset-split <g>    firered (default) or emerald — how tile, metatile
                                      and palette slots divide between the two tilesets
               --diagnose             report every candidate table run and dump raw
@@ -426,6 +446,7 @@ public static class Program
         public string? MapNameFilter { get; private init; }
         public bool RenderAllMaps { get; private init; }
         public TilesetSplit Split { get; private init; } = TilesetSplit.FireRed;
+        public string? ExportWorldPath { get; private init; }
         public TileOrder TileOrder { get; private init; } = TileOrder.RowMajor;
 
         public static Options Parse(string[] args)
@@ -441,6 +462,7 @@ public static class Program
             string[] maps = [];
             string? nameFilter = null;
             TilesetSplit split = TilesetSplit.FireRed;
+            string? exportWorld = null;
             TileOrder order = TileOrder.RowMajor;
 
             for (int i = 1; i < args.Length; i++)
@@ -485,6 +507,9 @@ public static class Program
                     case "--map-name":
                         nameFilter = Next(args, ref i, "--map-name");
                         break;
+                    case "--export-world":
+                        exportWorld = Next(args, ref i, "--export-world");
+                        break;
                     case "--tileset-split":
                         string game = Next(args, ref i, "--tileset-split");
                         split = game.StartsWith("em", StringComparison.OrdinalIgnoreCase)
@@ -516,6 +541,7 @@ public static class Program
                 RenderAllMaps = renderAll,
                 MapNameFilter = nameFilter,
                 Split = split,
+                ExportWorldPath = exportWorld,
                 TileOrder = order,
             };
         }

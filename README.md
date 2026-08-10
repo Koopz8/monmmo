@@ -24,11 +24,16 @@ The project layout enforces the rest:
 | `src/RomExtract` | Cartridge reading | **Client-only.** The server must never reference this |
 | `src/Tools/RomDump` | CLI harness | Development tool for inspecting a cartridge |
 | `src/Client` | The game client | Window, input, drawing. No engine, no editor |
-| `tests/RomExtract.Tests` | Test suite | 147 tests, no cartridge required |
+| `src/Server` | Authoritative server | **Core only.** Never references `RomExtract` |
+| `tests/RomExtract.Tests` | Test suite | 198 tests, no cartridge required |
 
-When the server project lands, the one rule to hold is that its dependency graph
-must not contain `RomExtract`. That way the legal posture is guaranteed by the build
-rather than by remembering.
+The server does not read cartridges. It learns the world from a **collision-only**
+file an operator exports from their own image — map ids, names, dimensions and one
+byte of walkability per square. No graphics, no text, no audio.
+
+That rule is enforced rather than remembered: a test asserts `RomExtract` does not
+appear in the server assembly's referenced assemblies. A comment would not have
+caught a stray `using`; this does.
 
 ---
 
