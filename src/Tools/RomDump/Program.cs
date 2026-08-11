@@ -900,6 +900,23 @@ public static class Program
         foreach (var pocket in items.GroupBy(i => i.Pocket).OrderByDescending(g => g.Count()))
             Console.WriteLine($"    {pocket.Key,-9} {pocket.Count()}");
 
+        // Before going looking for an effect table, look at what is already in hand.
+        // A Potion restores 20, a Super Potion 50, a Hyper Potion 200 — if any of these
+        // four fields holds those numbers then the amounts are already extracted and
+        // there is no second format to read at all. Cheapest question first.
+        Console.WriteLine();
+        Console.WriteLine("  Medicine, with every field already read:");
+        Console.WriteLine("        id name           hold param usage secondary");
+
+        foreach (ItemRecord item in items
+                     .Where(i => i.Pocket == Pocket.Items && i.BattleUsage != 0)
+                     .Take(14))
+        {
+            Console.WriteLine(
+                $"    {item.Id,6} {item.Name,-14} {item.HoldEffect,4} {item.HoldEffectParam,5} " +
+                $"{item.BattleUsage,5} {item.SecondaryId,9}");
+        }
+
         Console.WriteLine();
         Console.WriteLine("  Spot check — compare these names and prices against the games:");
 
