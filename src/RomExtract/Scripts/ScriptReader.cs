@@ -230,6 +230,37 @@ public static class ScriptReader
     }
 
     /// <summary>
+    /// The command that ended a read, or nothing when the script ended properly.
+    /// <para>
+    /// The same job <c>Explain</c> does for the located tables. A script that stops at an
+    /// unknown command is not an error and looks like nothing at all — it just quietly
+    /// contains less than it does, and whatever was past that point is invisible. Every
+    /// shop in FireRed went missing this way, and the only way to find out which command
+    /// was in the way is to count them.
+    /// </para>
+    /// </summary>
+    public static byte? StoppedAt(Rom rom, uint address, int maxCommands = MaxCommands)
+    {
+        if (rom.ToOffsetOrNull(address) is not { } offset) return null;
+
+        for (int i = 0; i < maxCommands; i++)
+        {
+            if (offset >= rom.Length) return null;
+
+            byte code = rom.ReadU8(offset);
+            byte first = offset + 1 < rom.Length ? rom.ReadU8(offset + 1) : (byte)0;
+
+            if (ScriptCommands.ArgumentLength(code, first) is not { } length) return code;
+
+            offset += 1 + length;
+
+            if (code is ScriptCommands.End or ScriptCommands.Return or ScriptCommands.Goto) return null;
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Which trainer a script picks a fight with, or nothing when it does not.
     /// <para>
     /// This is the only way to find out. The object standing on the map says <em>that</em>

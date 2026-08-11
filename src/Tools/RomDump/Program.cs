@@ -5,7 +5,9 @@ using PokeMmo.Core.Data;
 using PokeMmo.RomExtract;
 using PokeMmo.RomExtract.Graphics;
 using PokeMmo.RomExtract.Maps;
+using PokeMmo.Core.World;
 using PokeMmo.RomExtract.Items;
+using PokeMmo.RomExtract.Scripts;
 using PokeMmo.RomExtract.Trainers;
 
 namespace PokeMmo.Tools.RomDump;
@@ -126,6 +128,9 @@ public static class Program
 
         if (options.DumpItems)
             WriteItems(rom);
+
+        if (options.DumpScripts)
+            WriteScripts(rom);
 
         Console.WriteLine();
         Console.WriteLine($"Done. Output in {Path.GetFullPath(options.OutputDirectory)}");
@@ -724,6 +729,55 @@ public static class Program
     /// table — there is no question of starting a slot early or late.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Reports how far the scripts on people actually read.
+    /// <para>
+    /// A script that stops at a command this project does not know is not an error and
+    /// produces no symptom: it simply contains less than it does. Everything past that
+    /// point — what somebody says, who they fight, what they sell — is invisible, and
+    /// the only way to find out which command is in the way is to count them.
+    /// </para>
+    /// </summary>
+    private static void WriteScripts(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("Scripts");
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        int withScripts = 0;
+        int cleanEnd = 0;
+        int withMart = 0;
+        int withTrainer = 0;
+
+        var stoppers = new Dictionary<byte, int>();
+
+        foreach (LoadedMap map in library.All())
+        {
+            foreach (MapObject person in map.Objects.Where(o => o.HasScript))
+            {
+                withScripts++;
+
+                if (ScriptReader.StoppedAt(rom, person.ScriptAddress) is { } code)
+                    stoppers[code] = stoppers.GetValueOrDefault(code) + 1;
+                else
+                    cleanEnd++;
+
+                if (ScriptReader.FindMart(rom, person.ScriptAddress).Count > 0) withMart++;
+                if (ScriptReader.FindTrainer(rom, person.ScriptAddress) is not null) withTrainer++;
+            }
+        }
+
+        Console.WriteLine($"  {withScripts} people with a script");
+        Console.WriteLine($"  {cleanEnd} read to a proper end, {withScripts - cleanEnd} stopped at a command we do not know");
+        Console.WriteLine($"  {withTrainer} name a trainer, {withMart} open a shop");
+        Console.WriteLine();
+        Console.WriteLine("  The commands stopping the most reads:");
+
+        foreach ((byte code, int count) in stoppers.OrderByDescending(s => s.Value).Take(20))
+            Console.WriteLine($"    0x{code:X2}  stops {count}");
+    }
+
     private static void WriteItems(Rom rom)
     {
         Console.WriteLine();
@@ -901,6 +955,8 @@ public static class Program
               --trainers             report the trainer table: where it starts, what
                                      was rejected just before it, and a few parties
               --items                report the item table, its pockets and prices
+              --scripts              report how far object scripts read, and which
+                                     commands stop them
               --export-rules <path>  write the rules file the server resolves battles
                                      against: base stats, move power, catch rates and
                                      learnsets, with no names of any kind
@@ -936,6 +992,7 @@ public static class Program
         public bool DumpOverworld { get; private init; }
         public bool DumpTrainers { get; private init; }
         public bool DumpItems { get; private init; }
+        public bool DumpScripts { get; private init; }
         public bool DumpMoves { get; private init; }
         public bool DumpEncounters { get; private init; }
         public string? BehaviourMap { get; private init; }
@@ -959,6 +1016,7 @@ public static class Program
             bool overworld = false;
             bool trainers = false;
             bool items = false;
+            bool scripts = false;
             bool dumpMoves = false, dumpEncounters = false;
             string? behaviourMap = null;
             TileOrder order = TileOrder.RowMajor;
@@ -1020,6 +1078,9 @@ public static class Program
                     case "--items":
                         items = true;
                         break;
+                    case "--scripts":
+                        scripts = true;
+                        break;
                     case "--moves":
                         dumpMoves = true;
                         break;
@@ -1066,6 +1127,7 @@ public static class Program
                 DumpOverworld = overworld,
                 DumpTrainers = trainers,
                 DumpItems = items,
+                DumpScripts = scripts,
                 DumpMoves = dumpMoves,
                 DumpEncounters = dumpEncounters,
                 BehaviourMap = behaviourMap,

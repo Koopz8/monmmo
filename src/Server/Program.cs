@@ -455,15 +455,30 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
 
                             playerId = player.Id;
 
-                            // Registered only after the world knows about them, so no
-                            // broadcast can reach a half-joined connection.
-                            _channels[playerId] = channel;
-
                             Console.WriteLine(
                                 $"+ {player.Name} (#{player.Id}) at {player.Square}, " +
                                 $"{player.Party.Count} in party, {world.PlayerCount} online");
 
-                            await DispatchAsync(welcome, playerId, cancellationToken).ConfigureAwait(false);
+                            // Everything meant for this player alone goes out before the
+                            // channel is registered, and the welcome is the first of it.
+                            //
+                            // Registering first was a race the world could win: it ticks
+                            // five times a second, and a person wandering on the starting
+                            // map could have their step broadcast down this socket in
+                            // front of the welcome. The client reads exactly one message
+                            // to decide whether it is logged in, so what it saw was a
+                            // successful login reported as "the server said something
+                            // unexpected".
+                            foreach (Outgoing mine in welcome.Where(o => o.OnlyTo == playerId))
+                                await channel.SendAsync(mine.Message, cancellationToken).ConfigureAwait(false);
+
+                            _channels[playerId] = channel;
+
+                            await DispatchAsync(
+                                    welcome.Where(o => o.OnlyTo != playerId).ToList(),
+                                    playerId,
+                                    cancellationToken)
+                                .ConfigureAwait(false);
                             break;
 
                         case BattleTurn turn when playerId != 0:

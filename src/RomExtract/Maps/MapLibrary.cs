@@ -51,6 +51,9 @@ public sealed class MapLibrary
 
     public bool Contains(string mapId) => _byId.ContainsKey(mapId);
 
+    /// <summary>Every map, loaded. Only for reports — this decompresses the lot.</summary>
+    public IEnumerable<LoadedMap> All() => _byId.Values.Select(Load);
+
     /// <summary>Loads a map by its <c>bank.map</c> address, or null when there is none.</summary>
     public LoadedMap? TryLoad(string mapId) =>
         _byId.TryGetValue(mapId, out (int Bank, int Map, MapHeaderRecord Header) found) ? Load(found) : null;
