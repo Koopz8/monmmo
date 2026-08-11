@@ -75,12 +75,52 @@ public static class Program
         ReportWorldLinks(world);
         ReportStartingMapLinks(game);
         ReportEncounterReadiness(game.StartingMap);
+        ReportTrainerReadiness(world, rules);
 
         using var store = new SqlitePlayerStore(databasePath);
         Console.WriteLine($"Accounts in {Path.GetFullPath(databasePath)}");
 
         await new GameServer(game, store, verbose).RunAsync(port);
         return 0;
+    }
+
+    /// <summary>
+    /// Whether the trainers standing on maps line up with the parties in the rules file.
+    /// <para>
+    /// This is the cross-check that catches a trainer table located one slot off. The
+    /// two files come from the same image but by completely different routes — the ids
+    /// out of scripts, the parties out of a table — so if the table start were wrong,
+    /// the referenced ids would stop resolving. A world where every trainer resolves is
+    /// not proof, but a world where half of them do not is a very loud symptom.
+    /// </para>
+    /// </summary>
+    private static void ReportTrainerReadiness(WorldData world, GameRules? rules)
+    {
+        List<MapObject> trainers = world.Maps
+            .SelectMany(m => m.Objects)
+            .Where(o => o.IsTrainer)
+            .ToList();
+
+        if (trainers.Count == 0)
+        {
+            Console.WriteLine("  no trainers in this world file — re-export it if you want anybody to challenge you");
+            return;
+        }
+
+        int named = trainers.Count(o => o.CanBeFought);
+        int seeing = trainers.Count(o => o.SightRange > 0);
+
+        Console.WriteLine(
+            $"  {trainers.Count} trainers on maps, {named} of them naming a trainer id, " +
+            $"{seeing} with a line of sight");
+
+        if (rules is null) return;
+
+        int missing = trainers.Count(o => o.CanBeFought && rules.TrainerAt(o.TrainerId) is null);
+
+        Console.WriteLine(missing == 0
+            ? $"  every trainer id on a map has a party in {nameof(GameRules)}"
+            : $"  {missing} trainers name an id with no party — the trainer table may be located wrongly");
     }
 
     /// <summary>
@@ -107,7 +147,8 @@ public static class Program
 
             Console.WriteLine(
                 $"Rules from {path}: {rules.SpeciesCount} species, " +
-                $"{rules.MoveCount} moves, {rules.LearnsetCount} learnsets");
+                $"{rules.MoveCount} moves, {rules.LearnsetCount} learnsets, " +
+                $"{rules.TrainerCount} trainers");
 
             return rules;
         }

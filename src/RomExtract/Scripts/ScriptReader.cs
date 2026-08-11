@@ -10,6 +10,10 @@ namespace PokeMmo.RomExtract.Scripts;
 /// </summary>
 public sealed record ScriptCommand(int Offset, byte Code, byte[] Arguments)
 {
+    /// <summary>A two-byte argument, which is how ids and flag numbers are written.</summary>
+    public int Word(int at = 0) =>
+        at + 2 <= Arguments.Length ? Arguments[at] | (Arguments[at + 1] << 8) : 0;
+
     public uint Pointer(int at = 0) =>
         at + 4 <= Arguments.Length
             ? (uint)(Arguments[at] | (Arguments[at + 1] << 8) | (Arguments[at + 2] << 16) | (Arguments[at + 3] << 24))
@@ -43,6 +47,31 @@ public static class ScriptCommands
     public const byte Release = 0x6C;
     public const byte Message = 0x67;
     public const byte WaitButton = 0x66;
+    public const byte TrainerBattle = 0x5C;
+
+    /// <summary>
+    /// How long a <c>trainerbattle</c> is, which depends on its first argument.
+    /// <para>
+    /// The only command here whose length is not fixed. Its first byte chooses a
+    /// variant, and the variants differ in how many text pointers follow — a gym leader
+    /// has one more than a route trainer, and the kind that cannot be fought right now
+    /// has one more again.
+    /// </para>
+    /// <para>
+    /// Every variant starts the same way: the type, the trainer id, and a flag number.
+    /// So the id is readable whether or not this table has the right length for the
+    /// rest, and a variant this does not know stops the read rather than guessing —
+    /// which loses whatever came after the fight, and never invents it.
+    /// </para>
+    /// </summary>
+    public static int? TrainerBattleLength(byte kind) => kind switch
+    {
+        0 or 5 or 9 => 13,      // type, id, flag, intro, defeat
+        3 => 9,                 // no intro text
+        1 or 2 or 4 or 7 => 17, // ... and one more script or text pointer
+        6 or 8 => 21,           // ... and two
+        _ => null,
+    };
 
     /// <summary>
     /// Argument lengths, by command.
@@ -117,12 +146,21 @@ public static class ScriptCommands
         [0x72] = 1,
     };
 
-    /// <summary>Length of a command's arguments, or null when the command is unknown.</summary>
-    public static int? ArgumentLength(byte code) =>
-        ArgumentLengths.TryGetValue(code, out int length) ? length : null;
+    /// <summary>
+    /// Length of a command's arguments, or null when the command is unknown.
+    /// <para>
+    /// <paramref name="firstArgument"/> only matters for <c>trainerbattle</c>, which is
+    /// the one command in this set whose size it decides.
+    /// </para>
+    /// </summary>
+    public static int? ArgumentLength(byte code, byte firstArgument = 0) =>
+        code == TrainerBattle
+            ? TrainerBattleLength(firstArgument)
+            : ArgumentLengths.TryGetValue(code, out int length) ? length : null;
 
     public static string NameOf(byte code) => code switch
     {
+        TrainerBattle => "trainerbattle",
         Nop => "nop",
         End => "end",
         Return => "return",
@@ -165,7 +203,9 @@ public static class ScriptReader
 
             byte code = rom.ReadU8(offset);
 
-            if (ScriptCommands.ArgumentLength(code) is not { } length) break;
+            byte first = offset + 1 < rom.Length ? rom.ReadU8(offset + 1) : (byte)0;
+
+            if (ScriptCommands.ArgumentLength(code, first) is not { } length) break;
             if (offset + 1 + length > rom.Length) break;
 
             byte[] arguments = rom.Slice(offset + 1, length).ToArray();
@@ -180,6 +220,25 @@ public static class ScriptReader
         }
 
         return commands;
+    }
+
+    /// <summary>
+    /// Which trainer a script picks a fight with, or nothing when it does not.
+    /// <para>
+    /// This is the only way to find out. The object standing on the map says <em>that</em>
+    /// somebody is a trainer — one field, set or not — and never says which one. The id
+    /// is an argument to the <c>trainerbattle</c> command inside their script, which is
+    /// why reading scripts had to come first.
+    /// </para>
+    /// </summary>
+    public static int? FindTrainer(Rom rom, uint address)
+    {
+        foreach (ScriptCommand command in Read(rom, address))
+        {
+            if (command.Code == ScriptCommands.TrainerBattle) return command.Word(1);
+        }
+
+        return null;
     }
 
     /// <summary>

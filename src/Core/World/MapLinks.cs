@@ -58,11 +58,72 @@ public sealed record MapObject(
     bool IsTrainer,
     int RangeX = 0,
     int RangeY = 0,
-    uint ScriptAddress = 0)
+    uint ScriptAddress = 0,
+    int TrainerId = 0,
+    int SightRange = 0)
 {
     /// <summary>True when talking to this one would do something.</summary>
     public bool HasScript => ScriptAddress != 0;
     public GridPosition Square => new(X, Y);
+
+    /// <summary>True when this one has a party the server can actually field.</summary>
+    public bool CanBeFought => IsTrainer && TrainerId != 0;
+
+    /// <summary>
+    /// Whether a player standing here is in this trainer's line of sight.
+    /// <para>
+    /// A straight line in the direction they are facing, out to their sight range, and
+    /// nothing to either side. Written as "same column, in front, within range" rather
+    /// than as a distance, because a distance would have them notice somebody standing
+    /// diagonally — which they famously do not.
+    /// </para>
+    /// <para>
+    /// Whether anything is <em>between</em> the two is not decided here. That needs the
+    /// map, and this record has never seen one.
+    /// </para>
+    /// </summary>
+    public bool CanSee(GridPosition square)
+    {
+        if (SightRange <= 0) return false;
+
+        (int alongX, int alongY) = Facing switch
+        {
+            Direction.Up => (0, -1),
+            Direction.Down => (0, 1),
+            Direction.Left => (-1, 0),
+            _ => (1, 0),
+        };
+
+        for (int step = 1; step <= SightRange; step++)
+        {
+            if (square == new GridPosition(X + alongX * step, Y + alongY * step)) return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>The squares between this one and a player they can see, nearest first.</summary>
+    public IEnumerable<GridPosition> ApproachTo(GridPosition square)
+    {
+        (int alongX, int alongY) = Facing switch
+        {
+            Direction.Up => (0, -1),
+            Direction.Down => (0, 1),
+            Direction.Left => (-1, 0),
+            _ => (1, 0),
+        };
+
+        for (int step = 1; step <= SightRange; step++)
+        {
+            var next = new GridPosition(X + alongX * step, Y + alongY * step);
+
+            // Stops one short: walking onto the player rather than up to them would put
+            // two characters on one square.
+            if (next == square) yield break;
+
+            yield return next;
+        }
+    }
 
     /// <summary>True when this one paces about rather than standing still.</summary>
     public bool Wanders => MovementType is 2 or 3 or 4 or 5 or 6;

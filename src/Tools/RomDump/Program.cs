@@ -5,6 +5,7 @@ using PokeMmo.Core.Data;
 using PokeMmo.RomExtract;
 using PokeMmo.RomExtract.Graphics;
 using PokeMmo.RomExtract.Maps;
+using PokeMmo.RomExtract.Trainers;
 
 namespace PokeMmo.Tools.RomDump;
 
@@ -118,6 +119,9 @@ public static class Program
 
         if (options.DumpOverworld)
             WriteOverworldSprites(rom, options.OutputDirectory);
+
+        if (options.DumpTrainers)
+            WriteTrainers(rom, speciesCount);
 
         Console.WriteLine();
         Console.WriteLine($"Done. Output in {Path.GetFullPath(options.OutputDirectory)}");
@@ -623,6 +627,61 @@ public static class Program
     /// nothing" from "found it" — a count, the dimensions, and pictures to look at.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Reports the trainer table, in the shape that answers the question a located
+    /// address cannot: whether the ids line up.
+    /// <para>
+    /// The table's first entry is a placeholder with no party, so a locator that starts
+    /// on the first <em>readable</em> record starts one slot late and hands every
+    /// trainer somebody else's creatures. Nothing about that looks wrong from the
+    /// outside — the counts are healthy either way — so what is printed here is what
+    /// came just before the start, and a sample of parties to eyeball against the games.
+    /// </para>
+    /// </summary>
+    private static void WriteTrainers(Rom rom, int speciesCount)
+    {
+        Console.WriteLine();
+        Console.WriteLine("Trainers");
+
+        if (speciesCount <= 0) speciesCount = 512;
+
+        if (TrainerTable.Locate(rom, speciesCount, Console.WriteLine) is not { } table)
+        {
+            Console.WriteLine("  no trainer table found");
+            return;
+        }
+
+        List<TrainerRecord> trainers = TrainerTable.Read(rom, table, speciesCount);
+
+        Console.WriteLine($"  {trainers.Count} trainers, highest id {trainers.Max(t => t.Id)}");
+
+        Console.WriteLine(
+            $"  the slot before the table: {TrainerRecord.Explain(rom, table - TrainerRecord.RecordSizeBytes, speciesCount)}");
+
+        Console.WriteLine($"  the first slot itself:     {TrainerRecord.Explain(rom, table, speciesCount)}");
+
+        var shapes = trainers
+            .GroupBy(t => (t.Party.Any(m => m.HeldItem != 0), t.Party.Any(m => m.Moves.Count > 0)))
+            .OrderByDescending(g => g.Count());
+
+        foreach (var shape in shapes)
+        {
+            (bool item, bool moves) = shape.Key;
+            Console.WriteLine(
+                $"    {shape.Count(),4} with {(item ? "items" : "no items"),8}, {(moves ? "custom moves" : "level-up moves")}");
+        }
+
+        Console.WriteLine($"    {trainers.Count(t => t.IsDouble)} double battles");
+        Console.WriteLine();
+        Console.WriteLine("  Spot check — compare these names and parties against the games:");
+
+        foreach (TrainerRecord trainer in trainers.Take(6))
+        {
+            string party = string.Join(", ", trainer.Party.Select(m => $"#{m.Species} L{m.Level}"));
+            Console.WriteLine($"    {trainer.Id,4} {trainer.Name,-12} class {trainer.Class,3}  {party}");
+        }
+    }
+
     private static void WriteOverworldSprites(Rom rom, string outputDirectory)
     {
         Console.WriteLine();
@@ -754,6 +813,8 @@ public static class Program
                                      (implies --encounters, does not render anything)
               --overworld            report the overworld sprite tables and write a
                                      few of the walking figures as PNGs
+              --trainers             report the trainer table: where it starts, what
+                                     was rejected just before it, and a few parties
               --export-rules <path>  write the rules file the server resolves battles
                                      against: base stats, move power, catch rates and
                                      learnsets, with no names of any kind
@@ -787,6 +848,7 @@ public static class Program
         public string? ExportRulesPath { get; private init; }
 
         public bool DumpOverworld { get; private init; }
+        public bool DumpTrainers { get; private init; }
         public bool DumpMoves { get; private init; }
         public bool DumpEncounters { get; private init; }
         public string? BehaviourMap { get; private init; }
@@ -808,6 +870,7 @@ public static class Program
             string? exportWorld = null;
             string? exportRules = null;
             bool overworld = false;
+            bool trainers = false;
             bool dumpMoves = false, dumpEncounters = false;
             string? behaviourMap = null;
             TileOrder order = TileOrder.RowMajor;
@@ -863,6 +926,9 @@ public static class Program
                     case "--overworld":
                         overworld = true;
                         break;
+                    case "--trainers":
+                        trainers = true;
+                        break;
                     case "--moves":
                         dumpMoves = true;
                         break;
@@ -907,6 +973,7 @@ public static class Program
                 ExportWorldPath = exportWorld,
                 ExportRulesPath = exportRules,
                 DumpOverworld = overworld,
+                DumpTrainers = trainers,
                 DumpMoves = dumpMoves,
                 DumpEncounters = dumpEncounters,
                 BehaviourMap = behaviourMap,

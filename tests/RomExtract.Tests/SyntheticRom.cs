@@ -3,6 +3,7 @@ using PokeMmo.RomExtract.Graphics;
 using PokeMmo.Core.Battle;
 using PokeMmo.Core.World;
 using PokeMmo.RomExtract.Maps;
+using PokeMmo.RomExtract.Trainers;
 
 namespace PokeMmo.RomExtract.Tests;
 
@@ -168,6 +169,12 @@ public sealed class SyntheticRom
 
     private const int ObjectsStride = 128;
 
+    /// <summary>Which trainer the person on a map picks a fight as. Never zero.</summary>
+    public static int TrainerIdFor(int mapIndex) => 1 + mapIndex % TrainerCount;
+
+    /// <summary>How far that person can see. Real ranges are small.</summary>
+    public static int SightRangeFor(int mapIndex) => 1 + mapIndex % 4;
+
     /// <summary>The objects written for a map, which is what extraction is checked against.</summary>
     public static List<MapObject> ObjectsFor(int index)
     {
@@ -176,10 +183,15 @@ public sealed class SyntheticRom
         return
         [
             new MapObject(1, 5 + index % 20, 3, 2, Direction.Up, 7, false, 0, 0, ScriptAddressFor(index, 0)),
-            new MapObject(2, 9 + index % 20, 6, 5, Direction.Left, 9, true, 0, 0, ScriptAddressFor(index, 1)),
+            new MapObject(
+                2, 9 + index % 20, 6, 5, Direction.Left, 9, true, 0, 0,
+                ScriptAddressFor(index, 1), TrainerIdFor(index), SightRangeFor(index)),
             new MapObject(3, 1, 8, 6, Direction.Down, 0, false, 0, 0, ScriptAddressFor(index, 2)),
         ];
     }
+
+    /// <summary>The object slot that is a trainer, and so the one with a fight in its script.</summary>
+    public const int TrainerObjectSlot = 1;
 
     public static int MapIndex(int bank, int map) => bank * MapsPerBank + map;
 
@@ -350,6 +362,7 @@ public sealed class SyntheticRom
         WriteMapHeadersAndBanks();
         WriteLearnsets();
         WriteOverworldSprites();
+        WriteTrainers();
     }
 
     /// <summary>Palette 0 of the synthetic tileset — what a rendered map is checked against.</summary>
@@ -607,6 +620,11 @@ public sealed class SyntheticRom
             _data[at + 9] = (byte)entry.MovementType;
             _data[at + 10] = (byte)((entry.RangeX & 0x0F) | ((entry.RangeY & 0x0F) << 4));
             WriteU16(at + 12, (ushort)(entry.IsTrainer ? 1 : 0));
+
+            // The same two bytes are a sight range on a trainer and a berry-tree id on
+            // a tree. Written for everybody, expected back only from the trainer.
+            WriteU16(at + 14, (ushort)(entry.IsTrainer ? entry.SightRange : 7));
+
             WriteU32(at + 16, Rom.BaseAddress + (uint)ScriptFor(index, i));
         }
 
@@ -621,6 +639,126 @@ public sealed class SyntheticRom
 
         _data[events] = (byte)(objects.Count + 1);
         WriteU32(events + 4, Rom.BaseAddress + (uint)table);
+    }
+
+    // --- trainers ----------------------------------------------------------------
+
+    /// <summary>
+    /// Forty bytes of filler immediately before the table.
+    /// <para>
+    /// There so the placeholder at the front of the table is a run of exactly one blank
+    /// slot rather than the leading edge of an ocean of zeros. That distinction is the
+    /// whole of how the locator decides whether to step back onto it, and a fixture
+    /// sitting in open space would never exercise it.
+    /// </para>
+    /// </summary>
+    public const int TrainerGuardOffset = 0x100000;
+
+    public const int TrainerTableOffset = TrainerGuardOffset + TrainerRecordBytes;
+
+    public const int TrainerPartiesOffset = 0x104000;
+
+    private const int TrainerRecordBytes = 40;
+    private const int TrainerPartyStride = 128;
+
+    /// <summary>Real trainers, ids 1 upward. Trainer zero is the empty placeholder.</summary>
+    public const int TrainerCount = 48;
+
+    /// <summary>
+    /// A trainer with no party at all, in the middle of the table.
+    /// <para>
+    /// Real tables have these — entries removed during development and never renumbered,
+    /// because renumbering would break every script that names one.
+    /// </para>
+    /// </summary>
+    public const int TrainerWithNoParty = 13;
+
+    /// <summary>The party written for a trainer, which is what extraction is checked against.</summary>
+    public static List<TrainerMon> TrainerPartyFor(int id)
+    {
+        if (id <= 0 || id > TrainerCount || id == TrainerWithNoParty) return [];
+
+        int flags = id % 4;
+        int size = 1 + id % 3;
+
+        var party = new List<TrainerMon>();
+
+        for (int i = 0; i < size; i++)
+        {
+            List<int> moves = (flags & 1) != 0 ? [1 + i, 10 + i, 20 + i] : [];
+
+            party.Add(new TrainerMon(
+                (id * 3 + i) % (SpeciesCount - 1) + 1,
+                5 + (id + i) % 40,
+                (flags & 2) != 0 ? 20 + i : 0,
+                moves));
+        }
+
+        return party;
+    }
+
+    public static bool TrainerIsDouble(int id) => id % 5 == 0;
+
+    /// <summary>
+    /// Writes the trainer table: a blank placeholder, then records whose party pointers
+    /// lead off to parties in one of the four shapes the flags choose between.
+    /// </summary>
+    private void WriteTrainers()
+    {
+        for (int i = 0; i < TrainerRecordBytes; i++) _data[TrainerGuardOffset + i] = 0xC3;
+
+        for (int id = 1; id <= TrainerCount; id++)
+        {
+            int at = TrainerTableOffset + id * TrainerRecordBytes;
+            List<TrainerMon> party = TrainerPartyFor(id);
+
+            _data[at + 1] = (byte)(id % 20);        // class
+            _data[at + 2] = (byte)(id % 3);         // encounter music
+            _data[at + 3] = (byte)(id % 30);        // picture
+
+            GameText.Encode($"TRAINER{id:D2}", 12).CopyTo(_data, at + 4);
+
+            if (party.Count == 0) continue;
+
+            int flags = id % 4;
+
+            _data[at] = (byte)flags;
+            _data[at + 24] = (byte)(TrainerIsDouble(id) ? 1 : 0);
+            WriteU32(at + 28, 0x0F);                // ai flags
+            WriteU32(at + 32, (uint)party.Count);
+
+            int members = TrainerPartiesOffset + id * TrainerPartyStride;
+            WriteU32(at + 36, Rom.BaseAddress + (uint)members);
+
+            int stride = (flags & 1) != 0 ? 16 : 8;
+
+            for (int i = 0; i < party.Count; i++)
+            {
+                TrainerMon mon = party[i];
+                int slot = members + i * stride;
+
+                WriteU16(slot, (ushort)(10 + i));               // ivs
+                WriteU16(slot + 2, (ushort)mon.Level);
+                WriteU16(slot + 4, (ushort)mon.Species);
+
+                int movesAt = slot + 6;
+
+                if ((flags & 2) != 0)
+                {
+                    WriteU16(slot + 6, (ushort)mon.HeldItem);
+                    movesAt = slot + 8;
+                }
+
+                if ((flags & 1) == 0) continue;
+
+                for (int m = 0; m < 4; m++)
+                {
+                    // The fourth is left at zero: an unused slot, which is how a trainer
+                    // with three moves is written.
+                    WriteU16(movesAt + m * 2, (ushort)(m < mon.Moves.Count ? mon.Moves[m] : 0));
+                }
+            }
+        }
     }
 
     public static uint ScriptAddressFor(int mapIndex, int slot) =>
@@ -650,6 +788,21 @@ public sealed class SyntheticRom
             int text = ScriptTextOffset + (index * 4 + slot) * ScriptTextStride;
 
             WriteDialogue(text, DialogueFor(index, objects[slot].LocalId));
+
+            // A trainer's script opens with the fight. Which trainer they are is only
+            // ever written here — the object standing on the map says that somebody is
+            // one, and never says which.
+            if (slot == TrainerObjectSlot)
+            {
+                _data[at] = 0x5C;                                   // trainerbattle
+                _data[at + 1] = 0;                                  // the plain variant
+                WriteU16(at + 2, (ushort)TrainerIdFor(index));
+                WriteU16(at + 4, (ushort)(0x200 + index));          // the flag it sets
+                WriteU32(at + 6, Rom.BaseAddress + (uint)text);     // what they say first
+                WriteU32(at + 10, Rom.BaseAddress + (uint)text);    // and on losing
+
+                at += 14;
+            }
 
             _data[at] = 0x6A;                                       // lock
             _data[at + 1] = 0x6B;                                   // faceplayer

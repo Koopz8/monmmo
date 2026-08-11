@@ -59,6 +59,9 @@ public class FixtureLayoutTests
             SyntheticRom.OverworldCount * SyntheticRom.OverworldFrameCount * SyntheticRom.OverworldWidth * SyntheticRom.OverworldHeight / 2);
         yield return new("overworld palette table", SyntheticRom.OverworldPaletteTableOffset, SyntheticRom.OverworldPaletteCount * 8);
         yield return new("overworld palette data", SyntheticRom.OverworldPaletteDataOffset, SyntheticRom.OverworldPaletteCount * GbaPalette.SizeBytes);
+
+        yield return new("trainer table", SyntheticRom.TrainerGuardOffset, (SyntheticRom.TrainerCount + 2) * 40);
+        yield return new("trainer parties", SyntheticRom.TrainerPartiesOffset, (SyntheticRom.TrainerCount + 1) * 128);
     }
 
     [Fact]

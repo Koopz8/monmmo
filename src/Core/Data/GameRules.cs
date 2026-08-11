@@ -23,20 +23,23 @@ public sealed class GameRules
 {
     private static readonly byte[] Magic = "MONRULES"u8.ToArray();
 
-    private const int Version = 1;
+    private const int Version = 2;
 
     private readonly Dictionary<int, SpeciesData> _species;
     private readonly Dictionary<int, MoveData> _moves;
     private readonly Dictionary<int, Learnset> _learnsets;
+    private readonly Dictionary<int, TrainerParty> _trainers;
 
     public GameRules(
         IEnumerable<SpeciesData> species,
         IEnumerable<MoveData> moves,
-        IEnumerable<Learnset> learnsets)
+        IEnumerable<Learnset> learnsets,
+        IEnumerable<TrainerParty>? trainers = null)
     {
         _species = species.ToDictionary(s => s.Index);
         _moves = moves.ToDictionary(m => m.Id);
         _learnsets = learnsets.ToDictionary(l => l.Species);
+        _trainers = (trainers ?? []).ToDictionary(t => t.Id);
     }
 
     public int SpeciesCount => _species.Count;
@@ -45,11 +48,15 @@ public sealed class GameRules
 
     public int LearnsetCount => _learnsets.Count;
 
+    public int TrainerCount => _trainers.Count;
+
     public SpeciesData? SpeciesAt(int index) => _species.GetValueOrDefault(index);
 
     public MoveData? MoveAt(int id) => _moves.GetValueOrDefault(id);
 
     public Learnset? LearnsetOf(int species) => _learnsets.GetValueOrDefault(species);
+
+    public TrainerParty? TrainerAt(int id) => _trainers.GetValueOrDefault(id);
 
     /// <summary>
     /// The moves a wild creature of this species and level would know — the last four
@@ -118,6 +125,25 @@ public sealed class GameRules
             {
                 writer.Write(entry.Level);
                 writer.Write(entry.MoveId);
+            }
+        }
+
+        writer.Write(_trainers.Count);
+
+        foreach (TrainerParty trainer in _trainers.Values)
+        {
+            writer.Write(trainer.Id);
+            writer.Write(trainer.IsDouble);
+            writer.Write(trainer.Members.Count);
+
+            foreach (TrainerMember member in trainer.Members)
+            {
+                writer.Write(member.Species);
+                writer.Write(member.Level);
+                writer.Write(member.HeldItem);
+                writer.Write(member.Moves.Count);
+
+                foreach (int move in member.Moves) writer.Write(move);
             }
         }
     }
@@ -199,7 +225,39 @@ public sealed class GameRules
             learnsets.Add(new Learnset(index, entries));
         }
 
-        return new GameRules(species, moves, learnsets);
+        var trainers = new List<TrainerParty>();
+
+        foreach (int _ in Counted(reader, "trainers", 8192))
+        {
+            int id = reader.ReadInt32();
+            bool isDouble = reader.ReadBoolean();
+            int memberCount = reader.ReadInt32();
+
+            if (memberCount is < 0 or > 6)
+                throw new InvalidDataException($"Trainer {id} claims a party of {memberCount}.");
+
+            var members = new List<TrainerMember>(memberCount);
+
+            for (int i = 0; i < memberCount; i++)
+            {
+                int memberSpecies = reader.ReadInt32();
+                int level = reader.ReadInt32();
+                int held = reader.ReadInt32();
+                int moveCount = reader.ReadInt32();
+
+                if (moveCount is < 0 or > 4)
+                    throw new InvalidDataException($"Trainer {id} member {i} claims {moveCount} moves.");
+
+                var moveIds = new List<int>(moveCount);
+                for (int m = 0; m < moveCount; m++) moveIds.Add(reader.ReadInt32());
+
+                members.Add(new TrainerMember(memberSpecies, level, held, moveIds));
+            }
+
+            trainers.Add(new TrainerParty(id, isDouble, members));
+        }
+
+        return new GameRules(species, moves, learnsets, trainers);
     }
 
     /// <summary>

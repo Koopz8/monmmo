@@ -1,5 +1,6 @@
 using PokeMmo.Core.Battle;
 using PokeMmo.Core.Data;
+using PokeMmo.RomExtract.Trainers;
 
 namespace PokeMmo.RomExtract;
 
@@ -44,15 +45,43 @@ public static class RulesExporter
             .Select(m => m with { Name = string.Empty })
             .ToList();
 
-        var rules = new GameRules(anonymousSpecies, anonymousMoves, learnsets.Values);
+        List<TrainerParty> trainers = ExtractTrainers(rom, species.Count, log);
+
+        var rules = new GameRules(anonymousSpecies, anonymousMoves, learnsets.Values, trainers);
 
         log?.Invoke(
             $"  rules: {rules.SpeciesCount} species, {rules.MoveCount} moves, " +
-            $"{rules.LearnsetCount} learnsets (no names)");
+            $"{rules.LearnsetCount} learnsets, {rules.TrainerCount} trainers (no names)");
 
         ReportUsableness(rules, log);
 
         return rules;
+    }
+
+    /// <summary>
+    /// Reads the trainer table, and drops every name on the way out.
+    /// <para>
+    /// A cartridge with no findable trainer table is not a failure worth refusing an
+    /// export over — everything else in the file still works, and the world simply has
+    /// nobody in it who wants a fight.
+    /// </para>
+    /// </summary>
+    private static List<TrainerParty> ExtractTrainers(Rom rom, int speciesCount, Action<string>? log)
+    {
+        if (TrainerTable.Locate(rom, speciesCount, log) is not { } table)
+        {
+            log?.Invoke("  trainers: no table found — nobody will challenge anybody");
+            return [];
+        }
+
+        List<TrainerRecord> records = TrainerTable.Read(rom, table, speciesCount);
+
+        // The names came off the cartridge and stop here. Same rule as species and
+        // moves: the server gets an id, and the client that owns an image turns it back
+        // into "BUG CATCHER RICK".
+        return records
+            .Select(r => new TrainerParty(r.Id, r.IsDouble, r.Party.Select(m => m.ToMember()).ToList()))
+            .ToList();
     }
 
     private static SpeciesData Anonymise(SpeciesData species) => new()

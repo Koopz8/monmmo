@@ -118,6 +118,11 @@ public static class MapLinkExtractor
             byte range = rom.ReadU8(at + 10);
 
             int trainerType = rom.ReadU16(at + 12);
+
+            // The same field is a sight range on a trainer and a berry-tree id on a
+            // tree, which is why it is only read as one when the object is the other.
+            int sight = trainerType != 0 ? rom.ReadU16(at + 14) : 0;
+
             uint script = rom.ReadU32(at + 16);
 
             if (x < 0 || x >= width || y < 0 || y >= height)
@@ -125,6 +130,14 @@ public static class MapLinkExtractor
                 log?.Invoke($"    object {i} at ({x}, {y}) is outside a {width}x{height} map — dropped");
                 continue;
             }
+
+            bool hasScript = rom.IsRomAddress(script);
+
+            // Which trainer somebody is is not in this record — only that they are one.
+            // The id is an argument to a command inside their script.
+            int trainerId = trainerType != 0 && hasScript
+                ? Scripts.ScriptReader.FindTrainer(rom, script) ?? 0
+                : 0;
 
             objects.Add(new MapObject(
                 localId,
@@ -136,7 +149,9 @@ public static class MapLinkExtractor
                 trainerType != 0,
                 range & 0x0F,
                 (range >> 4) & 0x0F,
-                rom.IsRomAddress(script) ? script : 0));
+                hasScript ? script : 0,
+                trainerId,
+                sight));
         }
 
         return objects;

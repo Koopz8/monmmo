@@ -70,7 +70,7 @@ public sealed class WorldData
     /// <summary>Identifies the format, so a wrong or stale file fails loudly.</summary>
     private static readonly byte[] Magic = "MONWORLD"u8.ToArray();
 
-    private const int Version = 5;
+    private const int Version = 6;
 
     private readonly Dictionary<string, MapData> _maps;
 
@@ -213,6 +213,11 @@ public sealed class WorldData
             writer.Write(entry.IsTrainer);
             writer.Write(entry.RangeX);
             writer.Write(entry.RangeY);
+
+            // The trainer id is a number, not an address — the script it was read out
+            // of stays on the cartridge, and so does the address of that script.
+            writer.Write(entry.TrainerId);
+            writer.Write(entry.SightRange);
         }
     }
 
@@ -281,6 +286,11 @@ public sealed class WorldData
                 (Direction)facing,
                 reader.ReadInt32(),
                 reader.ReadBoolean(),
+                reader.ReadInt32(),
+                reader.ReadInt32(),
+                // Deliberately zero. A script address is a cartridge address and this
+                // file does not carry any.
+                0,
                 reader.ReadInt32(),
                 reader.ReadInt32()));
         }
