@@ -49,6 +49,9 @@ public static class ScriptCommands
     public const byte WaitButton = 0x66;
     public const byte TrainerBattle = 0x5C;
 
+    /// <summary>Opens a shop. The argument is a pointer to a list of what it sells.</summary>
+    public const byte PokeMart = 0x86;
+
     /// <summary>
     /// How long a <c>trainerbattle</c> is, which depends on its first argument.
     /// <para>
@@ -144,6 +147,9 @@ public static class ScriptCommands
         [0x70] = 1,
         [0x71] = 1,
         [0x72] = 1,
+        [PokeMart] = 4,
+        [0x87] = 4,     // the decoration shop
+        [0x88] = 4,     // and the other decoration shop
     };
 
     /// <summary>
@@ -161,6 +167,7 @@ public static class ScriptCommands
     public static string NameOf(byte code) => code switch
     {
         TrainerBattle => "trainerbattle",
+        PokeMart => "pokemart",
         Nop => "nop",
         End => "end",
         Return => "return",
@@ -239,6 +246,41 @@ public static class ScriptReader
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// What a shopkeeper sells, or nothing when this script does not open a shop.
+    /// <para>
+    /// The list is a run of two-byte item ids ending in a zero — no count, like almost
+    /// everything else on this cartridge. A shop selling nothing and a pointer that is
+    /// not a shop list look identical from one entry in, so a list whose first entry is
+    /// already the terminator is treated as neither.
+    /// </para>
+    /// </summary>
+    public static List<int> FindMart(Rom rom, uint address, int maxItems = 64)
+    {
+        foreach (ScriptCommand command in Read(rom, address))
+        {
+            if (command.Code != ScriptCommands.PokeMart) continue;
+            if (rom.ToOffsetOrNull(command.Pointer()) is not { } list) continue;
+
+            var stock = new List<int>();
+
+            for (int i = 0; i < maxItems; i++)
+            {
+                int at = list + i * 2;
+                if (at + 2 > rom.Length) break;
+
+                int itemId = rom.ReadU16(at);
+                if (itemId == 0) break;
+
+                stock.Add(itemId);
+            }
+
+            if (stock.Count > 0) return stock;
+        }
+
+        return [];
     }
 
     /// <summary>

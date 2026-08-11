@@ -127,6 +127,10 @@ public sealed class NetworkClient : IDisposable
 
     public void SendTalkFinished() => Send(new TalkFinished());
 
+    public void SendBuy(int itemId, int count) => Send(new BuyRequest(itemId, count));
+
+    public void SendSell(int itemId, int count) => Send(new SellRequest(itemId, count));
+
     private void Send(NetMessage message)
     {
         if (_channel is null) return;

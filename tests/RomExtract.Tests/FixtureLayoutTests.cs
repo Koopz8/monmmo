@@ -49,6 +49,7 @@ public class FixtureLayoutTests
 
         yield return new("scripts", SyntheticRom.ScriptsOffset, SyntheticRom.MapCount * 4 * 64);
         yield return new("script text", SyntheticRom.ScriptTextOffset, SyntheticRom.MapCount * 4 * 256);
+        yield return new("shop lists", SyntheticRom.ShopListsOffset, SyntheticRom.MapCount * 64);
 
         yield return new("overworld table", SyntheticRom.OverworldTableOffset, SyntheticRom.OverworldCount * 4);
         yield return new("overworld records", SyntheticRom.OverworldRecordsOffset, SyntheticRom.OverworldCount * ObjectGraphicsInfo.RecordSizeBytes);

@@ -50,6 +50,16 @@ public sealed record ServerPlayer(int Id, long AccountId, string Name)
     public int Money { get; set; } = SavedCharacter.StartingMoney;
 
     /// <summary>
+    /// What the shop this player has open sells, or nothing when none is.
+    /// <para>
+    /// Held rather than looked up on each purchase. A player who walks away mid-shop
+    /// would otherwise keep buying from wherever they now stand, and a player standing
+    /// between two shopkeepers would be buying from whichever the loop reached first.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<int> Shopping { get; set; } = [];
+
+    /// <summary>
     /// The party, stored as the numbers a save holds rather than as battlers. The
     /// server has no cartridge and so cannot build a battler at all — it has no base
     /// stats to build one from. That constraint is the reason this is a save shape
@@ -502,7 +512,27 @@ public sealed class GameWorld
             // way in; the battle arriving is what closes it.
             if (StartTrainerBattle(player, person.Template) is { Count: > 0 } challenge) return challenge;
 
+            // A shop opens on top of the hold rather than instead of it: the shopkeeper
+            // still has to stand still while somebody is buying from them.
+            List<Outgoing> shop = OpenShop(player, person.Template);
+
             person.HeldBy = playerId;
+
+            if (shop.Count > 0)
+            {
+                Direction facing = Interaction.Opposite(player.Facing);
+
+                if (person.Facing != facing)
+                {
+                    person.Facing = facing;
+
+                    shop.Add(new Outgoing(
+                        new ObjectMoved(person.LocalId, person.Square.X, person.Square.Y, person.Facing),
+                        OnMap: player.MapId));
+                }
+
+                return shop;
+            }
 
             Direction turned = Interaction.Opposite(player.Facing);
             if (person.Facing == turned) return [];
@@ -645,11 +675,101 @@ public sealed class GameWorld
     /// </summary>
     public string? LastSightRefusal { get; private set; }
 
+    /// <summary>
+    /// Opens a shop, if the person being spoken to keeps one.
+    /// <para>
+    /// The prices come out of the rules file rather than the shop. A cartridge shop is
+    /// a list of ids and nothing else — what each one costs is a property of the item,
+    /// which is why a Poké Ball is the same price in every town.
+    /// </para>
+    /// </summary>
+    private List<Outgoing> OpenShop(ServerPlayer player, MapObject keeper)
+    {
+        if (_rules is null || !keeper.IsShopkeeper) return [];
+
+        List<ShopEntry> stock = keeper.Stock
+            .Select(id => (Id: id, Item: _rules.ItemAt(id)))
+            .Where(entry => entry.Item is not null)
+            .Select(entry => new ShopEntry(entry.Id, entry.Item!.Price))
+            .ToList();
+
+        if (stock.Count == 0) return [];
+
+        player.Shopping = [.. keeper.Stock];
+
+        return [new Outgoing(new ShopOpened(stock, player.Money, player.Bag.Entries), OnlyTo: player.Id)];
+    }
+
+    /// <summary>
+    /// Buys some of one thing, and says what the money and the bag are afterwards.
+    /// <para>
+    /// Everything is checked here and nothing is taken on trust: that a shop is open,
+    /// that it stocks this, what it costs, that the money is there, and that the bag has
+    /// room. A client sends an id and a count and has no say in any of the rest.
+    /// </para>
+    /// </summary>
+    public List<Outgoing> Buy(int playerId, int itemId, int count)
+    {
+        lock (_gate)
+        {
+            if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
+            if (_rules is null) return [];
+
+            if (!player.Shopping.Contains(itemId)) return [Told(player, "They don't sell that.")];
+            if (_rules.ItemAt(itemId) is not { } item) return [Told(player, "They don't sell that.")];
+
+            int wanted = Math.Clamp(count, 1, Bag.MaxStack);
+
+            // Priced before anything is taken, and capped by what can be afforded rather
+            // than refused outright — a player asking for ten with money for four gets
+            // four, which is what a shop does.
+            int affordable = item.Price > 0 ? Math.Min(wanted, player.Money / item.Price) : 0;
+
+            if (affordable <= 0) return [Told(player, "You don't have enough money.")];
+
+            // Added first, because the bag is what might refuse. Charging for items that
+            // never went in is the one failure here that costs a player something.
+            int taken = player.Bag.Add(itemId, affordable);
+
+            if (taken <= 0) return [Told(player, "You can't carry any more.")];
+
+            player.Money -= taken * item.Price;
+
+            return [Told(player, $"Bought {taken}.")];
+        }
+    }
+
+    /// <summary>Sells some of one thing, at half price and never a key item.</summary>
+    public List<Outgoing> Sell(int playerId, int itemId, int count)
+    {
+        lock (_gate)
+        {
+            if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
+            if (_rules is null || player.Shopping.Count == 0) return [];
+
+            if (_rules.ItemAt(itemId) is not { } item) return [Told(player, "They don't want that.")];
+            if (item.SellPrice <= 0) return [Told(player, "They won't take that.")];
+
+            int sold = player.Bag.Remove(itemId, Math.Max(1, count));
+
+            if (sold <= 0) return [Told(player, "You don't have any.")];
+
+            player.Money = Math.Min(MaxMoney, player.Money + sold * item.SellPrice);
+
+            return [Told(player, $"Sold {sold} for {sold * item.SellPrice}.")];
+        }
+    }
+
+    private Outgoing Told(ServerPlayer player, string message) =>
+        new(new ShopUpdated(player.Money, player.Bag.Entries, message), OnlyTo: player.Id);
+
     /// <summary>The text box is closed. Whoever this player was holding carries on.</summary>
     public void StopTalking(int playerId)
     {
         lock (_gate)
         {
+            if (_players.TryGetValue(playerId, out ServerPlayer? shopper)) shopper.Shopping = [];
+
             foreach (MapPopulation people in _populated.Values)
                 people.Release(holder => holder == playerId);
         }

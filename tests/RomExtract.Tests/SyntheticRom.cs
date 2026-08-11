@@ -187,12 +187,21 @@ public sealed class SyntheticRom
             new MapObject(
                 2, 9 + index % 20, 6, 5, Direction.Left, 9, true, 0, 0,
                 ScriptAddressFor(index, 1), TrainerIdFor(index), SightRangeFor(index)),
-            new MapObject(3, 1, 8, 6, Direction.Down, 0, false, 0, 0, ScriptAddressFor(index, 2)),
+            new MapObject(
+                3, 1, 8, 6, Direction.Down, 0, false, 0, 0,
+                ScriptAddressFor(index, 2), 0, 0, StockFor(index)),
         ];
     }
 
     /// <summary>The object slot that is a trainer, and so the one with a fight in its script.</summary>
     public const int TrainerObjectSlot = 1;
+
+    /// <summary>The object slot that keeps a shop.</summary>
+    public const int ShopObjectSlot = 2;
+
+    /// <summary>What that shop sells. Ends with a zero on the cartridge, not a count.</summary>
+    public static List<int> StockFor(int mapIndex) =>
+        [1 + mapIndex % 20, 4 + mapIndex % 20, 9 + mapIndex % 20];
 
     public static int MapIndex(int bank, int map) => bank * MapsPerBank + map;
 
@@ -763,6 +772,10 @@ public sealed class SyntheticRom
         }
     }
 
+    public const int ShopListsOffset = 0x0B0000;
+
+    private const int ShopListStride = 64;
+
     // --- items -------------------------------------------------------------------
 
     public const int ItemTableOffset = 0x110000;
@@ -899,6 +912,24 @@ public sealed class SyntheticRom
                 WriteU32(at + 10, Rom.BaseAddress + (uint)text);    // and on losing
 
                 at += 14;
+            }
+
+            // A shopkeeper opens their shop and then says something, which is the order
+            // the games use and the order that makes both readable from one script.
+            if (slot == ShopObjectSlot)
+            {
+                int list = ShopListsOffset + index * ShopListStride;
+                List<int> stock = StockFor(index);
+
+                for (int i = 0; i < stock.Count; i++) WriteU16(list + i * 2, (ushort)stock[i]);
+
+                // The terminator, and no count anywhere.
+                WriteU16(list + stock.Count * 2, 0);
+
+                _data[at] = 0x86;                                   // pokemart
+                WriteU32(at + 1, Rom.BaseAddress + (uint)list);
+
+                at += 5;
             }
 
             _data[at] = 0x6A;                                       // lock

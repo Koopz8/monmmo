@@ -70,7 +70,7 @@ public sealed class WorldData
     /// <summary>Identifies the format, so a wrong or stale file fails loudly.</summary>
     private static readonly byte[] Magic = "MONWORLD"u8.ToArray();
 
-    private const int Version = 6;
+    private const int Version = 7;
 
     private readonly Dictionary<string, MapData> _maps;
 
@@ -218,6 +218,11 @@ public sealed class WorldData
             // of stays on the cartridge, and so does the address of that script.
             writer.Write(entry.TrainerId);
             writer.Write(entry.SightRange);
+
+            // Item ids, which are numbers. The list itself lived at a cartridge address
+            // and that address stays where it was.
+            writer.Write(entry.Stock.Count);
+            foreach (int itemId in entry.Stock) writer.Write(itemId);
         }
     }
 
@@ -258,6 +263,21 @@ public sealed class WorldData
         return (connections, warps);
     }
 
+    /// <summary>What one object sells, refusing a count that could only be corruption.</summary>
+    private static List<int> ReadStock(BinaryReader reader, string mapId)
+    {
+        int count = reader.ReadInt32();
+
+        if (count is < 0 or > 64)
+            throw new InvalidDataException($"Map '{mapId}' has a shop claiming {count} items.");
+
+        var stock = new List<int>(count);
+
+        for (int i = 0; i < count; i++) stock.Add(reader.ReadInt32());
+
+        return stock;
+    }
+
     private static IReadOnlyList<MapObject> ReadObjects(BinaryReader reader, string mapId)
     {
         int count = reader.ReadInt32();
@@ -292,7 +312,8 @@ public sealed class WorldData
                 // file does not carry any.
                 0,
                 reader.ReadInt32(),
-                reader.ReadInt32()));
+                reader.ReadInt32(),
+                ReadStock(reader, mapId)));
         }
 
         return objects;

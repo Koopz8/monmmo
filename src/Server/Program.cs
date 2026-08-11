@@ -135,6 +135,12 @@ public static class Program
         foreach ((MapData map, int count) in busiest)
             Console.WriteLine($"    {map.Id,-8} {map.Name,-20} {count} looking for a fight");
 
+        int shops = world.Maps.Sum(m => m.Objects.Count(o => o.IsShopkeeper));
+
+        Console.WriteLine(shops == 0
+            ? "  no shops in this world file — re-export it if you want anywhere to spend money"
+            : $"  {shops} shopkeepers across the world");
+
         MapData starting = world.Find(startingMapId) ?? world.Maps.First();
 
         int here = starting.Objects.Count(o => o.CanBeFought && o.SightRange > 0);
@@ -498,6 +504,16 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
 
                         case TalkFinished when playerId != 0:
                             world.StopTalking(playerId);
+                            break;
+
+                        case BuyRequest buy when playerId != 0:
+                            await DispatchAsync(world.Buy(playerId, buy.ItemId, buy.Count), playerId, cancellationToken)
+                                .ConfigureAwait(false);
+                            break;
+
+                        case SellRequest sell when playerId != 0:
+                            await DispatchAsync(world.Sell(playerId, sell.ItemId, sell.Count), playerId, cancellationToken)
+                                .ConfigureAwait(false);
                             break;
 
                         case MoveRequest move when playerId != 0:

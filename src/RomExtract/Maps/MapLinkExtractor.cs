@@ -139,6 +139,13 @@ public static class MapLinkExtractor
                 ? Scripts.ScriptReader.FindTrainer(rom, script) ?? 0
                 : 0;
 
+            // Shopkeepers are not marked in any way. The only thing that distinguishes
+            // one is a pokemart command in their script, so every scriptable person has
+            // to be read to find out — which is cheap, and only happens at export.
+            List<int> stock = hasScript && trainerId == 0
+                ? Scripts.ScriptReader.FindMart(rom, script)
+                : [];
+
             objects.Add(new MapObject(
                 localId,
                 graphicsId,
@@ -151,7 +158,8 @@ public static class MapLinkExtractor
                 (range >> 4) & 0x0F,
                 hasScript ? script : 0,
                 trainerId,
-                sight));
+                sight,
+                stock));
         }
 
         return objects;

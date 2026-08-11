@@ -162,6 +162,7 @@ public static class Program
         var others = new Dictionary<int, RemoteCharacter>();
         BattleScreen? battle = null;
         DialogueBox? talking = null;
+        ShopScreen? shop = null;
         IReadOnlyList<BagEntry> bag = [];
         int money = 0;
 
@@ -180,7 +181,9 @@ public static class Program
         {
             float delta = Raylib.GetFrameTime();
 
-            ApplyServerMessages(network, others, player, view, data, trainers, items, ref battle, ref bag, ref money, ref correction);
+            ApplyServerMessages(
+                network, others, player, view, data, trainers, items,
+                ref battle, ref shop, ref bag, ref money, ref correction);
 
             // A battle suspends the overworld entirely: the server is running it, and
             // walking on meanwhile would put the two sides out of step.
@@ -220,6 +223,36 @@ public static class Program
             {
                 if (square != player.Square) player.Place(view.Collision, square);
                 correction = null;
+            }
+
+            // A shop takes the whole screen, like a battle. Anything the text box was
+            // waiting for is dropped: the counter is what the button press was for.
+            if (shop is not null)
+            {
+                talking = null;
+
+                shop.Update();
+
+                // Taken once. Asking twice clears it on the first call and the second
+                // question is always answered "nothing".
+                switch (shop.TakePending())
+                {
+                    case BuyRequest buy: network.SendBuy(buy.ItemId, buy.Count); break;
+                    case SellRequest sell: network.SendSell(sell.ItemId, sell.Count); break;
+                }
+
+                Raylib.BeginDrawing();
+                shop.Draw();
+                Raylib.EndDrawing();
+
+                if (shop.IsClosed)
+                {
+                    money = shop.Money;
+                    shop = null;
+                    network.SendTalkFinished();
+                }
+
+                continue;
             }
 
             // A conversation stops the world the same way a battle does, except the map
@@ -371,6 +404,7 @@ public static class Program
         TrainerNames trainers,
         ItemNames items,
         ref BattleScreen? battle,
+        ref ShopScreen? shop,
         ref IReadOnlyList<BagEntry> bag,
         ref int money,
         ref GridPosition? correction)
@@ -440,6 +474,16 @@ public static class Program
 
                 case BattlerSentOut sent:
                     battle?.Apply(sent);
+                    break;
+
+                case ShopOpened opened:
+                    shop = new ShopScreen(opened, items);
+                    break;
+
+                case ShopUpdated updated:
+                    shop?.Apply(updated);
+                    money = updated.Money;
+                    bag = updated.Bag;
                     break;
 
                 case BattleUpdate update:

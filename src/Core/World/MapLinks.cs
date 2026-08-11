@@ -60,8 +60,53 @@ public sealed record MapObject(
     int RangeY = 0,
     uint ScriptAddress = 0,
     int TrainerId = 0,
-    int SightRange = 0)
+    int SightRange = 0,
+    IReadOnlyList<int>? Sells = null)
 {
+    /// <summary>What this one sells, which for almost everybody is nothing.</summary>
+    public IReadOnlyList<int> Stock { get; init; } = Sells ?? [];
+
+    /// <summary>True when talking to this one opens a shop.</summary>
+    public bool IsShopkeeper => Stock.Count > 0;
+
+    /// <summary>
+    /// Compares stock by its contents.
+    /// <para>
+    /// A record compares its members with <c>Equals</c>, and for a list that is
+    /// reference equality. Third time this project has needed saying, and the world
+    /// file's round-trip test is exactly the kind that would go quietly green without it.
+    /// </para>
+    /// </summary>
+    public bool Equals(MapObject? other) =>
+        other is not null &&
+        LocalId == other.LocalId &&
+        GraphicsId == other.GraphicsId &&
+        X == other.X &&
+        Y == other.Y &&
+        Facing == other.Facing &&
+        MovementType == other.MovementType &&
+        IsTrainer == other.IsTrainer &&
+        RangeX == other.RangeX &&
+        RangeY == other.RangeY &&
+        ScriptAddress == other.ScriptAddress &&
+        TrainerId == other.TrainerId &&
+        SightRange == other.SightRange &&
+        Stock.SequenceEqual(other.Stock);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+
+        hash.Add(LocalId);
+        hash.Add(X);
+        hash.Add(Y);
+        hash.Add(TrainerId);
+
+        foreach (int itemId in Stock) hash.Add(itemId);
+
+        return hash.ToHashCode();
+    }
+
     /// <summary>True when talking to this one would do something.</summary>
     public bool HasScript => ScriptAddress != 0;
     public GridPosition Square => new(X, Y);

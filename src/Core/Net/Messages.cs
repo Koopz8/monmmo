@@ -20,6 +20,10 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(MoveRequest), "move")]
 [JsonDerivedType(typeof(TalkRequest), "talk")]
 [JsonDerivedType(typeof(TalkFinished), "talkdone")]
+[JsonDerivedType(typeof(BuyRequest), "buy")]
+[JsonDerivedType(typeof(SellRequest), "sell")]
+[JsonDerivedType(typeof(ShopOpened), "shop")]
+[JsonDerivedType(typeof(ShopUpdated), "shopupdate")]
 [JsonDerivedType(typeof(Welcome), "welcome")]
 [JsonDerivedType(typeof(AuthFailed), "authfailed")]
 [JsonDerivedType(typeof(MapChanged), "mapchanged")]
@@ -66,8 +70,20 @@ public sealed record MoveRequest(Direction Direction) : NetMessage;
 /// </summary>
 public sealed record TalkRequest(int LocalId) : NetMessage;
 
-/// <summary>The text box is closed; whoever was held may carry on.</summary>
+/// <summary>The text box is closed; whoever was held may carry on. Also shuts a shop.</summary>
 public sealed record TalkFinished : NetMessage;
+
+/// <summary>
+/// Buy some of one thing from the shop that is open.
+/// <para>
+/// The item and the count, and no price. A request carrying a price is a request a
+/// client can lie in — what it costs is the server's to look up.
+/// </para>
+/// </summary>
+public sealed record BuyRequest(int ItemId, int Count) : NetMessage;
+
+/// <summary>Sell some of one thing to the shop that is open.</summary>
+public sealed record SellRequest(int ItemId, int Count) : NetMessage;
 
 /// <summary>
 /// What the player chose to do this turn.
@@ -206,6 +222,32 @@ public sealed record BattleFinished(
     int Prize,
     IReadOnlyList<BagEntry> Balls,
     IReadOnlyList<SavedMon> Party) : NetMessage;
+
+/// <summary>One line of a shop's stock: what it is and what it costs today.</summary>
+public sealed record ShopEntry(int ItemId, int Price);
+
+/// <summary>
+/// A shop is open. Sent only to the player who opened it.
+/// <para>
+/// The whole bag comes with it rather than only the pockets a shop touches, because
+/// selling needs to show everything sellable and a shop that could only see balls would
+/// be a strange shop.
+/// </para>
+/// </summary>
+public sealed record ShopOpened(
+    IReadOnlyList<ShopEntry> Stock,
+    int Money,
+    IReadOnlyList<BagEntry> Bag) : NetMessage;
+
+/// <summary>
+/// What the money and the bag are after something was bought or sold.
+/// <para>
+/// Sent instead of a yes or no. A refusal and a purchase differ only in what these two
+/// numbers become, and a client that had to work out which happened would eventually
+/// work it out wrongly.
+/// </para>
+/// </summary>
+public sealed record ShopUpdated(int Money, IReadOnlyList<BagEntry> Bag, string Message) : NetMessage;
 
 /// <summary>The request could not be honoured at all.</summary>
 public sealed record Rejected(string Reason) : NetMessage;
