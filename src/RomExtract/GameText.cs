@@ -40,6 +40,108 @@ public static class GameText
         [0xBA] = '/',
     };
 
+    /// <summary>A line break inside a text box.</summary>
+    public const byte NewLine = 0xFE;
+
+    /// <summary>Wait for a button, then clear the box and carry on.</summary>
+    public const byte Paragraph = 0xFB;
+
+    /// <summary>Wait for a button, then scroll up a line and carry on.</summary>
+    public const byte Scroll = 0xFA;
+
+    /// <summary>Wait for a button without clearing anything.</summary>
+    public const byte Prompt = 0xFC;
+
+    /// <summary>
+    /// Decodes a run of dialogue, which is not the same job as decoding a name.
+    /// <para>
+    /// A name is a fixed-width record of letters. Dialogue is a stream with control
+    /// bytes in it — line breaks, page breaks, waits — and running it through the name
+    /// decoder turns every one of those into a question mark. The control bytes are
+    /// what make a text box read as a text box, so they are kept and turned into the
+    /// breaks a renderer needs.
+    /// </para>
+    /// <para>
+    /// <paramref name="maxBytes"/> bounds it: dialogue has no length, only a
+    /// terminator, and a pointer that is not really text would otherwise read to the
+    /// end of the cartridge.
+    /// </para>
+    /// </summary>
+    public static List<string> DecodeDialogue(ReadOnlySpan<byte> bytes, int maxBytes = 1024)
+    {
+        var pages = new List<string>();
+        var page = new StringBuilder();
+
+        for (int i = 0; i < bytes.Length && i < maxBytes; i++)
+        {
+            byte b = bytes[i];
+
+            if (b == Terminator) break;
+
+            switch (b)
+            {
+                case NewLine:
+                    page.Append('\n');
+                    break;
+
+                // A scroll and a page break differ in how the box animates, which is
+                // not something this can express — both end the page.
+                case Paragraph:
+                case Scroll:
+                    pages.Add(page.ToString().TrimEnd());
+                    page.Clear();
+                    break;
+
+                case Prompt:
+                    break;
+
+                default:
+                    page.Append(DecodeByte(b));
+                    break;
+            }
+        }
+
+        if (page.Length > 0) pages.Add(page.ToString().TrimEnd());
+
+        return pages;
+    }
+
+    /// <summary>
+    /// True when a run of bytes reads as dialogue rather than as arbitrary data.
+    /// <para>
+    /// Used to decide whether a pointer leads to text at all. Anything can be decoded;
+    /// the question is whether the result is words.
+    /// </para>
+    /// <para>
+    /// Spaces are not evidence. A zero byte decodes as a space, so a run of empty
+    /// memory decodes as nothing but spaces — which counted as perfectly readable text
+    /// under the obvious version of this check, and made every pointer into padding
+    /// look like somebody with a great deal to say.
+    /// </para>
+    /// </summary>
+    public static bool LooksLikeDialogue(ReadOnlySpan<byte> bytes, int maxBytes = 512)
+    {
+        int words = 0;
+        int nonsense = 0;
+
+        for (int i = 0; i < bytes.Length && i < maxBytes; i++)
+        {
+            byte b = bytes[i];
+            if (b == Terminator) break;
+
+            if (b is NewLine or Paragraph or Scroll or Prompt) continue;
+
+            char decoded = DecodeByte(b);
+
+            if (decoded == ' ') continue;
+
+            if (decoded == '?' && b != 0xAC) nonsense++;
+            else words++;
+        }
+
+        return words >= 4 && words >= nonsense * 3;
+    }
+
     /// <summary>Decodes bytes up to the terminator or the end of the span.</summary>
     public static string Decode(ReadOnlySpan<byte> bytes)
     {

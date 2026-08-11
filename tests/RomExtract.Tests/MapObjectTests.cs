@@ -97,7 +97,16 @@ public class MapObjectExtractionTests
         MapData after = reloaded.Find(SyntheticRom.MapIdAt(6))!;
 
         Assert.NotEmpty(before.Objects);
-        Assert.Equal(before.Objects, after.Objects);
+
+        // Script addresses are deliberately not written. They are cartridge addresses,
+        // and the world file is the server's — it has no business holding one, and no
+        // use for it either, since the client reads scripts from its own image.
+        Assert.Equal(
+            before.Objects.Select(o => o with { ScriptAddress = 0 }),
+            after.Objects);
+
+        Assert.All(before.Objects, o => Assert.True(o.HasScript));
+        Assert.All(after.Objects, o => Assert.False(o.HasScript));
     }
 }
 

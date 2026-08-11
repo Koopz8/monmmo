@@ -153,6 +153,19 @@ public sealed class SyntheticRom
 
     public const int MapObjectsOffset = 0x078000;
 
+    public const int ScriptsOffset = 0x0A0000;
+    public const int ScriptTextOffset = 0x0A4000;
+
+    private const int ScriptStride = 64;
+    private const int ScriptTextStride = 256;
+
+    /// <summary>What the person with this local id says. Two pages, to exercise the break.</summary>
+    public static List<string> DialogueFor(int mapIndex, int localId) =>
+    [
+        $"HELLO {mapIndex:D2}",
+        $"I AM NUMBER {localId}",
+    ];
+
     private const int ObjectsStride = 128;
 
     /// <summary>The objects written for a map, which is what extraction is checked against.</summary>
@@ -162,9 +175,9 @@ public sealed class SyntheticRom
 
         return
         [
-            new MapObject(1, 5 + index % 20, 3, 2, Direction.Up, 7, false),
-            new MapObject(2, 9 + index % 20, 6, 5, Direction.Left, 9, true),
-            new MapObject(3, 1, 8, 6, Direction.Down, 0, false),
+            new MapObject(1, 5 + index % 20, 3, 2, Direction.Up, 7, false, 0, 0, ScriptAddressFor(index, 0)),
+            new MapObject(2, 9 + index % 20, 6, 5, Direction.Left, 9, true, 0, 0, ScriptAddressFor(index, 1)),
+            new MapObject(3, 1, 8, 6, Direction.Down, 0, false, 0, 0, ScriptAddressFor(index, 2)),
         ];
     }
 
@@ -204,13 +217,19 @@ public sealed class SyntheticRom
     public const int MapCount = BankCount * MapsPerBank;
 
     // --- overworld sprites -------------------------------------------------------
+    //
+    // The pixel data is the largest block in this file — eighty sprites of nine frames
+    // at 256 bytes each — and it was originally laid out where it quietly ran over the
+    // top of two other regions. Nothing failed: the tests that touched it used low
+    // indices, and the writes that clobbered it happened to run last. RegionsDoNotOverlap
+    // exists because of that.
 
     public const int OverworldTableOffset = 0x080000;
     public const int OverworldRecordsOffset = 0x081000;
     public const int OverworldFrameListsOffset = 0x084000;
-    public const int OverworldPixelsOffset = 0x088000;
-    public const int OverworldPaletteTableOffset = 0x090000;
-    public const int OverworldPaletteDataOffset = 0x091000;
+    public const int OverworldPixelsOffset = 0x0C0000;
+    public const int OverworldPaletteTableOffset = 0x0F0000;
+    public const int OverworldPaletteDataOffset = 0x0F1000;
 
     public const int OverworldCount = 80;
 
@@ -435,6 +454,7 @@ public sealed class SyntheticRom
                 WriteU32(header + 8, 0);   // scripts
                 WriteU32(header + 12, Rom.BaseAddress + (uint)(MapConnectionRecordOffset + index * ConnectionRecordStride));
 
+                WriteScriptsFor(index);
                 WriteObjectsFor(index);
                 WriteWarpsFor(index);
                 WriteConnectionsFor(index);
@@ -585,8 +605,9 @@ public sealed class SyntheticRom
             WriteU16(at + 6, (ushort)entry.Y);
             _data[at + 8] = 0;                                  // elevation
             _data[at + 9] = (byte)entry.MovementType;
+            _data[at + 10] = (byte)((entry.RangeX & 0x0F) | ((entry.RangeY & 0x0F) << 4));
             WriteU16(at + 12, (ushort)(entry.IsTrainer ? 1 : 0));
-            WriteU32(at + 16, Rom.BaseAddress + (uint)table);   // script
+            WriteU32(at + 16, Rom.BaseAddress + (uint)ScriptFor(index, i));
         }
 
         // One object beyond the map's own edge, which extraction should drop.
@@ -600,6 +621,65 @@ public sealed class SyntheticRom
 
         _data[events] = (byte)(objects.Count + 1);
         WriteU32(events + 4, Rom.BaseAddress + (uint)table);
+    }
+
+    public static uint ScriptAddressFor(int mapIndex, int slot) =>
+        Rom.BaseAddress + (uint)ScriptFor(mapIndex, slot);
+
+    public static int ScriptFor(int mapIndex, int slot) =>
+        ScriptsOffset + (mapIndex * 4 + slot) * ScriptStride;
+
+    /// <summary>
+    /// Writes a script per person: lock, face the player, load a pointer, call the
+    /// standard routine that shows it, release, end.
+    /// <para>
+    /// That pairing is the point. The games have no "say this" instruction — dialogue
+    /// is a pointer loaded into a slot followed by a call to a routine that displays
+    /// whatever is in it, so text is found by watching what gets loaded.
+    /// </para>
+    /// </summary>
+    private void WriteScriptsFor(int index)
+    {
+        if (index == MapWithoutEvents) return;
+
+        List<MapObject> objects = ObjectsFor(index);
+
+        for (int slot = 0; slot < objects.Count; slot++)
+        {
+            int at = ScriptFor(index, slot);
+            int text = ScriptTextOffset + (index * 4 + slot) * ScriptTextStride;
+
+            WriteDialogue(text, DialogueFor(index, objects[slot].LocalId));
+
+            _data[at] = 0x6A;                                       // lock
+            _data[at + 1] = 0x6B;                                   // faceplayer
+            _data[at + 2] = 0x0F;                                   // loadpointer
+            _data[at + 3] = 0;                                      // into slot zero
+            WriteU32(at + 4, Rom.BaseAddress + (uint)text);
+            _data[at + 8] = 0x09;                                   // callstd
+            _data[at + 9] = 2;
+            _data[at + 10] = 0x6C;                                  // release
+            _data[at + 11] = 0x02;                                  // end
+        }
+    }
+
+    /// <summary>
+    /// Writes dialogue the way the cartridge stores it: encoded characters with control
+    /// bytes between the pages, ending in a terminator.
+    /// </summary>
+    private void WriteDialogue(int at, IReadOnlyList<string> pages)
+    {
+        int i = at;
+
+        for (int page = 0; page < pages.Count; page++)
+        {
+            foreach (char c in pages[page])
+                _data[i++] = c == ' ' ? (byte)0x00 : EncodeCharAsCartridgeWould(c);
+
+            if (page < pages.Count - 1) _data[i++] = GameText.Paragraph;
+        }
+
+        _data[i] = GameText.Terminator;
     }
 
     /// <summary>

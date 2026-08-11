@@ -57,8 +57,11 @@ public sealed record MapObject(
     int MovementType,
     bool IsTrainer,
     int RangeX = 0,
-    int RangeY = 0)
+    int RangeY = 0,
+    uint ScriptAddress = 0)
 {
+    /// <summary>True when talking to this one would do something.</summary>
+    public bool HasScript => ScriptAddress != 0;
     public GridPosition Square => new(X, Y);
 
     /// <summary>True when this one paces about rather than standing still.</summary>

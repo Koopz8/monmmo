@@ -118,6 +118,7 @@ public static class MapLinkExtractor
             byte range = rom.ReadU8(at + 10);
 
             int trainerType = rom.ReadU16(at + 12);
+            uint script = rom.ReadU32(at + 16);
 
             if (x < 0 || x >= width || y < 0 || y >= height)
             {
@@ -134,7 +135,8 @@ public static class MapLinkExtractor
                 movementType,
                 trainerType != 0,
                 range & 0x0F,
-                (range >> 4) & 0x0F));
+                (range >> 4) & 0x0F,
+                rom.IsRomAddress(script) ? script : 0));
         }
 
         return objects;
