@@ -23,23 +23,26 @@ public sealed class GameRules
 {
     private static readonly byte[] Magic = "MONRULES"u8.ToArray();
 
-    private const int Version = 2;
+    private const int Version = 3;
 
     private readonly Dictionary<int, SpeciesData> _species;
     private readonly Dictionary<int, MoveData> _moves;
     private readonly Dictionary<int, Learnset> _learnsets;
     private readonly Dictionary<int, TrainerParty> _trainers;
+    private readonly Dictionary<int, ItemData> _items;
 
     public GameRules(
         IEnumerable<SpeciesData> species,
         IEnumerable<MoveData> moves,
         IEnumerable<Learnset> learnsets,
-        IEnumerable<TrainerParty>? trainers = null)
+        IEnumerable<TrainerParty>? trainers = null,
+        IEnumerable<ItemData>? items = null)
     {
         _species = species.ToDictionary(s => s.Index);
         _moves = moves.ToDictionary(m => m.Id);
         _learnsets = learnsets.ToDictionary(l => l.Species);
         _trainers = (trainers ?? []).ToDictionary(t => t.Id);
+        _items = (items ?? []).ToDictionary(i => i.Id);
     }
 
     public int SpeciesCount => _species.Count;
@@ -50,6 +53,8 @@ public sealed class GameRules
 
     public int TrainerCount => _trainers.Count;
 
+    public int ItemCount => _items.Count;
+
     public SpeciesData? SpeciesAt(int index) => _species.GetValueOrDefault(index);
 
     public MoveData? MoveAt(int id) => _moves.GetValueOrDefault(id);
@@ -57,6 +62,8 @@ public sealed class GameRules
     public Learnset? LearnsetOf(int species) => _learnsets.GetValueOrDefault(species);
 
     public TrainerParty? TrainerAt(int id) => _trainers.GetValueOrDefault(id);
+
+    public ItemData? ItemAt(int id) => _items.GetValueOrDefault(id);
 
     /// <summary>
     /// The moves a wild creature of this species and level would know — the last four
@@ -145,6 +152,20 @@ public sealed class GameRules
 
                 foreach (int move in member.Moves) writer.Write(move);
             }
+        }
+
+        writer.Write(_items.Count);
+
+        foreach (ItemData item in _items.Values)
+        {
+            writer.Write(item.Id);
+            writer.Write(item.Price);
+            writer.Write((int)item.Pocket);
+            writer.Write(item.HoldEffect);
+            writer.Write(item.HoldEffectParam);
+            writer.Write(item.Importance);
+            writer.Write(item.BattleUsage);
+            writer.Write(item.SecondaryId);
         }
     }
 
@@ -257,7 +278,22 @@ public sealed class GameRules
             trainers.Add(new TrainerParty(id, isDouble, members));
         }
 
-        return new GameRules(species, moves, learnsets, trainers);
+        var items = new List<ItemData>();
+
+        foreach (int _ in Counted(reader, "items", 4096))
+        {
+            items.Add(new ItemData(
+                reader.ReadInt32(),
+                reader.ReadInt32(),
+                (Pocket)reader.ReadInt32(),
+                reader.ReadInt32(),
+                reader.ReadInt32(),
+                reader.ReadInt32(),
+                reader.ReadInt32(),
+                reader.ReadInt32()));
+        }
+
+        return new GameRules(species, moves, learnsets, trainers, items);
     }
 
     /// <summary>

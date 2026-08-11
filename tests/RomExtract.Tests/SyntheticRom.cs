@@ -3,6 +3,7 @@ using PokeMmo.RomExtract.Graphics;
 using PokeMmo.Core.Battle;
 using PokeMmo.Core.World;
 using PokeMmo.RomExtract.Maps;
+using PokeMmo.Core.Data;
 using PokeMmo.RomExtract.Trainers;
 
 namespace PokeMmo.RomExtract.Tests;
@@ -363,6 +364,7 @@ public sealed class SyntheticRom
         WriteLearnsets();
         WriteOverworldSprites();
         WriteTrainers();
+        WriteItems();
     }
 
     /// <summary>Palette 0 of the synthetic tileset — what a rendered map is checked against.</summary>
@@ -758,6 +760,82 @@ public sealed class SyntheticRom
                     WriteU16(movesAt + m * 2, (ushort)(m < mon.Moves.Count ? mon.Moves[m] : 0));
                 }
             }
+        }
+    }
+
+    // --- items -------------------------------------------------------------------
+
+    public const int ItemTableOffset = 0x110000;
+    public const int ItemDescriptionsOffset = 0x114000;
+
+    private const int ItemRecordBytes = 44;
+
+    /// <summary>Items zero upward, with zero being the cartridge's "nothing".</summary>
+    public const int ItemCount = 96;
+
+    /// <summary>An item nobody can buy or sell, standing in for the key items.</summary>
+    /// <remarks>
+    /// Given a price on purpose. Real key items are priced at zero, and a fixture that
+    /// copied that would make every test about importance pass whether the code read
+    /// importance or not — which is exactly what happened the first time these were
+    /// written. The price has to be the thing that is <em>not</em> deciding it.
+    /// </remarks>
+    public const int KeyItem = 20;
+
+    public static int ItemPriceFor(int id) => id == 0 ? 0 : id * 50;
+
+    public static Pocket ItemPocketFor(int id) => id switch
+    {
+        0 => Pocket.None,
+        KeyItem => Pocket.KeyItems,
+        _ when id % 8 == 3 => Pocket.Balls,
+        _ when id % 8 == 5 => Pocket.Berries,
+        _ => Pocket.Items,
+    };
+
+    public static string ItemNameFor(int id) => id == 0 ? "NOTHING" : $"ITEM {id:D2}";
+
+    /// <summary>
+    /// Writes the item table. Every record states its own id, which is what makes this
+    /// table findable at all — and what makes the question of where it starts have
+    /// exactly one answer.
+    /// </summary>
+    private void WriteItems()
+    {
+        for (int id = 0; id < ItemCount; id++)
+        {
+            int at = ItemTableOffset + id * ItemRecordBytes;
+
+            GameText.Encode(ItemNameFor(id), 14).CopyTo(_data, at);
+
+            WriteU16(at + 0x0E, (ushort)id);
+            WriteU16(at + 0x10, (ushort)ItemPriceFor(id));
+
+            _data[at + 0x12] = (byte)(id % 7);              // hold effect
+            _data[at + 0x13] = (byte)(id % 30);             // hold effect parameter
+
+            WriteU32(at + 0x14, Rom.BaseAddress + (uint)(ItemDescriptionsOffset + id * 64));
+
+            _data[at + 0x18] = (byte)(id == KeyItem ? 1 : 0);
+            _data[at + 0x1A] = (byte)ItemPocketFor(id);
+            _data[at + 0x1B] = (byte)(id % 4);              // type
+
+            // A field routine on some, a battle routine on others, neither on a few.
+            // All three shapes are real and a reader has to accept every one of them.
+            if (id % 3 != 0) WriteU32(at + 0x1C, Rom.BaseAddress + (uint)ScriptsOffset);
+
+            _data[at + 0x20] = (byte)(id % 5);              // battle usage
+
+            if (id % 3 != 1) WriteU32(at + 0x24, Rom.BaseAddress + (uint)ScriptsOffset);
+
+            _data[at + 0x28] = (byte)(id % 11);             // secondary id
+        }
+
+        for (int id = 0; id < ItemCount; id++)
+        {
+            int at = ItemDescriptionsOffset + id * 64;
+
+            GameText.EncodeAnchor($"A THING NUMBER {id:D2}").CopyTo(_data, at);
         }
     }
 

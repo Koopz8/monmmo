@@ -5,6 +5,7 @@ using PokeMmo.Core.Data;
 using PokeMmo.RomExtract;
 using PokeMmo.RomExtract.Graphics;
 using PokeMmo.RomExtract.Maps;
+using PokeMmo.RomExtract.Items;
 using PokeMmo.RomExtract.Trainers;
 
 namespace PokeMmo.Tools.RomDump;
@@ -122,6 +123,9 @@ public static class Program
 
         if (options.DumpTrainers)
             WriteTrainers(rom, speciesCount);
+
+        if (options.DumpItems)
+            WriteItems(rom);
 
         Console.WriteLine();
         Console.WriteLine($"Done. Output in {Path.GetFullPath(options.OutputDirectory)}");
@@ -712,6 +716,46 @@ public static class Program
         return Enumerable.Range(0, wanted).Select(i => items[i * step]);
     }
 
+    /// <summary>
+    /// Reports the item table.
+    /// <para>
+    /// Shorter than the others because there is less to doubt. Every record contains
+    /// its own index, so a table that counts from zero for four hundred entries is the
+    /// table — there is no question of starting a slot early or late.
+    /// </para>
+    /// </summary>
+    private static void WriteItems(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("Items");
+
+        if (ItemTable.Locate(rom, Console.WriteLine) is not { } table)
+        {
+            Console.WriteLine("  no item table found");
+            return;
+        }
+
+        List<ItemRecord> items = ItemTable.Read(rom, table);
+
+        Console.WriteLine($"  {items.Count} items, {items.Count(i => i.ToData().CanBeBought)} of them for sale");
+        Console.WriteLine($"  the record after the last: {ItemRecord.Explain(rom, table + items.Count * ItemRecord.RecordSizeBytes, items.Count)}");
+
+        foreach (var pocket in items.GroupBy(i => i.Pocket).OrderByDescending(g => g.Count()))
+            Console.WriteLine($"    {pocket.Key,-9} {pocket.Count()}");
+
+        Console.WriteLine();
+        Console.WriteLine("  Spot check — compare these names and prices against the games:");
+
+        foreach (ItemRecord item in Spread(items, 12))
+        {
+            string name = string.IsNullOrWhiteSpace(item.Name) ? "(no name)" : item.Name;
+
+            Console.WriteLine(
+                $"    {item.Id,4} {name,-14} {item.Pocket,-9} " +
+                $"{(item.Price > 0 ? $"{item.Price}" : "not for sale"),12}");
+        }
+    }
+
     private static void WriteOverworldSprites(Rom rom, string outputDirectory)
     {
         Console.WriteLine();
@@ -845,6 +889,7 @@ public static class Program
                                      few of the walking figures as PNGs
               --trainers             report the trainer table: where it starts, what
                                      was rejected just before it, and a few parties
+              --items                report the item table, its pockets and prices
               --export-rules <path>  write the rules file the server resolves battles
                                      against: base stats, move power, catch rates and
                                      learnsets, with no names of any kind
@@ -879,6 +924,7 @@ public static class Program
 
         public bool DumpOverworld { get; private init; }
         public bool DumpTrainers { get; private init; }
+        public bool DumpItems { get; private init; }
         public bool DumpMoves { get; private init; }
         public bool DumpEncounters { get; private init; }
         public string? BehaviourMap { get; private init; }
@@ -901,6 +947,7 @@ public static class Program
             string? exportRules = null;
             bool overworld = false;
             bool trainers = false;
+            bool items = false;
             bool dumpMoves = false, dumpEncounters = false;
             string? behaviourMap = null;
             TileOrder order = TileOrder.RowMajor;
@@ -959,6 +1006,9 @@ public static class Program
                     case "--trainers":
                         trainers = true;
                         break;
+                    case "--items":
+                        items = true;
+                        break;
                     case "--moves":
                         dumpMoves = true;
                         break;
@@ -1004,6 +1054,7 @@ public static class Program
                 ExportRulesPath = exportRules,
                 DumpOverworld = overworld,
                 DumpTrainers = trainers,
+                DumpItems = items,
                 DumpMoves = dumpMoves,
                 DumpEncounters = dumpEncounters,
                 BehaviourMap = behaviourMap,

@@ -1,5 +1,6 @@
 using PokeMmo.Core.Battle;
 using PokeMmo.Core.Data;
+using PokeMmo.RomExtract.Items;
 using PokeMmo.RomExtract.Trainers;
 
 namespace PokeMmo.RomExtract;
@@ -47,11 +48,14 @@ public static class RulesExporter
 
         List<TrainerParty> trainers = ExtractTrainers(rom, species.Count, log);
 
-        var rules = new GameRules(anonymousSpecies, anonymousMoves, learnsets.Values, trainers);
+        List<ItemData> items = ExtractItems(rom, log);
+
+        var rules = new GameRules(anonymousSpecies, anonymousMoves, learnsets.Values, trainers, items);
 
         log?.Invoke(
             $"  rules: {rules.SpeciesCount} species, {rules.MoveCount} moves, " +
-            $"{rules.LearnsetCount} learnsets, {rules.TrainerCount} trainers (no names)");
+            $"{rules.LearnsetCount} learnsets, {rules.TrainerCount} trainers, " +
+            $"{rules.ItemCount} items (no names)");
 
         ReportUsableness(rules, log);
 
@@ -82,6 +86,24 @@ public static class RulesExporter
         return records
             .Select(r => new TrainerParty(r.Id, r.IsDouble, r.Party.Select(m => m.ToMember()).ToList()))
             .ToList();
+    }
+
+    /// <summary>
+    /// Reads the item table, and drops every name and description on the way out.
+    /// <para>
+    /// A cartridge with no findable item table is not worth refusing an export over.
+    /// Everything else in the file still works and there is simply nothing to buy.
+    /// </para>
+    /// </summary>
+    private static List<ItemData> ExtractItems(Rom rom, Action<string>? log)
+    {
+        if (ItemTable.Locate(rom, log) is not { } table)
+        {
+            log?.Invoke("  items: no table found — there will be nothing to buy or carry");
+            return [];
+        }
+
+        return ItemTable.Read(rom, table).Select(i => i.ToData()).ToList();
     }
 
     private static SpeciesData Anonymise(SpeciesData species) => new()

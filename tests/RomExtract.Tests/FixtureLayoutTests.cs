@@ -62,6 +62,9 @@ public class FixtureLayoutTests
 
         yield return new("trainer table", SyntheticRom.TrainerGuardOffset, (SyntheticRom.TrainerCount + 2) * 40);
         yield return new("trainer parties", SyntheticRom.TrainerPartiesOffset, (SyntheticRom.TrainerCount + 1) * 128);
+
+        yield return new("item table", SyntheticRom.ItemTableOffset, SyntheticRom.ItemCount * 44);
+        yield return new("item descriptions", SyntheticRom.ItemDescriptionsOffset, SyntheticRom.ItemCount * 64);
     }
 
     [Fact]
