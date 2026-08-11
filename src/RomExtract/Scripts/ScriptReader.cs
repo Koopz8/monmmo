@@ -400,11 +400,21 @@ public static class ScriptReader
     /// why reading scripts had to come first.
     /// </para>
     /// </summary>
-    public static int? FindTrainer(Rom rom, uint address)
+    public static int? FindTrainer(Rom rom, uint address) => FindTrainerBattle(rom, address)?.Id;
+
+    /// <summary>
+    /// Which fight a script picks and the flag it is remembered by, or nothing.
+    /// <para>
+    /// The two travel together because they are arguments to the same command and
+    /// neither is written anywhere else. Reading them separately would mean walking
+    /// every script twice to learn two halves of one fact.
+    /// </para>
+    /// </summary>
+    public static (int Id, int Flag)? FindTrainerBattle(Rom rom, uint address)
     {
         foreach (ScriptCommand command in ReadAll(rom, address))
         {
-            if (command.Code == ScriptCommands.TrainerBattle) return command.Word(1);
+            if (command.Code == ScriptCommands.TrainerBattle) return (command.Word(1), command.Word(3));
         }
 
         return null;

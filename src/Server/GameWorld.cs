@@ -1,6 +1,7 @@
 using PokeMmo.Core.Battle;
 using PokeMmo.Core.Data;
 using PokeMmo.Core.Net;
+using PokeMmo.Core.Scripts;
 using PokeMmo.Core.Save;
 using PokeMmo.Core.World;
 
@@ -36,6 +37,19 @@ public sealed record ServerPlayer(int Id, long AccountId, string Name)
     /// you walk back past them.
     /// </summary>
     public HashSet<int> DefeatedTrainers { get; } = [];
+
+    /// <summary>
+    /// The cartridge's own bookkeeping for this player: which script flags are set and
+    /// what the script variables hold.
+    /// <para>
+    /// Stored and handed back without being understood. The server cannot run a script
+    /// — the bytes are on an image it has never seen — so it cannot know that one of
+    /// these numbers is the parcel and another is the bicycle. What it can do is be the
+    /// one place they live, which is what stops two machines disagreeing about whether
+    /// something has already happened.
+    /// </para>
+    /// </summary>
+    public ScriptState Script { get; init; } = new();
 
     /// <summary>
     /// Everything this player is carrying.
@@ -114,6 +128,18 @@ public sealed class GameWorld
     private readonly Dictionary<string, MapPopulation> _populated = [];
     private readonly BattleRng _objectRng = new(0x5EED);
 
+    /// <summary>
+    /// Which script flag says a trainer has already been beaten, by trainer id.
+    /// <para>
+    /// Built once from the world file, because the pair is written down there and
+    /// nowhere else — both halves are arguments to the same command inside a script,
+    /// and this end of the wire has no cartridge to read one from. A trainer who turns
+    /// up on more than one map is the same trainer with the same flag, so the first one
+    /// found is as good as any.
+    /// </para>
+    /// </summary>
+    private readonly Dictionary<int, int> _trainerFlags = [];
+
     public GameWorld(WorldData world, string startingMapId, GameRules? rules = null, uint encounterSeed = 1)
     {
         _world = world;
@@ -121,6 +147,16 @@ public sealed class GameWorld
         _rules = rules;
         _battles = rules is null ? null : new BattleFactory(rules);
         _progression = rules is null ? null : new Progression(rules);
+
+        foreach (MapData map in world.Maps)
+        {
+            foreach (MapObject person in map.Objects)
+            {
+                if (person.TrainerId == 0 || person.TrainerFlag == 0) continue;
+
+                _trainerFlags.TryAdd(person.TrainerId, person.TrainerFlag);
+            }
+        }
 
         StartingMap = world.Find(startingMapId)
             ?? world.FindByName(startingMapId)
@@ -245,9 +281,21 @@ public sealed class GameWorld
                 Bag = new Bag(saved.Items),
                 Money = saved.Money,
                 Party = [.. saved.Party],
+                Script = new ScriptState(
+                    saved.Flags,
+                    saved.Variables.Select(v => new KeyValuePair<int, int>(v.Id, v.Value))),
             };
 
-            foreach (int beaten in saved.DefeatedTrainers) player.DefeatedTrainers.Add(beaten);
+            foreach (int beaten in saved.DefeatedTrainers)
+            {
+                player.DefeatedTrainers.Add(beaten);
+
+                // Saves written before flags existed know who was beaten and not which
+                // flag says so. Lighting it on the way in costs one lookup and means an
+                // account that has been playing for weeks does not have to fight
+                // everybody again to make them stop saying hello.
+                if (_trainerFlags.GetValueOrDefault(beaten) is var flag and not 0) player.Script.Set(flag);
+            }
 
             // A save from before healing existed, or one written mid-wipe, would leave
             // this account unable to start a battle for good. Waking up healthy is the
@@ -259,7 +307,11 @@ public sealed class GameWorld
                 new(
                     new Welcome(
                         player.Id, mapId, square.X, square.Y, player.Facing,
-                        player.Money, player.Bag.Entries, player.Party),
+                        player.Money, player.Bag.Entries, player.Party)
+                    {
+                        Flags = [.. player.Script.Flags],
+                        Variables = [.. player.Script.Variables.Select(v => new SavedVariable(v.Key, v.Value))],
+                    },
                     OnlyTo: player.Id),
             };
 
@@ -810,6 +862,28 @@ public sealed class GameWorld
     private Outgoing Told(ServerPlayer player, string message) =>
         new(new ShopUpdated(player.Money, player.Bag.Entries, message), OnlyTo: player.Id);
 
+    /// <summary>
+    /// Records what a script the player just ran did to their save.
+    /// <para>
+    /// Taken on trust, and worth saying why rather than leaving it to be discovered.
+    /// Only the client can run a script — the bytes are on a cartridge and this side has
+    /// never seen one — so either the flags live here and arrive from there, or they
+    /// live on the client and stop being a save at all. The two things worth guarding,
+    /// money and what is in the party, are decided here and are not in this message.
+    /// </para>
+    /// </summary>
+    public void RunScript(int playerId, ScriptRan ran)
+    {
+        lock (_gate)
+        {
+            if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return;
+
+            foreach (int flag in ran.Set) player.Script.Set(flag);
+            foreach (int flag in ran.Cleared) player.Script.Clear(flag);
+            foreach (SavedVariable variable in ran.Written) player.Script.Write(variable.Id, variable.Value);
+        }
+    }
+
     /// <summary>The text box is closed. Whoever this player was holding carries on.</summary>
     public void StopTalking(int playerId)
     {
@@ -1155,6 +1229,18 @@ public sealed class GameWorld
             if (finished)
             {
                 send.Add(new Outgoing(FinishBattle(player, encounter, winner), OnlyTo: playerId));
+
+                // Beating somebody is decided here and nowhere else. Which line they
+                // read next is decided by running their script against these flags, so
+                // a flag the client is not told about is a trainer who goes on greeting
+                // you as though the fight never happened.
+                if (winner == Side.Player &&
+                    encounter.TrainerId is { } won &&
+                    _trainerFlags.GetValueOrDefault(won) is var lit and not 0 &&
+                    player.Script.Set(lit))
+                {
+                    send.Add(new Outgoing(new FlagsChanged([lit]), OnlyTo: playerId));
+                }
                 return send;
             }
 
@@ -1315,6 +1401,8 @@ public sealed class GameWorld
                 DefeatedTrainers = [.. player.DefeatedTrainers],
                 Items = player.Bag.Entries,
                 Money = player.Money,
+                Flags = [.. player.Script.Flags],
+                Variables = [.. player.Script.Variables.Select(v => new SavedVariable(v.Key, v.Value))],
             };
         }
     }

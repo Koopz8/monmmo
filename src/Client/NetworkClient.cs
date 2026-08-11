@@ -2,7 +2,9 @@ using System.Collections.Concurrent;
 using System.Net.Sockets;
 using PokeMmo.Core.Battle;
 using PokeMmo.Core.Net;
+using PokeMmo.Core.Save;
 using PokeMmo.Core.World;
+using PokeMmo.RomExtract.Scripts;
 
 namespace PokeMmo.Client;
 
@@ -126,6 +128,13 @@ public sealed class NetworkClient : IDisposable
     public void SendTalk(int localId) => Send(new TalkRequest(localId));
 
     public void SendTalkFinished() => Send(new TalkFinished());
+
+    /// <summary>Tells the server what a script the player just ran did to their save.</summary>
+    public void SendScriptRan(ScriptRun run) =>
+        Send(new ScriptRan(
+            run.FlagsSet,
+            run.FlagsCleared,
+            [.. run.VariablesWritten.Select(v => new SavedVariable(v.Key, v.Value))]));
 
     public void SendBuy(int itemId, int count) => Send(new BuyRequest(itemId, count));
 

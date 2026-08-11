@@ -118,6 +118,19 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
                 PRIMARY KEY (account_id, trainer_id)
             );
 
+            CREATE TABLE IF NOT EXISTS script_flags (
+                account_id INTEGER NOT NULL REFERENCES characters(account_id) ON DELETE CASCADE,
+                flag       INTEGER NOT NULL,
+                PRIMARY KEY (account_id, flag)
+            );
+
+            CREATE TABLE IF NOT EXISTS script_variables (
+                account_id INTEGER NOT NULL REFERENCES characters(account_id) ON DELETE CASCADE,
+                variable   INTEGER NOT NULL,
+                value      INTEGER NOT NULL,
+                PRIMARY KEY (account_id, variable)
+            );
+
             CREATE TABLE IF NOT EXISTS party_moves (
                 member_id INTEGER NOT NULL REFERENCES party_members(id) ON DELETE CASCADE,
                 slot      INTEGER NOT NULL,
@@ -336,6 +349,41 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
             await beaten.ExecuteNonQueryAsync(cancellationToken);
         }
 
+        // Rewritten wholesale, unlike the beaten trainers. A script can clear a flag as
+        // readily as set one — that is what makes a door lock behind you — so an
+        // insert-only table would be one nothing could ever come back out of.
+        await using (SqliteCommand clear = connection.CreateCommand())
+        {
+            clear.Transaction = transaction;
+            clear.CommandText =
+                "DELETE FROM script_flags WHERE account_id = $id; " +
+                "DELETE FROM script_variables WHERE account_id = $id;";
+            clear.Parameters.AddWithValue("$id", accountId);
+            await clear.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        foreach (int flag in character.Flags)
+        {
+            await using SqliteCommand row = connection.CreateCommand();
+            row.Transaction = transaction;
+            row.CommandText = "INSERT OR IGNORE INTO script_flags (account_id, flag) VALUES ($id, $flag);";
+            row.Parameters.AddWithValue("$id", accountId);
+            row.Parameters.AddWithValue("$flag", flag);
+            await row.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        foreach (SavedVariable variable in character.Variables)
+        {
+            await using SqliteCommand row = connection.CreateCommand();
+            row.Transaction = transaction;
+            row.CommandText =
+                "INSERT OR REPLACE INTO script_variables (account_id, variable, value) VALUES ($id, $var, $value);";
+            row.Parameters.AddWithValue("$id", accountId);
+            row.Parameters.AddWithValue("$var", variable.Id);
+            row.Parameters.AddWithValue("$value", variable.Value);
+            await row.ExecuteNonQueryAsync(cancellationToken);
+        }
+
         // The party is rewritten wholesale rather than diffed. Six rows is nothing,
         // and a diff is where an ordering bug would hide.
         await using (SqliteCommand clear = connection.CreateCommand())
@@ -494,11 +542,37 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
                 carried.Add(new BagEntry(reader.GetInt32(0), reader.GetInt32(1)));
         }
 
+        var flags = new List<int>();
+
+        await using (SqliteCommand command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT flag FROM script_flags WHERE account_id = $id ORDER BY flag;";
+            command.Parameters.AddWithValue("$id", accountId);
+
+            await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken)) flags.Add(reader.GetInt32(0));
+        }
+
+        var variables = new List<SavedVariable>();
+
+        await using (SqliteCommand command = connection.CreateCommand())
+        {
+            command.CommandText =
+                "SELECT variable, value FROM script_variables WHERE account_id = $id ORDER BY variable;";
+            command.Parameters.AddWithValue("$id", accountId);
+
+            await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+                variables.Add(new SavedVariable(reader.GetInt32(0), reader.GetInt32(1)));
+        }
+
         return new SavedCharacter(mapId, x, y, facing, party)
         {
             DefeatedTrainers = defeated,
             Items = carried,
             Money = money,
+            Flags = flags,
+            Variables = variables,
         };
     }
 

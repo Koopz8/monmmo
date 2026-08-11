@@ -1,3 +1,4 @@
+using PokeMmo.Core.Scripts;
 using PokeMmo.Core.World;
 using PokeMmo.RomExtract.Maps;
 using PokeMmo.RomExtract.Scripts;
@@ -394,5 +395,167 @@ public class ScriptReaderTests
         var image = new byte[0x400];
         commands.CopyTo(image, 0);
         return image;
+    }
+}
+
+/// <summary>
+/// Running a script rather than reading it.
+/// <para>
+/// The reader answers "what could this person possibly say" and has to, because
+/// choosing between the arms of a conditional needs the flags of a save. The runner is
+/// given those flags and walks one path — so what comes back is a transcript rather
+/// than an inventory, and a person stops saying every version of their line at once.
+/// </para>
+/// </summary>
+public class ScriptRunnerTests
+{
+    private const uint Start = Rom.BaseAddress;
+    private const uint Elsewhere = Rom.BaseAddress + 0x100;
+    private const uint SaysA = Rom.BaseAddress + 0x200;
+    private const uint SaysB = Rom.BaseAddress + 0x220;
+
+    private static byte[] At(uint address) =>
+        [(byte)address, (byte)(address >> 8), (byte)(address >> 16), (byte)(address >> 24)];
+
+    private static byte[] Word(int value) => [(byte)value, (byte)(value >> 8)];
+
+    /// <summary>Six of the same letter, which is enough to read as speech and not as data.</summary>
+    private static byte[] Speech(char letter) =>
+    [
+        .. Enumerable.Repeat((byte)(0xBB + (letter - 'A')), 6),
+        GameText.Terminator,
+    ];
+
+    private static Rom Image(params (uint Address, byte[] Bytes)[] chunks)
+    {
+        var image = new byte[0x400];
+
+        foreach ((uint address, byte[] bytes) in chunks)
+            bytes.CopyTo(image, (int)(address - Rom.BaseAddress));
+
+        return new Rom(image);
+    }
+
+    /// <summary>A script that says one letter and stops.</summary>
+    private static byte[] Says(uint text) => [ScriptCommands.Message, .. At(text), ScriptCommands.End];
+
+    [Fact]
+    public void OnlyTheArmThatRunsIsRead()
+    {
+        // checkflag then "goto if less" is the commonest pair on the cartridge, and it
+        // means "if they have not done this yet". A flag is one or nothing compared
+        // against one, so clear reads as less and set reads as equal.
+        Rom rom = Image(
+            (Start, [0x2B, .. Word(0x828), ScriptCommands.GotoIf, 0x00, .. At(Elsewhere), .. Says(SaysB)]),
+            (Elsewhere, Says(SaysA)),
+            (SaysA, Speech('A')),
+            (SaysB, Speech('B')));
+
+        Assert.Equal("AAAAAA", Assert.Single(ScriptRunner.Run(rom, Start).Pages));
+
+        Assert.Equal(
+            "BBBBBB",
+            Assert.Single(ScriptRunner.Run(rom, Start, new ScriptState([0x828])).Pages));
+    }
+
+    [Fact]
+    public void ACallComesBackAndCarriesOn()
+    {
+        // The difference between call and goto is the whole of a script's structure:
+        // most people in FireRed say nothing themselves and call somebody who does.
+        Rom rom = Image(
+            (Start, [ScriptCommands.Call, .. At(Elsewhere), ScriptCommands.Message, .. At(SaysB), ScriptCommands.End]),
+            (Elsewhere, [ScriptCommands.Message, .. At(SaysA), ScriptCommands.Return]),
+            (SaysA, Speech('A')),
+            (SaysB, Speech('B')));
+
+        Assert.Equal(["AAAAAA", "BBBBBB"], ScriptRunner.Run(rom, Start).Pages);
+    }
+
+    [Fact]
+    public void ABeatenTrainerSaysWhatComesAfterTheFightInstead()
+    {
+        // The command is its own conditional. A set flag does not skip a branch — it
+        // makes the fight do nothing and lets the script carry on to the line they say
+        // once you have beaten them. Reading both, which is what the old reader did, is
+        // why a trainer greeted you and gloated about losing in the same breath.
+        byte[] script =
+        [
+            ScriptCommands.TrainerBattle, 0x00, .. Word(41), .. Word(0x4F1), .. At(SaysA), .. At(SaysB),
+            ScriptCommands.Message, .. At(SaysB), ScriptCommands.End,
+        ];
+
+        Rom rom = Image((Start, script), (SaysA, Speech('A')), (SaysB, Speech('B')));
+
+        ScriptRun first = ScriptRunner.Run(rom, Start);
+
+        Assert.Equal(41, first.TrainerId);
+        Assert.Equal(0x4F1, first.TrainerFlag);
+        Assert.Equal("AAAAAA", Assert.Single(first.Pages));
+
+        ScriptRun again = ScriptRunner.Run(rom, Start, new ScriptState([0x4F1]));
+
+        Assert.Null(again.TrainerId);
+        Assert.Equal("BBBBBB", Assert.Single(again.Pages));
+    }
+
+    [Fact]
+    public void WhatAScriptWritesIsReportedRatherThanApplied()
+    {
+        // A run has to be repeatable: the client runs one to find out whether there is
+        // anything to open a box for, and would otherwise set every flag in it twice.
+        // What was written comes back as a list for somebody else to persist.
+        Rom rom = Image((Start, [0x29, .. Word(0x2A5), 0x16, .. Word(0x4001), .. Word(3), ScriptCommands.End]));
+
+        var save = new ScriptState();
+
+        ScriptRun run = ScriptRunner.Run(rom, Start, save);
+
+        Assert.Equal([0x2A5], run.FlagsSet);
+        Assert.Equal(3, run.VariablesWritten[0x4001]);
+
+        Assert.False(save.Has(0x2A5));
+        Assert.Equal([0x2A5], ScriptRunner.Run(rom, Start, save).FlagsSet);
+    }
+
+    [Fact]
+    public void AVariableDecidesABranchTheSameWayAFlagDoes()
+    {
+        Rom rom = Image(
+            (Start, [0x21, .. Word(0x4001), .. Word(2), ScriptCommands.GotoIf, 0x04, .. At(Elsewhere), .. Says(SaysB)]),
+            (Elsewhere, Says(SaysA)),
+            (SaysA, Speech('A')),
+            (SaysB, Speech('B')));
+
+        Assert.Equal("BBBBBB", Assert.Single(ScriptRunner.Run(rom, Start).Pages));
+
+        var far = new ScriptState(variables: [new KeyValuePair<int, int>(0x4001, 7)]);
+
+        Assert.Equal("AAAAAA", Assert.Single(ScriptRunner.Run(rom, Start, far).Pages));
+    }
+
+    [Fact]
+    public void AScriptThatLoopsForeverStillComesBack()
+    {
+        // Real scripts loop — a "which one do you want?" prompt waits for an answer this
+        // has no way to give. Following jumps without a budget is a client that hangs on
+        // somebody saying hello.
+        Rom rom = Image((Start, [ScriptCommands.Goto, .. At(Start)]));
+
+        Assert.True(ScriptRunner.Run(rom, Start).IsEmpty);
+    }
+
+    [Fact]
+    public void AnUnknownCommandStopsTheRunAndSaysWhich()
+    {
+        // Per run rather than per script, because a script can now stop somewhere it
+        // only reaches on one branch: the same person reads cleanly today and stops
+        // tomorrow, and the difference is a flag.
+        Rom rom = Image((Start, [ScriptCommands.Message, .. At(SaysA), 0x30, ScriptCommands.End]), (SaysA, Speech('A')));
+
+        ScriptRun run = ScriptRunner.Run(rom, Start);
+
+        Assert.Equal((byte)0x30, run.StoppedAt);
+        Assert.Equal("AAAAAA", Assert.Single(run.Pages));
     }
 }

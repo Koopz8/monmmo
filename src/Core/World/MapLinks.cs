@@ -70,6 +70,18 @@ public sealed record MapObject(
     public bool IsShopkeeper => Stock.Count > 0;
 
     /// <summary>
+    /// The script flag that means this trainer has already been beaten.
+    /// <para>
+    /// Carried here for the same reason the trainer id is: both are arguments to the
+    /// <c>trainerbattle</c> command inside a script, nothing on the map record says
+    /// either, and the server has no cartridge to go and look. Without it the server can
+    /// remember that somebody won a fight and still cannot tell the client which line
+    /// that person should read afterwards.
+    /// </para>
+    /// </summary>
+    public int TrainerFlag { get; init; }
+
+    /// <summary>
     /// Compares stock by its contents.
     /// <para>
     /// A record compares its members with <c>Equals</c>, and for a list that is
@@ -91,6 +103,7 @@ public sealed record MapObject(
         ScriptAddress == other.ScriptAddress &&
         TrainerId == other.TrainerId &&
         SightRange == other.SightRange &&
+        TrainerFlag == other.TrainerFlag &&
         Stock.SequenceEqual(other.Stock);
 
     public override int GetHashCode()

@@ -20,6 +20,8 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(MoveRequest), "move")]
 [JsonDerivedType(typeof(TalkRequest), "talk")]
 [JsonDerivedType(typeof(TalkFinished), "talkdone")]
+[JsonDerivedType(typeof(ScriptRan), "scriptran")]
+[JsonDerivedType(typeof(FlagsChanged), "flags")]
 [JsonDerivedType(typeof(BuyRequest), "buy")]
 [JsonDerivedType(typeof(SellRequest), "sell")]
 [JsonDerivedType(typeof(ShopOpened), "shop")]
@@ -74,6 +76,25 @@ public sealed record TalkRequest(int LocalId) : NetMessage;
 public sealed record TalkFinished : NetMessage;
 
 /// <summary>
+/// What a script the player just ran did to their save.
+/// <para>
+/// Sent by the client because the client is the only machine that can run one: the
+/// bytes are on a cartridge and the server has never had one. The server stores what
+/// it is told without knowing what any of it means, which is the same arrangement as
+/// the party — a save here is a list of numbers that only an image can resolve.
+/// </para>
+/// <para>
+/// Not anti-cheat, and not pretending to be. A client that lied about a flag would be
+/// lying about its own single-player progress, and the server keeps the two things
+/// worth guarding — money and what is in the party — for itself.
+/// </para>
+/// </summary>
+public sealed record ScriptRan(
+    IReadOnlyList<int> Set,
+    IReadOnlyList<int> Cleared,
+    IReadOnlyList<SavedVariable> Written) : NetMessage;
+
+/// <summary>
 /// Buy some of one thing from the shop that is open.
 /// <para>
 /// The item and the count, and no price. A request carrying a price is a request a
@@ -105,7 +126,20 @@ public sealed record Welcome(
     Direction Facing,
     int Money,
     IReadOnlyList<BagEntry> Bag,
-    IReadOnlyList<SavedMon> Party) : NetMessage;
+    IReadOnlyList<SavedMon> Party) : NetMessage
+{
+    /// <summary>
+    /// The save's script flags and variables, without which the client cannot tell
+    /// which of somebody's lines is the one they are on.
+    /// <para>
+    /// Init properties rather than two more positional members, for the reason the save
+    /// gives for the same choice: every existing construction is correct without them.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<int> Flags { get; init; } = [];
+
+    public IReadOnlyList<SavedVariable> Variables { get; init; } = [];
+}
 
 /// <summary>
 /// The player is now on a different map, through a door or off an edge.
@@ -116,6 +150,17 @@ public sealed record Welcome(
 /// </para>
 /// </summary>
 public sealed record MapChanged(string MapId, int X, int Y, Direction Facing) : NetMessage;
+
+/// <summary>
+/// Flags the server set without being asked.
+/// <para>
+/// Winning a fight is the case that matters. Beating somebody is decided here — the
+/// client has no party but its own and no say in it — and until the flag reaches the
+/// client that trainer goes on reading their opening line, because which line somebody
+/// reads is decided by running their script against exactly these flags.
+/// </para>
+/// </summary>
+public sealed record FlagsChanged(IReadOnlyList<int> Flags) : NetMessage;
 
 /// <summary>
 /// The credentials were not accepted. Deliberately vague about which half was wrong,

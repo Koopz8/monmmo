@@ -134,10 +134,13 @@ public static class MapLinkExtractor
             bool hasScript = rom.IsRomAddress(script);
 
             // Which trainer somebody is is not in this record — only that they are one.
-            // The id is an argument to a command inside their script.
-            int trainerId = trainerType != 0 && hasScript
-                ? Scripts.ScriptReader.FindTrainer(rom, script) ?? 0
-                : 0;
+            // The id is an argument to a command inside their script, and so is the flag
+            // that means somebody has already beaten them.
+            (int Id, int Flag) fight = trainerType != 0 && hasScript
+                ? Scripts.ScriptReader.FindTrainerBattle(rom, script) ?? (0, 0)
+                : (0, 0);
+
+            int trainerId = fight.Id;
 
             // Shopkeepers are not marked in any way. The only thing that distinguishes
             // one is a pokemart command in their script, so every scriptable person has
@@ -159,7 +162,10 @@ public static class MapLinkExtractor
                 hasScript ? script : 0,
                 trainerId,
                 sight,
-                stock));
+                stock)
+            {
+                TrainerFlag = fight.Flag,
+            });
         }
 
         return objects;

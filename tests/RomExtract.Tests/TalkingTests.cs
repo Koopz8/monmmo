@@ -392,3 +392,89 @@ public class TurningTests
         Assert.Empty(world.Move(player.Id, Direction.Down, 10));
     }
 }
+
+/// <summary>
+/// The flags a save carries, and the one the server sets on its own.
+/// <para>
+/// The server cannot run a script — the bytes are on a cartridge it has never seen — so
+/// what it knows about flags is what it was told and what it stores. The exception is
+/// the flag that says a trainer has been beaten, because beating somebody is decided
+/// here and nowhere else.
+/// </para>
+/// </summary>
+public class ScriptFlagTests
+{
+    private const string Town = "3.0";
+
+    private static GameWorld World(params MapObject[] people)
+    {
+        MapData map = new(Town, "PALLET TOWN", 8, 8, new byte[64]) { Objects = people };
+
+        return new GameWorld(new WorldData([map]), Town, TestRules.All);
+    }
+
+    private static MapObject Trainer(int localId, int trainerId, int flag) =>
+        new(localId, 5, 3, 3, Direction.Down, 0, true, 0, 0, 0, trainerId, 1) { TrainerFlag = flag };
+
+    private static Welcome WelcomeFor(GameWorld world, SavedCharacter saved)
+    {
+        (_, List<Outgoing> send) = world.Join(1, "Koop", saved);
+
+        return send.Select(o => o.Message).OfType<Welcome>().Single();
+    }
+
+    [Fact]
+    public void TheSaveHandsBackWhatItWasGiven()
+    {
+        Welcome welcome = WelcomeFor(
+            World(),
+            SavedCharacter.Fresh(Town, 1, 1) with
+            {
+                Flags = [0x2A5],
+                Variables = [new SavedVariable(0x4001, 3)],
+            });
+
+        Assert.Equal([0x2A5], welcome.Flags);
+        Assert.Equal(3, welcome.Variables.Single(v => v.Id == 0x4001).Value);
+    }
+
+    [Fact]
+    public void ASaveThatKnowsWhoWasBeatenLearnsWhichFlagSaysSo()
+    {
+        // Every account that has been playing predates flags existing. They know who
+        // they have beaten and not the cartridge's number for it, and without this they
+        // would have to fight everybody again to make them stop saying hello.
+        Welcome welcome = WelcomeFor(
+            World(Trainer(1, 41, 0x4F1)),
+            SavedCharacter.Fresh(Town, 1, 1) with { DefeatedTrainers = [41] });
+
+        Assert.Equal([0x4F1], welcome.Flags);
+    }
+
+    [Fact]
+    public void ATrainerWithNoFlagLightsNothing()
+    {
+        // Their script could not be read as far as the fight, or was read and had no
+        // flag in it. Lighting flag zero would be lighting whatever flag zero means.
+        Welcome welcome = WelcomeFor(
+            World(Trainer(1, 41, 0)),
+            SavedCharacter.Fresh(Town, 1, 1) with { DefeatedTrainers = [41] });
+
+        Assert.Empty(welcome.Flags);
+    }
+
+    [Fact]
+    public void WhatAClientSaysAScriptDidIsKept()
+    {
+        GameWorld world = World();
+
+        (ServerPlayer player, _) = world.Join(1, "Koop", SavedCharacter.Fresh(Town, 1, 1) with { Flags = [0x828] });
+
+        world.RunScript(player.Id, new ScriptRan([0x2A5], [0x828], [new SavedVariable(0x4001, 3)]));
+
+        SavedCharacter saved = world.Snapshot(player.Id)!;
+
+        Assert.Equal([0x2A5], saved.Flags);
+        Assert.Equal(3, saved.Variables.Single(v => v.Id == 0x4001).Value);
+    }
+}

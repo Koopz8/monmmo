@@ -186,12 +186,25 @@ public sealed class SyntheticRom
             new MapObject(1, 5 + index % 20, 3, 2, Direction.Up, 7, false, 0, 0, ScriptAddressFor(index, 0)),
             new MapObject(
                 2, 9 + index % 20, 6, 5, Direction.Left, 9, true, 0, 0,
-                ScriptAddressFor(index, 1), TrainerIdFor(index), SightRangeFor(index)),
+                ScriptAddressFor(index, 1), TrainerIdFor(index), SightRangeFor(index))
+            {
+                TrainerFlag = TrainerFlagFor(index),
+            },
             new MapObject(
                 3, 1, 8, 6, Direction.Down, 0, false, 0, 0,
                 ScriptAddressFor(index, 2), 0, 0, StockFor(index)),
         ];
     }
+
+    /// <summary>
+    /// The flag a map's trainer is remembered by.
+    /// <para>
+    /// Stated once and both written and expected from here. A fixture that declares one
+    /// number and plants another is a test that passes because both halves were guessed
+    /// the same way, which this project has already paid for twice.
+    /// </para>
+    /// </summary>
+    public static int TrainerFlagFor(int index) => 0x200 + index;
 
     /// <summary>The object slot that is a trainer, and so the one with a fight in its script.</summary>
     public const int TrainerObjectSlot = 1;
@@ -926,7 +939,7 @@ public sealed class SyntheticRom
                 _data[at] = 0x5C;                                   // trainerbattle
                 _data[at + 1] = 0;                                  // the plain variant
                 WriteU16(at + 2, (ushort)TrainerIdFor(index));
-                WriteU16(at + 4, (ushort)(0x200 + index));          // the flag it sets
+                WriteU16(at + 4, (ushort)TrainerFlagFor(index));    // the flag it sets
                 WriteU32(at + 6, Rom.BaseAddress + (uint)text);     // what they say first
                 WriteU32(at + 10, Rom.BaseAddress + (uint)text);    // and on losing
 

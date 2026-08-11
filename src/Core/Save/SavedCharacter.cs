@@ -63,6 +63,9 @@ public sealed record SavedMon(
     }
 }
 
+/// <summary>One script variable and what it holds.</summary>
+public sealed record SavedVariable(int Id, int Value);
+
 /// <summary>
 /// Everything about a player that outlives their connection.
 /// </summary>
@@ -111,6 +114,26 @@ public sealed record SavedCharacter(
     /// </para>
     /// </summary>
     public IReadOnlyList<BagEntry> Items { get; init; } = [];
+
+    /// <summary>
+    /// Script flags this character has set, and what its script variables hold.
+    /// <para>
+    /// The cartridge's own bookkeeping: a number per thing that can have happened, and
+    /// a few hundred small integers for the things that have a count. The server has no
+    /// idea what any of them mean and does not need one — it stores them and hands them
+    /// back, and the machine with the cartridge is the only one that can say that flag
+    /// 0x2A5 is the one about the parcel.
+    /// </para>
+    /// <para>
+    /// Kept apart from <see cref="DefeatedTrainers"/> rather than folded into it. The
+    /// two answer the same question about a trainer and disagree about everything else:
+    /// a trainer id is this project's own numbering and survives a re-export, while a
+    /// flag is the cartridge's and means nothing without one.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<int> Flags { get; init; } = [];
+
+    public IReadOnlyList<SavedVariable> Variables { get; init; } = [];
 
     public int Money { get; init; } = StartingMoney;
 

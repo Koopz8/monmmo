@@ -1,6 +1,7 @@
 using PokeMmo.Core.Battle;
 using PokeMmo.Core.Net;
 using PokeMmo.Core.Save;
+using PokeMmo.Core.Scripts;
 using PokeMmo.Core.World;
 using PokeMmo.RomExtract;
 using PokeMmo.RomExtract.Maps;
@@ -166,6 +167,11 @@ public static class Program
         IReadOnlyList<BagEntry> bag = [];
         int money = 0;
 
+        // The cartridge's bookkeeping, as the server has it. Kept here because running
+        // a script needs it and only this machine can run one — the server stores these
+        // and has no idea what any of them mean.
+        var script = new ScriptState();
+
         // Where the server last said we are, when that disagreed with where we think we
         // are. Held rather than applied on the spot: a correction almost always arrives
         // mid-step, and snapping a character sideways through a stride looks worse than
@@ -182,7 +188,7 @@ public static class Program
             float delta = Raylib.GetFrameTime();
 
             ApplyServerMessages(
-                network, others, player, view, data, trainers, items,
+                network, others, player, view, data, trainers, items, script,
                 ref battle, ref shop, ref bag, ref money, ref correction);
 
             // A battle suspends the overworld entirely: the server is running it, and
@@ -270,7 +276,7 @@ public static class Program
             }
             else if (DialogueBox.Pressed() && !player.IsStepping)
             {
-                talking = Talk(data, view, player, network);
+                talking = Talk(data, view, player, network, script);
             }
 
             Direction? input = talking is null ? ReadDirection() : null;
@@ -357,7 +363,7 @@ public static class Program
     /// </para>
     /// </summary>
     private static DialogueBox? Talk(
-        GameData data, MapView view, WalkingCharacter player, NetworkClient network)
+        GameData data, MapView view, WalkingCharacter player, NetworkClient network, ScriptState script)
     {
         // Where the server says people are, which after a few seconds of wandering is
         // nowhere near where the cartridge put them.
@@ -378,9 +384,25 @@ public static class Program
         // say could never be challenged by walking up to them.
         network.SendTalk(person.LocalId);
 
-        DialogueBox? box = person.HasScript
-            ? new DialogueBox(ScriptReader.ReadDialogue(data.Rom, person.ScriptAddress))
-            : null;
+        // Run rather than read. The reader follows both arms of every conditional
+        // because it has to — choosing needs a save's flags — which is why a trainer
+        // used to greet you, gloat about losing and thank you for the rematch in one
+        // breath. Given the flags, this walks the one path that actually happens.
+        ScriptRun run = person.HasScript
+            ? ScriptRunner.Run(data.Rom, person.ScriptAddress, script)
+            : new ScriptRun();
+
+        // Applied on both sides rather than waiting to be told. The server is where
+        // these live, but the next line this person reads is decided here and it would
+        // be decided from yesterday's flags for as long as the round trip takes.
+        foreach (int flag in run.FlagsSet) script.Set(flag);
+        foreach (int flag in run.FlagsCleared) script.Clear(flag);
+        foreach ((int id, int value) in run.VariablesWritten) script.Write(id, value);
+
+        if (run.FlagsSet.Count + run.FlagsCleared.Count + run.VariablesWritten.Count > 0)
+            network.SendScriptRan(run);
+
+        DialogueBox? box = person.HasScript ? new DialogueBox(run.Pages) : null;
 
         // Plenty of scripts say nothing at all — they set a flag, or hand something
         // over. An empty box would still have to be dismissed, so there isn't one.
@@ -409,6 +431,7 @@ public static class Program
         GameData data,
         TrainerNames trainers,
         ItemNames items,
+        ScriptState script,
         ref BattleScreen? battle,
         ref ShopScreen? shop,
         ref IReadOnlyList<BagEntry> bag,
@@ -427,6 +450,18 @@ public static class Program
                     player.Place(view.Collision, new GridPosition(welcome.X, welcome.Y));
                     bag = welcome.Bag;
                     money = welcome.Money;
+
+                    foreach (int flag in welcome.Flags) script.Set(flag);
+                    foreach (SavedVariable variable in welcome.Variables) script.Write(variable.Id, variable.Value);
+
+                    break;
+
+                case FlagsChanged changed:
+                    // Almost always one flag, and almost always the one that means the
+                    // trainer just beaten has been beaten. Without it they would go on
+                    // greeting the player who beat them.
+                    foreach (int flag in changed.Flags) script.Set(flag);
+
                     break;
 
                 case PlayerAppeared appeared when appeared.PlayerId != network.PlayerId:

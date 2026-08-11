@@ -534,6 +534,19 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                             world.StopTalking(playerId);
                             break;
 
+                        case ScriptRan ran when playerId != 0:
+                            world.RunScript(playerId, ran);
+
+                            if (ran.Set.Count + ran.Cleared.Count + ran.Written.Count > 0)
+                            {
+                                Console.WriteLine(
+                                    $"* #{playerId} ran a script: " +
+                                    $"{ran.Set.Count} flags set, {ran.Cleared.Count} cleared, " +
+                                    $"{ran.Written.Count} variables written");
+                            }
+
+                            break;
+
                         case BuyRequest buy when playerId != 0:
                             await DispatchAsync(world.Buy(playerId, buy.ItemId, buy.Count), playerId, cancellationToken)
                                 .ConfigureAwait(false);

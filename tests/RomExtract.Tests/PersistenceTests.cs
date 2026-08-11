@@ -220,6 +220,53 @@ public class SqlitePlayerStoreTests
     }
 
     [Fact]
+    public async Task ScriptFlagsAndVariablesOutliveTheConnection()
+    {
+        // The server has no idea what any of these mean and does not need one. Storing
+        // them is the whole of its involvement — the machine with the cartridge is the
+        // only one that can say which of these numbers is the parcel.
+        using SqlitePlayerStore store = SqlitePlayerStore.InMemory();
+
+        await store.RegisterAsync("Mason", "a-good-password", Character());
+
+        var account = Assert.IsType<AuthOutcome.Success>(await store.LoginAsync("Mason", "a-good-password"));
+
+        await store.SaveAsync(
+            account.Account.Id,
+            Character() with
+            {
+                Flags = [0x2A5, 0x828],
+                Variables = [new SavedVariable(0x4001, 3), new SavedVariable(0x4060, 1)],
+            });
+
+        var login = Assert.IsType<AuthOutcome.Success>(await store.LoginAsync("Mason", "a-good-password"));
+
+        Assert.Equal([0x2A5, 0x828], login.Character.Flags.Order());
+        Assert.Equal([new SavedVariable(0x4001, 3), new SavedVariable(0x4060, 1)], login.Character.Variables);
+    }
+
+    [Fact]
+    public async Task AFlagAScriptClearsIsActuallyCleared()
+    {
+        // Rewritten wholesale rather than inserted, which is the opposite of how a
+        // beaten trainer is stored and right for the opposite reason: a script clears
+        // flags as readily as it sets them — that is what makes a door lock behind you —
+        // so an insert-only table would be one nothing could ever come back out of.
+        using SqlitePlayerStore store = SqlitePlayerStore.InMemory();
+
+        await store.RegisterAsync("Mason", "a-good-password", Character());
+
+        var account = Assert.IsType<AuthOutcome.Success>(await store.LoginAsync("Mason", "a-good-password"));
+
+        await store.SaveAsync(account.Account.Id, Character() with { Flags = [0x2A5, 0x828] });
+        await store.SaveAsync(account.Account.Id, Character() with { Flags = [0x2A5] });
+
+        var login = Assert.IsType<AuthOutcome.Success>(await store.LoginAsync("Mason", "a-good-password"));
+
+        Assert.Equal([0x2A5], login.Character.Flags);
+    }
+
+    [Fact]
     public async Task SavingReplacesThePartyRatherThanAddingToIt()
     {
         using SqlitePlayerStore store = SqlitePlayerStore.InMemory();

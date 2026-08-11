@@ -5,6 +5,7 @@ using PokeMmo.Core.Data;
 using PokeMmo.RomExtract;
 using PokeMmo.RomExtract.Graphics;
 using PokeMmo.RomExtract.Maps;
+using PokeMmo.Core.Scripts;
 using PokeMmo.Core.World;
 using PokeMmo.RomExtract.Items;
 using PokeMmo.RomExtract.Scripts;
@@ -134,6 +135,9 @@ public static class Program
 
         if (!string.IsNullOrEmpty(options.ScriptMap))
             WriteMapScripts(rom, options.ScriptMap);
+
+        if (!string.IsNullOrEmpty(options.ScriptRun))
+            WriteScriptRuns(rom, options.ScriptRun);
 
         Console.WriteLine();
         Console.WriteLine($"Done. Output in {Path.GetFullPath(options.OutputDirectory)}");
@@ -870,6 +874,80 @@ public static class Program
         }
     }
 
+    /// <summary>
+    /// What everybody on a map actually says, twice: once from a fresh save and once
+    /// with whatever their own script would have set already lit.
+    /// <para>
+    /// The instrument for this milestone. Running a script rather than reading it turns
+    /// on a handful of numbers that this project has no way to check from a fixture —
+    /// which condition byte means "less", whether a set trainer flag skips the fight or
+    /// the whole script — and the last time numbers were half-remembered here it cost
+    /// three rounds of the same bug. Two runs side by side is the cheapest way to see
+    /// whether the second one is a different sentence rather than the same one.
+    /// </para>
+    /// </summary>
+    private static void WriteScriptRuns(Rom rom, string mapId)
+    {
+        Console.WriteLine();
+        Console.WriteLine($"Running the scripts on {mapId}");
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        if (library.TryLoad(mapId) is not { } map)
+        {
+            Console.WriteLine($"  no map {mapId} on this cartridge");
+            return;
+        }
+
+        Console.WriteLine($"  {map.Name}, {map.Objects.Count(o => o.HasScript)} of {map.Objects.Count} with a script");
+
+        foreach (MapObject person in map.Objects.Where(o => o.HasScript))
+        {
+            ScriptRun fresh = ScriptRunner.Run(rom, person.ScriptAddress);
+
+            Console.WriteLine();
+            Console.WriteLine($"  person {person.LocalId} at ({person.X}, {person.Y}), script 0x{person.ScriptAddress:X8}");
+
+            Describe("    on a fresh save", fresh);
+
+            // The flags this person's own script turns on, plus the one their fight is
+            // remembered by. Anything else would be a guess about what the rest of the
+            // world had done first.
+            var later = new ScriptState(fresh.FlagsSet);
+
+            if (fresh.TrainerFlag is { } flag) later.Set(flag);
+
+            if (later.Flags.Count == 0) continue;
+
+            Describe(
+                $"    with {string.Join(", ", later.Flags.Select(f => $"0x{f:X}"))} set",
+                ScriptRunner.Run(rom, person.ScriptAddress, later));
+        }
+
+        static void Describe(string heading, ScriptRun run)
+        {
+            Console.WriteLine(heading);
+
+            if (run.TrainerId is { } trainer)
+                Console.WriteLine($"      fights trainer {trainer}, remembered by 0x{run.TrainerFlag:X}");
+
+            if (run.Stock.Count > 0) Console.WriteLine($"      opens a shop of {run.Stock.Count} things");
+
+            foreach (int flag in run.FlagsSet) Console.WriteLine($"      sets flag 0x{flag:X}");
+            foreach (int flag in run.FlagsCleared) Console.WriteLine($"      clears flag 0x{flag:X}");
+
+            foreach ((int id, int value) in run.VariablesWritten)
+                Console.WriteLine($"      writes {value} to variable 0x{id:X}");
+
+            foreach (string page in run.Pages)
+                Console.WriteLine($"      \"{GameText.ToAscii(page).Replace("\n", " ")}\"");
+
+            if (run.StoppedAt is { } stopper) Console.WriteLine($"      stopped at 0x{stopper:X2}");
+
+            if (run.IsEmpty && run.StoppedAt is null) Console.WriteLine("      nothing at all");
+        }
+    }
+
     private static void WriteItems(Rom rom)
     {
         Console.WriteLine();
@@ -1104,6 +1182,9 @@ public static class Program
         public bool DumpItems { get; private init; }
         public bool DumpScripts { get; private init; }
         public string ScriptMap { get; private init; } = "";
+
+        /// <summary>The map whose scripts to run, rather than read.</summary>
+        public string ScriptRun { get; private init; } = "";
         public bool DumpMoves { get; private init; }
         public bool DumpEncounters { get; private init; }
         public string? BehaviourMap { get; private init; }
@@ -1129,6 +1210,7 @@ public static class Program
             bool items = false;
             bool scripts = false;
             string scriptMap = "";
+            string scriptRun = "";
             bool dumpMoves = false, dumpEncounters = false;
             string? behaviourMap = null;
             TileOrder order = TileOrder.RowMajor;
@@ -1196,6 +1278,9 @@ public static class Program
                     case "--script-map":
                         scriptMap = Next(args, ref i, "--script-map");
                         break;
+                    case "--script-run":
+                        scriptRun = Next(args, ref i, "--script-run");
+                        break;
                     case "--moves":
                         dumpMoves = true;
                         break;
@@ -1244,6 +1329,7 @@ public static class Program
                 DumpItems = items,
                 DumpScripts = scripts,
                 ScriptMap = scriptMap,
+                ScriptRun = scriptRun,
                 DumpMoves = dumpMoves,
                 DumpEncounters = dumpEncounters,
                 BehaviourMap = behaviourMap,
