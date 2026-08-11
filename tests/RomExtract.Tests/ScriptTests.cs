@@ -124,6 +124,133 @@ public class ScriptReaderTests
         Assert.True(Fixture.ToRom().IsRomAddress(loadPointer.Pointer(1)));
     }
 
+    /// <summary>Builds a tiny image holding two scripts, the first calling the second.</summary>
+    private static Rom TwoScripts(byte[] first, byte[] second, int secondAt = 0x100)
+    {
+        var image = new byte[0x400];
+
+        first.CopyTo(image, 0);
+        second.CopyTo(image, secondAt);
+
+        return new Rom(image);
+    }
+
+    [Fact]
+    public void AScriptThatHandsOffIsFollowed()
+    {
+        // Most people in FireRed do their work somewhere else: lock, face the player,
+        // call, release, end — and everything that makes them who they are is at the
+        // other end of that call. A reader that stops at the handoff sees somebody who
+        // does nothing, which is what a cartridge with a shop in every town looked like.
+        uint target = Rom.BaseAddress + 0x100;
+
+        byte[] caller =
+        [
+            ScriptCommands.Lock,
+            ScriptCommands.Call,
+            (byte)target, (byte)(target >> 8), (byte)(target >> 16), (byte)(target >> 24),
+            ScriptCommands.Release,
+            ScriptCommands.End,
+        ];
+
+        byte[] called = [ScriptCommands.WaitButton, ScriptCommands.End];
+
+        List<ScriptCommand> commands = ScriptReader.ReadAll(TwoScripts(caller, called), Rom.BaseAddress);
+
+        Assert.Contains(commands, c => c.Code == ScriptCommands.WaitButton);
+    }
+
+    [Fact]
+    public void AScriptThatCallsItselfIsReadOnce()
+    {
+        // Real scripts loop. Following a handoff without remembering where you have been
+        // is a reader that never comes back.
+        uint self = Rom.BaseAddress;
+
+        byte[] script =
+        [
+            ScriptCommands.Lock,
+            ScriptCommands.Call,
+            (byte)self, (byte)(self >> 8), (byte)(self >> 16), (byte)(self >> 24),
+            ScriptCommands.End,
+        ];
+
+        List<ScriptCommand> commands = ScriptReader.ReadAll(TwoScripts(script, []), self);
+
+        Assert.Equal(3, commands.Count);
+    }
+
+    [Fact]
+    public void BothArmsOfAConditionalAreRead()
+    {
+        // Deciding which arm runs needs the flags of a save this has never seen. Reading
+        // both is the difference between knowing what somebody might say and knowing
+        // nothing at all.
+        uint target = Rom.BaseAddress + 0x100;
+
+        byte[] caller =
+        [
+            ScriptCommands.GotoIf,
+            0x01,
+            (byte)target, (byte)(target >> 8), (byte)(target >> 16), (byte)(target >> 24),
+            ScriptCommands.End,
+        ];
+
+        byte[] called = [ScriptCommands.WaitButton, ScriptCommands.End];
+
+        List<ScriptCommand> commands = ScriptReader.ReadAll(TwoScripts(caller, called), Rom.BaseAddress);
+
+        Assert.Contains(commands, c => c.Code == ScriptCommands.WaitButton);
+    }
+
+    [Fact]
+    public void TheCommandEveryPersonOpensWithTakesNoArgument()
+    {
+        // One byte, 468 broken scripts. Taking an argument here swallows the next command
+        // and puts the read one byte out of step forever — after which what it hits is
+        // whatever sat in the middle of a pointer or a variable id. Every one of the
+        // twenty commonest "unknown commands" on a real cartridge was this, and none of
+        // them was a command.
+        Assert.Equal(0, ScriptCommands.ArgumentLength(0x5A));
+
+        // The bytes that prove it: lock, this, call <a real pointer>, release, end.
+        uint target = Rom.BaseAddress + 0x100;
+
+        byte[] script =
+        [
+            ScriptCommands.Lock,
+            0x5A,
+            ScriptCommands.Call,
+            (byte)target, (byte)(target >> 8), (byte)(target >> 16), (byte)(target >> 24),
+            ScriptCommands.Release,
+            ScriptCommands.End,
+        ];
+
+        List<ScriptCommand> commands = ScriptReader.Read(TwoScripts(script, []), Rom.BaseAddress);
+
+        Assert.Equal(
+            new byte[] { ScriptCommands.Lock, 0x5A, ScriptCommands.Call, ScriptCommands.Release, ScriptCommands.End },
+            commands.Select(c => c.Code));
+
+        Assert.Equal(target, commands[2].Pointer());
+    }
+
+    [Fact]
+    public void SettingAFlagTakesTwoBytes()
+    {
+        // One byte here does not stop the read — it makes the next byte an `end`. The
+        // script then reports a clean read and quietly contains nothing, which is worse
+        // than failing.
+        Assert.Equal(2, ScriptCommands.ArgumentLength(0x29));
+
+        byte[] script = [0x29, 0xA5, 0x02, ScriptCommands.WaitButton, ScriptCommands.End];
+
+        List<ScriptCommand> commands = ScriptReader.Read(TwoScripts(script, []), Rom.BaseAddress);
+
+        Assert.Equal(3, commands.Count);
+        Assert.Equal(0x02A5, commands[0].Word());
+    }
+
     [Fact]
     public void AnUnknownCommandStopsTheRead()
     {

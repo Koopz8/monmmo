@@ -53,6 +53,11 @@ public static class ScriptCommands
     public const byte Return = 0x03;
     public const byte Call = 0x04;
     public const byte Goto = 0x05;
+
+    /// <summary>Conditional jumps: a condition byte, then where to go.</summary>
+    public const byte GotoIf = 0x06;
+
+    public const byte CallIf = 0x07;
     public const byte LoadPointer = 0x0F;
     public const byte CallStandard = 0x09;
     public const byte Lock = 0x6A;
@@ -132,21 +137,41 @@ public static class ScriptCommands
         [0x1E] = 6,     // comparefarbytetobank
         [0x1F] = 5,     // comparefarbytetobyte
         [0x20] = 8,     // comparefarbytes
-        [0x21] = 3,     // compare
+        // Four: a variable and a value, both two bytes. `21 60 40 01 00` is
+        // compare(0x4060, 1), and the `06 04 ...` that follows it is a well-formed
+        // conditional goto with a real pointer in it.
+        [0x21] = 4,     // compare
         [0x22] = 4,     // comparevars
         [0x25] = 0,     // return-ish
         [0x26] = 1,
         [0x27] = 0,
         [0x28] = 0,
-        [0x29] = 1,     // setflag
-        [0x2A] = 1,     // clearflag
-        [0x2B] = 1,     // checkflag
+        // Two bytes, not one. Proved by the bytes: `29 A5 02 53 04 00 1A 00 80 ...`
+        // reads as setflag(0x02A5) and then keeps parsing cleanly for another twenty
+        // commands. Taking one byte makes the 0x02 an `end`, which is worse than a
+        // failure — the script reports a clean read and quietly contains nothing.
+        [0x29] = 2,     // setflag
+        [0x2A] = 2,     // clearflag
+        [0x2B] = 2,     // checkflag
         [0x39] = 1,
         [0x3A] = 0,
         [0x53] = 2,     // givemoney-ish
         [0x54] = 2,
         [0x55] = 2,
-        [0x5A] = 1,
+        // Nothing at all, and this one byte was the whole problem.
+        //
+        // Almost every person in FireRed opens with `6A 5A` — lock, then this. Taking an
+        // argument here swallowed the next command byte, and from that point on the read
+        // was one byte out of step forever. What it then hit was whatever happened to sit
+        // in the middle of a pointer or a variable id: 0x80 from var 0x800D (258 scripts),
+        // 0x78 from the pointer 0x081A6578, 0x60 from var 0x4060, 0x40 from var 0x4001.
+        // Every one of the twenty commonest "unknown commands" on a real cartridge was
+        // this, and none of them was a command.
+        //
+        // The proof is what follows it: `6A 5A 04 78 65 1A 08 6C 02` reads as lock,
+        // this, call 0x081A6578, release, end — a textbook script, with a pointer that
+        // lands exactly on a script. Reading it any other way does not.
+        [0x5A] = 0,
         [WaitButton] = 0,
         [Message] = 4,
         [0x68] = 1,     // closeonkeypress-ish
@@ -273,6 +298,58 @@ public static class ScriptReader
         return null;
     }
 
+    /// <summary>
+    /// Everything a script runs, following the ones it hands off to.
+    /// <para>
+    /// Most people in FireRed do their work somewhere else. A shopkeeper's own script is
+    /// often four instructions long — lock, face the player, <c>call</c>, release — and
+    /// everything that makes them a shopkeeper is at the other end of that call. A reader
+    /// that stops at the handoff sees a person who does nothing, which is exactly what
+    /// this project saw: a cartridge with a shop in every town and not one shop found.
+    /// </para>
+    /// <para>
+    /// Branches are followed but not evaluated. Both arms of a conditional are read,
+    /// because deciding which one runs needs the flags of a save this has never seen, and
+    /// reading both is the difference between knowing what somebody might say and knowing
+    /// nothing. What comes back is therefore everything reachable, not a transcript.
+    /// </para>
+    /// </summary>
+    public static List<ScriptCommand> ReadAll(Rom rom, uint address, int maxScripts = 16)
+    {
+        var all = new List<ScriptCommand>();
+        var seen = new HashSet<uint>();
+        var queue = new Queue<uint>();
+
+        queue.Enqueue(address);
+        seen.Add(address);
+
+        while (queue.Count > 0 && seen.Count <= maxScripts)
+        {
+            foreach (ScriptCommand command in Read(rom, queue.Dequeue()))
+            {
+                all.Add(command);
+
+                uint target = command.Code switch
+                {
+                    ScriptCommands.Call or ScriptCommands.Goto => command.Pointer(),
+
+                    // The conditional forms put a one-byte condition first and the
+                    // destination after it.
+                    ScriptCommands.CallIf or ScriptCommands.GotoIf => command.Pointer(1),
+
+                    _ => 0,
+                };
+
+                if (target == 0 || !rom.IsRomAddress(target)) continue;
+                if (!seen.Add(target)) continue;
+
+                queue.Enqueue(target);
+            }
+        }
+
+        return all;
+    }
+
     /// <summary>Where in the image a read stopped, for printing the bytes around it.</summary>
     public static int? StoppedAtOffset(Rom rom, uint address, int maxCommands = MaxCommands)
     {
@@ -306,7 +383,7 @@ public static class ScriptReader
     /// </summary>
     public static int? FindTrainer(Rom rom, uint address)
     {
-        foreach (ScriptCommand command in Read(rom, address))
+        foreach (ScriptCommand command in ReadAll(rom, address))
         {
             if (command.Code == ScriptCommands.TrainerBattle) return command.Word(1);
         }
@@ -325,7 +402,7 @@ public static class ScriptReader
     /// </summary>
     public static List<int> FindMart(Rom rom, uint address, int maxItems = 64)
     {
-        foreach (ScriptCommand command in Read(rom, address))
+        foreach (ScriptCommand command in ReadAll(rom, address))
         {
             if (command.Code != ScriptCommands.PokeMart) continue;
             if (rom.ToOffsetOrNull(command.Pointer()) is not { } list) continue;
@@ -363,7 +440,7 @@ public static class ScriptReader
     {
         var pages = new List<string>();
 
-        foreach (ScriptCommand command in Read(rom, address))
+        foreach (ScriptCommand command in ReadAll(rom, address))
         {
             uint text = command.Code switch
             {
