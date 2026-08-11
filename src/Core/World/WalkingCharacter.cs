@@ -36,6 +36,23 @@ public sealed class WalkingCharacter
     public int StepsTaken { get; private set; }
 
     /// <summary>
+    /// The direction the other side has to be told about after this update, or nothing.
+    /// <para>
+    /// A step and a turn on the spot are both news and only one of them was ever sent.
+    /// A step goes out the moment it begins; a turn went nowhere, so the server's idea
+    /// of which way a player looked was whichever way they last walked. Everything the
+    /// server decides from facing was then decided from that, and talking is decided
+    /// from nothing else.
+    /// </para>
+    /// <para>
+    /// It is a property here rather than two conditions in the render loop because the
+    /// render loop is the one part of this that no test can reach. Anything the two
+    /// sides have to agree on belongs where agreeing can be checked.
+    /// </para>
+    /// </summary>
+    public Direction? ToReport { get; private set; }
+
+    /// <summary>
     /// How far through the current step, from zero to one.
     /// <para>
     /// Exposed so a renderer can pick a walking frame from it. The alternative is a
@@ -60,12 +77,16 @@ public sealed class WalkingCharacter
     /// </summary>
     public void Update(float deltaSeconds, Direction? input)
     {
+        ToReport = null;
+
         // Input is only read between steps: once a step is underway it runs to
         // completion, so a character can never stop between squares.
         if (!IsStepping && input is { } direction)
         {
             // Face the way we are trying to go even when blocked, which is what lets a
             // character turn on the spot.
+            bool turned = direction != Facing;
+
             Facing = direction;
 
             if (_grid.TryStep(Square, direction, out GridPosition destination))
@@ -74,6 +95,13 @@ public sealed class WalkingCharacter
                 Square = destination;
                 _stepProgress = 0f;
                 IsStepping = true;
+                ToReport = direction;
+            }
+            else if (turned)
+            {
+                // Only a change is worth reporting. Holding a direction against a wall
+                // is one turn and then sixty frames a second of nothing new.
+                ToReport = direction;
             }
         }
 

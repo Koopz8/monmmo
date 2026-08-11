@@ -87,6 +87,60 @@ public class WalkingCharacterTests
     }
 
     [Fact]
+    public void AStepIsReportedTheFrameItBegins()
+    {
+        WalkingCharacter character = At(1, 1);
+        character.Update(1f / 60f, Direction.Right);
+
+        Assert.Equal(Direction.Right, character.ToReport);
+    }
+
+    [Fact]
+    public void ATurnOnTheSpotIsReportedToo()
+    {
+        // The whole point of this property. A turn changes what the other side should
+        // answer about who is in front of whom, and it used to change it on one machine
+        // only — so a player who walked up to somebody from the side and turned to face
+        // them was, as far as the server knew, still looking the way they arrived.
+        // Facing starts Down, so this both turns and is blocked.
+        WalkingCharacter character = At(2, 3);
+        character.Update(1f / 60f, Direction.Up);   // (2,2) is a wall
+
+        Assert.False(character.IsStepping);
+        Assert.Equal(Direction.Up, character.ToReport);
+    }
+
+    [Fact]
+    public void HoldingADirectionAgainstAWallIsOneTurnAndThenNothing()
+    {
+        // Sixty frames a second of "still facing down" is not news, and the interval
+        // that keeps a player from running would start refusing it.
+        WalkingCharacter character = At(2, 3);
+
+        character.Update(1f / 60f, Direction.Up);
+        Assert.Equal(Direction.Up, character.ToReport);
+
+        for (int frame = 0; frame < 30; frame++)
+        {
+            character.Update(1f / 60f, Direction.Up);
+            Assert.Null(character.ToReport);
+        }
+    }
+
+    [Fact]
+    public void NothingHappeningIsNotReported()
+    {
+        WalkingCharacter character = At(1, 1);
+
+        // Mid-step frames included: the step was reported when it began.
+        character.Update(1f / 60f, Direction.Right);
+        character.Update(1f / 60f, null);
+
+        Assert.True(character.IsStepping);
+        Assert.Null(character.ToReport);
+    }
+
+    [Fact]
     public void WillNotWalkOffTheMap()
     {
         WalkingCharacter character = At(0, 0);

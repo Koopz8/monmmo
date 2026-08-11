@@ -192,12 +192,16 @@ public class GameWorldTests
     {
         // The rate limit is what stops a modified client from sprinting: the honest
         // one is bounded by its own step animation.
+        //
+        // Both steps have somewhere to go. A second Right would walk into the wall at
+        // (2, 0), and a step that goes nowhere is a turn — which is not rate limited,
+        // and would have this passing for a reason it is not about.
         GameWorld world = NewWorld();
         (ServerPlayer player, _) = world.Join("Mason");
         player.Square = new GridPosition(0, 0);
 
         world.Move(player.Id, Direction.Right, 10);
-        List<Outgoing> tooSoon = world.Move(player.Id, Direction.Right, 10.01);
+        List<Outgoing> tooSoon = world.Move(player.Id, Direction.Down, 10.01);
 
         MoveRejected rejected = MessagesOf<MoveRejected>(tooSoon).Single();
 
@@ -210,9 +214,10 @@ public class GameWorldTests
     {
         GameWorld world = NewWorld();
         (ServerPlayer player, _) = world.Join("Mason");
+        player.Square = new GridPosition(0, 0);
 
         world.Move(player.Id, Direction.Right, 10);
-        Outgoing rejection = world.Move(player.Id, Direction.Right, 10.01).Single();
+        Outgoing rejection = world.Move(player.Id, Direction.Down, 10.01).Single();
 
         Assert.Equal(player.Id, rejection.OnlyTo);
     }

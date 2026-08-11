@@ -306,7 +306,28 @@ public sealed class GameWorld
                 return [new Outgoing(new Rejected("Not in the world."), OnlyTo: playerId)];
 
             // Facing changes even when the step does not, so turning on the spot works.
+            Direction before = player.Facing;
             player.Facing = direction;
+
+            CollisionGrid grid = GridFor(player.MapId);
+            GridPosition wanted = player.Square.Step(direction);
+
+            if (grid.Contains(wanted) && (!grid.IsWalkable(wanted) || IsOccupied(player.MapId, wanted)))
+            {
+                // Blocked is not an error: the client predicted the same thing and is
+                // already standing still, facing the wall. Everyone else still needs
+                // to see the turn.
+                //
+                // Checked before the interval, because nobody has moved. Rate limiting a
+                // turn would refuse the last thing a player does before pressing the
+                // button — walk up to somebody, turn to face them, speak — and refuse it
+                // precisely when they did it briskly.
+                return before == direction
+                    ? []
+                    : [new Outgoing(
+                        new PlayerMoved(playerId, player.Square.X, player.Square.Y, player.Facing),
+                        OnMap: player.MapId)];
+            }
 
             if (nowSeconds - player.LastStepAt < MinimumStepInterval)
             {
@@ -315,22 +336,9 @@ public sealed class GameWorld
                     OnlyTo: playerId)];
             }
 
-            CollisionGrid grid = GridFor(player.MapId);
-            GridPosition wanted = player.Square.Step(direction);
-
             // Off the edge of the map is not a wall when a neighbour is joined there.
             if (!grid.Contains(wanted))
                 return StepAcrossEdge(player, direction, nowSeconds);
-
-            if (!grid.IsWalkable(wanted) || IsOccupied(player.MapId, wanted))
-            {
-                // Blocked is not an error: the client predicted the same thing and is
-                // already standing still, facing the wall. Everyone else still needs
-                // to see the turn.
-                return [new Outgoing(
-                    new PlayerMoved(playerId, player.Square.X, player.Square.Y, player.Facing),
-                    OnMap: player.MapId)];
-            }
 
             player.Square = wanted;
             player.LastStepAt = nowSeconds;

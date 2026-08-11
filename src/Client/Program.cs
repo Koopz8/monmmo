@@ -273,29 +273,29 @@ public static class Program
                 talking = Talk(data, view, player, network);
             }
 
-            bool wasStepping = player.IsStepping;
             Direction? input = talking is null ? ReadDirection() : null;
             player.Update(delta, input);
 
             edgeCooldown = Math.Max(0f, edgeCooldown - delta);
 
-            // Tell the server the moment a step begins, not when it finishes — it is
-            // already predicted locally, so waiting would add a round trip of lag to
-            // every square.
-            if (!wasStepping && player.IsStepping)
-            {
-                network.SendMove(player.Facing);
-            }
-            else if (!player.IsStepping &&
-                     input is { } wanted &&
-                     edgeCooldown <= 0f &&
-                     view.Collision.LeavesGrid(player.Square, wanted))
+            if (!player.IsStepping &&
+                input is { } wanted &&
+                edgeCooldown <= 0f &&
+                view.Collision.LeavesGrid(player.Square, wanted))
             {
                 // The one step the client cannot predict: it has no idea what is on the
                 // next map, or whether there is one. Ask, stand still, and let the
                 // answer arrive as a map change or as nothing at all.
                 network.SendMove(wanted);
                 edgeCooldown = WalkingCharacter.StepSeconds;
+            }
+            else if (player.ToReport is { } report)
+            {
+                // Told the moment a step begins, not when it finishes — it is already
+                // predicted locally, so waiting would add a round trip of lag to every
+                // square. A turn on the spot comes through here too, and used not to
+                // come through anywhere.
+                network.SendMove(report);
             }
 
             foreach (RemoteCharacter other in others.Values) other.Update(delta);

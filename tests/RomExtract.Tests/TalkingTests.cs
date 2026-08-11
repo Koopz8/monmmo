@@ -238,3 +238,157 @@ public class TalkingTests
         Assert.Equal(2, world.TalkingTo(player.Id));
     }
 }
+
+/// <summary>
+/// Whether the server ends up looking the same way the player does.
+/// <para>
+/// The client predicts its own movement and tells the server what it did. It told the
+/// server about steps. It did not tell it about turns — and a turn on the spot is what
+/// walking into a wall does, and a person is a wall as far as the grid is concerned. So
+/// the last thing anybody does before speaking to somebody was the one thing the server
+/// never heard about, and it went on answering "who is in front of this player" from
+/// whichever way they last walked.
+/// </para>
+/// <para>
+/// Fifth time this project has enforced a rule on one side of the split and left the
+/// other side unaware of it. The first four were map edges, NPC collision, doors and
+/// counters. This one runs the client's own character against a real world and checks
+/// the two agree, rather than checking each side against itself.
+/// </para>
+/// </summary>
+public class TurningTests
+{
+    private const string Town = "3.0";
+
+    /// <summary>An 8x8 town with a wall at (2, 2), shared by both sides.</summary>
+    private static byte[] Walls()
+    {
+        var collision = new byte[64];
+        collision[2 * 8 + 2] = 1;
+        return collision;
+    }
+
+    private static GameWorld World(byte[] collision) =>
+        new(new WorldData([new MapData(Town, "PALLET TOWN", 8, 8, collision)]), Town, TestRules.All);
+
+    /// <summary>
+    /// One press, played through the client's character and forwarded to the server
+    /// exactly the way the render loop forwards it — from <c>ToReport</c>, and from
+    /// nothing else.
+    /// </summary>
+    private static void Press(
+        GameWorld world, int playerId, WalkingCharacter character, Direction press, ref double now)
+    {
+        for (int frame = 0; frame < 30; frame++)
+        {
+            character.Update(1f / 60f, frame == 0 ? press : null);
+
+            if (character.ToReport is { } report)
+            {
+                now += 1.0;
+                world.Move(playerId, report, now);
+            }
+
+            if (!character.IsStepping) return;
+        }
+    }
+
+    [Fact]
+    public void TheServerLooksTheSameWayThePlayerDoes()
+    {
+        byte[] collision = Walls();
+        GameWorld world = World(collision);
+
+        (ServerPlayer player, _) = world.Join(
+            1, "Koop", new SavedCharacter(Town, 1, 1, Direction.Down, []));
+
+        var character = new WalkingCharacter();
+        character.Place(new CollisionGrid(8, 8, collision), new GridPosition(1, 1));
+
+        double now = 0;
+
+        // Walk one square right, then press into the wall — which turns without moving.
+        Press(world, player.Id, character, Direction.Right, ref now);
+        Press(world, player.Id, character, Direction.Down, ref now);
+
+        Assert.Equal(new GridPosition(2, 1), character.Square);
+        Assert.Equal(character.Square, player.Square);
+        Assert.Equal(Direction.Down, character.Facing);
+        Assert.Equal(character.Facing, player.Facing);
+    }
+
+    [Fact]
+    public void TurningTowardsSomebodyIsEnoughToTalkToThem()
+    {
+        // The bug as it was actually met: a player standing beside somebody, turned to
+        // face them, pressed the button, and the server refused a conversation with a
+        // person it agreed was standing right there.
+        //
+        // Pressing towards them is the whole input. A person is solid, so the press
+        // turns without stepping — and a turn was the one thing the client kept to
+        // itself, which left the server sure this player was still looking down.
+        byte[] collision = Walls();
+
+        MapData map = new(Town, "PALLET TOWN", 8, 8, collision)
+        {
+            Objects = [new MapObject(1, 5, 4, 5, Direction.Down, 0, false)],
+        };
+
+        var world = new GameWorld(new WorldData([map]), Town, TestRules.All);
+
+        (ServerPlayer player, _) = world.Join(
+            1, "Koop", new SavedCharacter(Town, 3, 5, Direction.Down, []));
+
+        var character = new WalkingCharacter();
+
+        // The grid the client predicts against has people in it, which is what makes
+        // walking towards one a turn rather than a step.
+        character.Place(
+            new CollisionGrid(8, 8, collision).With([new GridPosition(4, 5)]),
+            new GridPosition(3, 5));
+
+        double now = 0;
+
+        Press(world, player.Id, character, Direction.Right, ref now);
+
+        Assert.Equal(new GridPosition(3, 5), character.Square);
+        Assert.Equal(Direction.Right, character.Facing);
+
+        world.StartTalking(player.Id, 1);
+
+        Assert.Equal(1, world.TalkingTo(player.Id));
+    }
+
+    [Fact]
+    public void ATurnIsNotRefusedForBeingTooQuick()
+    {
+        // The interval exists to stop somebody walking faster than the game allows. A
+        // turn moves nobody, and the turn it would refuse is the one immediately after
+        // arriving — which is every turn a player makes on the way to speaking to
+        // somebody.
+        GameWorld world = World(Walls());
+
+        (ServerPlayer player, _) = world.Join(
+            1, "Koop", new SavedCharacter(Town, 1, 1, Direction.Down, []));
+
+        world.Move(player.Id, Direction.Right, 10);
+
+        List<Outgoing> send = world.Move(player.Id, Direction.Down, 10.001);
+
+        Assert.Empty(send.Select(o => o.Message).OfType<MoveRejected>());
+        Assert.Equal(Direction.Down, player.Facing);
+    }
+
+    [Fact]
+    public void FacingTheSameWayTwiceSaysNothingToAnybody()
+    {
+        // A client only reports changes, but a server that rebroadcast every repeat
+        // would hand anyone who does not one megaphone per frame.
+        GameWorld world = World(Walls());
+
+        (ServerPlayer player, _) = world.Join(
+            1, "Koop", new SavedCharacter(Town, 2, 1, Direction.Down, []));
+
+        Assert.Empty(world.Move(player.Id, Direction.Down, 10));
+    }
+}
