@@ -182,8 +182,12 @@ public static class ScriptCommands
         [0x5A] = 0,
         [WaitButton] = 0,
         [Message] = 4,
-        [0x68] = 1,     // closeonkeypress-ish
-        [0x69] = 1,
+        // Both take nothing. `69 2B 25 08 06 00 91 E0 1B 08` reads as this, then
+        // checkflag(0x0825), then a conditional goto whose pointer lands on a script —
+        // and the 0x91, 0x23 and 0xDF that looked like commands are all the low byte of
+        // whichever flag was being checked. 200 scripts, one byte, again.
+        [0x68] = 0,     // close the message box
+        [0x69] = 0,     // lock everybody
         [Lock] = 0,
         [FacePlayer] = 0,
         [Release] = 0,
@@ -200,6 +204,8 @@ public static class ScriptCommands
         [0x72] = 1,
         [PokeMart] = 4,
         [0x87] = 4,     // the decoration shop
+        [0xC7] = 1,
+        [0xCF] = 0,
         [0x88] = 4,     // and the other decoration shop
     };
 

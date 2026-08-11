@@ -277,6 +277,38 @@ public class ScriptReaderTests
     }
 
     [Fact]
+    public void LockingAndClosingABoxTakeNothing()
+    {
+        // Third round, same shape a third time. `69 2B 25 08 06 00 ...` is this, then
+        // checkflag(0x0825), then a conditional goto — and 0x91, 0x23 and 0xDF, which
+        // between them "stopped" 200 scripts, are the low bytes of the flags being
+        // checked. None of the three was ever a command.
+        Assert.Equal(0, ScriptCommands.ArgumentLength(0x69));
+        Assert.Equal(0, ScriptCommands.ArgumentLength(0x68));
+
+        uint target = Rom.BaseAddress + 0x100;
+
+        byte[] script =
+        [
+            0x69,
+            0x2B, 0x25, 0x08,                                                   // checkflag 0x0825
+            ScriptCommands.GotoIf, 0x00,
+            (byte)target, (byte)(target >> 8), (byte)(target >> 16), (byte)(target >> 24),
+            0x68,
+            ScriptCommands.End,
+        ];
+
+        List<ScriptCommand> commands = ScriptReader.Read(TwoScripts(script, []), Rom.BaseAddress);
+
+        Assert.Equal(
+            new byte[] { 0x69, 0x2B, ScriptCommands.GotoIf, 0x68, ScriptCommands.End },
+            commands.Select(c => c.Code));
+
+        Assert.Equal(0x0825, commands[1].Word());
+        Assert.Equal(target, commands[2].Pointer(1));
+    }
+
+    [Fact]
     public void AnUnknownCommandStopsTheRead()
     {
         // Guessing a length would resume at some byte inside an argument, and from
