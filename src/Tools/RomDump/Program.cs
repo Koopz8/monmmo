@@ -143,6 +143,8 @@ public static class Program
 
         if (options.Specials) WriteSpecials(rom);
 
+        if (options.Shared) WriteSharedScripts(rom);
+
         if (!string.IsNullOrEmpty(options.WhoSays)) WriteWhoSays(rom, options.WhoSays);
 
         if (options.ScriptAt != 0) WriteScriptAt(rom, options.ScriptAt);
@@ -1261,6 +1263,83 @@ public static class Program
         }
     }
 
+    /// <summary>
+    /// The addresses map objects hand their work to, and how many of them do.
+    /// <para>
+    /// A different question from <c>--specials</c>, and a better one. What a special
+    /// routine <em>does</em> is code this project cannot see and will not guess at; what
+    /// a shared script <em>is</em> can be counted. Every Pokémon Centre nurse in the game
+    /// is <c>call 0x081A6578</c> and nothing else, so the routine called by exactly one
+    /// person on each of nineteen maps is the nurse — on the cartridge's own arithmetic,
+    /// with no English in it and no number remembered from anywhere.
+    /// </para>
+    /// <para>
+    /// This is the shape milestone 0 settled on for the tables: locate it by what it
+    /// looks like, print the evidence, and hardcode nothing.
+    /// </para>
+    /// </summary>
+    private static void WriteSharedScripts(Rom rom, int top = 20)
+    {
+        Console.WriteLine();
+        Console.WriteLine("Scripts that map objects hand their work to");
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        var people = new Dictionary<uint, int>();
+        var maps = new Dictionary<uint, HashSet<string>>();
+        var says = new Dictionary<uint, Dictionary<string, int>>();
+
+        foreach (LoadedMap map in library.All())
+        {
+            foreach (MapObject person in map.Objects.Where(o => o.HasScript))
+            {
+                // Only what this person hands off directly. Following further would
+                // count every helper the helper uses and drown the one-per-town shape
+                // this is looking for.
+                foreach (ScriptCommand command in ScriptReader.Read(rom, person.ScriptAddress))
+                {
+                    uint target = command.Code switch
+                    {
+                        ScriptCommands.Call or ScriptCommands.Goto => command.Pointer(),
+                        ScriptCommands.CallIf or ScriptCommands.GotoIf => command.Pointer(1),
+                        _ => 0,
+                    };
+
+                    if (target == 0 || !rom.IsRomAddress(target)) continue;
+
+                    people[target] = people.GetValueOrDefault(target) + 1;
+
+                    if (!maps.TryGetValue(target, out HashSet<string>? on)) maps[target] = on = [];
+
+                    on.Add(map.Name);
+
+                    if (ScriptRunner.Run(rom, person.ScriptAddress).Pages.FirstOrDefault() is not { } opening) continue;
+                    if (opening.Trim().Length == 0) continue;
+
+                    if (!says.TryGetValue(target, out Dictionary<string, int>? lines)) says[target] = lines = [];
+
+                    lines[opening] = lines.GetValueOrDefault(opening) + 1;
+                }
+            }
+        }
+
+        Console.WriteLine($"  {people.Count} shared scripts, called from {library.Count} maps");
+
+        foreach ((uint target, HashSet<string> on) in maps.OrderByDescending(e => e.Value.Count).Take(top))
+        {
+            Console.WriteLine($"    0x{target:X8}  {on.Count} maps, {people[target]} callers");
+
+            if (!says.TryGetValue(target, out Dictionary<string, int>? lines)) continue;
+
+            foreach ((string opening, int said) in lines.OrderByDescending(e => e.Value).Take(1))
+            {
+                string line = GameText.ToAscii(opening).Replace("\n", " ");
+
+                Console.WriteLine($"            {said}x  \"{(line.Length > 84 ? line[..84] + "..." : line)}\"");
+            }
+        }
+    }
+
     private static void WriteItems(Rom rom)
     {
         Console.WriteLine();
@@ -1505,6 +1584,9 @@ public static class Program
         /// <summary>Count which special routines get called, and on which maps.</summary>
         public bool Specials { get; private init; }
 
+        /// <summary>Count the scripts map objects hand their work to.</summary>
+        public bool Shared { get; private init; }
+
         /// <summary>Find everybody who says this, and report what their script calls.</summary>
         public string WhoSays { get; private init; } = "";
 
@@ -1538,6 +1620,7 @@ public static class Program
             string scriptRun = "";
             bool scriptRuns = false;
             bool specials = false;
+            bool shared = false;
             string whoSays = "";
             uint scriptAt = 0;
             bool dumpMoves = false, dumpEncounters = false;
@@ -1616,6 +1699,9 @@ public static class Program
                     case "--specials":
                         specials = true;
                         break;
+                    case "--shared":
+                        shared = true;
+                        break;
                     case "--who-says":
                         whoSays = Next(args, ref i, "--who-says");
                         break;
@@ -1675,6 +1761,7 @@ public static class Program
                 ScriptRun = scriptRun,
                 ScriptRuns = scriptRuns,
                 Specials = specials,
+                Shared = shared,
                 WhoSays = whoSays,
                 ScriptAt = scriptAt,
                 DumpMoves = dumpMoves,
