@@ -453,14 +453,20 @@ public static class Program
 
                     foreach (int flag in welcome.Flags) script.Set(flag);
                     foreach (SavedVariable variable in welcome.Variables) script.Write(variable.Id, variable.Value);
+                    foreach (int beaten in welcome.Beaten) script.MarkBeaten(beaten);
 
                     break;
 
                 case FlagsChanged changed:
-                    // Almost always one flag, and almost always the one that means the
-                    // trainer just beaten has been beaten. Without it they would go on
-                    // greeting the player who beat them.
                     foreach (int flag in changed.Flags) script.Set(flag);
+
+                    break;
+
+                case TrainerBeaten beaten:
+                    // Winning is decided on the server. Until this arrives, running that
+                    // trainer's script gives their opening line — because what the script
+                    // asks is whether the fight has already happened.
+                    script.MarkBeaten(beaten.TrainerId);
 
                     break;
 

@@ -79,15 +79,22 @@ public static class ScriptCommands
     /// has one more again.
     /// </para>
     /// <para>
-    /// Every variant starts the same way: the type, the trainer id, and a flag number.
+    /// Every variant starts the same way: the type, the trainer id, and one more word.
     /// So the id is readable whether or not this table has the right length for the
     /// rest, and a variant this does not know stops the read rather than guessing —
     /// which loses whatever came after the fight, and never invents it.
     /// </para>
+    /// <para>
+    /// That third word was called a flag here and is not one. On a real image it is zero
+    /// for all fifteen people on Route 8, and the flag that would have been read out of
+    /// it was zero for every trainer in the game — which is a number that means "flag
+    /// zero", not "no flag". Whatever the games remember a beaten trainer by, it is not
+    /// written in the script.
+    /// </para>
     /// </summary>
     public static int? TrainerBattleLength(byte kind) => kind switch
     {
-        0 or 5 or 9 => 13,      // type, id, flag, intro, defeat
+        0 or 5 or 9 => 13,      // type, id, that word, intro, defeat
         3 => 9,                 // no intro text
         1 or 2 or 4 or 7 => 17, // ... and one more script or text pointer
         6 or 8 => 21,           // ... and two
@@ -400,21 +407,11 @@ public static class ScriptReader
     /// why reading scripts had to come first.
     /// </para>
     /// </summary>
-    public static int? FindTrainer(Rom rom, uint address) => FindTrainerBattle(rom, address)?.Id;
-
-    /// <summary>
-    /// Which fight a script picks and the flag it is remembered by, or nothing.
-    /// <para>
-    /// The two travel together because they are arguments to the same command and
-    /// neither is written anywhere else. Reading them separately would mean walking
-    /// every script twice to learn two halves of one fact.
-    /// </para>
-    /// </summary>
-    public static (int Id, int Flag)? FindTrainerBattle(Rom rom, uint address)
+    public static int? FindTrainer(Rom rom, uint address)
     {
         foreach (ScriptCommand command in ReadAll(rom, address))
         {
-            if (command.Code == ScriptCommands.TrainerBattle) return (command.Word(1), command.Word(3));
+            if (command.Code == ScriptCommands.TrainerBattle) return command.Word(1);
         }
 
         return null;

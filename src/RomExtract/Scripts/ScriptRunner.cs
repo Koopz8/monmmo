@@ -14,16 +14,6 @@ public sealed record ScriptRun
     /// <summary>The fight this run picks, if it picks one.</summary>
     public int? TrainerId { get; init; }
 
-    /// <summary>
-    /// The flag that fight is remembered by.
-    /// <para>
-    /// Carried out of the run because it is the only place it exists. A trainer's id and
-    /// the flag that means "you have beaten this one" are both arguments to the same
-    /// command, and nothing on the map record says either.
-    /// </para>
-    /// </summary>
-    public int? TrainerFlag { get; init; }
-
     /// <summary>Flags this run set, in order, and the ones it cleared.</summary>
     public IReadOnlyList<int> FlagsSet { get; init; } = [];
 
@@ -103,7 +93,6 @@ public static class ScriptRunner
         var stack = new Stack<uint>();
 
         int? trainerId = null;
-        int? trainerFlag = null;
         byte? stoppedAt = null;
         int? stoppedAtOffset = null;
 
@@ -239,16 +228,20 @@ public static class ScriptRunner
 
                 case ScriptCommands.TrainerBattle:
                     // The command is its own conditional, and this is the whole reason a
-                    // beaten trainer used to read their opening line. Their flag being
-                    // set does not skip a branch — it makes the fight itself do nothing,
-                    // and the script carries straight on to whatever they say afterwards.
+                    // beaten trainer used to read their opening line. Having beaten them
+                    // does not skip a branch — it makes the fight itself do nothing, and
+                    // the script carries straight on to whatever they say afterwards.
+                    // Confirmed on a real image: all fifteen people on Route 8 have a
+                    // different second line, and it is the line they say once beaten.
+                    //
+                    // Which trainer, and not which flag. The word after the id is not a
+                    // flag number — it is zero for every one of those fifteen — so the
+                    // games remember a beaten trainer somewhere the script does not say.
                     int id = command.Word(1);
-                    int flag = command.Word(3);
 
-                    if (save.Has(flag)) break;
+                    if (save.HasBeaten(id)) break;
 
                     trainerId = id;
-                    trainerFlag = flag;
 
                     // Every variant but one opens with the line they say on sight, and
                     // that line belongs to the fight rather than to what comes after it.
@@ -275,7 +268,6 @@ public static class ScriptRunner
             Pages = pages,
             Stock = stock,
             TrainerId = trainerId,
-            TrainerFlag = trainerFlag,
             FlagsSet = set,
             FlagsCleared = cleared,
             VariablesWritten = written,

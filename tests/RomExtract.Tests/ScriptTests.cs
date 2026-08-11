@@ -445,9 +445,16 @@ public class ScriptRunnerTests
         // A question mark is a lie: it reads as punctuation somebody typed, so the one
         // character this cannot decode is also the one it can never notice. POKéMON read
         // as POK?MON in every line on Route 1 and looked like a sentence.
-        List<string> pages = GameText.DecodeDialogue([0xBB, 0x1B, 0xBC, GameText.Terminator]);
+        // 0x50 rather than 0x1B: this test is about the ones still unknown, and 0x1B is
+        // é now precisely because printing it that way gave it away.
+        List<string> pages = GameText.DecodeDialogue([0xBB, 0x50, 0xBC, GameText.Terminator]);
 
-        Assert.Equal("A{1B}B", Assert.Single(pages));
+        Assert.Equal("A{50}B", Assert.Single(pages));
+
+        // And the three that printing the byte identified, each from the sentence it
+        // turned up in on the real cartridge.
+        Assert.Equal("PokéMON…:", Assert.Single(GameText.DecodeDialogue(
+            [0xCA, 0xE3, 0xDF, 0x1B, 0xC7, 0xC9, 0xC8, 0xB0, 0xF0, GameText.Terminator])));
 
         // A real question mark is still a real question mark.
         Assert.Equal("A?", Assert.Single(GameText.DecodeDialogue([0xBB, 0xAC, GameText.Terminator])));
@@ -489,10 +496,13 @@ public class ScriptRunnerTests
     [Fact]
     public void ABeatenTrainerSaysWhatComesAfterTheFightInstead()
     {
-        // The command is its own conditional. A set flag does not skip a branch — it
-        // makes the fight do nothing and lets the script carry on to the line they say
-        // once you have beaten them. Reading both, which is what the old reader did, is
-        // why a trainer greeted you and gloated about losing in the same breath.
+        // The command is its own conditional. Having beaten them does not skip a branch
+        // — it makes the fight do nothing and lets the script carry on to the line they
+        // say afterwards. Confirmed on a real image: all fifteen people on Route 8 have
+        // a second line and it is a different sentence.
+        //
+        // By id. The word after the id in this command is not a flag number, whatever
+        // else it is — the fixture plants one here and nothing reads it.
         byte[] script =
         [
             ScriptCommands.TrainerBattle, 0x00, .. Word(41), .. Word(0x4F1), .. At(SaysA), .. At(SaysB),
@@ -504,10 +514,9 @@ public class ScriptRunnerTests
         ScriptRun first = ScriptRunner.Run(rom, Start);
 
         Assert.Equal(41, first.TrainerId);
-        Assert.Equal(0x4F1, first.TrainerFlag);
         Assert.Equal("AAAAAA", Assert.Single(first.Pages));
 
-        ScriptRun again = ScriptRunner.Run(rom, Start, new ScriptState([0x4F1]));
+        ScriptRun again = ScriptRunner.Run(rom, Start, new ScriptState(beaten: [41]));
 
         Assert.Null(again.TrainerId);
         Assert.Equal("BBBBBB", Assert.Single(again.Pages));

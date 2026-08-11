@@ -128,17 +128,6 @@ public sealed class GameWorld
     private readonly Dictionary<string, MapPopulation> _populated = [];
     private readonly BattleRng _objectRng = new(0x5EED);
 
-    /// <summary>
-    /// Which script flag says a trainer has already been beaten, by trainer id.
-    /// <para>
-    /// Built once from the world file, because the pair is written down there and
-    /// nowhere else — both halves are arguments to the same command inside a script,
-    /// and this end of the wire has no cartridge to read one from. A trainer who turns
-    /// up on more than one map is the same trainer with the same flag, so the first one
-    /// found is as good as any.
-    /// </para>
-    /// </summary>
-    private readonly Dictionary<int, int> _trainerFlags = [];
 
     public GameWorld(WorldData world, string startingMapId, GameRules? rules = null, uint encounterSeed = 1)
     {
@@ -147,16 +136,6 @@ public sealed class GameWorld
         _rules = rules;
         _battles = rules is null ? null : new BattleFactory(rules);
         _progression = rules is null ? null : new Progression(rules);
-
-        foreach (MapData map in world.Maps)
-        {
-            foreach (MapObject person in map.Objects)
-            {
-                if (person.TrainerId == 0 || person.TrainerFlag == 0) continue;
-
-                _trainerFlags.TryAdd(person.TrainerId, person.TrainerFlag);
-            }
-        }
 
         StartingMap = world.Find(startingMapId)
             ?? world.FindByName(startingMapId)
@@ -286,16 +265,7 @@ public sealed class GameWorld
                     saved.Variables.Select(v => new KeyValuePair<int, int>(v.Id, v.Value))),
             };
 
-            foreach (int beaten in saved.DefeatedTrainers)
-            {
-                player.DefeatedTrainers.Add(beaten);
-
-                // Saves written before flags existed know who was beaten and not which
-                // flag says so. Lighting it on the way in costs one lookup and means an
-                // account that has been playing for weeks does not have to fight
-                // everybody again to make them stop saying hello.
-                if (_trainerFlags.GetValueOrDefault(beaten) is var flag and not 0) player.Script.Set(flag);
-            }
+            foreach (int beaten in saved.DefeatedTrainers) player.DefeatedTrainers.Add(beaten);
 
             // A save from before healing existed, or one written mid-wipe, would leave
             // this account unable to start a battle for good. Waking up healthy is the
@@ -311,6 +281,7 @@ public sealed class GameWorld
                     {
                         Flags = [.. player.Script.Flags],
                         Variables = [.. player.Script.Variables.Select(v => new SavedVariable(v.Key, v.Value))],
+                        Beaten = [.. player.DefeatedTrainers],
                     },
                     OnlyTo: player.Id),
             };
@@ -1231,16 +1202,12 @@ public sealed class GameWorld
                 send.Add(new Outgoing(FinishBattle(player, encounter, winner), OnlyTo: playerId));
 
                 // Beating somebody is decided here and nowhere else. Which line they
-                // read next is decided by running their script against these flags, so
-                // a flag the client is not told about is a trainer who goes on greeting
-                // you as though the fight never happened.
-                if (winner == Side.Player &&
-                    encounter.TrainerId is { } won &&
-                    _trainerFlags.GetValueOrDefault(won) is var lit and not 0 &&
-                    player.Script.Set(lit))
-                {
-                    send.Add(new Outgoing(new FlagsChanged([lit]), OnlyTo: playerId));
-                }
+                // read next is decided by running their script, and the thing that
+                // script asks is whether this fight has already happened — so a win the
+                // client is not told about is a trainer who goes on greeting the player
+                // who beat them.
+                if (winner == Side.Player && encounter.TrainerId is { } won)
+                    send.Add(new Outgoing(new TrainerBeaten(won), OnlyTo: playerId));
                 return send;
             }
 

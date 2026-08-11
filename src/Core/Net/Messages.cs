@@ -22,6 +22,7 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(TalkFinished), "talkdone")]
 [JsonDerivedType(typeof(ScriptRan), "scriptran")]
 [JsonDerivedType(typeof(FlagsChanged), "flags")]
+[JsonDerivedType(typeof(TrainerBeaten), "beaten")]
 [JsonDerivedType(typeof(BuyRequest), "buy")]
 [JsonDerivedType(typeof(SellRequest), "sell")]
 [JsonDerivedType(typeof(ShopOpened), "shop")]
@@ -139,6 +140,9 @@ public sealed record Welcome(
     public IReadOnlyList<int> Flags { get; init; } = [];
 
     public IReadOnlyList<SavedVariable> Variables { get; init; } = [];
+
+    /// <summary>Who this character has already beaten, so their scripts run correctly.</summary>
+    public IReadOnlyList<int> Beaten { get; init; } = [];
 }
 
 /// <summary>
@@ -151,16 +155,24 @@ public sealed record Welcome(
 /// </summary>
 public sealed record MapChanged(string MapId, int X, int Y, Direction Facing) : NetMessage;
 
+/// <summary>Flags the server set without being asked.</summary>
+public sealed record FlagsChanged(IReadOnlyList<int> Flags) : NetMessage;
+
 /// <summary>
-/// Flags the server set without being asked.
+/// A trainer this player has beaten.
 /// <para>
-/// Winning a fight is the case that matters. Beating somebody is decided here — the
-/// client has no party but its own and no say in it — and until the flag reaches the
-/// client that trainer goes on reading their opening line, because which line somebody
-/// reads is decided by running their script against exactly these flags.
+/// Winning is decided on the server — the client has no party but its own and no say
+/// in it — and until this arrives that trainer goes on reading their opening line,
+/// because <c>trainerbattle</c> is its own conditional and the thing it asks is whether
+/// this fight has already happened.
+/// </para>
+/// <para>
+/// By id, not by flag. The word after the id in a <c>trainerbattle</c> command is not a
+/// flag number, whatever it is: on a real image it is zero for every trainer on Route 8.
+/// The id is this project's own and has been persisted since trainers existed.
 /// </para>
 /// </summary>
-public sealed record FlagsChanged(IReadOnlyList<int> Flags) : NetMessage;
+public sealed record TrainerBeaten(int TrainerId) : NetMessage;
 
 /// <summary>
 /// The credentials were not accepted. Deliberately vague about which half was wrong,

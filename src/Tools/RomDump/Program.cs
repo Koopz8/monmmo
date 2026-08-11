@@ -927,26 +927,29 @@ public static class Program
                 }
             }
 
-            // The flags this person's own script turns on, plus the one their fight is
-            // remembered by. Anything else would be a guess about what the rest of the
-            // world had done first.
+            // What this person's own script turns on, plus their fight having happened.
+            // Anything else would be a guess about what the rest of the world had done
+            // first.
             var later = new ScriptState(fresh.FlagsSet);
 
-            if (fresh.TrainerFlag is { } flag) later.Set(flag);
+            if (fresh.TrainerId is { } fought) later.MarkBeaten(fought);
 
-            if (later.Flags.Count == 0) continue;
+            if (later.Flags.Count == 0 && later.Beaten.Count == 0) continue;
 
-            Describe(
-                $"    with {string.Join(", ", later.Flags.Select(f => $"0x{f:X}"))} set",
-                ScriptRunner.Run(rom, person.ScriptAddress, later));
+            string[] since =
+            [
+                .. later.Beaten.Select(t => $"trainer {t} beaten"),
+                .. later.Flags.Select(f => $"flag 0x{f:X} set"),
+            ];
+
+            Describe($"    with {string.Join(", ", since)}", ScriptRunner.Run(rom, person.ScriptAddress, later));
         }
 
         static void Describe(string heading, ScriptRun run)
         {
             Console.WriteLine(heading);
 
-            if (run.TrainerId is { } trainer)
-                Console.WriteLine($"      fights trainer {trainer}, remembered by 0x{run.TrainerFlag:X}");
+            if (run.TrainerId is { } trainer) Console.WriteLine($"      fights trainer {trainer}");
 
             if (run.Stock.Count > 0) Console.WriteLine($"      opens a shop of {run.Stock.Count} things");
 

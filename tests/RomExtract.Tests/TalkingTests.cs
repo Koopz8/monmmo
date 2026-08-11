@@ -413,8 +413,8 @@ public class ScriptFlagTests
         return new GameWorld(new WorldData([map]), Town, TestRules.All);
     }
 
-    private static MapObject Trainer(int localId, int trainerId, int flag) =>
-        new(localId, 5, 3, 3, Direction.Down, 0, true, 0, 0, 0, trainerId, 1) { TrainerFlag = flag };
+    private static MapObject Trainer(int localId, int trainerId) =>
+        new(localId, 5, 3, 3, Direction.Down, 0, true, 0, 0, 0, trainerId, 1);
 
     private static Welcome WelcomeFor(GameWorld world, SavedCharacter saved)
     {
@@ -439,27 +439,16 @@ public class ScriptFlagTests
     }
 
     [Fact]
-    public void ASaveThatKnowsWhoWasBeatenLearnsWhichFlagSaysSo()
+    public void TheClientIsToldWhoThisCharacterHasBeaten()
     {
-        // Every account that has been playing predates flags existing. They know who
-        // they have beaten and not the cartridge's number for it, and without this they
-        // would have to fight everybody again to make them stop saying hello.
+        // Not a flag. Running a trainer's script needs to know whether the fight has
+        // happened, and the id is the only name for it either side has — the word in the
+        // command that looked like a flag is zero for every trainer on the cartridge.
         Welcome welcome = WelcomeFor(
-            World(Trainer(1, 41, 0x4F1)),
+            World(Trainer(1, 41)),
             SavedCharacter.Fresh(Town, 1, 1) with { DefeatedTrainers = [41] });
 
-        Assert.Equal([0x4F1], welcome.Flags);
-    }
-
-    [Fact]
-    public void ATrainerWithNoFlagLightsNothing()
-    {
-        // Their script could not be read as far as the fight, or was read and had no
-        // flag in it. Lighting flag zero would be lighting whatever flag zero means.
-        Welcome welcome = WelcomeFor(
-            World(Trainer(1, 41, 0)),
-            SavedCharacter.Fresh(Town, 1, 1) with { DefeatedTrainers = [41] });
-
+        Assert.Equal([41], welcome.Beaten);
         Assert.Empty(welcome.Flags);
     }
 

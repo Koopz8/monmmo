@@ -74,6 +74,7 @@ public class MessageChannelTests
             new TalkFinished(),
             new ScriptRan([0x2A5], [0x828], [new SavedVariable(0x4001, 3)]),
             new FlagsChanged([0x4F1]),
+            new TrainerBeaten(41),
             new BuyRequest(4, 5),
             new SellRequest(13, 2),
             new ShopOpened([new ShopEntry(4, 200)], 5000, [new BagEntry(4, 3)]),

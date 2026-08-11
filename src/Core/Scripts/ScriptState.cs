@@ -35,12 +35,39 @@ public sealed class ScriptState
 {
     private readonly HashSet<int> _flags;
     private readonly Dictionary<int, int> _variables;
+    private readonly HashSet<int> _beaten;
 
-    public ScriptState(IEnumerable<int>? flags = null, IEnumerable<KeyValuePair<int, int>>? variables = null)
+    public ScriptState(
+        IEnumerable<int>? flags = null,
+        IEnumerable<KeyValuePair<int, int>>? variables = null,
+        IEnumerable<int>? beaten = null)
     {
         _flags = flags is null ? [] : [.. flags];
         _variables = variables is null ? [] : new Dictionary<int, int>(variables);
+        _beaten = beaten is null ? [] : [.. beaten];
     }
+
+    /// <summary>
+    /// Trainers this save has already beaten, by id.
+    /// <para>
+    /// Beside the flags rather than among them, because it is not one. A
+    /// <c>trainerbattle</c> command names a trainer and then a word that is not a flag
+    /// number — on a real FireRed image that word is zero for every trainer on Route 8,
+    /// and this project spent a commit believing otherwise. Whatever the games use to
+    /// remember a beaten trainer is not written in the script, so there is nothing to
+    /// read and no number to guess at.
+    /// </para>
+    /// <para>
+    /// The id is used instead. It is this project's own numbering, the server has
+    /// persisted it since trainers existed, and it survives a re-export — which the
+    /// cartridge's own numbering, whatever it is, would not need to.
+    /// </para>
+    /// </summary>
+    public IReadOnlyCollection<int> Beaten => _beaten;
+
+    public bool HasBeaten(int trainerId) => _beaten.Contains(trainerId);
+
+    public bool MarkBeaten(int trainerId) => _beaten.Add(trainerId);
 
     public IReadOnlyCollection<int> Flags => _flags;
 
@@ -64,7 +91,7 @@ public sealed class ScriptState
         else _variables[variable] = value;
     }
 
-    public ScriptState Copy() => new(_flags, _variables);
+    public ScriptState Copy() => new(_flags, _variables, _beaten);
 
     /// <summary>How two numbers compare, in the only three answers a script has.</summary>
     public static Comparison Compare(int left, int right) =>

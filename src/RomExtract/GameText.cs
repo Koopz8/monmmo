@@ -38,6 +38,15 @@ public static class GameText
         [0xB6] = '♀', // female sign
         [0xB8] = ',',
         [0xBA] = '/',
+
+        // Read off the cartridge rather than remembered, which is what printing the
+        // byte was for. Each one is fixed by the sentence it turned up in:
+        //   POK{1B}MON              — every line on every route
+        //   Go with GRIMER first{B0}and{B0}   — an ellipsis, not a word
+        //   ELI{F0} Twin power is fantastic.  — the twins on Route 8 name themselves
+        [0x1B] = 'é',
+        [0xB0] = '…',
+        [0xF0] = ':',
     };
 
     /// <summary>A line break inside a text box.</summary>
@@ -173,6 +182,8 @@ public static class GameText
                 case '’': sb.Append('\''); break;
                 case '♂': sb.Append("(M)"); break;
                 case '♀': sb.Append("(F)"); break;
+                case 'é': sb.Append('e'); break;
+                case '…': sb.Append("..."); break;
                 default: sb.Append(c); break;
             }
         }

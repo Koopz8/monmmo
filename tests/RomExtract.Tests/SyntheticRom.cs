@@ -186,10 +186,7 @@ public sealed class SyntheticRom
             new MapObject(1, 5 + index % 20, 3, 2, Direction.Up, 7, false, 0, 0, ScriptAddressFor(index, 0)),
             new MapObject(
                 2, 9 + index % 20, 6, 5, Direction.Left, 9, true, 0, 0,
-                ScriptAddressFor(index, 1), TrainerIdFor(index), SightRangeFor(index))
-            {
-                TrainerFlag = TrainerFlagFor(index),
-            },
+                ScriptAddressFor(index, 1), TrainerIdFor(index), SightRangeFor(index)),
             new MapObject(
                 3, 1, 8, 6, Direction.Down, 0, false, 0, 0,
                 ScriptAddressFor(index, 2), 0, 0, StockFor(index)),
@@ -197,14 +194,16 @@ public sealed class SyntheticRom
     }
 
     /// <summary>
-    /// The flag a map's trainer is remembered by.
+    /// The word a <c>trainerbattle</c> carries after the trainer id.
     /// <para>
-    /// Stated once and both written and expected from here. A fixture that declares one
-    /// number and plants another is a test that passes because both halves were guessed
-    /// the same way, which this project has already paid for twice.
+    /// Planted non-zero on purpose and read by nothing. This project spent a commit
+    /// calling it the flag a beaten trainer is remembered by; on a real image it is zero
+    /// for every trainer in the game, which is a number meaning "flag zero" rather than
+    /// "no flag". A fixture that plants something here is what keeps a future reader
+    /// from quietly assuming it is absent.
     /// </para>
     /// </summary>
-    public static int TrainerFlagFor(int index) => 0x200 + index;
+    public static int TrainerBattleWordFor(int index) => 0x200 + index;
 
     /// <summary>The object slot that is a trainer, and so the one with a fight in its script.</summary>
     public const int TrainerObjectSlot = 1;
@@ -939,7 +938,7 @@ public sealed class SyntheticRom
                 _data[at] = 0x5C;                                   // trainerbattle
                 _data[at + 1] = 0;                                  // the plain variant
                 WriteU16(at + 2, (ushort)TrainerIdFor(index));
-                WriteU16(at + 4, (ushort)TrainerFlagFor(index));    // the flag it sets
+                WriteU16(at + 4, (ushort)TrainerBattleWordFor(index)); // not a flag
                 WriteU32(at + 6, Rom.BaseAddress + (uint)text);     // what they say first
                 WriteU32(at + 10, Rom.BaseAddress + (uint)text);    // and on losing
 
