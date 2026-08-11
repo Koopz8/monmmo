@@ -146,6 +146,7 @@ public static class Program
         // Located while the window is opening rather than in the moment somebody steps
         // into a trainer's line of sight — locating walks the whole image.
         var trainers = new TrainerNames(data.Rom, data.Species.Count);
+        var items = new ItemNames(data.Rom);
 
         CharacterSprite? sprite = sprites.For(CharacterSprite.DefaultGraphicsId);
 
@@ -161,7 +162,8 @@ public static class Program
         var others = new Dictionary<int, RemoteCharacter>();
         BattleScreen? battle = null;
         DialogueBox? talking = null;
-        int balls = settings.Balls;
+        IReadOnlyList<BagEntry> bag = [];
+        int money = 0;
 
         // Where the server last said we are, when that disagreed with where we think we
         // are. Held rather than applied on the spot: a correction almost always arrives
@@ -178,7 +180,7 @@ public static class Program
         {
             float delta = Raylib.GetFrameTime();
 
-            ApplyServerMessages(network, others, player, view, data, trainers, ref battle, ref balls, ref correction);
+            ApplyServerMessages(network, others, player, view, data, trainers, items, ref battle, ref bag, ref money, ref correction);
 
             // A battle suspends the overworld entirely: the server is running it, and
             // walking on meanwhile would put the two sides out of step.
@@ -203,7 +205,7 @@ public static class Program
 
                 if (battle.IsDismissed)
                 {
-                    balls = battle.Balls;
+                    money = battle.Money;
                     battle.Unload();
                     battle = null;
                 }
@@ -304,7 +306,7 @@ public static class Program
                 DrawPlayer(playerX, playerY, player.Facing);
             Raylib.EndMode2D();
 
-            DrawStatus(view.Map, player, network, others.Count);
+            DrawStatus(view.Map, player, network, others.Count, money, bag.Count);
             talking?.Draw(WindowWidth, WindowHeight);
             Raylib.EndDrawing();
         }
@@ -367,8 +369,10 @@ public static class Program
         MapView view,
         GameData data,
         TrainerNames trainers,
+        ItemNames items,
         ref BattleScreen? battle,
-        ref int balls,
+        ref IReadOnlyList<BagEntry> bag,
+        ref int money,
         ref GridPosition? correction)
     {
         foreach (NetMessage message in network.Drain())
@@ -381,7 +385,8 @@ public static class Program
                     if (view.SwitchTo(welcome.MapId)) Raylib.SetWindowTitle($"MonMMO — {view.Map.Name}");
 
                     player.Place(view.Collision, new GridPosition(welcome.X, welcome.Y));
-                    balls = welcome.Balls;
+                    bag = welcome.Bag;
+                    money = welcome.Money;
                     break;
 
                 case PlayerAppeared appeared when appeared.PlayerId != network.PlayerId:
@@ -430,7 +435,7 @@ public static class Program
                     break;
 
                 case BattleStarted started:
-                    battle = new BattleScreen(started, data, trainers);
+                    battle = new BattleScreen(started, data, trainers, items);
                     break;
 
                 case BattlerSentOut sent:
@@ -443,7 +448,7 @@ public static class Program
 
                 case BattleFinished finished:
                     battle?.Apply(finished);
-                    balls = finished.Balls;
+                    money = finished.Money;
                     break;
 
                 case Rejected rejected when battle is not null:
@@ -519,7 +524,8 @@ public static class Program
         Raylib.DrawText(name, left, (int)y - 9, 8, Color.White);
     }
 
-    private static void DrawStatus(LoadedMap map, WalkingCharacter player, NetworkClient network, int others)
+    private static void DrawStatus(
+        LoadedMap map, WalkingCharacter player, NetworkClient network, int others, int money, int carrying)
     {
         string connection = network.Failure is { } failure
             ? $"   offline: {failure}"
@@ -527,7 +533,7 @@ public static class Program
 
         string line = $"{map.Name}  ({map.Bank}.{map.Number})   " +
                       $"{player.Square.X},{player.Square.Y}   " +
-                      $"{map.Collision.Width}x{map.Collision.Height}{connection}";
+                      $"{money}   {carrying} items{connection}";
 
         Raylib.DrawText(line, 13, 13, 20, Color.Black);
         Raylib.DrawText(line, 12, 12, 20, Color.White);

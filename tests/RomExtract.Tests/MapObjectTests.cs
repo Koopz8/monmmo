@@ -124,7 +124,7 @@ public class ObjectsBlockMovementTests
     private static ServerPlayer JoinAt(GameWorld world, int x, int y)
     {
         (ServerPlayer player, _) = world.Join(
-            1, "Mason", new SavedCharacter(Town, x, y, Direction.Down, 10, []));
+            1, "Mason", new SavedCharacter(Town, x, y, Direction.Down, []));
 
         return player;
     }

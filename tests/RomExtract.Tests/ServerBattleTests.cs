@@ -81,7 +81,7 @@ public class ServerBattleTests
         Assert.Equal(16, start.Opponent.Species);
         Assert.Equal(start.Opponent.MaxHp, start.Opponent.CurrentHp);
         Assert.NotEmpty(start.You.Moves);
-        Assert.True(start.Balls > 0);
+        Assert.True(start.Balls.Sum(b => b.Count) > 0);
     }
 
     [Fact]
@@ -138,9 +138,11 @@ public class ServerBattleTests
     {
         (GameWorld world, ServerPlayer player, BattleStarted start) = InBattle();
 
-        world.TakeBattleTurn(player.Id, new BattleAction.ThrowBall(BallKind.Poke));
+        int before = start.Balls.Single(b => b.ItemId == TestRules.BallItem).Count;
 
-        Assert.Equal(start.Balls - 1, player.Balls);
+        world.TakeBattleTurn(player.Id, new BattleAction.ThrowBall(TestRules.BallItem));
+
+        Assert.Equal(before - 1, player.Bag.CountOf(TestRules.BallItem));
     }
 
     [Fact]
@@ -149,13 +151,13 @@ public class ServerBattleTests
         // The count is the server's, so a client asking to throw one it does not have
         // gets a turn spent, not a free throw.
         (GameWorld world, ServerPlayer player, _) = InBattle();
-        player.Balls = 0;
+        player.Bag = new Bag();
 
-        List<Outgoing> send = world.TakeBattleTurn(player.Id, new BattleAction.ThrowBall(BallKind.Master));
+        List<Outgoing> send = world.TakeBattleTurn(player.Id, new BattleAction.ThrowBall(TestRules.BallItem));
 
         BattleUpdate update = send.Select(o => o.Message).OfType<BattleUpdate>().Single();
 
-        Assert.Equal(0, player.Balls);
+        Assert.Equal(0, player.Bag.CountOf(TestRules.BallItem));
         Assert.DoesNotContain(update.Events, e => e is BattleEvent.BallThrown);
     }
 
@@ -166,7 +168,7 @@ public class ServerBattleTests
 
         int before = player.Party.Count;
 
-        List<Outgoing> send = world.TakeBattleTurn(player.Id, new BattleAction.ThrowBall(BallKind.Master));
+        List<Outgoing> send = world.TakeBattleTurn(player.Id, new BattleAction.ThrowBall(TestRules.BallItem));
 
         BattleFinished finished = send.Select(o => o.Message).OfType<BattleFinished>().Single();
 
@@ -181,7 +183,7 @@ public class ServerBattleTests
     {
         (GameWorld world, ServerPlayer player, _) = InBattle();
 
-        world.TakeBattleTurn(player.Id, new BattleAction.ThrowBall(BallKind.Master));
+        world.TakeBattleTurn(player.Id, new BattleAction.ThrowBall(TestRules.BallItem));
 
         Assert.Null(player.Battle);
         Assert.False(player.InBattle);
@@ -265,7 +267,7 @@ public class ServerBattleTests
         // be paying for something that never fainted.
         (GameWorld world, ServerPlayer player, _) = InBattle();
 
-        List<Outgoing> send = world.TakeBattleTurn(player.Id, new BattleAction.ThrowBall(BallKind.Master));
+        List<Outgoing> send = world.TakeBattleTurn(player.Id, new BattleAction.ThrowBall(TestRules.BallItem));
 
         BattleUpdate update = send.Select(o => o.Message).OfType<BattleUpdate>().Single();
 
@@ -377,7 +379,7 @@ public class LosingTests
         GameWorld world = GrassyWorld();
 
         (ServerPlayer player, _) = world.Join(
-            1, "Mason", new SavedCharacter(Route, 0, 0, Direction.Down, 10, [Fainted()]));
+            1, "Mason", new SavedCharacter(Route, 0, 0, Direction.Down, [Fainted()]));
 
         Assert.True(player.Party[0].CurrentHp > 0);
     }
@@ -390,7 +392,7 @@ public class LosingTests
         var hurt = new SavedMon(16, 3, null, 1, StatusCondition.Burn, Nature.Hardy, [TestRules.FirstMove]);
 
         (ServerPlayer player, _) = world.Join(
-            1, "Mason", new SavedCharacter(Route, 0, 0, Direction.Down, 10, [hurt]));
+            1, "Mason", new SavedCharacter(Route, 0, 0, Direction.Down, [hurt]));
 
         // One battler on its last point is not a wipe, and healing it would make every
         // reconnect a free rest stop.
@@ -405,7 +407,7 @@ public class LosingTests
         GameWorld world = GrassyWorld();
 
         (ServerPlayer player, _) = world.Join(
-            1, "Mason", new SavedCharacter(Route, 0, 0, Direction.Down, 10, [Fainted()]));
+            1, "Mason", new SavedCharacter(Route, 0, 0, Direction.Down, [Fainted()]));
 
         // Faint it again, past the login heal, to reach the state directly.
         player.Party[0] = Fainted();

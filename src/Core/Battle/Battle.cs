@@ -98,7 +98,27 @@ public abstract record BattleAction
     public sealed record Struggle : BattleAction;
 
     /// <summary>Throwing a ball uses the turn; the target still gets to act if it stays free.</summary>
-    public sealed record ThrowBall(BallKind Ball) : BattleAction;
+    /// <summary>
+    /// A ball, named by the item it came out of the bag as.
+    /// <para>
+    /// The item id rather than the kind, because the count that has to be decremented
+    /// is a count of that item. A request naming a kind would let a client spend a Poké
+    /// Ball and throw a Master Ball.
+    /// </para>
+    /// </summary>
+    public sealed record ThrowBall(int ItemId) : BattleAction
+    {
+        /// <summary>
+        /// How well this one catches.
+        /// <para>
+        /// Filled in by the server from its rules, never by whoever sent the request.
+        /// Nothing on a cartridge states a ball's behaviour in data — it lives in the
+        /// game's code — so the id becomes a kind at export time, from the name, and
+        /// the answer is the server's from then on.
+        /// </para>
+        /// </summary>
+        public BallKind Kind { get; init; } = BallKind.Poke;
+    }
 }
 
 /// <summary>
@@ -208,7 +228,7 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         {
             // Only a wild opponent can be caught, and throwing spends the turn whether
             // or not it works.
-            ThrowAt(side, defender, throwBall.Ball, events);
+            ThrowAt(side, defender, throwBall.Kind, events);
             return;
         }
 

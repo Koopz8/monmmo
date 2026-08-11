@@ -104,7 +104,7 @@ public class TalkingTests
     private static ServerPlayer Join(GameWorld world, int id, int x, int y, Direction facing)
     {
         (ServerPlayer player, _) = world.Join(
-            id, $"Player{id}", new SavedCharacter(Town, x, y, facing, 10, []));
+            id, $"Player{id}", new SavedCharacter(Town, x, y, facing, []));
 
         return player;
     }

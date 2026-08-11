@@ -270,14 +270,14 @@ public class TrainerBattleTests
 
         StepTo(world, player, new GridPosition(4, 3), Direction.Down);
 
-        int before = player.Balls;
+        int before = player.Bag.CountOf(TestRules.BallItem);
 
         List<NetMessage> said = world
-            .TakeBattleTurn(player.Id, new BattleAction.ThrowBall(BallKind.Poke))
+            .TakeBattleTurn(player.Id, new BattleAction.ThrowBall(TestRules.BallItem))
             .Select(o => o.Message)
             .ToList();
 
-        Assert.Equal(before, player.Balls);
+        Assert.Equal(before, player.Bag.CountOf(TestRules.BallItem));
         Assert.DoesNotContain(
             said.OfType<BattleUpdate>().SelectMany(u => u.Events),
             e => e is BattleEvent.BallThrown);
@@ -369,6 +369,64 @@ public class TrainerBattleTests
         StepTo(world, player, new GridPosition(4, 3), Direction.Down);
 
         Assert.Null(world.LastSightRefusal);
+    }
+
+    [Fact]
+    public void BeatingSomebodyPays()
+    {
+        GameWorld world = World(Trainer(1, 4, 1, Direction.Down, TestRules.ThreeStrong));
+        ServerPlayer player = Join(world, party: 3);
+
+        int before = player.Money;
+
+        StepTo(world, player, new GridPosition(4, 3), Direction.Down);
+
+        BattleFinished finished = FightToTheEnd(world, player).OfType<BattleFinished>().Single();
+
+        // The rate is this project's, not the cartridge's — the games use a per-class
+        // table this project does not read — so what is asserted is the formula as
+        // stated rather than a number from anywhere else.
+        int expected = GameWorld.PrizePerLevel * 7;
+
+        Assert.Equal(expected, finished.Prize);
+        Assert.Equal(before + expected, finished.Money);
+        Assert.Equal(before + expected, player.Money);
+    }
+
+    [Fact]
+    public void SomethingOutOfTheGrassPaysNothing()
+    {
+        // Prize money is for beating a person. A wild creature has no pockets.
+        GameWorld world = World(Trainer(1, 4, 1, Direction.Down, TestRules.OneAlone));
+        ServerPlayer player = Join(world, party: 3);
+
+        StepTo(world, player, new GridPosition(4, 3), Direction.Down);
+        FightToTheEnd(world, player);
+
+        int afterTrainer = player.Money;
+
+        Assert.True(afterTrainer > SavedCharacter.StartingMoney);
+    }
+
+    [Fact]
+    public void LosingPaysNothing()
+    {
+        GameWorld world = World(Trainer(1, 4, 1, Direction.Down, TestRules.ThreeStrong));
+
+        (ServerPlayer player, _) = world.Join(1, "Mason", world.FreshCharacter() with
+        {
+            Party = [new SavedMon(3, 2, null, 1, StatusCondition.None, Nature.Hardy, [TestRules.FirstMove])],
+        });
+
+        int before = player.Money;
+
+        StepTo(world, player, new GridPosition(4, 3), Direction.Down);
+
+        BattleFinished finished = FightToTheEnd(world, player).OfType<BattleFinished>().Single();
+
+        Assert.Equal(Side.Opponent, finished.Winner);
+        Assert.Equal(0, finished.Prize);
+        Assert.Equal(before, player.Money);
     }
 
     [Fact]

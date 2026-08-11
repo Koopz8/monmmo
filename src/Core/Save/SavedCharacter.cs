@@ -71,11 +71,20 @@ public sealed record SavedCharacter(
     int X,
     int Y,
     Direction Facing,
-    int Balls,
     IReadOnlyList<SavedMon> Party)
 {
-    /// <summary>What a new account starts with. Enough to catch something.</summary>
+    /// <summary>
+    /// What a new account starts with. Enough to catch something.
+    /// <para>
+    /// Kept as a count of the ordinary ball rather than as a bag, because a bag needs a
+    /// rules file to know what an ordinary ball <em>is</em> and a fresh character has to
+    /// be makeable without one.
+    /// </para>
+    /// </summary>
     public const int StartingBalls = 20;
+
+    /// <summary>What a new account starts with, in the games' own currency.</summary>
+    public const int StartingMoney = 3000;
 
     /// <summary>
     /// Trainers this account has already beaten.
@@ -92,8 +101,21 @@ public sealed record SavedCharacter(
     /// </summary>
     public IReadOnlyList<int> DefeatedTrainers { get; init; } = [];
 
+    /// <summary>
+    /// Everything carried, as item ids and counts.
+    /// <para>
+    /// Init properties rather than positional members for the same reason the defeated
+    /// trainers are: every existing construction of one of these is correct without
+    /// them, and threading a new position through all of them to say "nothing yet"
+    /// would be churn with no meaning in it.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<BagEntry> Items { get; init; } = [];
+
+    public int Money { get; init; } = StartingMoney;
+
     public static SavedCharacter Fresh(string mapId, int x, int y) =>
-        new(mapId, x, y, Direction.Down, StartingBalls, []);
+        new(mapId, x, y, Direction.Down, []);
 
     public bool HasParty => Party.Count > 0;
 }

@@ -99,7 +99,7 @@ public class UsernameRulesTests
 public class SqlitePlayerStoreTests
 {
     private static SavedCharacter Character(params SavedMon[] party) =>
-        new("3.19", 10, 4, Direction.Left, 17, party);
+        new("3.19", 10, 4, Direction.Left, party) { Money = 4321 };
 
     private static SavedMon Mon(int species = 16, int level = 3) =>
         new(species, level, null, 11, StatusCondition.None, Nature.Hardy, [33, 45]);
@@ -119,7 +119,7 @@ public class SqlitePlayerStoreTests
         Assert.Equal("3.19", login.Character.MapId);
         Assert.Equal(10, login.Character.X);
         Assert.Equal(Direction.Left, login.Character.Facing);
-        Assert.Equal(17, login.Character.Balls);
+        Assert.Equal(4321, login.Character.Money);
     }
 
     [Fact]
@@ -141,6 +141,45 @@ public class SqlitePlayerStoreTests
         // Move order is slot order, not insertion luck: a party member's first move is
         // the one the menu puts first.
         Assert.Equal(new[] { 84, 45, 98 }, login.Character.Party[0].Moves);
+    }
+
+    [Fact]
+    public async Task ABagOutlivesTheConnection()
+    {
+        using SqlitePlayerStore store = SqlitePlayerStore.InMemory();
+
+        await store.RegisterAsync("Mason", "a-good-password", Character());
+
+        var account = Assert.IsType<AuthOutcome.Success>(await store.LoginAsync("Mason", "a-good-password"));
+
+        await store.SaveAsync(
+            account.Account.Id,
+            Character() with { Items = [new BagEntry(4, 12), new BagEntry(2, 1)], Money = 8800 });
+
+        var login = Assert.IsType<AuthOutcome.Success>(await store.LoginAsync("Mason", "a-good-password"));
+
+        Assert.Equal(8800, login.Character.Money);
+        Assert.Equal([new BagEntry(2, 1), new BagEntry(4, 12)], login.Character.Items.OrderBy(i => i.ItemId));
+    }
+
+    [Fact]
+    public async Task ThrowingSomethingAwayIsNotUndoneByTheNextSave()
+    {
+        // The bag is rewritten wholesale rather than inserted into, unlike the beaten
+        // trainers. A bag genuinely does shrink, and an insert-only one is a bag nothing
+        // can ever leave.
+        using SqlitePlayerStore store = SqlitePlayerStore.InMemory();
+
+        await store.RegisterAsync("Mason", "a-good-password", Character());
+
+        var account = Assert.IsType<AuthOutcome.Success>(await store.LoginAsync("Mason", "a-good-password"));
+
+        await store.SaveAsync(account.Account.Id, Character() with { Items = [new BagEntry(4, 12)] });
+        await store.SaveAsync(account.Account.Id, Character() with { Items = [] });
+
+        var login = Assert.IsType<AuthOutcome.Success>(await store.LoginAsync("Mason", "a-good-password"));
+
+        Assert.Empty(login.Character.Items);
     }
 
     [Fact]
@@ -344,12 +383,18 @@ public class SavedCharacterInTheWorldTests
     {
         GameWorld world = World();
 
-        var saved = new SavedCharacter("3.0", 3, 2, Direction.Left, 7, [Mon()]);
+        var saved = new SavedCharacter("3.0", 3, 2, Direction.Left, [Mon()])
+        {
+            Items = [new BagEntry(TestRules.BallItem, 7)],
+            Money = 1234,
+        };
+
         (ServerPlayer player, _) = world.Join(1, "Mason", saved);
 
         Assert.Equal(new GridPosition(3, 2), player.Square);
         Assert.Equal(Direction.Left, player.Facing);
-        Assert.Equal(7, player.Balls);
+        Assert.Equal(7, player.Bag.CountOf(TestRules.BallItem));
+        Assert.Equal(1234, player.Money);
         Assert.Single(player.Party);
     }
 
@@ -358,12 +403,16 @@ public class SavedCharacterInTheWorldTests
     {
         GameWorld world = World();
 
-        var saved = new SavedCharacter("3.0", 1, 1, Direction.Up, 4, [Mon(25), Mon(1)]);
+        var saved = new SavedCharacter("3.0", 1, 1, Direction.Up, [Mon(25), Mon(1)])
+        {
+            Items = [new BagEntry(TestRules.BallItem, 4)],
+        };
+
         (_, List<Outgoing> send) = world.Join(1, "Mason", saved);
 
         Welcome welcome = send.Select(o => o.Message).OfType<Welcome>().Single();
 
-        Assert.Equal(4, welcome.Balls);
+        Assert.Equal(4, welcome.Bag.Single().Count);
         Assert.Equal(2, welcome.Party.Count);
         Assert.Equal(25, welcome.Party[0].Species);
     }
@@ -375,7 +424,7 @@ public class SavedCharacterInTheWorldTests
         // would otherwise leave them stuck, with no way out from their side.
         GameWorld world = World();
 
-        var saved = new SavedCharacter("3.0", 2, 0, Direction.Down, 5, []);
+        var saved = new SavedCharacter("3.0", 2, 0, Direction.Down, []);
         (ServerPlayer player, _) = world.Join(1, "Mason", saved);
 
         Assert.NotEqual(new GridPosition(2, 0), player.Square);
@@ -387,7 +436,7 @@ public class SavedCharacterInTheWorldTests
     {
         GameWorld world = World();
 
-        var saved = new SavedCharacter("9.9", 3, 2, Direction.Down, 5, []);
+        var saved = new SavedCharacter("9.9", 3, 2, Direction.Down, []);
         (ServerPlayer player, _) = world.Join(1, "Mason", saved);
 
         Assert.True(world.Grid.IsWalkable(player.Square));
@@ -398,7 +447,7 @@ public class SavedCharacterInTheWorldTests
     {
         GameWorld world = World();
 
-        var saved = new SavedCharacter("3.0", 0, 0, Direction.Down, 9, []);
+        var saved = new SavedCharacter("3.0", 0, 0, Direction.Down, []);
         (ServerPlayer player, _) = world.Join(1, "Mason", saved);
 
         world.Move(player.Id, Direction.Right, nowSeconds: 10);
@@ -410,7 +459,7 @@ public class SavedCharacterInTheWorldTests
         Assert.Equal(player.Square.X, snapshot.X);
         Assert.Equal(player.Square.Y, snapshot.Y);
         Assert.Equal(Direction.Right, snapshot.Facing);
-        Assert.Equal(9, snapshot.Balls);
+        Assert.Equal(SavedCharacter.StartingMoney, snapshot.Money);
     }
 
     [Fact]
@@ -424,7 +473,7 @@ public class SavedCharacterInTheWorldTests
 
         SavedMon[] tooMany = Enumerable.Range(0, 40).Select(i => Mon(i + 1)).ToArray();
 
-        Assert.True(world.UpdateSave(player.Id, balls: 5, tooMany));
+        Assert.True(world.UpdateSave(player.Id, tooMany));
         Assert.Equal(Party.MaxSize, world.Snapshot(player.Id)!.Party.Count);
     }
 
@@ -433,7 +482,7 @@ public class SavedCharacterInTheWorldTests
     {
         GameWorld world = World();
 
-        Assert.False(world.UpdateSave(playerId: 404, balls: 5, []));
+        Assert.False(world.UpdateSave(playerId: 404, []));
         Assert.Null(world.Snapshot(404));
     }
 }

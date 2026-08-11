@@ -37,7 +37,17 @@ public sealed record ServerPlayer(int Id, long AccountId, string Name)
     /// </summary>
     public HashSet<int> DefeatedTrainers { get; } = [];
 
-    public int Balls { get; set; } = SavedCharacter.StartingBalls;
+    /// <summary>
+    /// Everything this player is carrying.
+    /// <para>
+    /// A bag rather than a count of balls, which is what this used to be. The count was
+    /// a stand-in from before there was an item table to read, and it could only ever
+    /// have described one item.
+    /// </para>
+    /// </summary>
+    public Bag Bag { get; set; } = new();
+
+    public int Money { get; set; } = SavedCharacter.StartingMoney;
 
     /// <summary>
     /// The party, stored as the numbers a save holds rather than as battlers. The
@@ -88,6 +98,7 @@ public sealed class GameWorld
 
     private int _nextPlayerId = 1;
 
+    private readonly GameRules? _rules;
     private readonly BattleFactory? _battles;
     private readonly Progression? _progression;
     private readonly Dictionary<string, MapPopulation> _populated = [];
@@ -97,6 +108,7 @@ public sealed class GameWorld
     {
         _world = world;
         _rng = new BattleRng(encounterSeed);
+        _rules = rules;
         _battles = rules is null ? null : new BattleFactory(rules);
         _progression = rules is null ? null : new Progression(rules);
 
@@ -180,10 +192,28 @@ public sealed class GameWorld
             // A starter at registration rather than one conjured at the first
             // encounter, so a party is never empty and the server never has to invent
             // a battler in the middle of a battle.
+            SavedCharacter withBalls = fresh with { Items = StartingItems() };
+
             return _battles?.Starter() is { } starter
-                ? fresh with { Party = [starter] }
-                : fresh;
+                ? withBalls with { Party = [starter] }
+                : withBalls;
         }
+    }
+
+    /// <summary>
+    /// What a new account is handed: some ordinary balls, if this world knows what one
+    /// is. A server with no rules file hands out nothing, because it has no idea which
+    /// number means a ball.
+    /// </summary>
+    private List<BagEntry> StartingItems()
+    {
+        if (_rules is null) return [];
+
+        ItemData? ball = Enumerable.Range(1, 512)
+            .Select(_rules.ItemAt)
+            .FirstOrDefault(i => i is { Ball: BallKind.Poke });
+
+        return ball is null ? [] : [new BagEntry(ball.Id, SavedCharacter.StartingBalls)];
     }
 
     /// <summary>
@@ -202,7 +232,8 @@ public sealed class GameWorld
                 MapId = mapId,
                 Square = square,
                 Facing = saved.Facing,
-                Balls = saved.Balls,
+                Bag = new Bag(saved.Items),
+                Money = saved.Money,
                 Party = [.. saved.Party],
             };
 
@@ -218,7 +249,7 @@ public sealed class GameWorld
                 new(
                     new Welcome(
                         player.Id, mapId, square.X, square.Y, player.Facing,
-                        player.Balls, player.Party),
+                        player.Money, player.Bag.Entries, player.Party),
                     OnlyTo: player.Id),
             };
 
@@ -513,7 +544,7 @@ public sealed class GameWorld
                 new BattleStarted(
                     BattleFactory.View(lead.Battler),
                     BattleFactory.View(party[0]),
-                    player.Balls,
+                    BallsOf(player),
                     trainer.TrainerId),
                 OnlyTo: player.Id),
         ];
@@ -776,7 +807,7 @@ public sealed class GameWorld
         player.Battle = new Encounter(lead.Slot, lead.Battler, [wild], _rng.State);
 
         send.Add(new Outgoing(
-            new BattleStarted(BattleFactory.View(lead.Battler), BattleFactory.View(wild), player.Balls),
+            new BattleStarted(BattleFactory.View(lead.Battler), BattleFactory.View(wild), BallsOf(player)),
             OnlyTo: player.Id));
     }
 
@@ -822,6 +853,47 @@ public sealed class GameWorld
             player.Party[i] = _battles.Healed(player.Party[i]);
     }
 
+    /// <summary>The most money an account can hold, which is the games' own ceiling.</summary>
+    public const int MaxMoney = 999_999;
+
+    /// <summary>
+    /// What beating a trainer pays.
+    /// <para>
+    /// <b>This project's rule, not the cartridge's.</b> The games multiply a per-class
+    /// base by the level of the last creature, and that base lives in a small table this
+    /// project does not read. Rather than invent a number and imply it came off an
+    /// image, the formula here is stated plainly: a flat rate per level of the strongest
+    /// thing they brought.
+    /// </para>
+    /// </summary>
+    public const int PrizePerLevel = 40;
+
+    private static int PrizeFor(Encounter encounter) =>
+        PrizePerLevel * encounter.Opponents.Max(o => o.Level);
+
+    /// <summary>The ball pocket, which is all a battle screen needs of a bag.</summary>
+    private List<BagEntry> BallsOf(ServerPlayer player) =>
+        _rules is null ? [] : player.Bag.InPocket(_rules, Pocket.Balls);
+
+    /// <summary>
+    /// Turns a request into what will actually happen, and spends whatever it costs.
+    /// <para>
+    /// The only place a ball leaves a bag. A throw that cannot happen becomes an
+    /// attack rather than a refusal, because refusing mid-battle leaves a client
+    /// waiting for a turn that never comes.
+    /// </para>
+    /// </summary>
+    private BattleAction Resolve(ServerPlayer player, Encounter encounter, BattleAction action)
+    {
+        if (action is not BattleAction.ThrowBall throwing) return action;
+
+        if (encounter.IsTrainerBattle) return new BattleAction.UseMove(0);
+        if (_rules?.ItemAt(throwing.ItemId) is not { Ball: { } kind }) return new BattleAction.UseMove(0);
+        if (player.Bag.Remove(throwing.ItemId) == 0) return new BattleAction.UseMove(0);
+
+        return throwing with { Kind = kind };
+    }
+
     /// <summary>True when at least one party member could take a turn.</summary>
     private bool CanFight(ServerPlayer player) =>
         _battles is not null && player.Party.Any(_battles.CanFight);
@@ -843,12 +915,11 @@ public sealed class GameWorld
 
             Battle battle = encounter.Current;
 
-            // Two ways a throw turns into an attack instead. The count is the server's,
-            // and so is the rule that somebody else's creature is not yours to catch —
-            // the client hides the option for both, and this is what makes it true.
-            if (action is BattleAction.ThrowBall && (player.Balls <= 0 || encounter.IsTrainerBattle))
-                action = new BattleAction.UseMove(0);
-            else if (action is BattleAction.ThrowBall) player.Balls--;
+            // Three ways a throw turns into an attack instead: nothing of that kind in
+            // the bag, an item that is not a ball at all, and somebody else's creature.
+            // The client hides the option for each of them, and this is what makes it
+            // true — a hidden option is a courtesy, not a rule.
+            action = Resolve(player, encounter, action);
 
             List<BattleEvent> events = battle.ResolveTurn(action, new BattleAction.UseMove(0));
 
@@ -879,7 +950,7 @@ public sealed class GameWorld
             var send = new List<Outgoing>
             {
                 new(
-                    new BattleUpdate(events, battle.Player.CurrentHp, battle.Opponent.CurrentHp, player.Balls),
+                    new BattleUpdate(events, battle.Player.CurrentHp, battle.Opponent.CurrentHp, BallsOf(player)),
                     OnlyTo: playerId),
             };
 
@@ -1006,7 +1077,11 @@ public sealed class GameWorld
         // no way to recover on its own.
         if (winner == Side.Opponent) HealParty(player);
 
-        return new BattleFinished(winner, caught, player.Balls, [.. player.Party]);
+        int prize = winner == Side.Player && encounter.IsTrainerBattle ? PrizeFor(encounter) : 0;
+
+        player.Money = Math.Min(MaxMoney, player.Money + prize);
+
+        return new BattleFinished(winner, caught, player.Money, prize, BallsOf(player), [.. player.Party]);
     }
 
     /// <summary>
@@ -1037,9 +1112,11 @@ public sealed class GameWorld
             if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return null;
 
             return new SavedCharacter(
-                player.MapId, player.Square.X, player.Square.Y, player.Facing, player.Balls, [.. player.Party])
+                player.MapId, player.Square.X, player.Square.Y, player.Facing, [.. player.Party])
             {
                 DefeatedTrainers = [.. player.DefeatedTrainers],
+                Items = player.Bag.Entries,
+                Money = player.Money,
             };
         }
     }
@@ -1052,13 +1129,12 @@ public sealed class GameWorld
     /// server-side — but a client cannot at least claim a party of two hundred.
     /// </para>
     /// </summary>
-    public bool UpdateSave(int playerId, int balls, IReadOnlyList<SavedMon> party)
+    public bool UpdateSave(int playerId, IReadOnlyList<SavedMon> party)
     {
         lock (_gate)
         {
             if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return false;
 
-            player.Balls = Math.Clamp(balls, 0, 999);
             player.Party = [.. party.Take(Party.MaxSize)];
 
             return true;

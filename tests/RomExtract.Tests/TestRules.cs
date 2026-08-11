@@ -21,6 +21,28 @@ internal static class TestRules
     /// <summary>A trainer with one, for the simple case.</summary>
     public const int OneAlone = 4;
 
+    /// <summary>An ordinary ball, as an item id.</summary>
+    public const int BallItem = 4;
+
+    /// <summary>A better one, so tests can tell a kind from a count.</summary>
+    public const int UltraBallItem = 2;
+
+    /// <summary>Something that is not a ball at all.</summary>
+    public const int PotionItem = 13;
+
+    /// <summary>The one that always works, so a kind can be told from a count.</summary>
+    public const int MasterBallItem = 1;
+
+    /// <summary>
+    /// A species nothing ordinary can catch.
+    /// <para>
+    /// Here so that "which ball is this" has a visible consequence. With everything at
+    /// a catch rate of 255 a Master Ball and a Poké Ball both catch, and a test that
+    /// cannot tell them apart proves nothing about which one the server used.
+    /// </para>
+    /// </summary>
+    public const int HardToCatch = 40;
+
     public static readonly GameRules All = Build();
 
     private static GameRules Build()
@@ -37,7 +59,7 @@ internal static class TestRules
                 BaseSpeed = 45, BaseSpAttack = 65, BaseSpDefense = 65,
                 Type1 = PokemonType.Normal,
                 Type2 = PokemonType.Normal,
-                CatchRate = 255,
+                CatchRate = index == HardToCatch ? (byte)1 : (byte)255,
                 ExpYield = 64,
 
                 // Named rather than left to the enum's first value, so the experience
@@ -72,6 +94,14 @@ internal static class TestRules
             ]),
         };
 
-        return new GameRules(species, moves, learnsets, trainers);
+        var items = new List<ItemData>
+        {
+            new(BallItem, 200, Pocket.Balls, 0, 0, 0, 0, 0, BallKind.Poke),
+            new(UltraBallItem, 1200, Pocket.Balls, 0, 0, 0, 0, 0, BallKind.Ultra),
+            new(MasterBallItem, 0, Pocket.Balls, 0, 0, 0, 0, 0, BallKind.Master),
+            new(PotionItem, 300, Pocket.Items, 0, 0, 0, 0, 0),
+        };
+
+        return new GameRules(species, moves, learnsets, trainers, items);
     }
 }

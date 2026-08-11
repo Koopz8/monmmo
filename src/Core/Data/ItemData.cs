@@ -1,3 +1,5 @@
+using PokeMmo.Core.Battle;
+
 namespace PokeMmo.Core.Data;
 
 /// <summary>Which part of the bag something goes in.</summary>
@@ -33,8 +35,12 @@ public sealed record ItemData(
     int HoldEffectParam,
     int Importance,
     int BattleUsage,
-    int SecondaryId)
+    int SecondaryId,
+    BallKind? Ball = null)
 {
+    /// <summary>True when throwing this at something could catch it.</summary>
+    public bool IsBall => Ball is not null;
+
     /// <summary>True when a shop would sell this. A price of zero means it is not for sale.</summary>
     public bool CanBeBought => Price > 0 && Importance == 0;
 

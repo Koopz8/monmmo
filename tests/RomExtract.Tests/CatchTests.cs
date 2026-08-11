@@ -135,7 +135,7 @@ public class CatchingInBattleTests
         var battle = new Battle(Mon("PLAYER", speed: 90), Mon("WILD", catchRate: 255, speed: 10), seed: 5);
 
         List<BattleEvent> events = battle.ResolveTurn(
-            new BattleAction.ThrowBall(BallKind.Master),
+            new BattleAction.ThrowBall(TestRules.BallItem) { Kind = BallKind.Master },
             new BattleAction.UseMove(0));
 
         Assert.True(battle.OpponentCaught);
@@ -150,7 +150,7 @@ public class CatchingInBattleTests
         var player = Mon("PLAYER", speed: 90);
         var battle = new Battle(player, Mon("WILD", catchRate: 255, speed: 10), seed: 5);
 
-        battle.ResolveTurn(new BattleAction.ThrowBall(BallKind.Master), new BattleAction.UseMove(0));
+        battle.ResolveTurn(new BattleAction.ThrowBall(TestRules.BallItem) { Kind = BallKind.Master }, new BattleAction.UseMove(0));
 
         Assert.Equal(player.MaxHp, player.CurrentHp);
     }
@@ -165,7 +165,7 @@ public class CatchingInBattleTests
         var battle = new Battle(player, Mon("WILD", catchRate: 3, speed: 10), seed: 7);
 
         List<BattleEvent> events = battle.ResolveTurn(
-            new BattleAction.ThrowBall(BallKind.Poke),
+            new BattleAction.ThrowBall(TestRules.BallItem) { Kind = BallKind.Poke },
             new BattleAction.UseMove(0));
 
         Assert.False(battle.OpponentCaught);
@@ -180,7 +180,7 @@ public class CatchingInBattleTests
         // of the shared type, and it must not hand the opponent a win condition.
         var battle = new Battle(Mon("PLAYER", speed: 10), Mon("WILD", speed: 90), seed: 3);
 
-        battle.ResolveTurn(new BattleAction.UseMove(0), new BattleAction.ThrowBall(BallKind.Master));
+        battle.ResolveTurn(new BattleAction.UseMove(0), new BattleAction.ThrowBall(TestRules.BallItem) { Kind = BallKind.Master });
 
         Assert.False(battle.OpponentCaught);
     }

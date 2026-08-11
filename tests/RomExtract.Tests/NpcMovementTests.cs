@@ -20,7 +20,7 @@ public class NpcMovementTests
     private static ServerPlayer Watching(GameWorld world, int x = 7, int y = 7)
     {
         (ServerPlayer player, _) = world.Join(
-            1, "Mason", new SavedCharacter(Town, x, y, Direction.Down, 10, []));
+            1, "Mason", new SavedCharacter(Town, x, y, Direction.Down, []));
 
         return player;
     }
@@ -180,7 +180,7 @@ public class NpcMovementTests
         GameWorld world = World(Wanderer(3, 3), Wanderer(5, 5));
 
         (ServerPlayer player, List<Outgoing> send) = world.Join(
-            1, "Mason", new SavedCharacter(Town, 0, 0, Direction.Down, 10, []));
+            1, "Mason", new SavedCharacter(Town, 0, 0, Direction.Down, []));
 
         ObjectsPlaced placed = send
             .Where(o => o.OnlyTo == player.Id)

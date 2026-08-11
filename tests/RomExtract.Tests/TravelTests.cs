@@ -51,7 +51,7 @@ public class TravelTests
     private static ServerPlayer JoinAt(GameWorld world, string name, string mapId, int x, int y, long account = 1)
     {
         (ServerPlayer player, _) = world.Join(
-            account, name, new SavedCharacter(mapId, x, y, Direction.Down, 10, []));
+            account, name, new SavedCharacter(mapId, x, y, Direction.Down, []));
 
         return player;
     }
@@ -222,7 +222,7 @@ public class TravelTests
         JoinAt(world, "FarAway", Route, 1, 1, account: 2);
 
         (ServerPlayer player, List<Outgoing> send) = world.Join(
-            3, "Mason", new SavedCharacter(Town, 3, 3, Direction.Down, 10, []));
+            3, "Mason", new SavedCharacter(Town, 3, 3, Direction.Down, []));
 
         List<PlayerAppeared> shown = send
             .Where(o => o.OnlyTo == player.Id)

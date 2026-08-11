@@ -103,7 +103,35 @@ public static class RulesExporter
             return [];
         }
 
-        return ItemTable.Read(rom, table).Select(i => i.ToData()).ToList();
+        return ItemTable.Read(rom, table).Select(i => i.ToData() with { Ball = BallFor(i) }).ToList();
+    }
+
+    /// <summary>
+    /// Which kind of ball an item is, decided from its name.
+    /// <para>
+    /// Nothing on the cartridge says this in data. A ball's behaviour lives in the
+    /// game's code, not in a field, so the only thing left to read it off is the name —
+    /// and this is the one place in the project allowed to do that, because it is the
+    /// place where names stop. What crosses into the rules file is a number.
+    /// </para>
+    /// <para>
+    /// Anything else in the ball pocket is treated as an ordinary ball rather than
+    /// dropped. There are a dozen of them and this project models three; a Nest Ball
+    /// that works like a Poké Ball is wrong in a small way, and a Nest Ball you cannot
+    /// throw is wrong in a way somebody would file a bug about.
+    /// </para>
+    /// </summary>
+    private static BallKind? BallFor(ItemRecord item)
+    {
+        if (item.Pocket != Pocket.Balls) return null;
+
+        string name = item.Name.ToUpperInvariant();
+
+        if (name.StartsWith("MASTER")) return BallKind.Master;
+        if (name.StartsWith("ULTRA")) return BallKind.Ultra;
+        if (name.StartsWith("GREAT")) return BallKind.Great;
+
+        return BallKind.Poke;
     }
 
     private static SpeciesData Anonymise(SpeciesData species) => new()

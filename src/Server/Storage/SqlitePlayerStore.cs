@@ -105,6 +105,13 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
                 UNIQUE (account_id, slot)
             );
 
+            CREATE TABLE IF NOT EXISTS bag_items (
+                account_id INTEGER NOT NULL REFERENCES characters(account_id) ON DELETE CASCADE,
+                item_id    INTEGER NOT NULL,
+                count      INTEGER NOT NULL,
+                PRIMARY KEY (account_id, item_id)
+            );
+
             CREATE TABLE IF NOT EXISTS defeated_trainers (
                 account_id INTEGER NOT NULL REFERENCES characters(account_id) ON DELETE CASCADE,
                 trainer_id INTEGER NOT NULL,
@@ -122,6 +129,12 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
         command.ExecuteNonQuery();
 
         AddColumnIfMissing(connection, "party_members", "experience", "INTEGER NOT NULL DEFAULT 0");
+
+        // The balls column is what the bag used to be, back when a player could carry
+        // exactly one kind of thing. It is left in place and written as zero rather than
+        // dropped, because dropping a column in SQLite means rebuilding the table and
+        // there is nothing to gain by it.
+        AddColumnIfMissing(connection, "characters", "money", $"INTEGER NOT NULL DEFAULT {SavedCharacter.StartingMoney}");
     }
 
     /// <summary>
@@ -267,14 +280,14 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
             upsert.Transaction = transaction;
             upsert.CommandText =
                 """
-                INSERT INTO characters (account_id, map_id, x, y, facing, balls, saved_at)
-                VALUES ($id, $map, $x, $y, $facing, $balls, $now)
+                INSERT INTO characters (account_id, map_id, x, y, facing, balls, money, saved_at)
+                VALUES ($id, $map, $x, $y, $facing, 0, $money, $now)
                 ON CONFLICT(account_id) DO UPDATE SET
                     map_id = excluded.map_id,
                     x = excluded.x,
                     y = excluded.y,
                     facing = excluded.facing,
-                    balls = excluded.balls,
+                    money = excluded.money,
                     saved_at = excluded.saved_at;
                 """;
 
@@ -283,10 +296,31 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
             upsert.Parameters.AddWithValue("$x", character.X);
             upsert.Parameters.AddWithValue("$y", character.Y);
             upsert.Parameters.AddWithValue("$facing", (int)character.Facing);
-            upsert.Parameters.AddWithValue("$balls", character.Balls);
+            upsert.Parameters.AddWithValue("$money", character.Money);
             upsert.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
 
             await upsert.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        // The bag is rewritten wholesale, unlike the beaten trainers: a bag genuinely
+        // does shrink, and an insert-only bag would be one nothing could ever leave.
+        await using (SqliteCommand clear = connection.CreateCommand())
+        {
+            clear.Transaction = transaction;
+            clear.CommandText = "DELETE FROM bag_items WHERE account_id = $id;";
+            clear.Parameters.AddWithValue("$id", accountId);
+            await clear.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        foreach (BagEntry entry in character.Items)
+        {
+            await using SqliteCommand item = connection.CreateCommand();
+            item.Transaction = transaction;
+            item.CommandText = "INSERT INTO bag_items (account_id, item_id, count) VALUES ($id, $item, $count);";
+            item.Parameters.AddWithValue("$id", accountId);
+            item.Parameters.AddWithValue("$item", entry.ItemId);
+            item.Parameters.AddWithValue("$count", entry.Count);
+            await item.ExecuteNonQueryAsync(cancellationToken);
         }
 
         // Inserted rather than rewritten, because a beaten trainer is never unbeaten.
@@ -359,12 +393,12 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
         SqliteConnection connection, long accountId, CancellationToken cancellationToken)
     {
         string mapId;
-        int x, y, balls;
+        int x, y, money;
         Direction facing;
 
         await using (SqliteCommand command = connection.CreateCommand())
         {
-            command.CommandText = "SELECT map_id, x, y, facing, balls FROM characters WHERE account_id = $id;";
+            command.CommandText = "SELECT map_id, x, y, facing, money FROM characters WHERE account_id = $id;";
             command.Parameters.AddWithValue("$id", accountId);
 
             await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -374,7 +408,7 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
             x = reader.GetInt32(1);
             y = reader.GetInt32(2);
             facing = (Direction)reader.GetInt32(3);
-            balls = reader.GetInt32(4);
+            money = reader.GetInt32(4);
         }
 
         var moves = new Dictionary<long, List<int>>();
@@ -448,7 +482,24 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
             while (await reader.ReadAsync(cancellationToken)) defeated.Add(reader.GetInt32(0));
         }
 
-        return new SavedCharacter(mapId, x, y, facing, balls, party) { DefeatedTrainers = defeated };
+        var carried = new List<BagEntry>();
+
+        await using (SqliteCommand command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT item_id, count FROM bag_items WHERE account_id = $id ORDER BY item_id;";
+            command.Parameters.AddWithValue("$id", accountId);
+
+            await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+                carried.Add(new BagEntry(reader.GetInt32(0), reader.GetInt32(1)));
+        }
+
+        return new SavedCharacter(mapId, x, y, facing, party)
+        {
+            DefeatedTrainers = defeated,
+            Items = carried,
+            Money = money,
+        };
     }
 
     /// <summary>

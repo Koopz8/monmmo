@@ -54,16 +54,18 @@ public class MessageChannelTests
             new RegisterRequest("Mason", "a-good-password"),
             new LoginRequest("Mason", "a-good-password"),
             new BattleTurn(new BattleAction.UseMove(2)),
-            new BattleTurn(new BattleAction.ThrowBall(BallKind.Great)),
+            new BattleTurn(new BattleAction.ThrowBall(4) { Kind = BallKind.Great }),
             new BattleStarted(
                 new BattlerView(1, 5, "Bulby", 19, 20, StatusCondition.None, [33]),
                 new BattlerView(16, 3, null, 11, 11, StatusCondition.None, [33, 45]),
-                12,
+                [new BagEntry(4, 12)],
                 TrainerId: 214),
             new BattleUpdate(
                 [new BattleEvent.MoveUsed(Side.Player, 33), new BattleEvent.Fainted(Side.Opponent)],
-                19, 0, 12),
-            new BattleFinished(Side.Player, true, 11, [new SavedMon(16, 3, null, 1, StatusCondition.None, Nature.Bold, [33])]),
+                19, 0, [new BagEntry(4, 12)]),
+            new BattleFinished(
+                Side.Player, true, 5400, 400, [new BagEntry(4, 11)],
+                [new SavedMon(16, 3, null, 1, StatusCondition.None, Nature.Bold, [33])]),
             new MoveRequest(Direction.Left),
             new BattlerSentOut(Side.Opponent, new BattlerView(4, 9, null, 22, 26, StatusCondition.None, [10])),
             new TalkRequest(4),
@@ -71,7 +73,9 @@ public class MessageChannelTests
             new MapChanged("3.1", 4, 9, Direction.Down),
             new ObjectsPlaced([new ObjectView(1, 5, 3, 3, Direction.Left)]),
             new ObjectMoved(1, 3, 4, Direction.Down),
-            new Welcome(7, "3.0", 12, 5, Direction.Up, 20, [new SavedMon(1, 5, null, 19, StatusCondition.None, Nature.Hardy, [33])]),
+            new Welcome(
+                7, "3.0", 12, 5, Direction.Up, 5000, [new BagEntry(4, 20)],
+                [new SavedMon(1, 5, null, 19, StatusCondition.None, Nature.Hardy, [33])]),
             new PlayerAppeared(9, "Someone", 1, 2, Direction.Right),
             new PlayerMoved(9, 3, 4, Direction.Down),
             new PlayerLeft(9),

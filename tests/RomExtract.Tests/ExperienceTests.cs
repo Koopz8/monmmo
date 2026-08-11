@@ -189,7 +189,7 @@ public class ExperiencePersistenceTests
         using SqlitePlayerStore store = SqlitePlayerStore.InMemory();
 
         var member = new SavedMon(1, 12, null, 20, StatusCondition.None, Nature.Hardy, [1, 2], 4321);
-        var character = new SavedCharacter("3.0", 1, 1, PokeMmo.Core.World.Direction.Down, 10, [member]);
+        var character = new SavedCharacter("3.0", 1, 1, PokeMmo.Core.World.Direction.Down, [member]);
 
         await store.RegisterAsync("Mason", "a-good-password", character);
 
@@ -243,7 +243,7 @@ public class ExperiencePersistenceTests
             using var store = new SqlitePlayerStore(path);
 
             var member = new SavedMon(1, 5, null, 20, StatusCondition.None, Nature.Hardy, [1], 99);
-            var character = new SavedCharacter("3.0", 1, 1, PokeMmo.Core.World.Direction.Down, 10, [member]);
+            var character = new SavedCharacter("3.0", 1, 1, PokeMmo.Core.World.Direction.Down, [member]);
 
             await store.RegisterAsync("Mason", "a-good-password", character);
 

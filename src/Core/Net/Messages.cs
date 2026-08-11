@@ -87,7 +87,8 @@ public sealed record Welcome(
     int X,
     int Y,
     Direction Facing,
-    int Balls,
+    int Money,
+    IReadOnlyList<BagEntry> Bag,
     IReadOnlyList<SavedMon> Party) : NetMessage;
 
 /// <summary>
@@ -165,7 +166,10 @@ public sealed record BattlerView(
 /// </para>
 /// </summary>
 public sealed record BattleStarted(
-    BattlerView You, BattlerView Opponent, int Balls, int? TrainerId = null) : NetMessage;
+    BattlerView You,
+    BattlerView Opponent,
+    IReadOnlyList<BagEntry> Balls,
+    int? TrainerId = null) : NetMessage;
 
 /// <summary>
 /// One side has sent out somebody new.
@@ -190,7 +194,7 @@ public sealed record BattleUpdate(
     IReadOnlyList<BattleEvent> Events,
     int YourHp,
     int OpponentHp,
-    int Balls) : NetMessage;
+    IReadOnlyList<BagEntry> Balls) : NetMessage;
 
 /// <summary>
 /// The battle is over. Carries the party back because it may have just grown.
@@ -198,7 +202,9 @@ public sealed record BattleUpdate(
 public sealed record BattleFinished(
     Side? Winner,
     bool Caught,
-    int Balls,
+    int Money,
+    int Prize,
+    IReadOnlyList<BagEntry> Balls,
     IReadOnlyList<SavedMon> Party) : NetMessage;
 
 /// <summary>The request could not be honoured at all.</summary>

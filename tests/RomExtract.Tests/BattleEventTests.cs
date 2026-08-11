@@ -104,7 +104,7 @@ public class BattleEventShapeTests
     [
         [new BattleAction.UseMove(2)],
         [new BattleAction.Struggle()],
-        [new BattleAction.ThrowBall(BallKind.Ultra)],
+        [new BattleAction.ThrowBall(TestRules.BallItem) { Kind = BallKind.Ultra }],
     ];
 }
 

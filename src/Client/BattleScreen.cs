@@ -1,5 +1,6 @@
 using PokeMmo.Core.Battle;
 using PokeMmo.Core.Net;
+using PokeMmo.Core.Save;
 using PokeMmo.RomExtract;
 using PokeMmo.RomExtract.Graphics;
 using Raylib_cs;
@@ -36,6 +37,7 @@ public sealed class BattleScreen
 
     private readonly GameData _data;
     private readonly string? _trainerName;
+    private readonly ItemNames? _items;
     private readonly List<string> _moveNames = [];
 
     private BattleNames _names;
@@ -54,9 +56,10 @@ public sealed class BattleScreen
     private BattlerView _you;
     private BattlerView _opponent;
 
-    public BattleScreen(BattleStarted start, GameData data, TrainerNames? trainers = null)
+    public BattleScreen(BattleStarted start, GameData data, TrainerNames? trainers = null, ItemNames? items = null)
     {
         _data = data;
+        _items = items;
         _you = start.You;
         _opponent = start.Opponent;
         Balls = start.Balls;
@@ -81,6 +84,8 @@ public sealed class BattleScreen
 
     /// <summary>True when a person started this, rather than something in the grass.</summary>
     public bool IsTrainerBattle => _trainerName is not null;
+
+    private string NameOf(int itemId) => _items?.Of(itemId) ?? $"item {itemId}";
 
     private string SpeciesNameOf(BattlerView battler) =>
         battler.Nickname ?? _data.SpeciesAt(battler.Species)?.Name ?? $"species {battler.Species}";
@@ -154,8 +159,24 @@ public sealed class BattleScreen
 
     public BattlePhase Phase { get; private set; } = BattlePhase.ReadingMessages;
 
-    /// <summary>Balls remaining, as the server counts them.</summary>
-    public int Balls { get; private set; }
+    /// <summary>
+    /// The ball pocket, as the server counts it.
+    /// <para>
+    /// A list rather than a number, which is what it used to be. Pressing X cycles
+    /// through what is actually carried rather than assuming everybody's bag holds one
+    /// kind of thing.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<BagEntry> Balls { get; private set; } = [];
+
+    /// <summary>Money, and what beating somebody just paid. Both the server's numbers.</summary>
+    public int Money { get; private set; }
+
+    private int _selectedBall;
+
+    /// <summary>Which ball pressing X would throw, or nothing when the pocket is empty.</summary>
+    private BagEntry? ChosenBall =>
+        Balls.Count == 0 ? null : Balls[Math.Clamp(_selectedBall, 0, Balls.Count - 1)];
 
     /// <summary>True once the battle is over and its last message has been read.</summary>
     public bool IsDismissed { get; private set; }
@@ -203,7 +224,10 @@ public sealed class BattleScreen
     public void Apply(BattleFinished finished)
     {
         Balls = finished.Balls;
+        Money = finished.Money;
         IsOver = true;
+
+        if (finished.Prize > 0) Say($"You got {finished.Prize} for winning!");
 
         if (finished.Winner == Side.Opponent)
             Say("You have no more usable Pokémon! Your party was healed.");
@@ -299,7 +323,7 @@ public sealed class BattleScreen
                 return;
             }
 
-            if (Balls <= 0)
+            if (ChosenBall is not { } ball)
             {
                 Say("You have no balls left!");
                 Phase = BattlePhase.ReadingMessages;
@@ -307,9 +331,20 @@ public sealed class BattleScreen
                 return;
             }
 
-            Choose(new BattleAction.ThrowBall(BallKind.Poke));
+            // Only the id. Which kind of ball that is, and therefore how well it works,
+            // is the server's answer — a request naming a kind would let a client spend
+            // the cheap one and throw the good one.
+            Choose(new BattleAction.ThrowBall(ball.ItemId));
             return;
         }
+
+        // Left and right pick which ball, which is otherwise a menu this screen has no
+        // room for. Nothing happens when there is only one kind to pick from.
+        if (Balls.Count > 1 && Raylib.IsKeyPressed(KeyboardKey.Right))
+            _selectedBall = (_selectedBall + 1) % Balls.Count;
+
+        if (Balls.Count > 1 && Raylib.IsKeyPressed(KeyboardKey.Left))
+            _selectedBall = (_selectedBall - 1 + Balls.Count) % Balls.Count;
 
         if (Confirmed()) Choose(new BattleAction.UseMove(_selectedMove));
     }
@@ -416,10 +451,14 @@ public sealed class BattleScreen
     {
         Raylib.DrawText("Choose a move:", 52, boxY + 18, 20, new Color(96, 96, 96, 255));
 
+        string ballLine = ChosenBall is { } ball
+            ? $"X: throw {NameOf(ball.ItemId)} ({ball.Count})" + (Balls.Count > 1 ? "  < >" : "")
+            : "X: no balls left";
+
         Raylib.DrawText(
-            $"X: throw a ball ({Balls} left)",
-            Width - 340, boxY + 18, 20,
-            Balls > 0 ? new Color(96, 96, 96, 255) : new Color(180, 120, 120, 255));
+            ballLine,
+            Width - 400, boxY + 18, 20,
+            ChosenBall is not null ? new Color(96, 96, 96, 255) : new Color(180, 120, 120, 255));
 
         for (int i = 0; i < _moveNames.Count; i++)
         {
