@@ -139,6 +139,8 @@ public static class Program
         if (!string.IsNullOrEmpty(options.ScriptRun))
             WriteScriptRuns(rom, options.ScriptRun);
 
+        if (options.ScriptRuns) WriteRunHistogram(rom);
+
         Console.WriteLine();
         Console.WriteLine($"Done. Output in {Path.GetFullPath(options.OutputDirectory)}");
         return 0;
@@ -910,6 +912,21 @@ public static class Program
 
             Describe("    on a fresh save", fresh);
 
+            // Where it gave up, which is almost never inside the script on the map. A
+            // pointer into the cartridge is recognisable on sight — xx xx xx 08 — and
+            // that is how every wrong argument length in milestone 14 was found.
+            if (fresh.StoppedAtOffset is { } stop)
+            {
+                for (int row = 0; row < 2; row++)
+                {
+                    int from = Math.Max(0, stop - 8) + row * 16;
+                    if (from + 16 > rom.Length) break;
+
+                    string hex = string.Join(" ", Enumerable.Range(0, 16).Select(i => $"{rom.ReadU8(from + i):X2}"));
+                    Console.WriteLine($"        {Rom.BaseAddress + (uint)from:X8}  {hex}");
+                }
+            }
+
             // The flags this person's own script turns on, plus the one their fight is
             // remembered by. Anything else would be a guess about what the rest of the
             // world had done first.
@@ -945,6 +962,68 @@ public static class Program
             if (run.StoppedAt is { } stopper) Console.WriteLine($"      stopped at 0x{stopper:X2}");
 
             if (run.IsEmpty && run.StoppedAt is null) Console.WriteLine("      nothing at all");
+        }
+    }
+
+    /// <summary>
+    /// How many conversations on this cartridge stop mid-sentence, and at what.
+    /// <para>
+    /// <c>--scripts</c> counts what stops a <em>read</em>, which follows both arms of
+    /// every conditional and so answers a question nobody asks any more. This counts
+    /// what stops a <em>run</em>: one path, from a fresh save, which is what a player
+    /// standing in front of somebody actually gets. The two numbers are not the same
+    /// and the second one is the one that matters.
+    /// </para>
+    /// </summary>
+    private static void WriteRunHistogram(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("Running every script on the cartridge");
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        var counts = new Dictionary<byte, int>();
+        var examples = new Dictionary<byte, List<uint>>();
+
+        int people = 0;
+        int silent = 0;
+        int finished = 0;
+
+        foreach (LoadedMap map in library.All())
+        {
+            foreach (MapObject person in map.Objects.Where(o => o.HasScript))
+            {
+                people++;
+
+                ScriptRun run = ScriptRunner.Run(rom, person.ScriptAddress);
+
+                if (run.StoppedAt is { } code)
+                {
+                    counts[code] = counts.GetValueOrDefault(code) + 1;
+
+                    List<uint> where = examples.TryGetValue(code, out List<uint>? seen) ? seen : examples[code] = [];
+
+                    // Three addresses is enough to read the bytes at; the count above is
+                    // the number that says how much it matters.
+                    if (where.Count < 3) where.Add(person.ScriptAddress);
+
+                    continue;
+                }
+
+                finished++;
+                if (run.IsEmpty) silent++;
+            }
+        }
+
+        Console.WriteLine($"  {people} people with a script");
+        Console.WriteLine($"  {finished} run to a proper end, {people - finished} stop somewhere");
+        Console.WriteLine($"  {silent} of those that finish do nothing at all — no line, no shop, no fight");
+
+        foreach ((byte code, int count) in counts.OrderByDescending(e => e.Value))
+        {
+            Console.WriteLine(
+                $"    0x{code:X2}  stops {count}  e.g. " +
+                string.Join(", ", examples[code].Select(a => $"0x{a:X8}")));
         }
     }
 
@@ -1185,6 +1264,9 @@ public static class Program
 
         /// <summary>The map whose scripts to run, rather than read.</summary>
         public string ScriptRun { get; private init; } = "";
+
+        /// <summary>Count what stops a run, across every script on the cartridge.</summary>
+        public bool ScriptRuns { get; private init; }
         public bool DumpMoves { get; private init; }
         public bool DumpEncounters { get; private init; }
         public string? BehaviourMap { get; private init; }
@@ -1211,6 +1293,7 @@ public static class Program
             bool scripts = false;
             string scriptMap = "";
             string scriptRun = "";
+            bool scriptRuns = false;
             bool dumpMoves = false, dumpEncounters = false;
             string? behaviourMap = null;
             TileOrder order = TileOrder.RowMajor;
@@ -1281,6 +1364,9 @@ public static class Program
                     case "--script-run":
                         scriptRun = Next(args, ref i, "--script-run");
                         break;
+                    case "--script-runs":
+                        scriptRuns = true;
+                        break;
                     case "--moves":
                         dumpMoves = true;
                         break;
@@ -1330,6 +1416,7 @@ public static class Program
                 DumpScripts = scripts,
                 ScriptMap = scriptMap,
                 ScriptRun = scriptRun,
+                ScriptRuns = scriptRuns,
                 DumpMoves = dumpMoves,
                 DumpEncounters = dumpEncounters,
                 BehaviourMap = behaviourMap,

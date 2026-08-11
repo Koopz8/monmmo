@@ -43,6 +43,17 @@ public sealed record ScriptRun
     /// </summary>
     public byte? StoppedAt { get; init; }
 
+    /// <summary>
+    /// Where in the image that happened, so the bytes around it can be printed.
+    /// <para>
+    /// The reader has the same thing and it is not enough here. A run follows jumps,
+    /// so where it gives up is almost never inside the script it started in — three
+    /// people out of four in FireRed say nothing themselves and call somebody who
+    /// does, and printing the bytes at the address on the map shows a handoff.
+    /// </para>
+    /// </summary>
+    public int? StoppedAtOffset { get; init; }
+
     public bool IsEmpty =>
         Pages.Count == 0 && Stock.Count == 0 && TrainerId is null &&
         FlagsSet.Count == 0 && FlagsCleared.Count == 0 && VariablesWritten.Count == 0;
@@ -94,6 +105,7 @@ public static class ScriptRunner
         int? trainerId = null;
         int? trainerFlag = null;
         byte? stoppedAt = null;
+        int? stoppedAtOffset = null;
 
         Comparison result = Comparison.Equal;
         uint pending = 0;
@@ -110,6 +122,7 @@ public static class ScriptRunner
             if (ScriptCommands.ArgumentLength(code, first) is not { } length)
             {
                 stoppedAt = code;
+                stoppedAtOffset = offset;
                 break;
             }
 
@@ -267,6 +280,7 @@ public static class ScriptRunner
             FlagsCleared = cleared,
             VariablesWritten = written,
             StoppedAt = stoppedAt,
+            StoppedAtOffset = stoppedAtOffset,
         };
     }
 

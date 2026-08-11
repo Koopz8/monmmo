@@ -440,6 +440,20 @@ public class ScriptRunnerTests
     private static byte[] Says(uint text) => [ScriptCommands.Message, .. At(text), ScriptCommands.End];
 
     [Fact]
+    public void AByteWithNoLetterBehindItSaysWhichByteItWas()
+    {
+        // A question mark is a lie: it reads as punctuation somebody typed, so the one
+        // character this cannot decode is also the one it can never notice. POKéMON read
+        // as POK?MON in every line on Route 1 and looked like a sentence.
+        List<string> pages = GameText.DecodeDialogue([0xBB, 0x1B, 0xBC, GameText.Terminator]);
+
+        Assert.Equal("A{1B}B", Assert.Single(pages));
+
+        // A real question mark is still a real question mark.
+        Assert.Equal("A?", Assert.Single(GameText.DecodeDialogue([0xBB, 0xAC, GameText.Terminator])));
+    }
+
+    [Fact]
     public void OnlyTheArmThatRunsIsRead()
     {
         // checkflag then "goto if less" is the commonest pair on the cartridge, and it
@@ -557,5 +571,10 @@ public class ScriptRunnerTests
 
         Assert.Equal((byte)0x30, run.StoppedAt);
         Assert.Equal("AAAAAA", Assert.Single(run.Pages));
+
+        // And where, so the bytes around it can be printed. A run follows jumps, so this
+        // is almost never inside the script the map named — printing the bytes there
+        // shows a handoff, which is what makes an unknown command hard to identify.
+        Assert.Equal(Rom.BaseAddress + 5, Rom.BaseAddress + (uint)run.StoppedAtOffset!.Value);
     }
 }

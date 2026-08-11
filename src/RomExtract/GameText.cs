@@ -96,7 +96,14 @@ public static class GameText
                     break;
 
                 default:
-                    page.Append(DecodeByte(b));
+                    // A byte with no letter behind it is written as its own number
+                    // rather than as a question mark. A question mark is a lie — it
+                    // reads as punctuation somebody typed, so the one character this
+                    // project cannot decode is also the one it can never notice. The
+                    // é in POKéMON hid in plain sight in every line on Route 1.
+                    if (DecodeByte(b) == '?' && b != 0xAC) page.Append($"{{{b:X2}}}");
+                    else page.Append(DecodeByte(b));
+
                     break;
             }
         }
