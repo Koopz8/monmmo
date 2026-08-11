@@ -25,6 +25,7 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(TrainerBeaten), "beaten")]
 [JsonDerivedType(typeof(UseItemRequest), "useitem")]
 [JsonDerivedType(typeof(BagUpdated), "bagupdate")]
+[JsonDerivedType(typeof(PartyHealed), "healed")]
 [JsonDerivedType(typeof(BuyRequest), "buy")]
 [JsonDerivedType(typeof(SellRequest), "sell")]
 [JsonDerivedType(typeof(ShopOpened), "shop")]
@@ -198,6 +199,16 @@ public sealed record BagUpdated(
     IReadOnlyList<BagEntry> Bag,
     IReadOnlyList<SavedMon> Party,
     string Message) : NetMessage;
+
+/// <summary>
+/// The party, put back on its feet at a counter.
+/// <para>
+/// <paramref name="Needed"/> is here so the client can say something true. A centre
+/// that reports a miracle to somebody who walked in healthy is the kind of small lie
+/// that makes a player stop believing the rest of it.
+/// </para>
+/// </summary>
+public sealed record PartyHealed(IReadOnlyList<SavedMon> Party, bool Needed) : NetMessage;
 
 /// <summary>
 /// The credentials were not accepted. Deliberately vague about which half was wrong,

@@ -69,6 +69,26 @@ public static class WorldExporter
             }
         }
 
+        // Located rather than known, and only once every map's people have been read:
+        // the nurse is whoever hands their work to the script that one person on each of
+        // the most maps hands theirs to, which is not a question a single map can answer.
+        uint? healer = Scripts.HealerLocator.Locate(
+            maps.Select(m => (m.Id, m.Objects)), rom, log);
+
+        if (healer is not null)
+        {
+            for (int i = 0; i < maps.Count; i++)
+            {
+                maps[i] = maps[i] with
+                {
+                    Objects =
+                    [
+                        .. maps[i].Objects.Select(o => o with { Heals = Scripts.HealerLocator.Heals(rom, o, healer) }),
+                    ],
+                };
+            }
+        }
+
         int withEncounters = maps.Count(m => m.Encounters is not null);
         int warps = maps.Sum(m => m.Warps.Count);
         int connections = maps.Sum(m => m.Connections.Count);
@@ -79,6 +99,13 @@ public static class WorldExporter
 
         log?.Invoke($"  {warps} warps, {connections} edge connections");
         log?.Invoke($"  {objects} objects, {trainers} of them trainers");
+
+        int healers = maps.Sum(m => m.Objects.Count(o => o.Heals));
+
+        log?.Invoke(
+            healers == 0
+                ? "  nobody heals — losing is still the only way to put a party back on its feet"
+                : $"  {healers} of them heal a party across {maps.Count(m => m.Objects.Any(o => o.Heals))} maps");
 
         ReportDanglingLinks(maps, log);
 

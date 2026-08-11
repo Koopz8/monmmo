@@ -70,6 +70,18 @@ public sealed record MapObject(
     public bool IsShopkeeper => Stock.Count > 0;
 
     /// <summary>
+    /// True when talking to this one puts the party back on its feet.
+    /// <para>
+    /// A fact about a person rather than about a map, and carried in the world file
+    /// because the server cannot work it out: what heals a party is a routine in the
+    /// game's own code, which is not data and cannot be read. What can be read is that
+    /// every nurse in the game hands her work to one shared script, and that script is
+    /// located at export by counting who calls it.
+    /// </para>
+    /// </summary>
+    public bool Heals { get; init; }
+
+    /// <summary>
     /// Compares stock by its contents.
     /// <para>
     /// A record compares its members with <c>Equals</c>, and for a list that is
@@ -91,6 +103,7 @@ public sealed record MapObject(
         ScriptAddress == other.ScriptAddress &&
         TrainerId == other.TrainerId &&
         SightRange == other.SightRange &&
+        Heals == other.Heals &&
         Stock.SequenceEqual(other.Stock);
 
     public override int GetHashCode()

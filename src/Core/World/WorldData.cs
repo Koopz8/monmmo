@@ -95,7 +95,7 @@ public sealed class WorldData
     /// <summary>Identifies the format, so a wrong or stale file fails loudly.</summary>
     private static readonly byte[] Magic = "MONWORLD"u8.ToArray();
 
-    private const int Version = 9;
+    private const int Version = 10;
 
     private readonly Dictionary<string, MapData> _maps;
 
@@ -243,6 +243,7 @@ public sealed class WorldData
             // of stays on the cartridge, and so does the address of that script.
             writer.Write(entry.TrainerId);
             writer.Write(entry.SightRange);
+            writer.Write(entry.Heals);
 
 
             // Item ids, which are numbers. The list itself lived at a cartridge address
@@ -338,8 +339,11 @@ public sealed class WorldData
                 // file does not carry any.
                 0,
                 reader.ReadInt32(),
-                reader.ReadInt32(),
-                ReadStock(reader, mapId)));
+                reader.ReadInt32())
+            {
+                Heals = reader.ReadBoolean(),
+                Stock = ReadStock(reader, mapId),
+            });
         }
 
         return objects;

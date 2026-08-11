@@ -194,7 +194,7 @@ public static class Program
 
             ApplyServerMessages(
                 network, others, player, view, data, trainers, items, script, carrying,
-                ref battle, ref shop, ref bag, ref party, ref money, ref correction);
+                ref talking, ref battle, ref shop, ref bag, ref party, ref money, ref correction);
 
             // A battle suspends the overworld entirely: the server is running it, and
             // walking on meanwhile would put the two sides out of step.
@@ -459,6 +459,7 @@ public static class Program
         ItemNames items,
         ScriptState script,
         BagScreen? carrying,
+        ref DialogueBox? said,
         ref BattleScreen? battle,
         ref ShopScreen? shop,
         ref IReadOnlyList<BagEntry> bag,
@@ -488,6 +489,19 @@ public static class Program
 
                 case FlagsChanged changed:
                     foreach (int flag in changed.Flags) script.Set(flag);
+
+                    break;
+
+                case PartyHealed healed:
+                    party = healed.Party;
+
+                    // The counter says it out loud, in a box dismissed like any other.
+                    // There is nothing to choose, so there is nothing to open.
+                    said = new DialogueBox([
+                        healed.Needed
+                            ? "We've restored your POKeMON to full health."
+                            : "Your POKeMON are all healthy already.",
+                    ]);
 
                     break;
 

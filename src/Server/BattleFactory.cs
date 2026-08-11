@@ -152,6 +152,17 @@ public sealed class BattleFactory(GameRules rules)
         return (Save(battler), battler.CurrentHp - before);
     }
 
+    /// <summary>
+    /// True when this one has nothing wrong with it.
+    /// <para>
+    /// Not the same question as whether it can fight. Something on one health with a
+    /// burn can fight and very much wants a centre, and telling a player nobody needed
+    /// healing when half the party is poisoned is a lie the counter should not tell.
+    /// </para>
+    /// </summary>
+    public bool IsWell(SavedMon saved) =>
+        Restore(saved) is not { } battler || (battler.CurrentHp >= battler.MaxHp && battler.Status == StatusCondition.None);
+
     /// <summary>True when this one can still fight.</summary>
     public bool CanFight(SavedMon saved) => Restore(saved) is { HasFainted: false };
 

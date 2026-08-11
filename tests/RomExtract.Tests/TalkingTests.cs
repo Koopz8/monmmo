@@ -1,3 +1,4 @@
+using PokeMmo.Core.Battle;
 using PokeMmo.Core.Net;
 using PokeMmo.Core.Save;
 using PokeMmo.Core.World;
@@ -465,5 +466,117 @@ public class ScriptFlagTests
 
         Assert.Equal([0x2A5], saved.Flags);
         Assert.Equal(3, saved.Variables.Single(v => v.Id == 0x4001).Value);
+    }
+}
+
+/// <summary>
+/// The counter that heals, and how the server comes to know which one it is.
+/// <para>
+/// It does not work it out. What heals a party is a routine in the game's own code,
+/// which is not data and cannot be read from an image — three rounds went into
+/// establishing that, and it is a boundary rather than a gap. The world file carries a
+/// flag instead, put there at export by counting who calls what.
+/// </para>
+/// </summary>
+public class HealingTests
+{
+    private const string Town = "3.0";
+
+    private static MapObject Nurse(int localId) =>
+        new(localId, 5, 3, 3, Direction.Down, 0, false) { Heals = true };
+
+    private static GameWorld World(params MapObject[] people)
+    {
+        MapData map = new(Town, "PALLET TOWN", 8, 8, new byte[64]) { Objects = people };
+
+        return new GameWorld(new WorldData([map]), Town, TestRules.All);
+    }
+
+    private static (GameWorld World, ServerPlayer Player) AtTheCounter(SavedMon party)
+    {
+        GameWorld world = World(Nurse(1));
+
+        (ServerPlayer player, _) = world.Join(
+            1, "Koop", SavedCharacter.Fresh(Town, 3, 4) with { Party = [party] });
+
+        player.Facing = Direction.Up;
+
+        return (world, player);
+    }
+
+    private static SavedMon Wounded =>
+        new(3, 30, null, 1, StatusCondition.None, Nature.Hardy, [TestRules.FirstMove]);
+
+    [Fact]
+    public void TalkingToOneStandsThePartyBackUp()
+    {
+        (GameWorld world, ServerPlayer player) = AtTheCounter(Wounded);
+
+        PartyHealed healed = world.StartTalking(player.Id, 1)
+            .Select(o => o.Message)
+            .OfType<PartyHealed>()
+            .Single();
+
+        Assert.True(healed.Needed);
+        Assert.True(healed.Party[0].CurrentHp > 1);
+        Assert.Equal(healed.Party[0].CurrentHp, player.Party[0].CurrentHp);
+    }
+
+    [Fact]
+    public void WalkingInHealthyIsNotReportedAsAMiracle()
+    {
+        // A centre that announces a recovery to somebody who did not need one is the
+        // kind of small lie that makes a player stop believing the rest of it.
+        (GameWorld world, ServerPlayer player) = AtTheCounter(Wounded);
+
+        world.StartTalking(player.Id, 1);
+        world.StopTalking(player.Id);
+
+        PartyHealed again = world.StartTalking(player.Id, 1)
+            .Select(o => o.Message)
+            .OfType<PartyHealed>()
+            .Single();
+
+        Assert.False(again.Needed);
+    }
+
+    [Fact]
+    public void SomebodyPoisonedNeededItEvenAtFullHealth()
+    {
+        // Whether a party is well is not whether it can fight. Something on full health
+        // with a burn can fight and very much wants a centre.
+        GameWorld world = World(Nurse(1));
+
+        (ServerPlayer player, _) = world.Join(
+            1,
+            "Koop",
+            SavedCharacter.Fresh(Town, 3, 4) with
+            {
+                Party = [new SavedMon(3, 5, null, 999, StatusCondition.Poison, Nature.Hardy, [TestRules.FirstMove])],
+            });
+
+        player.Facing = Direction.Up;
+
+        PartyHealed healed = world.StartTalking(player.Id, 1)
+            .Select(o => o.Message)
+            .OfType<PartyHealed>()
+            .Single();
+
+        Assert.True(healed.Needed);
+        Assert.Equal(StatusCondition.None, player.Party[0].Status);
+    }
+
+    [Fact]
+    public void SomebodyWhoIsNotANurseHealsNobody()
+    {
+        GameWorld world = World(new MapObject(1, 5, 3, 3, Direction.Down, 0, false));
+
+        (ServerPlayer player, _) = world.Join(
+            1, "Koop", SavedCharacter.Fresh(Town, 3, 4) with { Party = [Wounded] });
+
+        player.Facing = Direction.Up;
+
+        Assert.Empty(world.StartTalking(player.Id, 1).Select(o => o.Message).OfType<PartyHealed>());
+        Assert.Equal(1, player.Party[0].CurrentHp);
     }
 }

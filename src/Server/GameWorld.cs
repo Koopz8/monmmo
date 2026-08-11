@@ -575,6 +575,30 @@ public sealed class GameWorld
                 return challenge;
             }
 
+            // A counter that heals, before the one that sells. Both are counters and
+            // nobody is both, but the order says which this project would rather get
+            // wrong: a shop that healed you would be strange and a nurse that charged
+            // you would be worse.
+            if (person.Template.Heals && _battles is not null && player.Party.Count > 0)
+            {
+                bool needed = player.Party.Any(m => !_battles.IsWell(m));
+
+                HealParty(player);
+
+                person.HeldBy = playerId;
+
+                LastTalkOutcome = needed
+                    ? $"a centre: {player.Party.Count} back on their feet"
+                    : "a centre, though nobody needed it";
+
+                return
+                [
+                    new Outgoing(
+                        new PartyHealed([.. player.Party], needed),
+                        OnlyTo: playerId),
+                ];
+            }
+
             // A shop opens on top of the hold rather than instead of it: the shopkeeper
             // still has to stand still while somebody is buying from them.
             List<Outgoing> shop = OpenShop(player, person.Template);

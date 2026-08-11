@@ -77,6 +77,7 @@ public class MessageChannelTests
             new TrainerBeaten(41),
             new UseItemRequest(13, 0),
             new BagUpdated([new BagEntry(13, 2)], [], "Restored 20 health."),
+            new PartyHealed([], true),
             new BuyRequest(4, 5),
             new SellRequest(13, 2),
             new ShopOpened([new ShopEntry(4, 200)], 5000, [new BagEntry(4, 3)]),
