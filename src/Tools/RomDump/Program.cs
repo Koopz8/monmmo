@@ -1041,9 +1041,16 @@ public static class Program
     /// what cost milestone 14 three rounds and milestone 15 a whole commit.
     /// </para>
     /// <para>
-    /// What can be derived is where each one is used. A routine that turns up once on
-    /// almost every map called a centre and essentially nowhere else is the healer, and
-    /// the map names are evidence rather than a guess.
+    /// What can be derived is where each one is used and who uses it. The map name was
+    /// the first idea and it does not work: an indoor map takes its <em>town's</em> name
+    /// from the region table, so every centre in the game is called CELADON CITY or
+    /// CERULEAN CITY and none of them is called a centre.
+    /// </para>
+    /// <para>
+    /// What does work is asking the caller what they say. A nurse names the place she is
+    /// standing in, in a line this project has been able to decode since milestone 14 —
+    /// so the routine whose callers say "welcome to our centre" is the healer, on the
+    /// cartridge's own authority rather than anybody's memory.
     /// </para>
     /// </summary>
     private static void WriteSpecials(Rom rom, int top = 20)
@@ -1055,6 +1062,7 @@ public static class Program
 
         var maps = new Dictionary<int, HashSet<string>>();
         var callers = new Dictionary<int, int>();
+        var says = new Dictionary<int, uint>();
 
         foreach (LoadedMap map in library.All())
         {
@@ -1078,6 +1086,12 @@ public static class Program
                     if (!maps.TryGetValue(routine, out HashSet<string>? on)) maps[routine] = on = [];
 
                     on.Add(map.Name);
+
+                    // Keep a caller who actually says something. The first one found is
+                    // often a silent handoff, and a blank line next to a routine number
+                    // is the one thing this report cannot afford to print.
+                    if (!says.ContainsKey(routine) && ScriptRunner.Run(rom, person.ScriptAddress).Pages.Count > 0)
+                        says[routine] = person.ScriptAddress;
                 }
             }
         }
@@ -1091,6 +1105,14 @@ public static class Program
 
             Console.WriteLine(
                 $"    0x{routine:X4}  {on.Count} maps, {callers[routine]} callers  e.g. {string.Join(", ", names)}");
+
+            if (!says.TryGetValue(routine, out uint script)) continue;
+
+            string line = GameText
+                .ToAscii(ScriptRunner.Run(rom, script).Pages.FirstOrDefault() ?? "")
+                .Replace("\n", " ");
+
+            Console.WriteLine($"            \"{(line.Length > 96 ? line[..96] + "..." : line)}\"");
         }
     }
 
