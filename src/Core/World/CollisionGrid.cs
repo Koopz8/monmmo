@@ -82,6 +82,29 @@ public sealed class CollisionGrid
     /// disagree about where the player is standing.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// The same map with some squares made walkable that were not.
+    /// <para>
+    /// For doors. A door's square is solid in the block data — you cannot walk through a
+    /// building — and the games let you onto it anyway, because standing on it is what
+    /// takes you inside. A collision grid that does not know that refuses the step, so
+    /// the arrival never happens and the warp never fires: every shop in the world with
+    /// its door shut, and nothing anywhere reporting an error.
+    /// </para>
+    /// </summary>
+    public CollisionGrid WithOpen(IEnumerable<GridPosition> squares)
+    {
+        var copy = new byte[Width * Height];
+        _collision.CopyTo(copy, 0);
+
+        foreach (GridPosition square in squares)
+        {
+            if (Contains(square)) copy[square.Y * Width + square.X] = 0;
+        }
+
+        return new CollisionGrid(Width, Height, copy);
+    }
+
     public CollisionGrid With(IEnumerable<GridPosition> blocked)
     {
         var copy = new byte[Width * Height];

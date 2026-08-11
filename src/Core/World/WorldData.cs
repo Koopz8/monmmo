@@ -26,7 +26,32 @@ public sealed record MapData(string Id, string Name, int Width, int Height, byte
     public MapObject? ObjectAt(GridPosition square) =>
         Objects.FirstOrDefault(o => o.X == square.X && o.Y == square.Y);
 
-    public CollisionGrid ToGrid() => new(Width, Height, Collision);
+    /// <summary>
+    /// Walkability, with every warp square opened.
+    /// <para>
+    /// A door is solid in the block data and the games let you stand on it anyway.
+    /// Both sides build their grid this way, because a rule enforced on one side of a
+    /// client and server split needs its counterpart on the other — which this project
+    /// has now learned three times.
+    /// </para>
+    /// </summary>
+    public CollisionGrid ToGrid() =>
+        new CollisionGrid(Width, Height, Collision).WithOpen(Warps.Select(w => w.Square));
+
+    /// <summary>
+    /// How many warps sit on squares the block data calls solid.
+    /// <para>
+    /// Reported at startup. Doors are the overwhelming majority of warps, so a world
+    /// where this is near zero is a world whose doors are being read wrongly, and a
+    /// world where it is near the warp count is behaving exactly as the cartridge does.
+    /// </para>
+    /// </summary>
+    public int WarpsOnSolidSquares()
+    {
+        var raw = new CollisionGrid(Width, Height, Collision);
+
+        return Warps.Count(w => !raw.IsWalkable(w.Square));
+    }
 
     /// <summary>The warp on a square, if there is one.</summary>
     public Warp? WarpAt(GridPosition square) =>

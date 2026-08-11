@@ -207,6 +207,18 @@ public sealed class SyntheticRom
 
     public static string MapIdAt(int index) => $"{index / MapsPerBank}.{index % MapsPerBank}";
 
+    /// <summary>
+    /// A square that is solid <em>and</em> has a warp on it: a door.
+    /// <para>
+    /// Modelled because that is what a door is on a real cartridge — you cannot walk
+    /// through a building, and standing on the doorway is what takes you inside. A
+    /// fixture whose warps all sat on open ground made every test about doors pass
+    /// whether or not doors worked, which is how every shop in the world came to have
+    /// its door shut.
+    /// </para>
+    /// </summary>
+    public static readonly GridPosition DoorSquare = new(1, 1);
+
     /// <summary>The warps written for a map, which is what extraction is checked against.</summary>
     public static List<Warp> WarpsFor(int index)
     {
@@ -437,7 +449,14 @@ public sealed class SyntheticRom
         for (int y = 0; y < MapHeight; y++)
         {
             for (int x = 0; x < MapWidth; x++)
-                WriteU16(MapBlocksOffset + (y * MapWidth + x) * 2, (ushort)MetatileAt(x, y));
+            {
+                // Collision lives in the top bits of a block, above the metatile index.
+                int collision = new GridPosition(x, y) == DoorSquare ? 1 : 0;
+
+                WriteU16(
+                    MapBlocksOffset + (y * MapWidth + x) * 2,
+                    (ushort)(MetatileAt(x, y) | (collision << 10)));
+            }
         }
 
         WriteU32(MapLayoutOffset, MapWidth);

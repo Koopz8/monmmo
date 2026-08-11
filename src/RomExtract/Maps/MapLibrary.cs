@@ -73,7 +73,14 @@ public sealed class MapLibrary
             .Create(_rom, entry.Header.Layout)
             .Render(entry.Header.Layout);
 
-        CollisionGrid collision = entry.Header.Layout.ReadCollision(_rom);
+        CollisionGrid raw = entry.Header.Layout.ReadCollision(_rom);
+
+        List<Warp> warps = MapLinkExtractor.ReadWarps(_rom, entry.Header, raw.Width, raw.Height);
+
+        // Doors are solid in the block data. The client has to open them for the same
+        // reason the server does — it predicts every step against this grid, and a step
+        // it predicts as blocked is a step it never sends.
+        CollisionGrid collision = raw.WithOpen(warps.Select(w => w.Square));
 
         return new LoadedMap(
             NameOf(entry.Header),
@@ -88,6 +95,7 @@ public sealed class MapLibrary
             // and both sides deriving them from the same image is the arrangement
             // collision already uses.
             Objects = MapLinkExtractor.ReadObjects(_rom, entry.Header, collision.Width, collision.Height),
+            Warps = warps,
         };
     }
 

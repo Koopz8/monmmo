@@ -1,6 +1,7 @@
 using PokeMmo.Core.Net;
 using PokeMmo.Core.Save;
 using PokeMmo.Core.World;
+using PokeMmo.RomExtract.Maps;
 using PokeMmo.Server;
 
 namespace PokeMmo.RomExtract.Tests;
@@ -398,5 +399,115 @@ public class TravelTests
 
         Assert.Equal(Town, player.MapId);
         Assert.Equal(new GridPosition(1, 1), player.Square);
+    }
+}
+
+
+/// <summary>
+/// Doors.
+/// <para>
+/// A door's square is solid in the block data — you cannot walk through a building —
+/// and the games let you stand on it anyway, because standing on it is what takes you
+/// inside. A grid that does not know that refuses the step, so the arrival never happens
+/// and the warp never fires. Every shop in the world with its door shut, and nothing
+/// anywhere reporting an error.
+/// </para>
+/// </summary>
+public class DoorTests
+{
+    private const string Town = "3.0";
+    private const string Shop = "3.1";
+
+    /// <summary>A town with a solid wall along the top, and a door in it.</summary>
+    private static WorldData WorldWithADoor()
+    {
+        var wall = new byte[16];
+
+        for (int x = 0; x < 4; x++) wall[x] = 1;
+
+        MapData town = new(Town, "PALLET TOWN", 4, 4, wall)
+        {
+            Warps = [new Warp(2, 0, 0, Shop)],
+        };
+
+        MapData inside = new(Shop, "MART", 4, 4, new byte[16])
+        {
+            Warps = [new Warp(1, 3, 0, Town)],
+        };
+
+        return new WorldData([town, inside]);
+    }
+
+    [Fact]
+    public void ADoorIsWalkableEvenThoughTheWallIsNot()
+    {
+        MapData town = WorldWithADoor().Find(Town)!;
+
+        CollisionGrid grid = town.ToGrid();
+
+        Assert.True(grid.IsWalkable(new GridPosition(2, 0)));
+
+        // And the rest of the wall is still a wall. Opening the whole row would be a
+        // town you can walk out of the top of.
+        Assert.False(grid.IsWalkable(new GridPosition(1, 0)));
+        Assert.False(grid.IsWalkable(new GridPosition(3, 0)));
+    }
+
+    [Fact]
+    public void WalkingIntoADoorTakesYouInside()
+    {
+        var world = new GameWorld(WorldWithADoor(), Town, TestRules.All);
+
+        (ServerPlayer player, _) = world.Join(1, "Mason", world.FreshCharacter());
+
+        player.Square = new GridPosition(2, 1);
+        player.LastStepAt = double.NegativeInfinity;
+
+        MapChanged changed = world.Move(player.Id, Direction.Up, 10)
+            .Select(o => o.Message)
+            .OfType<MapChanged>()
+            .Single();
+
+        Assert.Equal(Shop, changed.MapId);
+    }
+
+    [Fact]
+    public void TheRestOfTheWallStillStopsYou()
+    {
+        var world = new GameWorld(WorldWithADoor(), Town, TestRules.All);
+
+        (ServerPlayer player, _) = world.Join(1, "Mason", world.FreshCharacter());
+
+        player.Square = new GridPosition(1, 1);
+        player.LastStepAt = double.NegativeInfinity;
+
+        world.Move(player.Id, Direction.Up, 10);
+
+        Assert.Equal(new GridPosition(1, 1), player.Square);
+    }
+
+    [Fact]
+    public void HowManyDoorsAreSolidIsWorthReporting()
+    {
+        // The number that tells a world whose doors are read correctly from one whose
+        // doors are being read as walls.
+        Assert.Equal(1, WorldWithADoor().Find(Town)!.WarpsOnSolidSquares());
+        Assert.Equal(0, WorldWithADoor().Find(Shop)!.WarpsOnSolidSquares());
+    }
+
+    [Fact]
+    public void TheClientOpensDoorsToo()
+    {
+        // The counterpart. The client predicts every step against its own grid, and a
+        // step it predicts as blocked is a step it never sends — so a door the server
+        // would allow is still a door nobody walks through.
+        var fixture = new SyntheticRom();
+
+        MapLibrary library = MapLibrary.Open(fixture.ToRom());
+
+        LoadedMap map = library.TryLoad("0.1")!;
+
+        Assert.NotEmpty(map.Warps);
+        Assert.All(map.Warps, w => Assert.True(map.Collision.IsWalkable(w.Square)));
     }
 }

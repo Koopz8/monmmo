@@ -19,6 +19,9 @@ public sealed record LoadedMap(
     /// <summary>People and things standing on this map.</summary>
     public IReadOnlyList<MapObject> Objects { get; init; } = [];
 
+    /// <summary>The doors and stairways on this map.</summary>
+    public IReadOnlyList<Warp> Warps { get; init; } = [];
+
     /// <summary>The map as a PNG, which is the simplest thing for a renderer to consume.</summary>
     public byte[] ToPng() => Graphics.PngWriter.ToArray(PixelWidth, PixelHeight, Rgba);
 }

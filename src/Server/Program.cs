@@ -205,7 +205,14 @@ public static class Program
             return;
         }
 
+        int doors = world.Maps.Sum(m => m.WarpsOnSolidSquares());
+
         Console.WriteLine($"  {warps} warps and {connections} edge connections across {world.Count} maps");
+
+        // A door's square is solid in the block data, so this number being large is the
+        // world behaving as the cartridge does. It being near zero would mean the doors
+        // are somewhere other than where this thinks they are.
+        Console.WriteLine($"  {doors} of those warps are on squares the map data calls solid — doors");
     }
 
     /// <summary>
