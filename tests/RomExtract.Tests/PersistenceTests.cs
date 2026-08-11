@@ -144,6 +144,43 @@ public class SqlitePlayerStoreTests
     }
 
     [Fact]
+    public async Task WhoYouHaveBeatenOutlivesTheConnection()
+    {
+        // A trainer who forgets they lost challenges you again the moment you walk back
+        // past them, which is worse than having no trainers at all.
+        using SqlitePlayerStore store = SqlitePlayerStore.InMemory();
+
+        await store.RegisterAsync("Mason", "a-good-password", Character());
+
+        var account = Assert.IsType<AuthOutcome.Success>(await store.LoginAsync("Mason", "a-good-password"));
+
+        await store.SaveAsync(account.Account.Id, Character() with { DefeatedTrainers = [3, 214] });
+
+        var login = Assert.IsType<AuthOutcome.Success>(await store.LoginAsync("Mason", "a-good-password"));
+
+        Assert.Equal([3, 214], login.Character.DefeatedTrainers.Order());
+    }
+
+    [Fact]
+    public async Task BeingBeatenIsNeverTakenBack()
+    {
+        // Written with an insert rather than a rewrite, so a save that happens to be
+        // built from a stale set cannot un-beat anybody.
+        using SqlitePlayerStore store = SqlitePlayerStore.InMemory();
+
+        await store.RegisterAsync("Mason", "a-good-password", Character());
+
+        var account = Assert.IsType<AuthOutcome.Success>(await store.LoginAsync("Mason", "a-good-password"));
+
+        await store.SaveAsync(account.Account.Id, Character() with { DefeatedTrainers = [3, 214] });
+        await store.SaveAsync(account.Account.Id, Character() with { DefeatedTrainers = [3] });
+
+        var login = Assert.IsType<AuthOutcome.Success>(await store.LoginAsync("Mason", "a-good-password"));
+
+        Assert.Equal([3, 214], login.Character.DefeatedTrainers.Order());
+    }
+
+    [Fact]
     public async Task SavingReplacesThePartyRatherThanAddingToIt()
     {
         using SqlitePlayerStore store = SqlitePlayerStore.InMemory();

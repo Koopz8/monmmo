@@ -58,12 +58,14 @@ public class MessageChannelTests
             new BattleStarted(
                 new BattlerView(1, 5, "Bulby", 19, 20, StatusCondition.None, [33]),
                 new BattlerView(16, 3, null, 11, 11, StatusCondition.None, [33, 45]),
-                12),
+                12,
+                TrainerId: 214),
             new BattleUpdate(
                 [new BattleEvent.MoveUsed(Side.Player, 33), new BattleEvent.Fainted(Side.Opponent)],
                 19, 0, 12),
             new BattleFinished(Side.Player, true, 11, [new SavedMon(16, 3, null, 1, StatusCondition.None, Nature.Bold, [33])]),
             new MoveRequest(Direction.Left),
+            new BattlerSentOut(Side.Opponent, new BattlerView(4, 9, null, 22, 26, StatusCondition.None, [10])),
             new TalkRequest(4),
             new TalkFinished(),
             new MapChanged("3.1", 4, 9, Direction.Down),

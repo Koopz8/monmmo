@@ -105,6 +105,12 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
                 UNIQUE (account_id, slot)
             );
 
+            CREATE TABLE IF NOT EXISTS defeated_trainers (
+                account_id INTEGER NOT NULL REFERENCES characters(account_id) ON DELETE CASCADE,
+                trainer_id INTEGER NOT NULL,
+                PRIMARY KEY (account_id, trainer_id)
+            );
+
             CREATE TABLE IF NOT EXISTS party_moves (
                 member_id INTEGER NOT NULL REFERENCES party_members(id) ON DELETE CASCADE,
                 slot      INTEGER NOT NULL,
@@ -283,6 +289,19 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
             await upsert.ExecuteNonQueryAsync(cancellationToken);
         }
 
+        // Inserted rather than rewritten, because a beaten trainer is never unbeaten.
+        // The whole set goes in on every save so a database that missed one catches up.
+        foreach (int trainerId in character.DefeatedTrainers)
+        {
+            await using SqliteCommand beaten = connection.CreateCommand();
+            beaten.Transaction = transaction;
+            beaten.CommandText =
+                "INSERT OR IGNORE INTO defeated_trainers (account_id, trainer_id) VALUES ($id, $trainer);";
+            beaten.Parameters.AddWithValue("$id", accountId);
+            beaten.Parameters.AddWithValue("$trainer", trainerId);
+            await beaten.ExecuteNonQueryAsync(cancellationToken);
+        }
+
         // The party is rewritten wholesale rather than diffed. Six rows is nothing,
         // and a diff is where an ordering bug would hide.
         await using (SqliteCommand clear = connection.CreateCommand())
@@ -418,7 +437,18 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
             }
         }
 
-        return new SavedCharacter(mapId, x, y, facing, balls, party);
+        var defeated = new List<int>();
+
+        await using (SqliteCommand command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT trainer_id FROM defeated_trainers WHERE account_id = $id;";
+            command.Parameters.AddWithValue("$id", accountId);
+
+            await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken)) defeated.Add(reader.GetInt32(0));
+        }
+
+        return new SavedCharacter(mapId, x, y, facing, balls, party) { DefeatedTrainers = defeated };
     }
 
     /// <summary>

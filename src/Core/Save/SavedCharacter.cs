@@ -77,6 +77,21 @@ public sealed record SavedCharacter(
     /// <summary>What a new account starts with. Enough to catch something.</summary>
     public const int StartingBalls = 20;
 
+    /// <summary>
+    /// Trainers this account has already beaten.
+    /// <para>
+    /// An init property rather than another positional member, because every existing
+    /// construction of one of these is correct without it and a new position would have
+    /// to be threaded through all of them to say "none yet".
+    /// </para>
+    /// <para>
+    /// It has to be persisted rather than kept for the session. A trainer who forgets
+    /// they lost challenges you again the moment you walk back past them, which is
+    /// worse than having no trainers at all.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<int> DefeatedTrainers { get; init; } = [];
+
     public static SavedCharacter Fresh(string mapId, int x, int y) =>
         new(mapId, x, y, Direction.Down, StartingBalls, []);
 

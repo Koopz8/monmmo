@@ -15,6 +15,12 @@ internal static class TestRules
 {
     public const int FirstMove = 1;
 
+    /// <summary>A trainer with three creatures, so a fight is more than one battle.</summary>
+    public const int ThreeStrong = 7;
+
+    /// <summary>A trainer with one, for the simple case.</summary>
+    public const int OneAlone = 4;
+
     public static readonly GameRules All = Build();
 
     private static GameRules Build()
@@ -52,6 +58,20 @@ internal static class TestRules
         for (int index = 0; index < 64; index++)
             learnsets.Add(new Learnset(index, [new LevelUpMove(1, FirstMove), new LevelUpMove(3, 2)]));
 
-        return new GameRules(species, moves, learnsets);
+        var trainers = new List<TrainerParty>
+        {
+            new(OneAlone, false, [new TrainerMember(3, 5, 0, [])]),
+
+            // Moves written out on one of them and left to the learnset on the others,
+            // because both are ordinary and the second is what most of the games use.
+            new(ThreeStrong, false,
+            [
+                new TrainerMember(3, 5, 0, [FirstMove]),
+                new TrainerMember(4, 6, 0, []),
+                new TrainerMember(5, 7, 0, []),
+            ]),
+        };
+
+        return new GameRules(species, moves, learnsets, trainers);
     }
 }

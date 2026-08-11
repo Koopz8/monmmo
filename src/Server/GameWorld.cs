@@ -26,10 +26,16 @@ public sealed record ServerPlayer(int Id, long AccountId, string Name)
     /// as it predicts a step, but what it predicts is never what is recorded.
     /// </para>
     /// </summary>
-    public Battle? Battle { get; set; }
+    public Encounter? Battle { get; set; }
 
     /// <summary>True while this player is in a battle and should not be walking.</summary>
     public bool InBattle => Battle is not null;
+
+    /// <summary>
+    /// Trainers this player has already beaten, so they do not start again the moment
+    /// you walk back past them.
+    /// </summary>
+    public HashSet<int> DefeatedTrainers { get; } = [];
 
     public int Balls { get; set; } = SavedCharacter.StartingBalls;
 
@@ -199,6 +205,8 @@ public sealed class GameWorld
                 Balls = saved.Balls,
                 Party = [.. saved.Party],
             };
+
+            foreach (int beaten in saved.DefeatedTrainers) player.DefeatedTrainers.Add(beaten);
 
             // A save from before healing existed, or one written mid-wipe, would leave
             // this account unable to start a battle for good. Waking up healthy is the
@@ -459,6 +467,10 @@ public sealed class GameWorld
 
             if (person.Square != player.Square.Step(player.Facing)) return [];
 
+            // Somebody who wants a fight gets one. The client opened a text box on the
+            // way in; the battle arriving is what closes it.
+            if (StartTrainerBattle(player, person.Template) is { Count: > 0 } challenge) return challenge;
+
             person.HeldBy = playerId;
 
             Direction turned = Interaction.Opposite(player.Facing);
@@ -470,6 +482,77 @@ public sealed class GameWorld
                 new ObjectMoved(person.LocalId, person.Square.X, person.Square.Y, person.Facing),
                 OnMap: player.MapId)];
         }
+    }
+
+    /// <summary>
+    /// Starts a fight with somebody standing on a map, if there is one to be had.
+    /// <para>
+    /// Refused for anybody who is not a trainer, who names no trainer id, who has
+    /// already been beaten, or who this server has no party for. All four are ordinary
+    /// — most people on a map are none of these things — so none of them is an error.
+    /// </para>
+    /// </summary>
+    private List<Outgoing> StartTrainerBattle(ServerPlayer player, MapObject trainer)
+    {
+        if (_battles is null || player.InBattle) return [];
+        if (!trainer.CanBeFought) return [];
+        if (player.DefeatedTrainers.Contains(trainer.TrainerId)) return [];
+
+        List<Battler> party = _battles.TrainerParty(trainer.TrainerId);
+        if (party.Count == 0) return [];
+
+        // Same rule as a wild encounter: no healthy lead, no battle. Starting one here
+        // would start a fight that was already lost before its first turn.
+        if (LeadBattler(player) is not { } lead) return [];
+
+        player.Battle = new Encounter(lead.Slot, lead.Battler, party, _rng.State, trainer.TrainerId);
+
+        return
+        [
+            new Outgoing(
+                new BattleStarted(
+                    BattleFactory.View(lead.Battler),
+                    BattleFactory.View(party[0]),
+                    player.Balls,
+                    trainer.TrainerId),
+                OnlyTo: player.Id),
+        ];
+    }
+
+    /// <summary>
+    /// Whoever on this map has just spotted the player, if anybody has.
+    /// <para>
+    /// A straight line in the direction they are facing, out to their range, with
+    /// nothing solid and nobody standing in between. The line is <see cref="MapObject"/>'s
+    /// job; the part about what is in the way needs the map, which is here.
+    /// </para>
+    /// </summary>
+    private MapObject? WhoSpotted(ServerPlayer player)
+    {
+        if (_battles is null) return null;
+        if (_world.Find(player.MapId) is not { } map) return null;
+
+        foreach (MapObject trainer in map.Objects)
+        {
+            if (!trainer.CanBeFought) continue;
+            if (player.DefeatedTrainers.Contains(trainer.TrainerId)) continue;
+
+            // Where they are now, not where the cartridge put them. A trainer who has
+            // wandered two squares is looking down a different line.
+            GridPosition standing = _populated.TryGetValue(player.MapId, out MapPopulation? people) &&
+                                    people.ById(trainer.LocalId) is { } live
+                ? live.Square
+                : trainer.Square;
+
+            MapObject looking = trainer with { X = standing.X, Y = standing.Y };
+
+            if (!looking.CanSee(player.Square)) continue;
+            if (looking.ApproachTo(player.Square).Any(square => !IsFree(player.MapId, square))) continue;
+
+            return looking;
+        }
+
+        return null;
     }
 
     /// <summary>The text box is closed. Whoever this player was holding carries on.</summary>
@@ -539,6 +622,15 @@ public sealed class GameWorld
         {
             send.AddRange(TakeWarp(player, warp));
             return;
+        }
+
+        if (WhoSpotted(player) is { } watcher)
+        {
+            send.AddRange(StartTrainerBattle(player, watcher));
+
+            // A fight and something in the grass on the same square would be two
+            // battles at once. The person who saw you gets to go first.
+            if (player.InBattle) return;
         }
 
         AddEncounterIfAny(player, send);
@@ -622,21 +714,30 @@ public sealed class GameWorld
         // was over before its first turn — which is exactly the freeze this fixes.
         if (LeadBattler(player) is not { } lead) return;
 
-        player.Battle = new Battle(lead, wild, _rng.State);
+        player.Battle = new Encounter(lead.Slot, lead.Battler, [wild], _rng.State);
 
         send.Add(new Outgoing(
-            new BattleStarted(BattleFactory.View(lead), BattleFactory.View(wild), player.Balls),
+            new BattleStarted(BattleFactory.View(lead.Battler), BattleFactory.View(wild), player.Balls),
             OnlyTo: player.Id));
     }
 
-    /// <summary>The first party member still standing, rebuilt from what was saved.</summary>
-    private Battler? LeadBattler(ServerPlayer player)
+    /// <summary>
+    /// The first party member still standing, rebuilt from what was saved, and which
+    /// slot it came out of.
+    /// <para>
+    /// The slot is what identifies it from here on. Matching on species was fine while
+    /// exactly one creature ever fought; a party with two of the same species in it
+    /// would have written one's health onto the other.
+    /// </para>
+    /// </summary>
+    private (int Slot, Battler Battler)? LeadBattler(ServerPlayer player, int after = -1)
     {
         if (_battles is null) return null;
 
-        foreach (SavedMon saved in player.Party)
+        for (int slot = after + 1; slot < player.Party.Count; slot++)
         {
-            if (_battles.Restore(saved) is { } battler && !battler.HasFainted) return battler;
+            if (_battles.Restore(player.Party[slot]) is { } battler && !battler.HasFainted)
+                return (slot, battler);
         }
 
         // Nothing can fight. Starting a battle here would start one already lost: it
@@ -678,11 +779,15 @@ public sealed class GameWorld
     {
         lock (_gate)
         {
-            if (!_players.TryGetValue(playerId, out ServerPlayer? player) || player.Battle is not { } battle)
+            if (!_players.TryGetValue(playerId, out ServerPlayer? player) || player.Battle is not { } encounter)
                 return [new Outgoing(new Rejected("You are not in a battle."), OnlyTo: playerId)];
 
-            // Throwing is refused here rather than trusted: the count is the server's.
-            if (action is BattleAction.ThrowBall && player.Balls <= 0)
+            Battle battle = encounter.Current;
+
+            // Two ways a throw turns into an attack instead. The count is the server's,
+            // and so is the rule that somebody else's creature is not yours to catch —
+            // the client hides the option for both, and this is what makes it true.
+            if (action is BattleAction.ThrowBall && (player.Balls <= 0 || encounter.IsTrainerBattle))
                 action = new BattleAction.UseMove(0);
             else if (action is BattleAction.ThrowBall) player.Balls--;
 
@@ -692,13 +797,25 @@ public sealed class GameWorld
             // games pay out between "it fainted" and the end of the battle. Appending
             // put it after "You won the battle!", which reads backwards and is the
             // easiest line in a battle to press past without reading.
-            if (battle.IsOver && battle.Winner == Side.Player && !battle.OpponentCaught)
+            if (battle.Opponent.HasFainted && !battle.OpponentCaught)
             {
-                List<BattleEvent> payout = AwardExperience(player, battle);
+                List<BattleEvent> payout = AwardExperience(player, encounter);
 
                 int ended = events.FindIndex(e => e is BattleEvent.Ended);
                 events.InsertRange(ended < 0 ? events.Count : ended, payout);
             }
+
+            // Whoever is out has to be written back before anything replaces them, or
+            // a fight of six creatures records only what happened to the last one.
+            WriteBackActive(player, encounter);
+
+            bool finished = Conclude(encounter, player, out Side? winner);
+
+            // The engine says a battle ended because somebody fainted. When there is
+            // another one to send out, that was the end of a battle and not of the
+            // fight — so the word is taken back out rather than shown to a player who
+            // is about to be handed a fresh opponent.
+            if (!finished) events.RemoveAll(e => e is BattleEvent.Ended);
 
             var send = new List<Outgoing>
             {
@@ -707,69 +824,121 @@ public sealed class GameWorld
                     OnlyTo: playerId),
             };
 
-            if (!battle.IsOver) return send;
+            if (finished)
+            {
+                send.Add(new Outgoing(FinishBattle(player, encounter, winner), OnlyTo: playerId));
+                return send;
+            }
 
-            send.Add(new Outgoing(FinishBattle(player, battle), OnlyTo: playerId));
+            if (battle.Opponent.HasFainted)
+            {
+                Battler next = encounter.SendNextOpponent();
+                send.Add(new Outgoing(new BattlerSentOut(Side.Opponent, BattleFactory.View(next)), OnlyTo: playerId));
+            }
+
+            if (battle.Player.HasFainted && LeadBattler(player, encounter.PlayerSlot) is { } replacement)
+            {
+                encounter.SendPlayer(replacement.Slot, replacement.Battler);
+
+                send.Add(new Outgoing(
+                    new BattlerSentOut(Side.Player, BattleFactory.View(replacement.Battler)), OnlyTo: playerId));
+            }
+
             return send;
         }
     }
 
     /// <summary>
-    /// Pays out for a win, and writes the result straight into the party.
+    /// Whether the fight as a whole is over, and who won it.
+    /// <para>
+    /// Distinct from the battle being over, which happens every time anybody faints.
+    /// A trainer with three creatures ends three battles and one fight.
+    /// </para>
+    /// </summary>
+    private bool Conclude(Encounter encounter, ServerPlayer player, out Side? winner)
+    {
+        Battle battle = encounter.Current;
+
+        winner = null;
+
+        if (battle.OpponentCaught)
+        {
+            winner = Side.Player;
+            return true;
+        }
+
+        if (encounter.OpponentIsBeaten)
+        {
+            winner = Side.Player;
+            return true;
+        }
+
+        if (battle.Player.HasFainted && LeadBattler(player, encounter.PlayerSlot) is null)
+        {
+            winner = Side.Opponent;
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Copies whoever is out back into the party, health and status only.
+    /// <para>
+    /// The level, moves and experience have already been written by the payout, and
+    /// rebuilding from the battler would undo them — that battler was built before the
+    /// battle and never grew. This cost a level once already.
+    /// </para>
+    /// </summary>
+    private static void WriteBackActive(ServerPlayer player, Encounter encounter)
+    {
+        if (encounter.PlayerSlot < 0 || encounter.PlayerSlot >= player.Party.Count) return;
+
+        player.Party[encounter.PlayerSlot] = player.Party[encounter.PlayerSlot] with
+        {
+            CurrentHp = encounter.Player.CurrentHp,
+            Status = encounter.Player.Status,
+        };
+    }
+
+    /// <summary>
+    /// Pays out for a knockout, and writes the result straight into the party.
     /// <para>
     /// Only the battler that fought is paid. Sharing it out across a party is a later
     /// problem, and one that needs a rule about who counts as having taken part.
     /// </para>
     /// </summary>
-    private List<BattleEvent> AwardExperience(ServerPlayer player, Battle battle)
+    private List<BattleEvent> AwardExperience(ServerPlayer player, Encounter encounter)
     {
         if (_progression is null) return [];
 
-        int lead = player.Party.FindIndex(m => m.Species == battle.Player.Species.Index);
-        if (lead < 0) return [];
+        int slot = encounter.PlayerSlot;
+        if (slot < 0 || slot >= player.Party.Count) return [];
 
         (SavedMon grown, List<BattleEvent> events) = _progression.Award(
-            player.Party[lead], battle.Opponent.Species.Index, battle.Opponent.Level);
+            player.Party[slot], encounter.Opponent.Species.Index, encounter.Opponent.Level);
 
-        player.Party[lead] = grown;
+        player.Party[slot] = grown;
 
         return events;
     }
 
     /// <summary>
-    /// Closes a battle and writes its consequences into the party.
+    /// Closes a fight and writes its consequences into the party.
     /// <para>
-    /// Health and status carry out of a battle, and anything caught joins the party —
-    /// both decided here, from the battle the server ran, rather than reported by the
-    /// client afterwards.
+    /// Anything caught joins the party, a beaten trainer is remembered so they do not
+    /// start again on the walk back, and a wiped party is put on its feet.
     /// </para>
     /// </summary>
-    private BattleFinished FinishBattle(ServerPlayer player, Battle battle)
+    private BattleFinished FinishBattle(ServerPlayer player, Encounter encounter, Side? winner)
     {
-        Side? winner = battle.Winner;
-        bool caught = battle.OpponentCaught;
-
-        // The lead was rebuilt from a save, so what happened to it has to be written
-        // back to that save rather than to the battler, which is about to be discarded.
-        if (player.Party.Count > 0)
-        {
-            int lead = player.Party.FindIndex(m => m.Species == battle.Player.Species.Index);
-
-            // Health and status only. The level, moves and experience have already been
-            // written by the payout, and rebuilding from the battler would undo them —
-            // that battler was built before the battle and never grew.
-            if (lead >= 0)
-            {
-                player.Party[lead] = player.Party[lead] with
-                {
-                    CurrentHp = battle.Player.CurrentHp,
-                    Status = battle.Player.Status,
-                };
-            }
-        }
+        bool caught = encounter.Current.OpponentCaught;
 
         if (caught && player.Party.Count < Party.MaxSize)
-            player.Party.Add(BattleFactory.Save(battle.Opponent));
+            player.Party.Add(BattleFactory.Save(encounter.Opponent));
+
+        if (winner == Side.Player && encounter.TrainerId is { } beaten)
+            player.DefeatedTrainers.Add(beaten);
 
         player.Battle = null;
 
@@ -809,7 +978,10 @@ public sealed class GameWorld
             if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return null;
 
             return new SavedCharacter(
-                player.MapId, player.Square.X, player.Square.Y, player.Facing, player.Balls, [.. player.Party]);
+                player.MapId, player.Square.X, player.Square.Y, player.Facing, player.Balls, [.. player.Party])
+            {
+                DefeatedTrainers = [.. player.DefeatedTrainers],
+            };
         }
     }
 

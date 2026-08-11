@@ -672,14 +672,44 @@ public static class Program
         }
 
         Console.WriteLine($"    {trainers.Count(t => t.IsDouble)} double battles");
+
+        // How many have no name at all. A handful at the front of the table is
+        // ordinary — placeholders left over from development. Most of them having no
+        // name would mean the name is not where this thinks it is, which is a different
+        // problem entirely and one worth telling apart at a glance.
+        int nameless = trainers.Count(t => string.IsNullOrWhiteSpace(t.Name));
+
+        Console.WriteLine($"    {nameless} with no name, {trainers.Count - nameless} named");
+
+        var classes = trainers.GroupBy(t => t.Class).OrderByDescending(g => g.Count()).Take(5);
+        Console.WriteLine($"    commonest classes: {string.Join(", ", classes.Select(c => $"{c.Key} x{c.Count()}"))}");
+
         Console.WriteLine();
         Console.WriteLine("  Spot check — compare these names and parties against the games:");
 
-        foreach (TrainerRecord trainer in trainers.Take(6))
+        // Spread across the whole table rather than taken off the front. The front of a
+        // real table is placeholders, which say nothing about whether the rest lines up.
+        foreach (TrainerRecord trainer in Spread(trainers, 12))
         {
-            string party = string.Join(", ", trainer.Party.Select(m => $"#{m.Species} L{m.Level}"));
-            Console.WriteLine($"    {trainer.Id,4} {trainer.Name,-12} class {trainer.Class,3}  {party}");
+            string party = string.Join(", ", trainer.Party.Select(m =>
+                $"#{m.Species} L{m.Level}" +
+                (m.HeldItem != 0 ? $" holding {m.HeldItem}" : "") +
+                (m.Moves.Count > 0 ? $" [{string.Join(" ", m.Moves)}]" : "")));
+
+            string name = string.IsNullOrWhiteSpace(trainer.Name) ? "(no name)" : trainer.Name;
+
+            Console.WriteLine($"    {trainer.Id,4} {name,-12} class {trainer.Class,3}  {party}");
         }
+    }
+
+    /// <summary>Evenly spaced entries, so a sample says something about the whole table.</summary>
+    private static IEnumerable<T> Spread<T>(IReadOnlyList<T> items, int wanted)
+    {
+        if (items.Count <= wanted) return items;
+
+        int step = items.Count / wanted;
+
+        return Enumerable.Range(0, wanted).Select(i => items[i * step]);
     }
 
     private static void WriteOverworldSprites(Rom rom, string outputDirectory)

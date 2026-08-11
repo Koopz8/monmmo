@@ -143,6 +143,10 @@ public static class Program
         // not find a sprite table is worse than one that draws a box.
         using var sprites = new CharacterSprites(data.Rom);
 
+        // Located while the window is opening rather than in the moment somebody steps
+        // into a trainer's line of sight — locating walks the whole image.
+        var trainers = new TrainerNames(data.Rom, data.Species.Count);
+
         CharacterSprite? sprite = sprites.For(CharacterSprite.DefaultGraphicsId);
 
         var player = new WalkingCharacter();
@@ -174,7 +178,7 @@ public static class Program
         {
             float delta = Raylib.GetFrameTime();
 
-            ApplyServerMessages(network, others, player, view, data, ref battle, ref balls, ref correction);
+            ApplyServerMessages(network, others, player, view, data, trainers, ref battle, ref balls, ref correction);
 
             // A battle suspends the overworld entirely: the server is running it, and
             // walking on meanwhile would put the two sides out of step.
@@ -327,15 +331,24 @@ public static class Program
         if (Interaction.InFrontOf(player.Square, player.Facing, view.Map.Objects, live) is not { } person)
             return null;
 
-        if (!person.HasScript) return null;
+        // Sent whether or not there is anything to read, because what happens next is
+        // not this side's decision. Somebody who wants a fight starts one here, and
+        // gating the message on finding dialogue would mean a trainer with nothing to
+        // say could never be challenged by walking up to them.
+        network.SendTalk(person.LocalId);
 
-        var box = new DialogueBox(ScriptReader.ReadDialogue(data.Rom, person.ScriptAddress));
+        DialogueBox? box = person.HasScript
+            ? new DialogueBox(ScriptReader.ReadDialogue(data.Rom, person.ScriptAddress))
+            : null;
 
         // Plenty of scripts say nothing at all — they set a flag, or hand something
         // over. An empty box would still have to be dismissed, so there isn't one.
-        if (box.IsEmpty) return null;
+        if (box is null || box.IsEmpty)
+        {
+            network.SendTalkFinished();
+            return null;
+        }
 
-        network.SendTalk(person.LocalId);
         return box;
     }
 
@@ -353,6 +366,7 @@ public static class Program
         WalkingCharacter player,
         MapView view,
         GameData data,
+        TrainerNames trainers,
         ref BattleScreen? battle,
         ref int balls,
         ref GridPosition? correction)
@@ -416,7 +430,11 @@ public static class Program
                     break;
 
                 case BattleStarted started:
-                    battle = new BattleScreen(started, data);
+                    battle = new BattleScreen(started, data, trainers);
+                    break;
+
+                case BattlerSentOut sent:
+                    battle?.Apply(sent);
                     break;
 
                 case BattleUpdate update:

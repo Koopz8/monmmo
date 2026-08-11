@@ -59,6 +59,40 @@ public sealed class BattleFactory(GameRules rules)
         return battler;
     }
 
+    /// <summary>
+    /// Builds a trainer's party, in the order it comes out.
+    /// <para>
+    /// Most trainers leave their moves to the level-up set — that is what the games do
+    /// — so an empty move list means "whatever this species knows by now" rather than
+    /// "no moves". Taking it literally would field a party that cannot take a turn.
+    /// </para>
+    /// </summary>
+    public List<Battler> TrainerParty(int trainerId)
+    {
+        if (rules.TrainerAt(trainerId) is not { } party) return [];
+
+        var built = new List<Battler>();
+
+        foreach (TrainerMember member in party.Members)
+        {
+            if (rules.SpeciesAt(member.Species) is not { } species) continue;
+
+            var battler = new Battler(species, member.Level);
+
+            foreach (int moveId in member.Moves)
+                if (rules.MoveAt(moveId) is { } move) battler.Moves.Add(move);
+
+            if (battler.Moves.Count == 0)
+                battler.Moves.AddRange(rules.MovesKnownAt(member.Species, member.Level));
+
+            if (battler.Moves.Count == 0 && rules.MoveAt(1) is { } fallback) battler.Moves.Add(fallback);
+
+            built.Add(battler);
+        }
+
+        return built;
+    }
+
     /// <summary>What a battler looks like to the other end: numbers, no names.</summary>
     public static BattlerView View(Battler battler) => new(
         battler.Species.Index,

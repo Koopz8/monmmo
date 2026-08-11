@@ -35,13 +35,17 @@ public sealed class BattleScreen
     private const int SpriteScale = 3;
 
     private readonly GameData _data;
-    private readonly BattleNames _names;
+    private readonly string? _trainerName;
     private readonly List<string> _moveNames = [];
 
-    private readonly Texture2D _wildSprite;
-    private readonly Texture2D _playerSprite;
-    private readonly bool _hasWildSprite;
-    private readonly bool _hasPlayerSprite;
+    private BattleNames _names;
+
+    // Not readonly any more. A trainer fight replaces whoever is out, and the sprite on
+    // the graphics card has to go with them.
+    private Texture2D _wildSprite;
+    private Texture2D _playerSprite;
+    private bool _hasWildSprite;
+    private bool _hasPlayerSprite;
 
     private readonly Queue<string> _pending = new();
     private string _message = "";
@@ -50,25 +54,102 @@ public sealed class BattleScreen
     private BattlerView _you;
     private BattlerView _opponent;
 
-    public BattleScreen(BattleStarted start, GameData data)
+    public BattleScreen(BattleStarted start, GameData data, TrainerNames? trainers = null)
     {
         _data = data;
         _you = start.You;
         _opponent = start.Opponent;
         Balls = start.Balls;
 
-        string yourName = start.You.Nickname ?? data.SpeciesAt(start.You.Species)?.Name ?? "Your side";
-        string wildName = data.SpeciesAt(start.Opponent.Species)?.Name ?? "the wild one";
+        // Resolved here, on the machine that has a cartridge. The server sent a number.
+        _trainerName = start.TrainerId is { } id ? trainers?.Of(id) ?? "TRAINER" : null;
 
-        _names = new BattleNames(yourName, $"the wild {wildName}", id => data.MoveAt(id)?.Name ?? $"move {id}");
+        _names = BattleNames.Unknown;
+        Rename();
 
-        foreach (int moveId in start.You.Moves)
-            _moveNames.Add(data.MoveAt(moveId)?.Name ?? $"move {moveId}");
+        RefreshMoveNames();
 
         (_wildSprite, _hasWildSprite) = LoadSprite(data, start.Opponent.Species, back: false);
         (_playerSprite, _hasPlayerSprite) = LoadSprite(data, start.You.Species, back: true);
 
-        Say($"A wild {wildName} appeared!");
+        Say(IsTrainerBattle
+            ? $"{_trainerName} wants to fight!"
+            : $"A wild {SpeciesNameOf(start.Opponent)} appeared!");
+
+        if (IsTrainerBattle) Say($"{_trainerName} sent out {SpeciesNameOf(start.Opponent)}!");
+    }
+
+    /// <summary>True when a person started this, rather than something in the grass.</summary>
+    public bool IsTrainerBattle => _trainerName is not null;
+
+    private string SpeciesNameOf(BattlerView battler) =>
+        battler.Nickname ?? _data.SpeciesAt(battler.Species)?.Name ?? $"species {battler.Species}";
+
+    /// <summary>
+    /// Rebuilds the names narration uses, which change whenever either side does.
+    /// <para>
+    /// A wild creature is "the wild PIDGEY" and a trainer's is just "PIDGEY", because
+    /// nothing a trainer owns is wild and reading that it is would be worse than
+    /// reading nothing.
+    /// </para>
+    /// </summary>
+    private void Rename()
+    {
+        string mine = SpeciesNameOf(_you);
+        string theirs = SpeciesNameOf(_opponent);
+
+        _names = new BattleNames(
+            mine,
+            IsTrainerBattle ? theirs : $"the wild {theirs}",
+            id => _data.MoveAt(id)?.Name ?? $"move {id}");
+    }
+
+    private void RefreshMoveNames()
+    {
+        _moveNames.Clear();
+        _selectedMove = 0;
+
+        foreach (int moveId in _you.Moves)
+            _moveNames.Add(_data.MoveAt(moveId)?.Name ?? $"move {moveId}");
+    }
+
+    /// <summary>
+    /// One side has sent out somebody new.
+    /// <para>
+    /// Everything about that side changes at once — the sprite, the health bar, the
+    /// name narration uses, and for the player's side the list of moves to choose from.
+    /// Forgetting any one of them leaves a screen that is half of the last creature.
+    /// </para>
+    /// </summary>
+    public void Apply(BattlerSentOut sent)
+    {
+        if (sent.Side == Side.Player)
+        {
+            _you = sent.Battler;
+
+            if (_hasPlayerSprite) Raylib.UnloadTexture(_playerSprite);
+            (_playerSprite, _hasPlayerSprite) = LoadSprite(_data, _you.Species, back: true);
+
+            RefreshMoveNames();
+            Rename();
+
+            Say($"Go! {SpeciesNameOf(_you)}!");
+        }
+        else
+        {
+            _opponent = sent.Battler;
+
+            if (_hasWildSprite) Raylib.UnloadTexture(_wildSprite);
+            (_wildSprite, _hasWildSprite) = LoadSprite(_data, _opponent.Species, back: false);
+
+            Rename();
+
+            Say($"{_trainerName ?? "The opponent"} sent out {SpeciesNameOf(_opponent)}!");
+        }
+
+        Phase = BattlePhase.ReadingMessages;
+
+        if (_message.Length == 0) AdvanceMessage();
     }
 
     public BattlePhase Phase { get; private set; } = BattlePhase.ReadingMessages;
@@ -126,6 +207,8 @@ public sealed class BattleScreen
 
         if (finished.Winner == Side.Opponent)
             Say("You have no more usable Pokémon! Your party was healed.");
+        else if (IsTrainerBattle && finished.Winner == Side.Player)
+            Say($"You defeated {_trainerName}!");
 
         // Reading, not finished: whatever is on screen still deserves a keypress. The
         // queue draining is what lands on Finished, and going straight there would
@@ -206,6 +289,16 @@ public sealed class BattleScreen
 
         if (Raylib.IsKeyPressed(KeyboardKey.X))
         {
+            if (IsTrainerBattle)
+            {
+                // The server refuses this too — this is only what stops a player
+                // spending a turn finding out.
+                Say("You can't catch someone else's Pokémon!");
+                Phase = BattlePhase.ReadingMessages;
+                AdvanceMessage();
+                return;
+            }
+
             if (Balls <= 0)
             {
                 Say("You have no balls left!");

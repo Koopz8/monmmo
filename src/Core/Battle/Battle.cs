@@ -120,6 +120,16 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
 
     public uint Seed => _rng.Seed;
 
+    /// <summary>
+    /// Where the dice have got to.
+    /// <para>
+    /// A trainer fight is a run of one-on-one battles rather than one long one, and the
+    /// next of them starts from here. Starting it from the seed instead would replay
+    /// the same rolls in the same order against every creature they send out.
+    /// </para>
+    /// </summary>
+    public uint State => _rng.State;
+
     public int TurnNumber { get; private set; }
 
     /// <summary>True once the opponent has been caught, which ends the battle.</summary>

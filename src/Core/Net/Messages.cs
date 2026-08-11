@@ -31,6 +31,7 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(MoveRejected), "rejected")]
 [JsonDerivedType(typeof(BattleStarted), "battlestart")]
 [JsonDerivedType(typeof(BattleUpdate), "battleupdate")]
+[JsonDerivedType(typeof(BattlerSentOut), "sentout")]
 [JsonDerivedType(typeof(BattleFinished), "battleend")]
 [JsonDerivedType(typeof(Rejected), "error")]
 public abstract record NetMessage;
@@ -155,8 +156,26 @@ public sealed record BattlerView(
     StatusCondition Status,
     IReadOnlyList<int> Moves);
 
-/// <summary>Something appeared in the grass. Sent only to the player who stepped on it.</summary>
-public sealed record BattleStarted(BattlerView You, BattlerView Opponent, int Balls) : NetMessage;
+/// <summary>
+/// A battle has begun. Sent only to the player in it.
+/// <para>
+/// <paramref name="TrainerId"/> is null for something in the grass and set when a
+/// person started it. The id is all that is sent — the client has a cartridge and
+/// turns it into a name and a class, exactly as it does for a species.
+/// </para>
+/// </summary>
+public sealed record BattleStarted(
+    BattlerView You, BattlerView Opponent, int Balls, int? TrainerId = null) : NetMessage;
+
+/// <summary>
+/// One side has sent out somebody new.
+/// <para>
+/// Its own message rather than a field on <see cref="BattleUpdate"/>, because it
+/// happens between turns rather than during one: whoever fainted did so as part of the
+/// turn just reported, and this is what comes next.
+/// </para>
+/// </summary>
+public sealed record BattlerSentOut(Side Side, BattlerView Battler) : NetMessage;
 
 /// <summary>
 /// What happened this turn, and where both sides now stand.
