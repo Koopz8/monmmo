@@ -582,6 +582,7 @@ public sealed class GameWorld
                     BattleFactory.View(lead.Battler),
                     BattleFactory.View(party[0]),
                     BallsOf(player),
+                    MedicineOf(player),
                     trainer.TrainerId),
                 OnlyTo: player.Id),
         ];
@@ -934,7 +935,7 @@ public sealed class GameWorld
         player.Battle = new Encounter(lead.Slot, lead.Battler, [wild], _rng.State);
 
         send.Add(new Outgoing(
-            new BattleStarted(BattleFactory.View(lead.Battler), BattleFactory.View(wild), BallsOf(player)),
+            new BattleStarted(BattleFactory.View(lead.Battler), BattleFactory.View(wild), BallsOf(player), MedicineOf(player)),
             OnlyTo: player.Id));
     }
 
@@ -1002,6 +1003,14 @@ public sealed class GameWorld
     private List<BagEntry> BallsOf(ServerPlayer player) =>
         _rules is null ? [] : player.Bag.InPocket(_rules, Pocket.Balls);
 
+    /// <summary>What in the bag would put health back on somebody.</summary>
+    private List<BagEntry> MedicineOf(ServerPlayer player) =>
+        _rules is null
+            ? []
+            : player.Bag.InPocket(_rules, Pocket.Items)
+                .Where(e => _rules.ItemAt(e.ItemId)?.Restores is not null)
+                .ToList();
+
     /// <summary>
     /// Turns a request into what will actually happen, and spends whatever it costs.
     /// <para>
@@ -1012,6 +1021,18 @@ public sealed class GameWorld
     /// </summary>
     private BattleAction Resolve(ServerPlayer player, Encounter encounter, BattleAction action)
     {
+        if (action is BattleAction.UseItem using_)
+        {
+            // Everything checked here: that it is a thing, that it restores anything,
+            // that it is actually carried. A client sends an id and nothing else.
+            if (_rules?.ItemAt(using_.ItemId) is not { Restores: not null } medicine)
+                return new BattleAction.UseMove(0);
+
+            if (player.Bag.Remove(using_.ItemId) == 0) return new BattleAction.UseMove(0);
+
+            return using_ with { Restores = medicine.RestoreFor(encounter.Player.MaxHp) };
+        }
+
         if (action is not BattleAction.ThrowBall throwing) return action;
 
         if (encounter.IsTrainerBattle) return new BattleAction.UseMove(0);
@@ -1077,7 +1098,7 @@ public sealed class GameWorld
             var send = new List<Outgoing>
             {
                 new(
-                    new BattleUpdate(events, battle.Player.CurrentHp, battle.Opponent.CurrentHp, BallsOf(player)),
+                    new BattleUpdate(events, battle.Player.CurrentHp, battle.Opponent.CurrentHp, BallsOf(player), MedicineOf(player)),
                     OnlyTo: playerId),
             };
 

@@ -41,6 +41,31 @@ public sealed record ItemData(
     /// <summary>True when throwing this at something could catch it.</summary>
     public bool IsBall => Ball is not null;
 
+    /// <summary>A restore amount meaning "all of it", as the cartridge writes it.</summary>
+    public const int FullRestore = 255;
+
+    /// <summary>
+    /// How much health this restores, or null when it restores none.
+    /// <para>
+    /// It was already here. <see cref="HoldEffectParam"/> is 20 on a Potion, 50 on a
+    /// Super Potion, 200 on a Hyper Potion and 255 on a Max Potion — the field does
+    /// double duty, and this project spent a paragraph planning to go and read a second
+    /// table with a variable-length format before looking at what it had already
+    /// extracted.
+    /// </para>
+    /// <para>
+    /// The status cures are <em>not</em> here: an Antidote and a Full Heal both carry
+    /// zero, so which condition each one clears really does live somewhere else. That is
+    /// still to do, and this is deliberately only the half that is knowable today.
+    /// </para>
+    /// </summary>
+    public int? Restores =>
+        BattleUsage != 0 && Pocket == Pocket.Items && HoldEffectParam > 0 ? HoldEffectParam : null;
+
+    /// <summary>How much this would actually put back on somebody, given their maximum.</summary>
+    public int RestoreFor(int maxHp) =>
+        Restores is not { } amount ? 0 : amount >= FullRestore ? maxHp : amount;
+
     /// <summary>True when a shop would sell this. A price of zero means it is not for sale.</summary>
     public bool CanBeBought => Price > 0 && Importance == 0;
 

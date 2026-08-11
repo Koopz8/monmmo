@@ -334,3 +334,147 @@ public class MoneyAndBallTests
         Assert.Equal(ordinary, player.Bag.CountOf(TestRules.BallItem));
     }
 }
+
+/// <summary>
+/// Using something out of the bag in a battle.
+/// <para>
+/// The amount was already extracted and nobody had looked: a Potion's restore is in the
+/// same field as a held item's parameter, 20 on a Potion and 200 on a Hyper Potion. This
+/// project had a paragraph planned about reading a second table with a variable-length
+/// format before checking what it already had.
+/// </para>
+/// </summary>
+public class UsingItemsTests
+{
+    private const string Route = "3.19";
+
+    private static GameWorld World()
+    {
+        var behaviours = new byte[16];
+        Array.Fill(behaviours, MetatileBehaviour.TallGrass);
+
+        MapData map = new(Route, "ROUTE 1", 4, 4, new byte[16])
+        {
+            Behaviours = behaviours,
+            Encounters = new MapEncounters(Route, Land: new EncounterTable(
+                EncounterKind.Land, 100,
+                Enumerable.Range(0, 12).Select(_ => new WildSlot(16, 3, 3)).ToList())),
+        };
+
+        return new GameWorld(new WorldData([map]), Route, TestRules.All);
+    }
+
+    /// <summary>In a battle, with a lead that has already taken a beating.</summary>
+    private static (GameWorld World, ServerPlayer Player) Hurt()
+    {
+        GameWorld world = World();
+
+        (ServerPlayer player, _) = world.Join(1, "Mason", world.FreshCharacter() with
+        {
+            Party = [new SavedMon(3, 30, null, 1, StatusCondition.None, Nature.Hardy, [TestRules.FirstMove])],
+        });
+
+        double now = 0;
+
+        for (int step = 0; step < 200; step++)
+        {
+            player.Square = new GridPosition(step % 4, 1);
+            player.LastStepAt = double.NegativeInfinity;
+            now += 1;
+
+            if (world.Move(player.Id, Direction.Down, now).Any(o => o.Message is BattleStarted))
+                return (world, player);
+        }
+
+        throw new InvalidOperationException("Never met anything.");
+    }
+
+    private static BattleUpdate Use(GameWorld world, ServerPlayer player, int itemId) =>
+        world.TakeBattleTurn(player.Id, new BattleAction.UseItem(itemId))
+            .Select(o => o.Message)
+            .OfType<BattleUpdate>()
+            .Single();
+
+    [Fact]
+    public void APotionPutsHealthBackAndIsSpent()
+    {
+        (GameWorld world, ServerPlayer player) = Hurt();
+
+        player.Bag.Add(TestRules.PotionItem, 2);
+
+        BattleUpdate update = Use(world, player, TestRules.PotionItem);
+
+        BattleEvent.HealthRestored healed = update.Events.OfType<BattleEvent.HealthRestored>().Single();
+
+        Assert.Equal(20, healed.Amount);
+        Assert.Equal(1, player.Bag.CountOf(TestRules.PotionItem));
+    }
+
+    [Fact]
+    public void HowMuchItRestoresIsTheServersNumber()
+    {
+        // A request that carried the amount would let a client drink a Potion for two
+        // hundred. It names an item; the amount comes out of the rules.
+        (GameWorld world, ServerPlayer player) = Hurt();
+
+        player.Bag.Add(TestRules.PotionItem, 1);
+
+        BattleUpdate update = world
+            .TakeBattleTurn(player.Id, new BattleAction.UseItem(TestRules.PotionItem) { Restores = 999 })
+            .Select(o => o.Message)
+            .OfType<BattleUpdate>()
+            .Single();
+
+        Assert.Equal(20, update.Events.OfType<BattleEvent.HealthRestored>().Single().Amount);
+    }
+
+    [Fact]
+    public void TheFullRestoreKindFillsWhateverTheMaximumIs()
+    {
+        // 255 is not an amount, it is the cartridge's way of saying "all of it".
+        (GameWorld world, ServerPlayer player) = Hurt();
+
+        player.Bag.Add(TestRules.FullPotionItem, 1);
+
+        BattleUpdate update = Use(world, player, TestRules.FullPotionItem);
+
+        Assert.True(update.Events.OfType<BattleEvent.HealthRestored>().Single().Amount > 20);
+        Assert.Equal(update.YourHp, player.Party[0].CurrentHp);
+    }
+
+    [Fact]
+    public void UsingSomethingThatRestoresNothingIsNotAUse()
+    {
+        (GameWorld world, ServerPlayer player) = Hurt();
+
+        int before = player.Bag.CountOf(TestRules.BallItem);
+
+        BattleUpdate update = Use(world, player, TestRules.BallItem);
+
+        // Not restoring anything and not being spent either. A ball is thrown, not drunk.
+        Assert.Empty(update.Events.OfType<BattleEvent.HealthRestored>());
+        Assert.Equal(before, player.Bag.CountOf(TestRules.BallItem));
+    }
+
+    [Fact]
+    public void UsingSomethingYouDoNotHaveIsNotAUseEither()
+    {
+        (GameWorld world, ServerPlayer player) = Hurt();
+
+        BattleUpdate update = Use(world, player, TestRules.PotionItem);
+
+        Assert.Empty(update.Events.OfType<BattleEvent.HealthRestored>());
+    }
+
+    [Fact]
+    public void ABattleIsToldWhatMedicineIsCarried()
+    {
+        (GameWorld world, ServerPlayer player) = Hurt();
+
+        player.Bag.Add(TestRules.PotionItem, 1);
+
+        BattleUpdate update = Use(world, player, TestRules.PotionItem);
+
+        Assert.DoesNotContain(update.Medicine, m => m.ItemId == TestRules.BallItem);
+    }
+}

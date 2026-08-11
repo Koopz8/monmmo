@@ -53,6 +53,12 @@ public static class BattleNarrator
 
         BattleEvent.Fainted e => $"{names.Of(e.Side)} fainted!",
 
+        // The amount, not the item's number: a Potion used on somebody two health short
+        // restores two, and saying twenty would be a lie the player can see.
+        BattleEvent.HealthRestored e => e.Amount > 0
+            ? $"{names.Of(e.Side)} recovered {e.Amount} HP!"
+            : $"It would have no effect on {names.Of(e.Side)}.",
+
         BattleEvent.BallThrown e => e.Caught
             ? $"Gotcha! {names.Of(e.Target)} was caught!"
             : e.Shakes switch

@@ -1,4 +1,5 @@
 using System.Text;
+using PokeMmo.Core.Battle;
 using PokeMmo.Core.Data;
 using PokeMmo.RomExtract.Items;
 
@@ -113,6 +114,44 @@ public class ItemTableTests
 
         Assert.True(key.IsKeyItem);
         Assert.Equal(0, key.SellPrice);
+    }
+
+    [Fact]
+    public void HowMuchSomethingRestoresWasAlreadyExtracted()
+    {
+        // A Potion is 20, a Super Potion 50, a Hyper Potion 200 — all of it in the same
+        // field a held item uses for its parameter. This project was a paragraph into
+        // planning to read a second table with a variable-length format before anybody
+        // looked at what was already in hand.
+        var potion = new ItemData(13, 300, Pocket.Items, 0, 20, 0, 1, 0);
+
+        Assert.Equal(20, potion.Restores);
+        Assert.Equal(20, potion.RestoreFor(500));
+    }
+
+    [Fact]
+    public void TwoFiftyFiveMeansAllOfItRatherThanTwoHundredAndFiftyFive()
+    {
+        // Asserted against a maximum above 255 on purpose. Below it the two readings are
+        // indistinguishable — heal(255) on a creature with 80 health fills it either way
+        // — and a test that cannot tell them apart is not testing anything.
+        var full = new ItemData(20, 2500, Pocket.Items, 0, ItemData.FullRestore, 0, 1, 0);
+
+        Assert.Equal(500, full.RestoreFor(500));
+    }
+
+    [Fact]
+    public void SomethingWithNoRestoreOnItRestoresNothing()
+    {
+        // The status cures are all zero here — an Antidote and a Full Heal both carry
+        // none, so which condition each clears really does live somewhere else. That is
+        // still to do, and this is deliberately only the half that is knowable today.
+        var antidote = new ItemData(14, 100, Pocket.Items, 0, 0, 0, 1, 0);
+        var ball = new ItemData(4, 200, Pocket.Balls, 0, 0, 0, 0, 0, BallKind.Poke);
+
+        Assert.Null(antidote.Restores);
+        Assert.Null(ball.Restores);
+        Assert.Equal(0, ball.RestoreFor(500));
     }
 
     [Fact]

@@ -29,6 +29,7 @@ public enum Side
 [JsonDerivedType(typeof(DamageDealt), "damage")]
 [JsonDerivedType(typeof(StatusHurt), "statushurt")]
 [JsonDerivedType(typeof(Fainted), "fainted")]
+[JsonDerivedType(typeof(HealthRestored), "healed")]
 [JsonDerivedType(typeof(BallThrown), "ball")]
 [JsonDerivedType(typeof(ExperienceGained), "exp")]
 [JsonDerivedType(typeof(LevelledUp), "levelup")]
@@ -61,6 +62,9 @@ public abstract record BattleEvent
 
     public sealed record Fainted(Side Side) : BattleEvent;
 
+    /// <summary>Somebody drank something. The amount is what actually went back on.</summary>
+    public sealed record HealthRestored(Side Side, int ItemId, int Amount) : BattleEvent;
+
     /// <summary>
     /// A ball was thrown. <paramref name="Shakes"/> is how many times it wobbled,
     /// which is what tells a player how close they came.
@@ -91,6 +95,7 @@ public abstract record BattleEvent
 [JsonDerivedType(typeof(UseMove), "move")]
 [JsonDerivedType(typeof(Struggle), "struggle")]
 [JsonDerivedType(typeof(ThrowBall), "ball")]
+[JsonDerivedType(typeof(UseItem), "item")]
 public abstract record BattleAction
 {
     public sealed record UseMove(int Slot) : BattleAction;
@@ -118,6 +123,19 @@ public abstract record BattleAction
         /// </para>
         /// </summary>
         public BallKind Kind { get; init; } = BallKind.Poke;
+    }
+
+    /// <summary>
+    /// Uses something out of the bag on whoever is out.
+    /// <para>
+    /// The item id, and how much it restores decided by the server — same arrangement as
+    /// a ball. A request that carried the amount would let a client drink a Potion for
+    /// two hundred.
+    /// </para>
+    /// </summary>
+    public sealed record UseItem(int ItemId) : BattleAction
+    {
+        public int Restores { get; init; }
     }
 }
 
@@ -223,6 +241,15 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
 
         if (attacker.HasFainted) return;
         if (!CanAct(side, attacker, events)) return;
+
+        if (action is BattleAction.UseItem item)
+        {
+            // Spends the turn whether or not it did much, exactly as a throw does.
+            int healed = attacker.Heal(item.Restores);
+
+            events.Add(new BattleEvent.HealthRestored(side, item.ItemId, healed));
+            return;
+        }
 
         if (action is BattleAction.ThrowBall throwBall)
         {

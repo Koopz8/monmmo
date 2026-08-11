@@ -63,6 +63,7 @@ public sealed class BattleScreen
         _you = start.You;
         _opponent = start.Opponent;
         Balls = start.Balls;
+        Medicine = start.Medicine;
 
         // Resolved here, on the machine that has a cartridge. The server sent a number.
         _trainerName = start.TrainerId is { } id ? trainers?.Of(id) ?? "TRAINER" : null;
@@ -169,6 +170,11 @@ public sealed class BattleScreen
     /// </summary>
     public IReadOnlyList<BagEntry> Balls { get; private set; } = [];
 
+    /// <summary>What in the bag would put health back on somebody.</summary>
+    public IReadOnlyList<BagEntry> Medicine { get; private set; } = [];
+
+    private BagEntry? ChosenMedicine => Medicine.Count == 0 ? null : Medicine[0];
+
     /// <summary>Money, and what beating somebody just paid. Both the server's numbers.</summary>
     public int Money { get; private set; }
 
@@ -215,6 +221,7 @@ public sealed class BattleScreen
         _you = _you with { CurrentHp = update.YourHp };
         _opponent = _opponent with { CurrentHp = update.OpponentHp };
         Balls = update.Balls;
+        Medicine = update.Medicine;
 
         Phase = BattlePhase.ReadingMessages;
         AdvanceMessage();
@@ -310,6 +317,22 @@ public sealed class BattleScreen
 
         if (Raylib.IsKeyPressed(KeyboardKey.Up) || Raylib.IsKeyPressed(KeyboardKey.W))
             _selectedMove = (_selectedMove - 1 + _moveNames.Count) % _moveNames.Count;
+
+        if (Raylib.IsKeyPressed(KeyboardKey.C))
+        {
+            if (ChosenMedicine is not { } medicine)
+            {
+                Say("You have nothing to use!");
+                Phase = BattlePhase.ReadingMessages;
+                AdvanceMessage();
+                return;
+            }
+
+            // The id only. How much it restores is the server's number — a request
+            // carrying the amount would let a client drink a Potion for two hundred.
+            Choose(new BattleAction.UseItem(medicine.ItemId));
+            return;
+        }
 
         if (Raylib.IsKeyPressed(KeyboardKey.X))
         {
@@ -450,6 +473,14 @@ public sealed class BattleScreen
     private void DrawMoveMenu(int boxY)
     {
         Raylib.DrawText("Choose a move:", 52, boxY + 18, 20, new Color(96, 96, 96, 255));
+
+        string medicineLine = ChosenMedicine is { } potion
+            ? $"C: use {NameOf(potion.ItemId)} ({potion.Count})"
+            : "C: nothing to use";
+
+        Raylib.DrawText(medicineLine, Width - 400, boxY + 44, 20, ChosenMedicine is not null
+            ? new Color(96, 96, 96, 255)
+            : new Color(180, 120, 120, 255));
 
         string ballLine = ChosenBall is { } ball
             ? $"X: throw {NameOf(ball.ItemId)} ({ball.Count})" + (Balls.Count > 1 ? "  < >" : "")

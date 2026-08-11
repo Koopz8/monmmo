@@ -27,8 +27,11 @@ internal static class TestRules
     /// <summary>A better one, so tests can tell a kind from a count.</summary>
     public const int UltraBallItem = 2;
 
-    /// <summary>Something that is not a ball at all.</summary>
+    /// <summary>Something that is not a ball at all. Restores twenty.</summary>
     public const int PotionItem = 13;
+
+    /// <summary>The kind that restores all of it, whatever the maximum happens to be.</summary>
+    public const int FullPotionItem = 20;
 
     /// <summary>The one that always works, so a kind can be told from a count.</summary>
     public const int MasterBallItem = 1;
@@ -99,7 +102,8 @@ internal static class TestRules
             new(BallItem, 200, Pocket.Balls, 0, 0, 0, 0, 0, BallKind.Poke),
             new(UltraBallItem, 1200, Pocket.Balls, 0, 0, 0, 0, 0, BallKind.Ultra),
             new(MasterBallItem, 0, Pocket.Balls, 0, 0, 0, 0, 0, BallKind.Master),
-            new(PotionItem, 300, Pocket.Items, 0, 0, 0, 0, 0),
+            new(PotionItem, 300, Pocket.Items, 0, 20, 0, 1, 0),
+            new(FullPotionItem, 2500, Pocket.Items, 0, ItemData.FullRestore, 0, 1, 0),
         };
 
         return new GameRules(species, moves, learnsets, trainers, items);

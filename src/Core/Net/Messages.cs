@@ -185,6 +185,7 @@ public sealed record BattleStarted(
     BattlerView You,
     BattlerView Opponent,
     IReadOnlyList<BagEntry> Balls,
+    IReadOnlyList<BagEntry> Medicine,
     int? TrainerId = null) : NetMessage;
 
 /// <summary>
@@ -210,7 +211,8 @@ public sealed record BattleUpdate(
     IReadOnlyList<BattleEvent> Events,
     int YourHp,
     int OpponentHp,
-    IReadOnlyList<BagEntry> Balls) : NetMessage;
+    IReadOnlyList<BagEntry> Balls,
+    IReadOnlyList<BagEntry> Medicine) : NetMessage;
 
 /// <summary>
 /// The battle is over. Carries the party back because it may have just grown.
