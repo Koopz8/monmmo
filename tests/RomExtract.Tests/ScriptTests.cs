@@ -252,6 +252,31 @@ public class ScriptReaderTests
     }
 
     [Fact]
+    public void AskingTheGameSomethingTakesARoutineNumber()
+    {
+        // These two were the whole of the second round. Neither stops a read where it
+        // sits — they misalign it, and what turns up a byte later looks like a command
+        // nobody has heard of. 0x80 "stopped" 245 scripts and is the top half of variable
+        // 0x800D; 0xA5, 0x73 and 0x74 are routine numbers.
+        Assert.Equal(2, ScriptCommands.ArgumentLength(0x25));
+        Assert.Equal(4, ScriptCommands.ArgumentLength(0x26));
+
+        byte[] script =
+        [
+            0x25, 0xA5, 0x00,               // special 0x00A5
+            0x26, 0x0D, 0x80, 0xA3, 0x00,   // specialvar 0x800D, 0x00A3
+            ScriptCommands.End,
+        ];
+
+        List<ScriptCommand> commands = ScriptReader.Read(TwoScripts(script, []), Rom.BaseAddress);
+
+        Assert.Equal(3, commands.Count);
+        Assert.Equal(0x00A5, commands[0].Word());
+        Assert.Equal(0x800D, commands[1].Word());
+        Assert.Equal(0x00A3, commands[1].Word(2));
+    }
+
+    [Fact]
     public void AnUnknownCommandStopsTheRead()
     {
         // Guessing a length would resume at some byte inside an argument, and from

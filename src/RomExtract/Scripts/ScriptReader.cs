@@ -142,8 +142,16 @@ public static class ScriptCommands
         // conditional goto with a real pointer in it.
         [0x21] = 4,     // compare
         [0x22] = 4,     // comparevars
-        [0x25] = 0,     // return-ish
-        [0x26] = 1,
+        // Two bytes: a routine number. `25 A5 00 21 73 40 00 00 06 01 ...` is
+        // special(0x00A5), compare(0x4073, 0), if-goto — and the pointer that conditional
+        // carries lands on a script. Reading it as no argument at all is what left 0xA5,
+        // 0x73 and 0x74 looking like commands; they are routine numbers.
+        [0x25] = 2,     // special
+
+        // Four: a variable to put the answer in, and the routine to ask. This one alone
+        // was 245 of the remaining stops — `26 0D 80 93 01` is specialvar(0x800D, 0x0193),
+        // and the 0x80 that looked like a command every time is the top half of 0x800D.
+        [0x26] = 4,     // specialvar
         [0x27] = 0,
         [0x28] = 0,
         // Two bytes, not one. Proved by the bytes: `29 A5 02 53 04 00 1A 00 80 ...`
@@ -179,6 +187,11 @@ public static class ScriptCommands
         [Lock] = 0,
         [FacePlayer] = 0,
         [Release] = 0,
+        // Three: which slot to write into, and a two-byte id. `84 00 10 00` is followed
+        // by `05 6C 78 1A 08` — a goto with a pointer that lands on a script, which only
+        // works if this command is exactly three bytes wide.
+        [0x84] = 3,
+
         [0x6D] = 0,
         [0x6E] = 1,
         [0x6F] = 1,
