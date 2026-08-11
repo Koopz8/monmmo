@@ -18,6 +18,16 @@ public sealed class ServerObject(MapObject template)
     /// <summary>When this one may next do something, in server seconds.</summary>
     public double NextMoveAt { get; set; }
 
+    /// <summary>
+    /// The player currently talking to this one, if anybody is.
+    /// <para>
+    /// Held rather than counted: only the player who started a conversation can end
+    /// it, so a second player walking up and pressing the button cannot release
+    /// somebody else's shopkeeper.
+    /// </para>
+    /// </summary>
+    public int? HeldBy { get; set; }
+
     public ObjectView ToView() => new(LocalId, Template.GraphicsId, Square.X, Square.Y, Facing);
 }
 
@@ -53,6 +63,25 @@ public sealed class MapPopulation
 
     public ServerObject? At(GridPosition square) => _objects.FirstOrDefault(o => o.Square == square);
 
+    public ServerObject? ById(int localId) => _objects.FirstOrDefault(o => o.LocalId == localId);
+
+    /// <summary>
+    /// Lets go of anybody whose holder no longer qualifies.
+    /// <para>
+    /// A hold has to be able to end without the client saying so. Players disconnect
+    /// mid-sentence, walk through a door, and close the window — none of which sends
+    /// anything, and all of which would otherwise leave somebody standing to attention
+    /// forever.
+    /// </para>
+    /// </summary>
+    public void Release(Func<int, bool> stale)
+    {
+        foreach (ServerObject entry in _objects)
+        {
+            if (entry.HeldBy is { } holder && stale(holder)) entry.HeldBy = null;
+        }
+    }
+
     /// <summary>
     /// Moves whoever is due to move, and says who changed.
     /// <para>
@@ -70,6 +99,10 @@ public sealed class MapPopulation
             if (now < entry.NextMoveAt) continue;
 
             entry.NextMoveAt = now + MoveInterval + rng.Next(100) / 100.0 * Jitter;
+
+            // Somebody being spoken to stays where they are and keeps looking at whoever
+            // is speaking. Their turn comes round again as normal once released.
+            if (entry.HeldBy is not null) continue;
 
             if (entry.Template.LooksAround)
             {

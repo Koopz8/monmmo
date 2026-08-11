@@ -69,6 +69,20 @@ public class DialogueTextTests
         // of padding reads as flawless text under any check that counts spaces.
         Assert.False(GameText.LooksLikeDialogue(new byte[64]));
     }
+
+    [Fact]
+    public void TheCurlyApostropheSurvivesTheTripToAPlainFont()
+    {
+        // The cartridge's apostrophe is a curly one and it turns up in roughly every
+        // other sentence. A font with no glyph for it draws nothing at all, so "I'm"
+        // comes out as "Im" — text that looks subtly wrong everywhere without ever
+        // looking wrong enough to go and investigate.
+        Assert.Equal("I'm \"here\"", GameText.ToAscii("I’m “here”"));
+        Assert.Equal("NIDORAN(M)", GameText.ToAscii("NIDORAN♂"));
+
+        // And anything already plain is left exactly as it is, line breaks included.
+        Assert.Equal("Hello!\nHow are you?", GameText.ToAscii("Hello!\nHow are you?"));
+    }
 }
 
 public class ScriptReaderTests

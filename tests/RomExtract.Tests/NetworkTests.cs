@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Buffers.Binary;
 using PokeMmo.Core.Battle;
 using PokeMmo.Core.Net;
@@ -47,10 +48,8 @@ public class MessageChannelTests
         return buffer.ToArray();
     }
 
-    [Fact]
-    public async Task RoundTripsEveryMessageKind()
-    {
-        NetMessage[] sent =
+    /// <summary>One of every kind of message, filled in enough to be worth comparing.</summary>
+    private static NetMessage[] SampleMessages() =>
         [
             new RegisterRequest("Mason", "a-good-password"),
             new LoginRequest("Mason", "a-good-password"),
@@ -65,6 +64,11 @@ public class MessageChannelTests
                 19, 0, 12),
             new BattleFinished(Side.Player, true, 11, [new SavedMon(16, 3, null, 1, StatusCondition.None, Nature.Bold, [33])]),
             new MoveRequest(Direction.Left),
+            new TalkRequest(4),
+            new TalkFinished(),
+            new MapChanged("3.1", 4, 9, Direction.Down),
+            new ObjectsPlaced([new ObjectView(1, 5, 3, 3, Direction.Left)]),
+            new ObjectMoved(1, 3, 4, Direction.Down),
             new Welcome(7, "3.0", 12, 5, Direction.Up, 20, [new SavedMon(1, 5, null, 19, StatusCondition.None, Nature.Hardy, [33])]),
             new PlayerAppeared(9, "Someone", 1, 2, Direction.Right),
             new PlayerMoved(9, 3, 4, Direction.Down),
@@ -73,6 +77,11 @@ public class MessageChannelTests
             new AuthFailed("Wrong name or password."),
             new Rejected("Log in first."),
         ];
+
+    [Fact]
+    public async Task RoundTripsEveryMessageKind()
+    {
+        NetMessage[] sent = SampleMessages();
 
         using var stream = new MemoryStream(await EncodeAsync(sent));
         var channel = new MessageChannel(stream);
@@ -85,6 +94,28 @@ public class MessageChannelTests
             Assert.Equal(expected.GetType(), received.GetType());
             Assert.Equal(Canonical(expected), Canonical(received));
         }
+    }
+
+    /// <summary>
+    /// Every message kind is in the round trip above.
+    /// <para>
+    /// That list is written by hand and had drifted: three kinds the server sends on
+    /// every map change had never been through it. A message with no discriminator
+    /// serialises as its base type and arrives as nothing at all, which shows up as a
+    /// feature that silently does not happen rather than as an error.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void NoMessageKindIsLeftOutOfThatList()
+    {
+        var declared = typeof(NetMessage)
+            .GetCustomAttributes<System.Text.Json.Serialization.JsonDerivedTypeAttribute>()
+            .Select(a => a.DerivedType)
+            .OrderBy(t => t.Name);
+
+        var covered = SampleMessages().Select(m => m.GetType()).Distinct().OrderBy(t => t.Name);
+
+        Assert.Equal(declared, covered);
     }
 
     /// <summary>

@@ -142,6 +142,37 @@ public static class GameText
         return words >= 4 && words >= nonsense * 3;
     }
 
+    /// <summary>
+    /// The same text with the characters a plain ASCII font cannot draw swapped for
+    /// ones it can.
+    /// <para>
+    /// The cartridge's apostrophe is a curly one, and it turns up in roughly every
+    /// other sentence anybody says. A font with no glyph for it draws nothing at all,
+    /// so "I'm" comes out as "Im" and the text looks subtly broken everywhere without
+    /// ever looking broken enough to investigate.
+    /// </para>
+    /// </summary>
+    public static string ToAscii(string text)
+    {
+        var sb = new StringBuilder(text.Length);
+
+        foreach (char c in text)
+        {
+            switch (c)
+            {
+                case '“':
+                case '”': sb.Append('"'); break;
+                case '‘':
+                case '’': sb.Append('\''); break;
+                case '♂': sb.Append("(M)"); break;
+                case '♀': sb.Append("(F)"); break;
+                default: sb.Append(c); break;
+            }
+        }
+
+        return sb.ToString();
+    }
+
     /// <summary>Decodes bytes up to the terminator or the end of the span.</summary>
     public static string Decode(ReadOnlySpan<byte> bytes)
     {

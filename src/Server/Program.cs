@@ -430,6 +430,15 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                             await DispatchAsync(battleResult, playerId, cancellationToken).ConfigureAwait(false);
                             break;
 
+                        case TalkRequest talk when playerId != 0:
+                            await DispatchAsync(world.StartTalking(playerId, talk.LocalId), playerId, cancellationToken)
+                                .ConfigureAwait(false);
+                            break;
+
+                        case TalkFinished when playerId != 0:
+                            world.StopTalking(playerId);
+                            break;
+
                         case MoveRequest move when playerId != 0:
                             int grassBefore = world.GrassSteps;
                             List<Outgoing> result = world.Move(playerId, move.Direction, Now);

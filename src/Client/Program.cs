@@ -4,6 +4,7 @@ using PokeMmo.Core.Save;
 using PokeMmo.Core.World;
 using PokeMmo.RomExtract;
 using PokeMmo.RomExtract.Maps;
+using PokeMmo.RomExtract.Scripts;
 using Raylib_cs;
 
 namespace PokeMmo.Client;
@@ -155,6 +156,7 @@ public static class Program
 
         var others = new Dictionary<int, RemoteCharacter>();
         BattleScreen? battle = null;
+        DialogueBox? talking = null;
         int balls = settings.Balls;
 
         // Where the server last said we are, when that disagreed with where we think we
@@ -178,6 +180,15 @@ public static class Program
             // walking on meanwhile would put the two sides out of step.
             if (battle is not null)
             {
+                // Something interrupted the conversation. Let go of whoever was being
+                // held before the overworld disappears, or they stand to attention
+                // until the server notices the player is elsewhere.
+                if (talking is not null)
+                {
+                    talking = null;
+                    network.SendTalkFinished();
+                }
+
                 battle.Update();
 
                 if (battle.TakePendingAction() is { } action) network.SendBattleAction(action);
@@ -205,8 +216,26 @@ public static class Program
                 correction = null;
             }
 
+            // A conversation stops the world the same way a battle does, except the map
+            // stays on screen behind it. Reading movement here would have the player
+            // walking away from somebody mid-sentence.
+            if (talking is not null)
+            {
+                talking.Update();
+
+                if (talking.IsFinished)
+                {
+                    talking = null;
+                    network.SendTalkFinished();
+                }
+            }
+            else if (DialogueBox.Pressed() && !player.IsStepping)
+            {
+                talking = Talk(data, view, player, network);
+            }
+
             bool wasStepping = player.IsStepping;
-            Direction? input = ReadDirection();
+            Direction? input = talking is null ? ReadDirection() : null;
             player.Update(delta, input);
 
             edgeCooldown = Math.Max(0f, edgeCooldown - delta);
@@ -272,9 +301,42 @@ public static class Program
             Raylib.EndMode2D();
 
             DrawStatus(view.Map, player, network, others.Count);
+            talking?.Draw(WindowWidth, WindowHeight);
             Raylib.EndDrawing();
         }
 
+    }
+
+    /// <summary>
+    /// Runs the script of whoever the player is facing, if anybody is there and they
+    /// have one.
+    /// <para>
+    /// Read from this machine's own cartridge, because this is the only machine that
+    /// has one. The server knows where everybody is standing and nothing whatsoever
+    /// about what they say — it is told a conversation started so that it can hold the
+    /// person still, and that is the whole of its involvement.
+    /// </para>
+    /// </summary>
+    private static DialogueBox? Talk(
+        GameData data, MapView view, WalkingCharacter player, NetworkClient network)
+    {
+        // Where the server says people are, which after a few seconds of wandering is
+        // nowhere near where the cartridge put them.
+        Dictionary<int, GridPosition> live = view.People.ToDictionary(p => p.Key, p => p.Value.Square);
+
+        if (Interaction.InFrontOf(player.Square, player.Facing, view.Map.Objects, live) is not { } person)
+            return null;
+
+        if (!person.HasScript) return null;
+
+        var box = new DialogueBox(ScriptReader.ReadDialogue(data.Rom, person.ScriptAddress));
+
+        // Plenty of scripts say nothing at all — they set a flag, or hand something
+        // over. An empty box would still have to be dismissed, so there isn't one.
+        if (box.IsEmpty) return null;
+
+        network.SendTalk(person.LocalId);
+        return box;
     }
 
     /// <summary>

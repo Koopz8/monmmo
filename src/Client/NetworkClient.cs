@@ -122,6 +122,11 @@ public sealed class NetworkClient : IDisposable
     /// <summary>What the player chose this turn. The server decides what it does.</summary>
     public void SendBattleAction(BattleAction action) => Send(new BattleTurn(action));
 
+    /// <summary>Asks the server to hold somebody still while they are being spoken to.</summary>
+    public void SendTalk(int localId) => Send(new TalkRequest(localId));
+
+    public void SendTalkFinished() => Send(new TalkFinished());
+
     private void Send(NetMessage message)
     {
         if (_channel is null) return;

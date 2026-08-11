@@ -408,6 +408,12 @@ public sealed class GameWorld
             {
                 if (Populate(mapId, nowSeconds) is not { } people) continue;
 
+                // A conversation ends when the client says so, and also when it cannot:
+                // a player who disconnected or walked through a door is not talking to
+                // anybody, whatever the last thing they sent was.
+                people.Release(holder =>
+                    !_players.TryGetValue(holder, out ServerPlayer? talker) || talker.MapId != mapId);
+
                 foreach (ObjectView moved in people.Step(_objectRng, nowSeconds, square => IsFree(mapId, square)))
                     send.Add(new Outgoing(new ObjectMoved(moved.LocalId, moved.X, moved.Y, moved.Facing), OnMap: mapId));
             }
@@ -422,6 +428,69 @@ public sealed class GameWorld
             }
 
             return send;
+        }
+    }
+
+    /// <summary>
+    /// A player has started talking to somebody: hold them still and turn them round.
+    /// <para>
+    /// What is said is decided entirely on the client, from its own cartridge. This
+    /// server has never seen a script and has nothing to contribute to the
+    /// conversation — the one thing it owns is where everybody is standing, so that is
+    /// the one thing it does about it.
+    /// </para>
+    /// <para>
+    /// Refused when the named person is not on the square the player is facing. That is
+    /// not anti-cheat — there is nothing here to cheat at yet — it is what keeps the
+    /// hold from being a way to freeze anybody on the map from anywhere on it.
+    /// </para>
+    /// </summary>
+    public List<Outgoing> StartTalking(int playerId, int localId)
+    {
+        lock (_gate)
+        {
+            if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
+            if (!_populated.TryGetValue(player.MapId, out MapPopulation? people)) return [];
+            if (people.ById(localId) is not { } person) return [];
+
+            // Anyone this player was already holding is let go first, so a client that
+            // loses a "finished" message cannot accumulate frozen people behind it.
+            people.Release(holder => holder == playerId);
+
+            if (person.Square != player.Square.Step(player.Facing)) return [];
+
+            person.HeldBy = playerId;
+
+            Direction turned = Interaction.Opposite(player.Facing);
+            if (person.Facing == turned) return [];
+
+            person.Facing = turned;
+
+            return [new Outgoing(
+                new ObjectMoved(person.LocalId, person.Square.X, person.Square.Y, person.Facing),
+                OnMap: player.MapId)];
+        }
+    }
+
+    /// <summary>The text box is closed. Whoever this player was holding carries on.</summary>
+    public void StopTalking(int playerId)
+    {
+        lock (_gate)
+        {
+            foreach (MapPopulation people in _populated.Values)
+                people.Release(holder => holder == playerId);
+        }
+    }
+
+    /// <summary>Who this player is currently holding still, for tests and for reporting.</summary>
+    public int? TalkingTo(int playerId)
+    {
+        lock (_gate)
+        {
+            if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return null;
+            if (!_populated.TryGetValue(player.MapId, out MapPopulation? people)) return null;
+
+            return people.Objects.FirstOrDefault(o => o.HeldBy == playerId)?.LocalId;
         }
     }
 

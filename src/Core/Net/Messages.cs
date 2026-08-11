@@ -18,6 +18,8 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(LoginRequest), "login")]
 [JsonDerivedType(typeof(BattleTurn), "turn")]
 [JsonDerivedType(typeof(MoveRequest), "move")]
+[JsonDerivedType(typeof(TalkRequest), "talk")]
+[JsonDerivedType(typeof(TalkFinished), "talkdone")]
 [JsonDerivedType(typeof(Welcome), "welcome")]
 [JsonDerivedType(typeof(AuthFailed), "authfailed")]
 [JsonDerivedType(typeof(MapChanged), "mapchanged")]
@@ -50,6 +52,21 @@ public sealed record LoginRequest(string Username, string Password) : NetMessage
 
 /// <summary>Asks to step one square. The server decides whether it happens.</summary>
 public sealed record MoveRequest(Direction Direction) : NetMessage;
+
+/// <summary>
+/// The player has started talking to somebody, and would like them to stand still.
+/// <para>
+/// The script itself is not asked for and could not be answered: the server has no
+/// cartridge and so has no idea what anybody says. All this buys is a person who is
+/// still there at the end of their own sentence — they wander every second or so
+/// otherwise, and a shopkeeper strolling off mid-conversation is the whole reason this
+/// message exists.
+/// </para>
+/// </summary>
+public sealed record TalkRequest(int LocalId) : NetMessage;
+
+/// <summary>The text box is closed; whoever was held may carry on.</summary>
+public sealed record TalkFinished : NetMessage;
 
 /// <summary>
 /// What the player chose to do this turn.
