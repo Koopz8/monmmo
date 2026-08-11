@@ -223,3 +223,98 @@ public class NpcMovementTests
         Assert.NotEqual(wanderer.Value, player.Square);
     }
 }
+
+/// <summary>
+/// How somebody on a map is drawn between the squares the server names.
+/// <para>
+/// The server sends a square a second or so apart. Without this they teleport, which
+/// is what "clunky" looks like from the outside.
+/// </para>
+/// </summary>
+public class WalkingPersonTests
+{
+    private static WalkingPerson Somebody(int x = 2, int y = 2) =>
+        new(5, new GridPosition(x, y), Direction.Down);
+
+    [Fact]
+    public void AStepSlidesRatherThanTeleporting()
+    {
+        WalkingPerson person = Somebody();
+
+        person.GoTo(new GridPosition(3, 2), Direction.Right);
+
+        (float startX, _) = person.PixelPosition;
+        Assert.True(person.IsWalking);
+
+        person.Update(WalkingCharacter.StepSeconds / 2f);
+
+        (float midX, _) = person.PixelPosition;
+
+        // Somewhere between the two squares, not at either end.
+        Assert.True(midX > startX);
+        Assert.True(midX < 3 * WalkingCharacter.SquarePixels);
+    }
+
+    [Fact]
+    public void AStepFinishesOnTheSquare()
+    {
+        WalkingPerson person = Somebody();
+
+        person.GoTo(new GridPosition(3, 2), Direction.Right);
+        person.Update(WalkingCharacter.StepSeconds);
+
+        Assert.False(person.IsWalking);
+        Assert.Equal(3 * WalkingCharacter.SquarePixels, person.PixelPosition.X);
+    }
+
+    [Fact]
+    public void ATurnOnTheSpotMovesNothing()
+    {
+        // Looking around and stepping arrive as the same message. A shopkeeper glancing
+        // about should not slide anywhere, and should not appear to be mid-stride.
+        WalkingPerson person = Somebody();
+
+        (float x, float y) = person.PixelPosition;
+
+        person.GoTo(new GridPosition(2, 2), Direction.Left);
+
+        Assert.Equal(Direction.Left, person.Facing);
+        Assert.False(person.IsWalking);
+        Assert.Equal((x, y), person.PixelPosition);
+    }
+
+    [Fact]
+    public void OnlyStepsChangeFeet()
+    {
+        WalkingPerson person = Somebody();
+
+        person.GoTo(new GridPosition(2, 2), Direction.Left);
+        person.GoTo(new GridPosition(2, 2), Direction.Up);
+
+        Assert.Equal(0, person.Stride);
+
+        person.GoTo(new GridPosition(2, 1), Direction.Up);
+        person.Update(WalkingCharacter.StepSeconds);
+        person.GoTo(new GridPosition(2, 0), Direction.Up);
+
+        // Two steps, two different feet — a walker that never alternates limps.
+        Assert.Equal(2, person.Stride);
+    }
+
+    [Fact]
+    public void AnUpdateArrivingMidStepDoesNotSnapBackwards()
+    {
+        // The server can send the next square before the last slide has finished. The
+        // walk has to carry on from where they are drawn, not from where they were.
+        WalkingPerson person = Somebody();
+
+        person.GoTo(new GridPosition(3, 2), Direction.Right);
+        person.Update(WalkingCharacter.StepSeconds / 2f);
+
+        (float midX, _) = person.PixelPosition;
+
+        person.GoTo(new GridPosition(4, 2), Direction.Right);
+
+        Assert.Equal(midX, person.PixelPosition.X);
+    }
+}

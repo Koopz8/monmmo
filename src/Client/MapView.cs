@@ -45,30 +45,47 @@ public sealed class MapView : IDisposable
     public CollisionGrid Collision { get; private set; } = null!;
 
     /// <summary>Where the server says everybody is, keyed by their id on this map.</summary>
-    public Dictionary<int, ObjectView> People { get; } = [];
+    public Dictionary<int, WalkingPerson> People { get; } = [];
 
     /// <summary>Replaces everybody, as sent on arriving at a map.</summary>
     public void Place(IEnumerable<ObjectView> people)
     {
         People.Clear();
 
-        foreach (ObjectView person in people) People[person.LocalId] = person;
+        foreach (ObjectView person in people)
+        {
+            People[person.LocalId] = new WalkingPerson(
+                person.GraphicsId, new GridPosition(person.X, person.Y), person.Facing);
+        }
 
         Rebuild();
     }
 
-    /// <summary>Moves one of them.</summary>
+    /// <summary>
+    /// Moves one of them.
+    /// <para>
+    /// A step and a turn on the spot arrive as the same message, and they must not look
+    /// the same: walking one square takes a fraction of a second, and a shopkeeper
+    /// glancing about should not slide anywhere at all.
+    /// </para>
+    /// </summary>
     public void Moved(ObjectMoved moved)
     {
-        if (!People.TryGetValue(moved.LocalId, out ObjectView existing)) return;
+        if (!People.TryGetValue(moved.LocalId, out WalkingPerson? person)) return;
 
-        People[moved.LocalId] = existing with { X = moved.X, Y = moved.Y, Facing = moved.Facing };
+        person.GoTo(new GridPosition(moved.X, moved.Y), moved.Facing);
 
         Rebuild();
+    }
+
+    /// <summary>Advances everybody's walk. Called once a frame.</summary>
+    public void Update(float deltaSeconds)
+    {
+        foreach (WalkingPerson person in People.Values) person.Update(deltaSeconds);
     }
 
     private void Rebuild() =>
-        Collision = Map.Collision.With(People.Values.Select(p => new GridPosition(p.X, p.Y)));
+        Collision = Map.Collision.With(People.Values.Select(p => p.Square));
 
     public Texture2D Texture => _texture;
 
@@ -114,3 +131,4 @@ public sealed class MapView : IDisposable
 
     public void Dispose() => Raylib.UnloadTexture(_texture);
 }
+

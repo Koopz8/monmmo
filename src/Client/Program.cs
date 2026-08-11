@@ -232,6 +232,8 @@ public static class Program
 
             foreach (RemoteCharacter other in others.Values) other.Update(delta);
 
+            view.Update(delta);
+
             (float playerX, float playerY) = player.PixelPosition;
             camera.Target = ClampView(playerX, playerY, view.Map);
 
@@ -243,13 +245,12 @@ public static class Program
 
             // Drawn before the players, so anyone standing in front of somebody is in
             // front of them rather than behind.
-            foreach (ObjectView standing in view.People.Values)
+            foreach (WalkingPerson standing in view.People.Values)
             {
-                float ox = standing.X * WalkingCharacter.SquarePixels;
-                float oy = standing.Y * WalkingCharacter.SquarePixels;
+                (float ox, float oy) = standing.PixelPosition;
 
                 if (sprites.For(standing.GraphicsId) is { } theirs)
-                    theirs.Draw(ox, oy, standing.Facing, walking: false, stride: 0);
+                    theirs.Draw(ox, oy, standing.Facing, standing.IsWalking, standing.Stride);
                 else
                     DrawPlayer(ox, oy, standing.Facing, new Color(200, 180, 140, 255));
             }
