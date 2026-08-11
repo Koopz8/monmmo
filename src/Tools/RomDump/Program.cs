@@ -737,8 +737,19 @@ public static class Program
 
         List<ItemRecord> items = ItemTable.Read(rom, table);
 
-        Console.WriteLine($"  {items.Count} items, {items.Count(i => i.ToData().CanBeBought)} of them for sale");
-        Console.WriteLine($"  the record after the last: {ItemRecord.Explain(rom, table + items.Count * ItemRecord.RecordSizeBytes, items.Count)}");
+        int highest = items.Count > 0 ? items[^1].Id : 0;
+
+        Console.WriteLine(
+            $"  {items.Count} items across {highest + 1} slots, " +
+            $"{items.Count(i => i.ToData().CanBeBought)} of them for sale");
+
+        // Reserved slots that were never filled in claim to be item zero wherever they
+        // sit, so a reader keyed on self-indexing stops at the first one. Saying how
+        // many were stepped over is what tells a short read from a short table.
+        Console.WriteLine($"  {highest + 1 - items.Count} reserved slots stepped over");
+
+        Console.WriteLine(
+            $"  the slot after the last: {ItemRecord.Explain(rom, table + (highest + 1) * ItemRecord.RecordSizeBytes, highest + 1)}");
 
         foreach (var pocket in items.GroupBy(i => i.Pocket).OrderByDescending(g => g.Count()))
             Console.WriteLine($"    {pocket.Key,-9} {pocket.Count()}");

@@ -31,17 +31,33 @@ public class ItemTableTests
     [Fact]
     public void EveryItemComesBackAsItWasWritten()
     {
-        List<ItemRecord> items = ItemTable.Read(Fixture.ToRom(), Table);
-
-        Assert.Equal(SyntheticRom.ItemCount, items.Count);
+        var items = ItemTable.Read(Fixture.ToRom(), Table).ToDictionary(i => i.Id);
 
         for (int id = 0; id < SyntheticRom.ItemCount; id++)
         {
-            Assert.Equal(id, items[id].Id);
+            if (SyntheticRom.ItemIsUnused(id)) continue;
+
             Assert.Equal(SyntheticRom.ItemPriceFor(id), items[id].Price);
             Assert.Equal(SyntheticRom.ItemPocketFor(id), items[id].Pocket);
             Assert.Equal(SyntheticRom.ItemNameFor(id), items[id].Name);
         }
+    }
+
+    [Fact]
+    public void ABlockOfUnusedSlotsIsNotTheEndOfTheTable()
+    {
+        // Real tables have reserved slots that were never filled in, written as copies
+        // of the "nothing" entry — so they claim to be item zero wherever they sit. A
+        // reader keyed on self-indexing stops dead at the first one, which is how a
+        // table of nearly four hundred items came back as fifty-two.
+        List<ItemRecord> items = ItemTable.Read(Fixture.ToRom(), Table);
+
+        Assert.Equal(SyntheticRom.ItemCount - SyntheticRom.UnusedItemCount, items.Count);
+        Assert.Equal(SyntheticRom.ItemCount - 1, items[^1].Id);
+
+        // And nothing is renumbered around the gap: an id is a position in the table.
+        Assert.DoesNotContain(items, i => SyntheticRom.ItemIsUnused(i.Id));
+        Assert.Contains(items, i => i.Id == SyntheticRom.FirstUnusedItem + SyntheticRom.UnusedItemCount);
     }
 
     [Fact]
@@ -127,11 +143,19 @@ public class ItemRulesTests
         GameRules loaded = GameRules.Load(buffer);
 
         Assert.Equal(exported.ItemCount, loaded.ItemCount);
-        Assert.Equal(SyntheticRom.ItemCount, loaded.ItemCount);
+        Assert.Equal(SyntheticRom.ItemCount - SyntheticRom.UnusedItemCount, loaded.ItemCount);
 
         for (int id = 0; id < SyntheticRom.ItemCount; id++)
         {
             Assert.Equal(exported.ItemAt(id), loaded.ItemAt(id));
+
+            // The reserved slots are not items and do not become one on the way through.
+            if (SyntheticRom.ItemIsUnused(id))
+            {
+                Assert.Null(loaded.ItemAt(id));
+                continue;
+            }
+
             Assert.Equal(SyntheticRom.ItemPocketFor(id), loaded.ItemAt(id)!.Pocket);
         }
     }

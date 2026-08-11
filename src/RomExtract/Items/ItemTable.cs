@@ -139,6 +139,36 @@ public static class ItemTable
     /// </summary>
     private const int MinimumRun = 48;
 
+    /// <summary>
+    /// Unused slots tolerated in a row before a run is considered finished.
+    /// <para>
+    /// Generous on purpose. A slot that was reserved and never filled in is a copy of
+    /// the "nothing" entry, and the cost of tolerating too many is scanning a little
+    /// further and adding nothing — because the only thing that resumes a run is a
+    /// record stating exactly its own index, which noise does not do.
+    /// </para>
+    /// </summary>
+    private const int MaxUnusedInARow = 32;
+
+    /// <summary>
+    /// True when a slot is a reserved one that was never filled in.
+    /// <para>
+    /// These are written as copies of the "nothing" entry, so they claim to be item
+    /// zero wherever they happen to sit. That is what makes a reader keyed on
+    /// self-indexing stop dead at the first one — FireRed has eleven in a row, and this
+    /// project read 52 items out of nearly four hundred because of it.
+    /// </para>
+    /// <para>
+    /// This says nothing about <em>where</em> the slot is, and does not need to. A guard
+    /// against mistaking the real item zero for a hole was written first and then
+    /// deleted, because deleting it changed nothing: both callers try the correctly
+    /// indexed reading before this one, and at position zero the two questions are the
+    /// same question.
+    /// </para>
+    /// </summary>
+    private static bool IsUnusedSlot(Rom rom, int offset) =>
+        ItemRecord.TryParse(rom, offset, 0) is not null;
+
     /// <summary>Finds the table, whose first record is item zero.</summary>
     public static int? Locate(Rom rom, Action<string>? log = null)
     {
@@ -148,17 +178,35 @@ public static class ItemTable
         {
             if (ItemRecord.TryParse(rom, offset, 0) is null) continue;
 
-            int run = 1;
+            int found = 1;
+            int index = 1;
+            int unused = 0;
 
-            while (offset + (run + 1) * stride <= rom.Length &&
-                   ItemRecord.TryParse(rom, offset + run * stride, run) is not null)
+            while (offset + (index + 1) * stride <= rom.Length)
             {
-                run++;
+                int at = offset + index * stride;
+
+                if (ItemRecord.TryParse(rom, at, index) is not null)
+                {
+                    found++;
+                    unused = 0;
+                }
+                else if (IsUnusedSlot(rom, at))
+                {
+                    if (++unused > MaxUnusedInARow) break;
+                }
+                else
+                {
+                    break;
+                }
+
+                index++;
             }
 
-            if (run < MinimumRun) continue;
+            if (found < MinimumRun) continue;
 
-            log?.Invoke($"  items: {run} consecutive records at 0x{Rom.BaseAddress + (uint)offset:X8}");
+            log?.Invoke(
+                $"  items: {found} records across {index} slots at 0x{Rom.BaseAddress + (uint)offset:X8}");
 
             return offset;
         }
@@ -167,24 +215,32 @@ public static class ItemTable
     }
 
     /// <summary>
-    /// Reads the table until a record stops agreeing about its own id.
+    /// Reads the table, stepping over the slots that were reserved and never used.
     /// <para>
-    /// No tolerance for holes, unlike the trainer table, because there is nothing to
-    /// tolerate: an item that did not state its own index would mean the table had
-    /// ended or that this was never the table.
+    /// Nothing is renumbered around a gap. An id <em>is</em> a position in this table —
+    /// that is the whole reason it can be located at all — so closing up the holes would
+    /// give every item after them somebody else's number.
     /// </para>
     /// </summary>
     public static List<ItemRecord> Read(Rom rom, int table, int maxItems = 1024)
     {
         var items = new List<ItemRecord>();
 
+        int unused = 0;
+
         for (int id = 0; id < maxItems; id++)
         {
             int at = table + id * ItemRecord.RecordSizeBytes;
 
-            if (ItemRecord.TryParse(rom, at, id) is not { } record) break;
+            if (ItemRecord.TryParse(rom, at, id) is { } record)
+            {
+                items.Add(record);
+                unused = 0;
+                continue;
+            }
 
-            items.Add(record);
+            if (!IsUnusedSlot(rom, at)) break;
+            if (++unused > MaxUnusedInARow) break;
         }
 
         return items;

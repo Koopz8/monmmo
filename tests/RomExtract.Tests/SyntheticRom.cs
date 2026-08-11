@@ -782,7 +782,24 @@ public sealed class SyntheticRom
     /// </remarks>
     public const int KeyItem = 20;
 
-    public static int ItemPriceFor(int id) => id == 0 ? 0 : id * 50;
+    /// <summary>
+    /// The first of a block of unused slots in the middle of the table.
+    /// <para>
+    /// Real cartridges have these: slots that were reserved and never filled in, written
+    /// as copies of the "nothing" entry. <b>They state an id of zero rather than their
+    /// own index</b>, which is exactly what a reader keyed on self-indexing will treat as
+    /// the end of the table. FireRed has eleven of them in a row and this project read
+    /// 52 items out of nearly four hundred because of it.
+    /// </para>
+    /// </summary>
+    public const int FirstUnusedItem = 30;
+
+    public const int UnusedItemCount = 11;
+
+    public static bool ItemIsUnused(int id) =>
+        id >= FirstUnusedItem && id < FirstUnusedItem + UnusedItemCount;
+
+    public static int ItemPriceFor(int id) => id == 0 || ItemIsUnused(id) ? 0 : id * 50;
 
     public static Pocket ItemPocketFor(int id) => id switch
     {
@@ -806,9 +823,11 @@ public sealed class SyntheticRom
         {
             int at = ItemTableOffset + id * ItemRecordBytes;
 
-            GameText.Encode(ItemNameFor(id), 14).CopyTo(_data, at);
+            GameText.Encode(ItemIsUnused(id) ? "????????" : ItemNameFor(id), 14).CopyTo(_data, at);
 
-            WriteU16(at + 0x0E, (ushort)id);
+            // An unused slot says it is item zero, whatever position it is in. That is
+            // the trap: a reader that stops when the id stops matching stops here.
+            WriteU16(at + 0x0E, (ushort)(ItemIsUnused(id) ? 0 : id));
             WriteU16(at + 0x10, (ushort)ItemPriceFor(id));
 
             _data[at + 0x12] = (byte)(id % 7);              // hold effect
@@ -817,7 +836,7 @@ public sealed class SyntheticRom
             WriteU32(at + 0x14, Rom.BaseAddress + (uint)(ItemDescriptionsOffset + id * 64));
 
             _data[at + 0x18] = (byte)(id == KeyItem ? 1 : 0);
-            _data[at + 0x1A] = (byte)ItemPocketFor(id);
+            _data[at + 0x1A] = (byte)(ItemIsUnused(id) ? 0 : (int)ItemPocketFor(id));
             _data[at + 0x1B] = (byte)(id % 4);              // type
 
             // A field routine on some, a battle routine on others, neither on a few.
