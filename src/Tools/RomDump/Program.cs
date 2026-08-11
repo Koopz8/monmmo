@@ -143,6 +143,8 @@ public static class Program
 
         if (options.Specials) WriteSpecials(rom);
 
+        if (!string.IsNullOrEmpty(options.WhoSays)) WriteWhoSays(rom, options.WhoSays);
+
         Console.WriteLine();
         Console.WriteLine($"Done. Output in {Path.GetFullPath(options.OutputDirectory)}");
         return 0;
@@ -1062,7 +1064,7 @@ public static class Program
 
         var maps = new Dictionary<int, HashSet<string>>();
         var callers = new Dictionary<int, int>();
-        var says = new Dictionary<int, uint>();
+        var says = new Dictionary<int, Dictionary<string, int>>();
 
         foreach (LoadedMap map in library.All())
         {
@@ -1087,11 +1089,17 @@ public static class Program
 
                     on.Add(map.Name);
 
-                    // Keep a caller who actually says something. The first one found is
-                    // often a silent handoff, and a blank line next to a routine number
-                    // is the one thing this report cannot afford to print.
-                    if (!says.ContainsKey(routine) && ScriptRunner.Run(rom, person.ScriptAddress).Pages.Count > 0)
-                        says[routine] = person.ScriptAddress;
+                    // The commonest opening line among the callers, not the first one
+                    // found. One chatty script calls half a dozen routines, so "the
+                    // first caller who says anything" quoted the same wireless-club
+                    // attendant beside six different routines and discriminated nothing.
+                    if (ScriptRunner.Run(rom, person.ScriptAddress).Pages.FirstOrDefault() is not { } opening) continue;
+                    if (opening.Trim().Length == 0) continue;
+
+                    if (!says.TryGetValue(routine, out Dictionary<string, int>? lines))
+                        says[routine] = lines = [];
+
+                    lines[opening] = lines.GetValueOrDefault(opening) + 1;
                 }
             }
         }
@@ -1106,14 +1114,77 @@ public static class Program
             Console.WriteLine(
                 $"    0x{routine:X4}  {on.Count} maps, {callers[routine]} callers  e.g. {string.Join(", ", names)}");
 
-            if (!says.TryGetValue(routine, out uint script)) continue;
+            if (!says.TryGetValue(routine, out Dictionary<string, int>? lines)) continue;
 
-            string line = GameText
-                .ToAscii(ScriptRunner.Run(rom, script).Pages.FirstOrDefault() ?? "")
-                .Replace("\n", " ");
+            foreach ((string opening, int said) in lines.OrderByDescending(e => e.Value).Take(2))
+            {
+                string line = GameText.ToAscii(opening).Replace("\n", " ");
 
-            Console.WriteLine($"            \"{(line.Length > 96 ? line[..96] + "..." : line)}\"");
+                Console.WriteLine($"            {said}x  \"{(line.Length > 88 ? line[..88] + "..." : line)}\"");
+            }
         }
+    }
+
+    /// <summary>
+    /// Everybody on the cartridge who says a given thing, and what their script calls.
+    /// <para>
+    /// The inverse of every question this tool has asked so far. Counting where a
+    /// routine is called from narrows a search and cannot finish it — six routines land
+    /// on the same nineteen maps and no count can tell them apart. Somebody who names
+    /// the place they are standing in can, and the text has been readable since
+    /// milestone 14.
+    /// </para>
+    /// </summary>
+    private static void WriteWhoSays(Rom rom, string needle, int top = 12)
+    {
+        Console.WriteLine();
+        Console.WriteLine($"People who say \"{needle}\"");
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        int found = 0;
+
+        foreach (LoadedMap map in library.All())
+        {
+            foreach (MapObject person in map.Objects.Where(o => o.HasScript))
+            {
+                ScriptRun run = ScriptRunner.Run(rom, person.ScriptAddress);
+
+                string? page = run.Pages
+                    .FirstOrDefault(p => GameText.ToAscii(p).Contains(needle, StringComparison.OrdinalIgnoreCase));
+
+                if (page is null) continue;
+
+                found++;
+
+                if (found > top) continue;
+
+                Console.WriteLine();
+                Console.WriteLine(
+                    $"  {WorldExporter.MapId(map.Bank, map.Number)} {map.Name}, person {person.LocalId} " +
+                    $"at ({person.X}, {person.Y}), script 0x{person.ScriptAddress:X8}");
+
+                Console.WriteLine($"    \"{GameText.ToAscii(page).Replace("\n", " ")}\"");
+
+                int[] routines =
+                [
+                    .. ScriptReader.ReadAll(rom, person.ScriptAddress)
+                        .Select(c => c.Code switch { 0x25 => c.Word(), 0x26 => c.Word(2), _ => -1 })
+                        .Where(r => r >= 0)
+                        .Distinct(),
+                ];
+
+                Console.WriteLine(
+                    routines.Length == 0
+                        ? "    calls no special routine at all"
+                        : $"    calls {string.Join(", ", routines.Select(r => $"0x{r:X4}"))}");
+
+                if (run.StoppedAt is { } stopper) Console.WriteLine($"    the run stopped at 0x{stopper:X2}");
+            }
+        }
+
+        Console.WriteLine();
+        Console.WriteLine(found > top ? $"  {found} in all, {found - top} not shown" : $"  {found} in all");
     }
 
     private static void WriteItems(Rom rom)
@@ -1359,6 +1430,9 @@ public static class Program
 
         /// <summary>Count which special routines get called, and on which maps.</summary>
         public bool Specials { get; private init; }
+
+        /// <summary>Find everybody who says this, and report what their script calls.</summary>
+        public string WhoSays { get; private init; } = "";
         public bool DumpMoves { get; private init; }
         public bool DumpEncounters { get; private init; }
         public string? BehaviourMap { get; private init; }
@@ -1387,6 +1461,7 @@ public static class Program
             string scriptRun = "";
             bool scriptRuns = false;
             bool specials = false;
+            string whoSays = "";
             bool dumpMoves = false, dumpEncounters = false;
             string? behaviourMap = null;
             TileOrder order = TileOrder.RowMajor;
@@ -1463,6 +1538,9 @@ public static class Program
                     case "--specials":
                         specials = true;
                         break;
+                    case "--who-says":
+                        whoSays = Next(args, ref i, "--who-says");
+                        break;
                     case "--moves":
                         dumpMoves = true;
                         break;
@@ -1514,6 +1592,7 @@ public static class Program
                 ScriptRun = scriptRun,
                 ScriptRuns = scriptRuns,
                 Specials = specials,
+                WhoSays = whoSays,
                 DumpMoves = dumpMoves,
                 DumpEncounters = dumpEncounters,
                 BehaviourMap = behaviourMap,
