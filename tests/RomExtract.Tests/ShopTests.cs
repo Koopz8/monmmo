@@ -105,11 +105,24 @@ public class ShopTests
 {
     private const string Town = "3.0";
 
+    /// <summary>
+    /// A shop with a counter between the customer and the clerk.
+    /// <para>
+    /// Which is where a clerk stands. The square in front of a player at the counter is
+    /// the counter itself, so the clerk is two away — and a rule of "the square in front"
+    /// meant every mart in the world had somebody nobody could speak to.
+    /// </para>
+    /// </summary>
     private static GameWorld World(params int[] stock)
     {
-        MapData map = new(Town, "PALLET TOWN", 8, 8, new byte[64])
+        var collision = new byte[64];
+
+        // The counter, along the row between (4, 2) and (4, 3).
+        collision[2 * 8 + 4] = 1;
+
+        MapData map = new(Town, "PALLET TOWN", 8, 8, collision)
         {
-            Objects = [new MapObject(1, 5, 4, 3, Direction.Up, 0, false, 0, 0, 0, 0, 0, stock)],
+            Objects = [new MapObject(1, 5, 4, 1, Direction.Down, 0, false, 0, 0, 0, 0, 0, stock)],
         };
 
         return new GameWorld(new WorldData([map]), Town, TestRules.All);
@@ -122,8 +135,8 @@ public class ShopTests
 
         (ServerPlayer player, _) = world.Join(1, "Mason", world.FreshCharacter());
 
-        player.Square = new GridPosition(4, 2);
-        player.Facing = Direction.Down;
+        player.Square = new GridPosition(4, 3);
+        player.Facing = Direction.Up;
 
         ShopOpened opened = world.StartTalking(player.Id, 1)
             .Select(o => o.Message)
@@ -138,6 +151,22 @@ public class ShopTests
 
     private static ShopUpdated Sell(GameWorld world, ServerPlayer player, int itemId, int count) =>
         world.Sell(player.Id, itemId, count).Select(o => o.Message).OfType<ShopUpdated>().Single();
+
+    [Fact]
+    public void AClerkBehindACounterCanStillBeTalkedTo()
+    {
+        // The whole reason a world with twenty shopkeepers in it still had no shop that
+        // would open. Reaching across is written as "what is in front is solid" rather
+        // than "what is in front is a counter", because which metatile behaviour means
+        // counter is a number that differs between these games — and this project has
+        // just spent three rounds paying for numbers it half-remembered.
+        (_, ServerPlayer player, ShopOpened shop) = AtTheCounter(TestRules.BallItem);
+
+        Assert.NotEmpty(shop.Stock);
+
+        // Two squares apart, with something solid in between.
+        Assert.Equal(new GridPosition(4, 3), player.Square);
+    }
 
     [Fact]
     public void TalkingToAShopkeeperOpensTheirShop()

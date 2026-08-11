@@ -363,8 +363,14 @@ public static class Program
         // nowhere near where the cartridge put them.
         Dictionary<int, GridPosition> live = view.People.ToDictionary(p => p.Key, p => p.Value.Square);
 
-        if (Interaction.InFrontOf(player.Square, player.Facing, view.Map.Objects, live) is not { } person)
+        // The map's own walkability, not the grid the client predicts against — that one
+        // has people in it, and a person is not a counter.
+        if (Interaction.InFrontOf(
+                player.Square, player.Facing, view.Map.Objects, live,
+                square => !view.Map.Collision.IsWalkable(square)) is not { } person)
+        {
             return null;
+        }
 
         // Sent whether or not there is anything to read, because what happens next is
         // not this side's decision. Somebody who wants a fight starts one here, and

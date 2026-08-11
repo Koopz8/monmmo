@@ -35,20 +35,49 @@ public static class Interaction
         GridPosition standing,
         Direction facing,
         IReadOnlyList<MapObject> objects,
-        IReadOnlyDictionary<int, GridPosition>? livePositions = null)
+        IReadOnlyDictionary<int, GridPosition>? livePositions = null,
+        Func<GridPosition, bool>? isSolid = null)
     {
-        GridPosition target = standing.Step(facing);
-
-        foreach (MapObject person in objects)
+        foreach (GridPosition target in Reachable(standing, facing, isSolid))
         {
-            GridPosition where =
-                livePositions is not null && livePositions.TryGetValue(person.LocalId, out GridPosition live)
-                    ? live
-                    : person.Square;
+            foreach (MapObject person in objects)
+            {
+                GridPosition where =
+                    livePositions is not null && livePositions.TryGetValue(person.LocalId, out GridPosition live)
+                        ? live
+                        : person.Square;
 
-            if (where == target) return person;
+                if (where == target) return person;
+            }
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// The squares a player can talk to from where they stand: the one in front, and
+    /// the one past it when what is in front is solid.
+    /// <para>
+    /// Counters. A shopkeeper stands behind one, so the square in front of the player is
+    /// the counter itself and the clerk is two away — which meant every mart in the world
+    /// had a clerk nobody could speak to, and the shop that was finally in the world file
+    /// still could not be opened.
+    /// </para>
+    /// <para>
+    /// Written as "solid" rather than as "a counter" on purpose. Which metatile behaviour
+    /// means counter is a number that differs between these games, and this project has
+    /// just spent three rounds paying for numbers it half-remembered. Somebody standing
+    /// directly behind the thing you are facing is a counter, a desk or a window in every
+    /// case that matters, and reaching across one costs nothing if it is a wall.
+    /// </para>
+    /// </summary>
+    public static IEnumerable<GridPosition> Reachable(
+        GridPosition standing, Direction facing, Func<GridPosition, bool>? isSolid = null)
+    {
+        GridPosition front = standing.Step(facing);
+
+        yield return front;
+
+        if (isSolid is not null && isSolid(front)) yield return front.Step(facing);
     }
 }

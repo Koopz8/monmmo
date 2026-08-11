@@ -506,7 +506,14 @@ public sealed class GameWorld
             // loses a "finished" message cannot accumulate frozen people behind it.
             people.Release(holder => holder == playerId);
 
-            if (person.Square != player.Square.Step(player.Facing)) return [];
+            // The square in front, or the one past it when a counter is in the way.
+            CollisionGrid grid = GridFor(player.MapId);
+
+            bool within = Interaction
+                .Reachable(player.Square, player.Facing, square => !grid.IsWalkable(square))
+                .Contains(person.Square);
+
+            if (!within) return [];
 
             // Somebody who wants a fight gets one. The client opened a text box on the
             // way in; the battle arriving is what closes it.
