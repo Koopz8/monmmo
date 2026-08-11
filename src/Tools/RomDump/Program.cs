@@ -145,6 +145,8 @@ public static class Program
 
         if (!string.IsNullOrEmpty(options.WhoSays)) WriteWhoSays(rom, options.WhoSays);
 
+        if (options.ScriptAt != 0) WriteScriptAt(rom, options.ScriptAt);
+
         Console.WriteLine();
         Console.WriteLine($"Done. Output in {Path.GetFullPath(options.OutputDirectory)}");
         return 0;
@@ -1187,6 +1189,78 @@ public static class Program
         Console.WriteLine(found > top ? $"  {found} in all, {found - top} not shown" : $"  {found} in all");
     }
 
+    /// <summary>
+    /// Everything reachable from one address, decoded and in hex.
+    /// <para>
+    /// The map-based dumps can only show a script somebody is standing on, and almost
+    /// nobody in FireRed does their own work. The Pokémon Centre nurse is five bytes:
+    /// lock, faceplayer, <c>call 0x081A6578</c>, release, end — every nurse in the game
+    /// is that same call, and what actually heals a party is at the other end of it,
+    /// where no map object points.
+    /// </para>
+    /// <para>
+    /// Prints each script it reaches whole: the instructions as this project reads them,
+    /// and the bytes they were read from. A pointer into the cartridge is recognisable
+    /// on sight — <c>xx xx xx 08</c> — which is how every wrong argument length so far
+    /// has been found.
+    /// </para>
+    /// </summary>
+    private static void WriteScriptAt(Rom rom, uint address, int maxScripts = 12)
+    {
+        Console.WriteLine();
+        Console.WriteLine($"Everything reachable from 0x{address:X8}");
+
+        var seen = new HashSet<uint>();
+        var queue = new Queue<uint>();
+
+        queue.Enqueue(address);
+        seen.Add(address);
+
+        while (queue.Count > 0 && seen.Count <= maxScripts)
+        {
+            uint at = queue.Dequeue();
+
+            Console.WriteLine();
+            Console.WriteLine($"  0x{at:X8}");
+
+            List<ScriptCommand> commands = ScriptReader.Read(rom, at);
+
+            foreach (ScriptCommand command in commands)
+            {
+                string arguments = string.Join(" ", command.Arguments.Select(b => $"{b:X2}"));
+
+                Console.WriteLine(
+                    $"    0x{command.Offset:X6}  {ScriptCommands.NameOf(command.Code),-14} {arguments}");
+
+                uint target = command.Code switch
+                {
+                    ScriptCommands.Call or ScriptCommands.Goto => command.Pointer(),
+                    ScriptCommands.CallIf or ScriptCommands.GotoIf => command.Pointer(1),
+                    _ => 0,
+                };
+
+                if (target == 0 || !rom.IsRomAddress(target)) continue;
+                if (!seen.Add(target)) continue;
+
+                queue.Enqueue(target);
+            }
+
+            if (ScriptReader.StoppedAt(rom, at) is { } stopper)
+                Console.WriteLine($"    stopped at 0x{stopper:X2}");
+
+            if (rom.ToOffsetOrNull(at) is not { } start) continue;
+
+            for (int row = 0; row < 3; row++)
+            {
+                int from = start + row * 16;
+                if (from + 16 > rom.Length) break;
+
+                string hex = string.Join(" ", Enumerable.Range(0, 16).Select(i => $"{rom.ReadU8(from + i):X2}"));
+                Console.WriteLine($"      {Rom.BaseAddress + (uint)from:X8}  {hex}");
+            }
+        }
+    }
+
     private static void WriteItems(Rom rom)
     {
         Console.WriteLine();
@@ -1433,6 +1507,9 @@ public static class Program
 
         /// <summary>Find everybody who says this, and report what their script calls.</summary>
         public string WhoSays { get; private init; } = "";
+
+        /// <summary>Dump everything reachable from one cartridge address.</summary>
+        public uint ScriptAt { get; private init; }
         public bool DumpMoves { get; private init; }
         public bool DumpEncounters { get; private init; }
         public string? BehaviourMap { get; private init; }
@@ -1462,6 +1539,7 @@ public static class Program
             bool scriptRuns = false;
             bool specials = false;
             string whoSays = "";
+            uint scriptAt = 0;
             bool dumpMoves = false, dumpEncounters = false;
             string? behaviourMap = null;
             TileOrder order = TileOrder.RowMajor;
@@ -1541,6 +1619,11 @@ public static class Program
                     case "--who-says":
                         whoSays = Next(args, ref i, "--who-says");
                         break;
+                    case "--script-at":
+                        string where = Next(args, ref i, "--script-at");
+                        scriptAt = Convert.ToUInt32(
+                            where.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? where[2..] : where, 16);
+                        break;
                     case "--moves":
                         dumpMoves = true;
                         break;
@@ -1593,6 +1676,7 @@ public static class Program
                 ScriptRuns = scriptRuns,
                 Specials = specials,
                 WhoSays = whoSays,
+                ScriptAt = scriptAt,
                 DumpMoves = dumpMoves,
                 DumpEncounters = dumpEncounters,
                 BehaviourMap = behaviourMap,

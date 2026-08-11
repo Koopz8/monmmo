@@ -244,6 +244,22 @@ public static class ScriptCommands
         Release => "release",
         Message => "message",
         WaitButton => "waitbutton",
+
+        // The ones the runner acts on. A dump that prints these as numbers makes the
+        // reader hold a table in their head while looking for the one command that is
+        // not in it, which is the whole job.
+        0x5A => "faceplayer2",
+        0x16 => "setvar",
+        0x17 => "addvar",
+        0x21 => "compare",
+        0x25 => "special",
+        0x26 => "specialvar",
+        0x29 => "setflag",
+        0x2A => "clearflag",
+        0x2B => "checkflag",
+        0x68 => "closemessage",
+        0x69 => "lockall",
+        0x6D => "waitstate",
         _ => $"0x{code:X2}",
     };
 }
