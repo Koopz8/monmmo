@@ -32,6 +32,19 @@ public sealed record ScriptCommand(int Offset, byte Code, byte[] Arguments)
 /// command of unknown length is the end of reading: there is no way to find the next
 /// one.
 /// </para>
+/// <para>
+/// <b>These lengths were written from memory of the Ruby and Emerald command set, and a
+/// real FireRed image says they are not good enough.</b> Of 1584 people with a script,
+/// 468 stop at a command this table does not have, and not one of the 1584 was found to
+/// open a shop — in a game with a shop in every town. A count of clean reads is not
+/// evidence either: a wrong length resumes inside an argument, and a stray 0x02 in the
+/// middle of a pointer reads as a perfectly good <c>end</c>.
+/// </para>
+/// <para>
+/// So the lengths that follow are believed, not known, and the ones that are missing are
+/// the reason two features look broken. The fix is to read the bytes rather than to add
+/// more guesses, which is what <c>--script-map</c> exists for.
+/// </para>
 /// </summary>
 public static class ScriptCommands
 {
@@ -251,6 +264,28 @@ public static class ScriptReader
             byte first = offset + 1 < rom.Length ? rom.ReadU8(offset + 1) : (byte)0;
 
             if (ScriptCommands.ArgumentLength(code, first) is not { } length) return code;
+
+            offset += 1 + length;
+
+            if (code is ScriptCommands.End or ScriptCommands.Return or ScriptCommands.Goto) return null;
+        }
+
+        return null;
+    }
+
+    /// <summary>Where in the image a read stopped, for printing the bytes around it.</summary>
+    public static int? StoppedAtOffset(Rom rom, uint address, int maxCommands = MaxCommands)
+    {
+        if (rom.ToOffsetOrNull(address) is not { } offset) return null;
+
+        for (int i = 0; i < maxCommands; i++)
+        {
+            if (offset >= rom.Length) return null;
+
+            byte code = rom.ReadU8(offset);
+            byte first = offset + 1 < rom.Length ? rom.ReadU8(offset + 1) : (byte)0;
+
+            if (ScriptCommands.ArgumentLength(code, first) is not { } length) return offset;
 
             offset += 1 + length;
 

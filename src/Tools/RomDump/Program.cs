@@ -132,6 +132,9 @@ public static class Program
         if (options.DumpScripts)
             WriteScripts(rom);
 
+        if (!string.IsNullOrEmpty(options.ScriptMap))
+            WriteMapScripts(rom, options.ScriptMap);
+
         Console.WriteLine();
         Console.WriteLine($"Done. Output in {Path.GetFullPath(options.OutputDirectory)}");
         return 0;
@@ -751,6 +754,7 @@ public static class Program
         int withTrainer = 0;
 
         var stoppers = new Dictionary<byte, int>();
+        var examples = new Dictionary<byte, (int Start, int Stop)>();
 
         foreach (LoadedMap map in library.All())
         {
@@ -759,9 +763,20 @@ public static class Program
                 withScripts++;
 
                 if (ScriptReader.StoppedAt(rom, person.ScriptAddress) is { } code)
+                {
                     stoppers[code] = stoppers.GetValueOrDefault(code) + 1;
+
+                    if (!examples.ContainsKey(code) &&
+                        rom.ToOffsetOrNull(person.ScriptAddress) is { } start &&
+                        ScriptReader.StoppedAtOffset(rom, person.ScriptAddress) is { } stop)
+                    {
+                        examples[code] = (start, stop);
+                    }
+                }
                 else
+                {
                     cleanEnd++;
+                }
 
                 if (ScriptReader.FindMart(rom, person.ScriptAddress).Count > 0) withMart++;
                 if (ScriptReader.FindTrainer(rom, person.ScriptAddress) is not null) withTrainer++;
@@ -776,6 +791,83 @@ public static class Program
 
         foreach ((byte code, int count) in stoppers.OrderByDescending(s => s.Value).Take(20))
             Console.WriteLine($"    0x{code:X2}  stops {count}");
+
+        // A count says which command is in the way; it does not say how long that
+        // command is, and guessing a length is worse than not knowing one — a wrong
+        // length resumes inside an argument and invents every instruction after it.
+        // The bytes are what settle it: a pointer is recognisable on sight.
+        Console.WriteLine();
+        Console.WriteLine("  One script for each, from the start, with ^ under where it stopped:");
+
+        foreach (byte code in stoppers.OrderByDescending(s => s.Value).Take(6).Select(s => s.Key))
+        {
+            if (!examples.TryGetValue(code, out (int Start, int Stop) example)) continue;
+
+            Console.WriteLine();
+            Console.WriteLine($"    stopped by 0x{code:X2} at 0x{Rom.BaseAddress + (uint)example.Stop:X8}");
+
+            for (int row = 0; row < 3; row++)
+            {
+                int from = example.Start + row * 16;
+                if (from + 16 > rom.Length) break;
+
+                string hex = string.Join(" ", Enumerable.Range(0, 16).Select(i => $"{rom.ReadU8(from + i):X2}"));
+                Console.WriteLine($"      {Rom.BaseAddress + (uint)from:X8}  {hex}");
+
+                if (example.Stop < from || example.Stop >= from + 16) continue;
+
+                Console.WriteLine($"      {new string(' ', 8)}  {new string(' ', (example.Stop - from) * 3)}^^");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Dumps every script on one map, as instructions and as bytes.
+    /// <para>
+    /// The histogram says which command is in the way. It does not say how long that
+    /// command is, and a guessed length is worse than no length — it resumes inside an
+    /// argument and invents every instruction after it. The bytes are what settle it: a
+    /// pointer into this cartridge is recognisable on sight, and the shape of the
+    /// arguments is readable once you can see them.
+    /// </para>
+    /// </summary>
+    private static void WriteMapScripts(Rom rom, string mapId)
+    {
+        Console.WriteLine();
+        Console.WriteLine($"Scripts on {mapId}");
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        if (library.TryLoad(mapId) is not { } map)
+        {
+            Console.WriteLine($"  no map {mapId} on this cartridge");
+            return;
+        }
+
+        Console.WriteLine($"  {map.Name}, {map.Objects.Count} people");
+
+        foreach (MapObject person in map.Objects.Where(o => o.HasScript))
+        {
+            Console.WriteLine();
+            Console.WriteLine($"  person {person.LocalId} at ({person.X}, {person.Y}), script 0x{person.ScriptAddress:X8}");
+
+            foreach (ScriptCommand command in ScriptReader.Read(rom, person.ScriptAddress))
+                Console.WriteLine($"    {command}");
+
+            if (ScriptReader.StoppedAt(rom, person.ScriptAddress) is { } stopper)
+                Console.WriteLine($"    stopped at 0x{stopper:X2}");
+
+            if (rom.ToOffsetOrNull(person.ScriptAddress) is not { } start) continue;
+
+            for (int row = 0; row < 4; row++)
+            {
+                int from = start + row * 16;
+                if (from + 16 > rom.Length) break;
+
+                string hex = string.Join(" ", Enumerable.Range(0, 16).Select(i => $"{rom.ReadU8(from + i):X2}"));
+                Console.WriteLine($"      {Rom.BaseAddress + (uint)from:X8}  {hex}");
+            }
+        }
     }
 
     private static void WriteItems(Rom rom)
@@ -957,6 +1049,7 @@ public static class Program
               --items                report the item table, its pockets and prices
               --scripts              report how far object scripts read, and which
                                      commands stop them
+              --script-map <b.m>     dump every script on one map, decoded and as bytes
               --export-rules <path>  write the rules file the server resolves battles
                                      against: base stats, move power, catch rates and
                                      learnsets, with no names of any kind
@@ -993,6 +1086,7 @@ public static class Program
         public bool DumpTrainers { get; private init; }
         public bool DumpItems { get; private init; }
         public bool DumpScripts { get; private init; }
+        public string ScriptMap { get; private init; } = "";
         public bool DumpMoves { get; private init; }
         public bool DumpEncounters { get; private init; }
         public string? BehaviourMap { get; private init; }
@@ -1017,6 +1111,7 @@ public static class Program
             bool trainers = false;
             bool items = false;
             bool scripts = false;
+            string scriptMap = "";
             bool dumpMoves = false, dumpEncounters = false;
             string? behaviourMap = null;
             TileOrder order = TileOrder.RowMajor;
@@ -1081,6 +1176,9 @@ public static class Program
                     case "--scripts":
                         scripts = true;
                         break;
+                    case "--script-map":
+                        scriptMap = Next(args, ref i, "--script-map");
+                        break;
                     case "--moves":
                         dumpMoves = true;
                         break;
@@ -1128,6 +1226,7 @@ public static class Program
                 DumpTrainers = trainers,
                 DumpItems = items,
                 DumpScripts = scripts,
+                ScriptMap = scriptMap,
                 DumpMoves = dumpMoves,
                 DumpEncounters = dumpEncounters,
                 BehaviourMap = behaviourMap,
