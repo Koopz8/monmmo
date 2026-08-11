@@ -140,6 +140,8 @@ public sealed class NetworkClient : IDisposable
 
     public void SendSell(int itemId, int count) => Send(new SellRequest(itemId, count));
 
+    public void SendUseItem(int itemId, int slot) => Send(new UseItemRequest(itemId, slot));
+
     private void Send(NetMessage message)
     {
         if (_channel is null) return;

@@ -23,6 +23,8 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(ScriptRan), "scriptran")]
 [JsonDerivedType(typeof(FlagsChanged), "flags")]
 [JsonDerivedType(typeof(TrainerBeaten), "beaten")]
+[JsonDerivedType(typeof(UseItemRequest), "useitem")]
+[JsonDerivedType(typeof(BagUpdated), "bagupdate")]
 [JsonDerivedType(typeof(BuyRequest), "buy")]
 [JsonDerivedType(typeof(SellRequest), "sell")]
 [JsonDerivedType(typeof(ShopOpened), "shop")]
@@ -173,6 +175,29 @@ public sealed record FlagsChanged(IReadOnlyList<int> Flags) : NetMessage;
 /// </para>
 /// </summary>
 public sealed record TrainerBeaten(int TrainerId) : NetMessage;
+
+/// <summary>
+/// Drink something, on the party member in this slot.
+/// <para>
+/// An id and a slot and nothing else. How much it restores is the server's number for
+/// the same reason it is in a battle — a request carrying the amount would let a client
+/// drink a Potion for two hundred — and how much room there is to restore into depends
+/// on maximum health, which is computed from base stats this end.
+/// </para>
+/// </summary>
+public sealed record UseItemRequest(int ItemId, int Slot) : NetMessage;
+
+/// <summary>
+/// The bag and the party after something was used out of a fight.
+/// <para>
+/// Both, because using a potion changes both and a client holding one of them stale
+/// shows a bag that has spent an item on somebody who is still hurt.
+/// </para>
+/// </summary>
+public sealed record BagUpdated(
+    IReadOnlyList<BagEntry> Bag,
+    IReadOnlyList<SavedMon> Party,
+    string Message) : NetMessage;
 
 /// <summary>
 /// The credentials were not accepted. Deliberately vague about which half was wrong,

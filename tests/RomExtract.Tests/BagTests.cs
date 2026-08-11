@@ -478,3 +478,90 @@ public class UsingItemsTests
         Assert.DoesNotContain(update.Medicine, m => m.ItemId == TestRules.BallItem);
     }
 }
+
+/// <summary>
+/// Drinking something out of a fight, which until now was the half of a potion that
+/// did not exist: they could be bought, carried and sold, and the only healing in the
+/// game was losing.
+/// </summary>
+public class UsingItemsOutOfBattleTests
+{
+    private const string Town = "3.0";
+
+    private static GameWorld World() =>
+        new(new WorldData([new MapData(Town, "PALLET TOWN", 8, 8, new byte[64])]), Town, TestRules.All);
+
+    private static (GameWorld World, ServerPlayer Player) Hurt(int potions = 1)
+    {
+        GameWorld world = World();
+
+        (ServerPlayer player, _) = world.Join(
+            1,
+            "Koop",
+            SavedCharacter.Fresh(Town, 1, 1) with
+            {
+                // One health out of whatever thirty levels of this comes to, so there is
+                // plenty of room for twenty to go back on.
+                Party = [new SavedMon(3, 30, null, 1, StatusCondition.None, Nature.Hardy, [TestRules.FirstMove])],
+                Items = potions > 0 ? [new BagEntry(TestRules.PotionItem, potions)] : [],
+            });
+
+        return (world, player);
+    }
+
+    private static BagUpdated Use(GameWorld world, ServerPlayer player, int itemId, int slot) =>
+        world.UseItem(player.Id, itemId, slot).Select(o => o.Message).OfType<BagUpdated>().Single();
+
+    [Fact]
+    public void APotionPutsHealthBackOnAndIsSpent()
+    {
+        (GameWorld world, ServerPlayer player) = Hurt();
+
+        int before = player.Party[0].CurrentHp;
+
+        BagUpdated update = Use(world, player, TestRules.PotionItem, 0);
+
+        Assert.True(update.Party[0].CurrentHp > before);
+        Assert.Empty(update.Bag);
+    }
+
+    [Fact]
+    public void SomebodyAlreadyWellIsNotChargedForIt()
+    {
+        // Out of a fight there is no turn being used up, so a potion that would do
+        // nothing costs nothing. In a battle the same press costs the turn, which is
+        // the difference between the two and the reason this is not shared code.
+        (GameWorld world, ServerPlayer player) = Hurt();
+
+        player.Bag.Add(TestRules.FullPotionItem, 1);
+
+        Use(world, player, TestRules.FullPotionItem, 0);
+
+        int held = player.Bag.CountOf(TestRules.PotionItem);
+
+        BagUpdated again = Use(world, player, TestRules.PotionItem, 0);
+
+        Assert.Equal(held, player.Bag.CountOf(TestRules.PotionItem));
+        Assert.Contains("effect", again.Message);
+    }
+
+    [Fact]
+    public void SomethingNotCarriedDoesNothing()
+    {
+        // The request is an id and a slot. Everything else — that it is a thing, that
+        // it restores anything, that it is actually in the bag — is checked here,
+        // because a client sends whatever it likes.
+        (GameWorld world, ServerPlayer player) = Hurt(potions: 0);
+
+        Assert.Empty(world.UseItem(player.Id, TestRules.PotionItem, 0));
+    }
+
+    [Fact]
+    public void ASlotNobodyIsStandingInDoesNothing()
+    {
+        (GameWorld world, ServerPlayer player) = Hurt();
+
+        Assert.Empty(world.UseItem(player.Id, TestRules.PotionItem, 4));
+        Assert.Empty(world.UseItem(player.Id, TestRules.PotionItem, -1));
+    }
+}

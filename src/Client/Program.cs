@@ -172,6 +172,11 @@ public static class Program
         // and has no idea what any of them mean.
         var script = new ScriptState();
 
+        // The party, out of a fight. Held because the bag has to say who a potion would
+        // go on, and until now nothing outside a battle had any reason to know.
+        IReadOnlyList<SavedMon> party = [];
+        BagScreen? carrying = null;
+
         // Where the server last said we are, when that disagreed with where we think we
         // are. Held rather than applied on the spot: a correction almost always arrives
         // mid-step, and snapping a character sideways through a stride looks worse than
@@ -188,8 +193,8 @@ public static class Program
             float delta = Raylib.GetFrameTime();
 
             ApplyServerMessages(
-                network, others, player, view, data, trainers, items, script,
-                ref battle, ref shop, ref bag, ref money, ref correction);
+                network, others, player, view, data, trainers, items, script, carrying,
+                ref battle, ref shop, ref bag, ref party, ref money, ref correction);
 
             // A battle suspends the overworld entirely: the server is running it, and
             // walking on meanwhile would put the two sides out of step.
@@ -229,6 +234,27 @@ public static class Program
             {
                 if (square != player.Square) player.Place(view.Collision, square);
                 correction = null;
+            }
+
+            // The bag, which is a whole screen for the same reason the counter is. Only
+            // openable with nothing else going on — mid-conversation it would be a way
+            // to walk off while somebody is held still.
+            if (carrying is null && talking is null && Raylib.IsKeyPressed(KeyboardKey.B))
+                carrying = new BagScreen(bag, party, items, data);
+
+            if (carrying is not null)
+            {
+                carrying.Update();
+
+                if (carrying.TakePending() is UseItemRequest use) network.SendUseItem(use.ItemId, use.Slot);
+
+                Raylib.BeginDrawing();
+                carrying.Draw();
+                Raylib.EndDrawing();
+
+                if (carrying.IsClosed) carrying = null;
+
+                continue;
             }
 
             // A shop takes the whole screen, like a battle. Anything the text box was
@@ -432,9 +458,11 @@ public static class Program
         TrainerNames trainers,
         ItemNames items,
         ScriptState script,
+        BagScreen? carrying,
         ref BattleScreen? battle,
         ref ShopScreen? shop,
         ref IReadOnlyList<BagEntry> bag,
+        ref IReadOnlyList<SavedMon> party,
         ref int money,
         ref GridPosition? correction)
     {
@@ -449,6 +477,7 @@ public static class Program
 
                     player.Place(view.Collision, new GridPosition(welcome.X, welcome.Y));
                     bag = welcome.Bag;
+                    party = welcome.Party;
                     money = welcome.Money;
 
                     foreach (int flag in welcome.Flags) script.Set(flag);
@@ -459,6 +488,13 @@ public static class Program
 
                 case FlagsChanged changed:
                     foreach (int flag in changed.Flags) script.Set(flag);
+
+                    break;
+
+                case BagUpdated updated:
+                    bag = updated.Bag;
+                    party = updated.Party;
+                    carrying?.Apply(updated);
 
                     break;
 
@@ -540,6 +576,12 @@ public static class Program
                 case BattleFinished finished:
                     battle?.Apply(finished);
                     money = finished.Money;
+
+                    // A fight is where health actually changes. Without this the bag
+                    // would open on a party that was last accurate at login and offer
+                    // a potion to somebody who is already full.
+                    party = finished.Party;
+
                     break;
 
                 case Rejected rejected when battle is not null:

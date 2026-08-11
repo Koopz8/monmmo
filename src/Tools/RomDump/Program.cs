@@ -141,6 +141,8 @@ public static class Program
 
         if (options.ScriptRuns) WriteRunHistogram(rom);
 
+        if (options.Specials) WriteSpecials(rom);
+
         Console.WriteLine();
         Console.WriteLine($"Done. Output in {Path.GetFullPath(options.OutputDirectory)}");
         return 0;
@@ -1030,6 +1032,68 @@ public static class Program
         }
     }
 
+    /// <summary>
+    /// Which <c>special</c> routines the people on this cartridge call, and where.
+    /// <para>
+    /// A Pokémon Centre heals through one of these. The command carries a routine number
+    /// and nothing else — the routine itself is code, not data, so there is no table to
+    /// read and no name anywhere in the image. Picking a number out of memory is exactly
+    /// what cost milestone 14 three rounds and milestone 15 a whole commit.
+    /// </para>
+    /// <para>
+    /// What can be derived is where each one is used. A routine that turns up once on
+    /// almost every map called a centre and essentially nowhere else is the healer, and
+    /// the map names are evidence rather than a guess.
+    /// </para>
+    /// </summary>
+    private static void WriteSpecials(Rom rom, int top = 20)
+    {
+        Console.WriteLine();
+        Console.WriteLine("special routines, by where they are called");
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        var maps = new Dictionary<int, HashSet<string>>();
+        var callers = new Dictionary<int, int>();
+
+        foreach (LoadedMap map in library.All())
+        {
+            foreach (MapObject person in map.Objects.Where(o => o.HasScript))
+            {
+                foreach (ScriptCommand command in ScriptReader.ReadAll(rom, person.ScriptAddress))
+                {
+                    // 0x25 takes a routine number; 0x26 takes a variable to answer into
+                    // and then the routine. Both are calls into code this cannot see.
+                    int routine = command.Code switch
+                    {
+                        0x25 => command.Word(),
+                        0x26 => command.Word(2),
+                        _ => -1,
+                    };
+
+                    if (routine < 0) continue;
+
+                    callers[routine] = callers.GetValueOrDefault(routine) + 1;
+
+                    if (!maps.TryGetValue(routine, out HashSet<string>? on)) maps[routine] = on = [];
+
+                    on.Add(map.Name);
+                }
+            }
+        }
+
+        Console.WriteLine($"  {callers.Count} distinct routines across {library.Count} maps");
+        Console.WriteLine($"  showing the {Math.Min(top, callers.Count)} called from the most maps");
+
+        foreach ((int routine, HashSet<string> on) in maps.OrderByDescending(e => e.Value.Count).Take(top))
+        {
+            string[] names = [.. on.OrderBy(n => n).Take(3)];
+
+            Console.WriteLine(
+                $"    0x{routine:X4}  {on.Count} maps, {callers[routine]} callers  e.g. {string.Join(", ", names)}");
+        }
+    }
+
     private static void WriteItems(Rom rom)
     {
         Console.WriteLine();
@@ -1270,6 +1334,9 @@ public static class Program
 
         /// <summary>Count what stops a run, across every script on the cartridge.</summary>
         public bool ScriptRuns { get; private init; }
+
+        /// <summary>Count which special routines get called, and on which maps.</summary>
+        public bool Specials { get; private init; }
         public bool DumpMoves { get; private init; }
         public bool DumpEncounters { get; private init; }
         public string? BehaviourMap { get; private init; }
@@ -1297,6 +1364,7 @@ public static class Program
             string scriptMap = "";
             string scriptRun = "";
             bool scriptRuns = false;
+            bool specials = false;
             bool dumpMoves = false, dumpEncounters = false;
             string? behaviourMap = null;
             TileOrder order = TileOrder.RowMajor;
@@ -1370,6 +1438,9 @@ public static class Program
                     case "--script-runs":
                         scriptRuns = true;
                         break;
+                    case "--specials":
+                        specials = true;
+                        break;
                     case "--moves":
                         dumpMoves = true;
                         break;
@@ -1420,6 +1491,7 @@ public static class Program
                 ScriptMap = scriptMap,
                 ScriptRun = scriptRun,
                 ScriptRuns = scriptRuns,
+                Specials = specials,
                 DumpMoves = dumpMoves,
                 DumpEncounters = dumpEncounters,
                 BehaviourMap = behaviourMap,

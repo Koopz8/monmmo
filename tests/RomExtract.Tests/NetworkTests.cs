@@ -75,6 +75,8 @@ public class MessageChannelTests
             new ScriptRan([0x2A5], [0x828], [new SavedVariable(0x4001, 3)]),
             new FlagsChanged([0x4F1]),
             new TrainerBeaten(41),
+            new UseItemRequest(13, 0),
+            new BagUpdated([new BagEntry(13, 2)], [], "Restored 20 health."),
             new BuyRequest(4, 5),
             new SellRequest(13, 2),
             new ShopOpened([new ShopEntry(4, 200)], 5000, [new BagEntry(4, 3)]),

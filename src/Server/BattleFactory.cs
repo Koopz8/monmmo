@@ -131,6 +131,27 @@ public sealed class BattleFactory(GameRules rules)
         return Save(battler);
     }
 
+    /// <summary>
+    /// A party member with health put back on, and how much actually went on.
+    /// <para>
+    /// The amount is worked out here rather than by whoever asked, because it depends on
+    /// maximum health and maximum health is computed from base stats — a full restore is
+    /// the word "all", not a number, and only this side knows what all is. It also means
+    /// a client cannot drink a Potion for two hundred, which is the same rule the battle
+    /// screen has followed since potions worked there.
+    /// </para>
+    /// </summary>
+    public (SavedMon Mon, int Restored) Restored(SavedMon saved, ItemData medicine)
+    {
+        if (Restore(saved) is not { } battler) return (saved, 0);
+
+        int before = battler.CurrentHp;
+
+        battler.Heal(medicine.RestoreFor(battler.MaxHp));
+
+        return (Save(battler), battler.CurrentHp - before);
+    }
+
     /// <summary>True when this one can still fight.</summary>
     public bool CanFight(SavedMon saved) => Restore(saved) is { HasFainted: false };
 

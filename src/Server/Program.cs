@@ -547,6 +547,12 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
 
                             break;
 
+                        case UseItemRequest use when playerId != 0:
+                            await DispatchAsync(
+                                world.UseItem(playerId, use.ItemId, use.Slot), playerId, cancellationToken)
+                                .ConfigureAwait(false);
+                            break;
+
                         case BuyRequest buy when playerId != 0:
                             await DispatchAsync(world.Buy(playerId, buy.ItemId, buy.Count), playerId, cancellationToken)
                                 .ConfigureAwait(false);

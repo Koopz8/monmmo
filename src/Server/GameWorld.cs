@@ -855,6 +855,48 @@ public sealed class GameWorld
         }
     }
 
+    /// <summary>
+    /// Uses something out of the bag on a party member, outside a fight.
+    /// <para>
+    /// The same rules the battle screen has followed since potions worked there — that
+    /// it is a thing, that it restores anything, that it is actually carried — and one
+    /// more that only applies out here: it has to do something. Spending a Full Restore
+    /// on somebody at full health is not a refusal in the games either, but it is worth
+    /// not charging for, because out of a fight there is no turn being used up and
+    /// nothing else to lose.
+    /// </para>
+    /// </summary>
+    public List<Outgoing> UseItem(int playerId, int itemId, int slot)
+    {
+        lock (_gate)
+        {
+            if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
+
+            if (player.InBattle)
+                return [new Outgoing(new Rejected("Not in the middle of a battle."), OnlyTo: playerId)];
+
+            if (slot < 0 || slot >= player.Party.Count) return [];
+            if (_battles is null || _rules?.ItemAt(itemId) is not { Restores: not null } medicine) return [];
+            if (player.Bag.CountOf(itemId) == 0) return [];
+
+            (SavedMon healed, int restored) = _battles.Restored(player.Party[slot], medicine);
+
+            if (restored <= 0)
+            {
+                return [new Outgoing(
+                    new BagUpdated(player.Bag.Entries, [.. player.Party], "It won't have any effect."),
+                    OnlyTo: playerId)];
+            }
+
+            player.Bag.Remove(itemId);
+            player.Party[slot] = healed;
+
+            return [new Outgoing(
+                new BagUpdated(player.Bag.Entries, [.. player.Party], $"Restored {restored} health."),
+                OnlyTo: playerId)];
+        }
+    }
+
     /// <summary>The text box is closed. Whoever this player was holding carries on.</summary>
     public void StopTalking(int playerId)
     {
