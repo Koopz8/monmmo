@@ -301,6 +301,77 @@ public class TrainerBattleTests
     }
 
     [Fact]
+    public void SomebodyWhoHasTurnedIsLookingTheNewWay()
+    {
+        // Their square comes from the living world already. Their facing has to as
+        // well: taking the position from one source and the direction from the other
+        // gives a line neither of them is looking along, and the bug hides until
+        // somebody happens to walk up to a trainer who glances about.
+        var watcher = new MapObject(
+            1, 5, 4, 1, MapObject.FacingFor(1), 1, IsTrainer: true,
+            RangeX: 1, RangeY: 1, ScriptAddress: 0, TrainerId: TestRules.OneAlone, SightRange: 3);
+
+        GameWorld world = World(watcher);
+        ServerPlayer player = Join(world);
+
+        player.Square = new GridPosition(0, 7);
+
+        // Turn the clock until they happen to look along the row the player will be on.
+        bool looking = false;
+
+        for (double now = 0.2; now < 200 && !looking; now += 0.2)
+        {
+            foreach (ObjectMoved moved in world.Tick(now).Select(o => o.Message).OfType<ObjectMoved>())
+                if (moved.Facing == Direction.Right) looking = true;
+        }
+
+        Assert.True(looking, "they never turned to face along the row.");
+
+        Assert.Single(StepTo(world, player, new GridPosition(6, 1), Direction.Left).OfType<BattleStarted>());
+    }
+
+    [Fact]
+    public void SomebodyBeatenSaysSoRatherThanSayingNothing()
+    {
+        // "I walked in front of them and nothing happened" has several causes that look
+        // identical from the player's side. The server is the only side that can tell
+        // them apart, so it writes down which it was.
+        GameWorld world = World(Trainer(1, 4, 1, Direction.Down, TestRules.OneAlone));
+        ServerPlayer player = Join(world, party: 3);
+
+        StepTo(world, player, new GridPosition(4, 3), Direction.Down);
+        FightToTheEnd(world, player);
+
+        StepTo(world, player, new GridPosition(4, 3), Direction.Down);
+
+        Assert.Contains("already been beaten", world.LastSightRefusal);
+    }
+
+    [Fact]
+    public void SomebodyWithNoLineOfSightSaysSoToo()
+    {
+        GameWorld world = World(Trainer(1, 4, 1, Direction.Down, TestRules.OneAlone, sight: 0));
+        ServerPlayer player = Join(world);
+
+        StepTo(world, player, new GridPosition(4, 3), Direction.Down);
+
+        Assert.Contains("no line of sight", world.LastSightRefusal);
+    }
+
+    [Fact]
+    public void WalkingPastAnOrdinaryPersonSaysNothingAtAll()
+    {
+        // Most people on a map are not trainers. A refusal for every one of them would
+        // bury the one that matters.
+        GameWorld world = World(new MapObject(1, 5, 4, 1, Direction.Down, 0, false));
+        ServerPlayer player = Join(world);
+
+        StepTo(world, player, new GridPosition(4, 3), Direction.Down);
+
+        Assert.Null(world.LastSightRefusal);
+    }
+
+    [Fact]
     public void SomebodyWhoseIdThisServerHasNoPartyForStartsNothing()
     {
         // Ordinary rather than an error: a world file exported from one image and a

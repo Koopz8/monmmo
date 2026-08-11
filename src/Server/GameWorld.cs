@@ -529,31 +529,90 @@ public sealed class GameWorld
     /// </summary>
     private MapObject? WhoSpotted(ServerPlayer player)
     {
-        if (_battles is null) return null;
+        LastSightRefusal = null;
+
         if (_world.Find(player.MapId) is not { } map) return null;
 
-        foreach (MapObject trainer in map.Objects)
+        _populated.TryGetValue(player.MapId, out MapPopulation? people);
+
+        foreach (MapObject template in map.Objects)
         {
-            if (!trainer.CanBeFought) continue;
-            if (player.DefeatedTrainers.Contains(trainer.TrainerId)) continue;
+            if (!template.IsTrainer) continue;
 
-            // Where they are now, not where the cartridge put them. A trainer who has
-            // wandered two squares is looking down a different line.
-            GridPosition standing = _populated.TryGetValue(player.MapId, out MapPopulation? people) &&
-                                    people.ById(trainer.LocalId) is { } live
-                ? live.Square
-                : trainer.Square;
+            // Where they are and which way they are looking both have to come from the
+            // living world. Taking the square from one source and the direction from
+            // the other gives a line neither of them is looking along.
+            MapObject trainer = people?.ById(template.LocalId) is { } live
+                ? template with { X = live.Square.X, Y = live.Square.Y, Facing = live.Facing }
+                : template;
 
-            MapObject looking = trainer with { X = standing.X, Y = standing.Y };
+            // Beyond here, everything is a reason this particular person did not start
+            // a fight — and only the ones a player standing nearby would find puzzling
+            // are written down. A refusal for every trainer on the map would bury the
+            // one that matters.
+            bool nearby = Nearby(trainer.Square, player.Square);
 
-            if (!looking.CanSee(player.Square)) continue;
-            if (looking.ApproachTo(player.Square).Any(square => !IsFree(player.MapId, square))) continue;
+            if (_battles is null)
+            {
+                if (nearby) LastSightRefusal = "there is no rules file, so nobody has a party to fight with";
+                continue;
+            }
 
-            return looking;
+            if (trainer.TrainerId == 0)
+            {
+                // Their script could not be read as far as the fight. Said out loud
+                // because from the outside it looks exactly like a broken sight line.
+                if (nearby) LastSightRefusal = $"object {trainer.LocalId} is a trainer but names no id";
+                continue;
+            }
+
+            if (player.DefeatedTrainers.Contains(trainer.TrainerId))
+            {
+                if (nearby) LastSightRefusal = $"trainer {trainer.TrainerId} has already been beaten";
+                continue;
+            }
+
+            if (trainer.SightRange == 0)
+            {
+                if (nearby) LastSightRefusal ??= $"trainer {trainer.TrainerId} has no line of sight — talk to them instead";
+                continue;
+            }
+
+            if (!trainer.CanSee(player.Square)) continue;
+
+            if (trainer.ApproachTo(player.Square).Any(square => !IsFree(player.MapId, square)))
+            {
+                LastSightRefusal = $"trainer {trainer.TrainerId} has something in the way";
+                continue;
+            }
+
+            return trainer;
         }
 
         return null;
     }
+
+    /// <summary>
+    /// Close enough that a player would expect something to happen.
+    /// <para>
+    /// Only used to decide whether a refusal is worth writing down. Being generous here
+    /// costs a log line; being mean costs the one line that would have explained a
+    /// puzzling walk past somebody.
+    /// </para>
+    /// </summary>
+    private static bool Nearby(GridPosition a, GridPosition b) =>
+        Math.Abs(a.X - b.X) + Math.Abs(a.Y - b.Y) <= 4;
+
+    /// <summary>
+    /// Why nobody challenged a player who has just stepped somewhere.
+    /// <para>
+    /// Only set when somebody could see them and it came to nothing anyway. Walking past
+    /// an ordinary person, and walking past a trainer who has already been beaten, look
+    /// identical from the player's side — and the commonest answer of all is that the map
+    /// simply has nobody on it who wants a fight, which is what the startup report is for.
+    /// </para>
+    /// </summary>
+    public string? LastSightRefusal { get; private set; }
 
     /// <summary>The text box is closed. Whoever this player was holding carries on.</summary>
     public void StopTalking(int playerId)

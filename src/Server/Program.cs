@@ -75,7 +75,7 @@ public static class Program
         ReportWorldLinks(world);
         ReportStartingMapLinks(game);
         ReportEncounterReadiness(game.StartingMap);
-        ReportTrainerReadiness(world, rules);
+        ReportTrainerReadiness(world, rules, game.StartingMap.Id);
 
         using var store = new SqlitePlayerStore(databasePath);
         Console.WriteLine($"Accounts in {Path.GetFullPath(databasePath)}");
@@ -94,7 +94,7 @@ public static class Program
     /// not proof, but a world where half of them do not is a very loud symptom.
     /// </para>
     /// </summary>
-    private static void ReportTrainerReadiness(WorldData world, GameRules? rules)
+    private static void ReportTrainerReadiness(WorldData world, GameRules? rules, string startingMapId)
     {
         List<MapObject> trainers = world.Maps
             .SelectMany(m => m.Objects)
@@ -121,6 +121,26 @@ public static class Program
         Console.WriteLine(missing == 0
             ? $"  every trainer id on a map has a party in {nameof(GameRules)}"
             : $"  {missing} trainers name an id with no party — the trainer table may be located wrongly");
+
+        // Where they actually are. Most maps have none — the first routes of the games
+        // deliberately have nobody who wants a fight — and "I walked past somebody and
+        // nothing happened" is otherwise indistinguishable from a broken sight line.
+        var busiest = world.Maps
+            .Select(m => (Map: m, Count: m.Objects.Count(o => o.CanBeFought && o.SightRange > 0)))
+            .Where(m => m.Count > 0)
+            .OrderByDescending(m => m.Count)
+            .Take(6)
+            .ToList();
+
+        foreach ((MapData map, int count) in busiest)
+            Console.WriteLine($"    {map.Id,-8} {map.Name,-20} {count} looking for a fight");
+
+        MapData starting = world.Find(startingMapId) ?? world.Maps.First();
+
+        int here = starting.Objects.Count(o => o.CanBeFought && o.SightRange > 0);
+
+        if (here == 0)
+            Console.WriteLine($"  nobody on {starting.Name} wants a fight — walk to one of the above");
     }
 
     /// <summary>
@@ -519,6 +539,11 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                             if (world.LastEdgeRefusal is { } refusal)
                             {
                                 Console.WriteLine($"| #{playerId} could not cross: {refusal}");
+                            }
+
+                            if (world.LastSightRefusal is { } unseen)
+                            {
+                                Console.WriteLine($"| #{playerId} was not challenged: {unseen}");
                             }
 
                             if (verbose && world.Find(playerId) is { } walker)
