@@ -498,9 +498,21 @@ public sealed class GameWorld
     {
         lock (_gate)
         {
+            LastTalkOutcome = null;
+
             if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
-            if (!_populated.TryGetValue(player.MapId, out MapPopulation? people)) return [];
-            if (people.ById(localId) is not { } person) return [];
+
+            if (!_populated.TryGetValue(player.MapId, out MapPopulation? people))
+            {
+                LastTalkOutcome = "that map is not populated";
+                return [];
+            }
+
+            if (people.ById(localId) is not { } person)
+            {
+                LastTalkOutcome = $"no object {localId} on {player.MapId}";
+                return [];
+            }
 
             // Anyone this player was already holding is let go first, so a client that
             // loses a "finished" message cannot accumulate frozen people behind it.
@@ -513,17 +525,36 @@ public sealed class GameWorld
                 .Reachable(player.Square, player.Facing, square => !grid.IsWalkable(square))
                 .Contains(person.Square);
 
-            if (!within) return [];
+            if (!within)
+            {
+                LastTalkOutcome =
+                    $"object {localId} is at {person.Square}, and from {player.Square} facing " +
+                    $"{player.Facing} the reachable squares are " +
+                    string.Join(" and ", Interaction
+                        .Reachable(player.Square, player.Facing, square => !grid.IsWalkable(square)));
+
+                return [];
+            }
 
             // Somebody who wants a fight gets one. The client opened a text box on the
             // way in; the battle arriving is what closes it.
-            if (StartTrainerBattle(player, person.Template) is { Count: > 0 } challenge) return challenge;
+            if (StartTrainerBattle(player, person.Template) is { Count: > 0 } challenge)
+            {
+                LastTalkOutcome = $"a fight with trainer {person.Template.TrainerId}";
+                return challenge;
+            }
 
             // A shop opens on top of the hold rather than instead of it: the shopkeeper
             // still has to stand still while somebody is buying from them.
             List<Outgoing> shop = OpenShop(player, person.Template);
 
             person.HeldBy = playerId;
+
+            LastTalkOutcome = person.Template.IsShopkeeper && shop.Count == 0
+                ? $"object {localId} sells {person.Template.Stock.Count} things, none of which this server has an item for"
+                : shop.Count > 0
+                    ? $"a shop with {person.Template.Stock.Count} things in it"
+                    : $"object {localId} held still; they sell nothing";
 
             if (shop.Count > 0)
             {
@@ -782,6 +813,17 @@ public sealed class GameWorld
                 people.Release(holder => holder == playerId);
         }
     }
+
+    /// <summary>
+    /// What the last attempt to talk to somebody came to.
+    /// <para>
+    /// Talking has four possible outcomes and three of them look identical from the
+    /// player's side: a fight, a shop, somebody held still to be spoken to, and nothing
+    /// at all. Only the server knows which it was, so it writes it down — the same
+    /// arrangement the map edges and the sight lines already use.
+    /// </para>
+    /// </summary>
+    public string? LastTalkOutcome { get; private set; }
 
     /// <summary>Who this player is currently holding still, for tests and for reporting.</summary>
     public int? TalkingTo(int playerId)

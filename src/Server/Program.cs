@@ -520,8 +520,14 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                             break;
 
                         case TalkRequest talk when playerId != 0:
-                            await DispatchAsync(world.StartTalking(playerId, talk.LocalId), playerId, cancellationToken)
-                                .ConfigureAwait(false);
+                            List<Outgoing> talked = world.StartTalking(playerId, talk.LocalId);
+
+                            // Four outcomes, three of which look the same from the
+                            // player's side. Only the server knows which it was.
+                            if (world.LastTalkOutcome is { } talkOutcome)
+                                Console.WriteLine($"* #{playerId} talked to {talk.LocalId}: {talkOutcome}");
+
+                            await DispatchAsync(talked, playerId, cancellationToken).ConfigureAwait(false);
                             break;
 
                         case TalkFinished when playerId != 0:
