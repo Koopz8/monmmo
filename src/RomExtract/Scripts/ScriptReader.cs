@@ -295,6 +295,25 @@ public static class ScriptCommands
         //
         // The third runs into 0x63, which is the next unknown along and the next round.
         [0x32] = 0,
+
+        // Four: an item and a count. Eight of nine sites read the same shape, and the
+        // shape says what the command is:
+        //
+        //   46 | 55 01  01 00 | 21 0D 80 00 00 | 06 01 ...
+        //   46 | 0D 00  01 00 | 21 0D 80 00 00 | 06 01 ...
+        //   46 | 6E 00  01 00 | 21 0D 80 00 00 | 06 01 ...
+        //
+        // An item id, then one of them, then compare 0x800D against zero and branch —
+        // which is a command handing something over and the script asking whether it
+        // fitted. This is the one that stopped Route 1 one line after "I know, I'll
+        // give you a sample. Here you go!", and the sample is item 0x0155.
+        [0x46] = 4,     // giveitem
+
+        // Nothing. Seven sites out of seven, every one followed immediately by
+        // `21 0D 80 00 00` — compare 0x800D against zero — and then a branch. A command
+        // that answers into the result variable and is asked about on the next line
+        // takes no arguments; anything swallowed here would eat the compare.
+        [0xA0] = 0,
     };
 
     /// <summary>
