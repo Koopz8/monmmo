@@ -784,3 +784,53 @@ public class ObstacleTests
         Assert.Equal(Strength, ScriptRunner.Run(Tree(Strength), Start).ShiftedBy);
     }
 }
+
+/// <summary>
+/// The movement lists a cutscene is made of, and the one thing about them that can be
+/// checked without a screen: where the steps stop.
+/// </summary>
+public class MovementListTests
+{
+    private static Rom Image(params (uint Address, byte[] Bytes)[] chunks)
+    {
+        var image = new byte[0x400];
+
+        foreach ((uint address, byte[] bytes) in chunks)
+            bytes.CopyTo(image, (int)(address - Rom.BaseAddress));
+
+        return new Rom(image);
+    }
+
+    [Fact]
+    public void AListEndsAtTheTerminatorAndNotAtTheNextOne()
+    {
+        // The lists sit packed one after another with nothing between them, so a reader
+        // that does not stop at 0xFE reads the next scene's steps as part of this one —
+        // and a cutscene that walks somebody twice as far as it should ends with them
+        // standing inside a building.
+        Rom rom = Image((Rom.BaseAddress, [0x11, 0x11, 0x11, MovementLists.End, 0x10, 0x10, MovementLists.End]));
+
+        Assert.Equal(new byte[] { 0x11, 0x11, 0x11 }, MovementLists.Read(rom, Rom.BaseAddress));
+        Assert.Equal(new byte[] { 0x10, 0x10 }, MovementLists.Read(rom, Rom.BaseAddress + 4));
+    }
+
+    [Fact]
+    public void SomethingWithNoTerminatorIsNotAList()
+    {
+        // applymovement's second argument is only a pointer; nothing says it leads to a
+        // list. Returning whatever is there would put sixty-four bytes of somebody
+        // else's data into a scene.
+        var image = new byte[0x400];
+        Array.Fill(image, (byte)0x11);
+
+        Assert.Empty(MovementLists.Read(new Rom(image), Rom.BaseAddress));
+    }
+
+    [Fact]
+    public void AnEmptyListIsStillAList()
+    {
+        // A terminator on its own. Ordinary — a scene that applies one to somebody who
+        // is already where they should be.
+        Assert.Empty(MovementLists.Read(Image((Rom.BaseAddress, [MovementLists.End])), Rom.BaseAddress));
+    }
+}

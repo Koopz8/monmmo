@@ -161,6 +161,8 @@ public static class Program
 
         if (options.Events) WriteEventShapes(rom);
 
+        if (options.Movements) WriteMovements(rom);
+
         if (options.ScriptAt != 0) WriteScriptAt(rom, options.ScriptAt);
 
         Console.WriteLine();
@@ -1201,6 +1203,117 @@ public static class Program
     /// milestone 14.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// The movement lists, and the evidence for what their bytes mean.
+    /// <para>
+    /// The histogram first and any hypothesis second. Twice this session a scan has been
+    /// wrong in a way only a control could catch, and both times the control was cheap.
+    /// </para>
+    /// </summary>
+    private static void WriteMovements(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("Movement lists");
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        List<MovementList> lists = MovementLists.All(rom, library);
+
+        if (lists.Count == 0)
+        {
+            Console.WriteLine("  none — no script on any map applies one");
+            return;
+        }
+
+        Console.WriteLine(
+            $"  {lists.Count} lists across {lists.Select(l => l.MapId).Distinct().Count()} maps, " +
+            $"{lists.Count(l => l.IsPlayer)} of them applied to person 0x{MovementList.Player:X2}");
+
+        Console.WriteLine($"  longest is {lists.Max(l => l.Steps.Length)} steps");
+
+        Console.WriteLine();
+        Console.WriteLine("  Step bytes, commonest first:");
+
+        foreach ((byte step, int count) in MovementLists.Histogram(lists).Take(16))
+            Console.WriteLine($"    0x{step:X2}  {count,5}");
+
+        // The oracle: a cutscene walks people over squares people can stand on. Only
+        // people, never the player — where the player is standing when a scene starts is
+        // not a fact about the cartridge.
+        Dictionary<string, LoadedMap> maps = library.All()
+            .ToDictionary(m => WorldExporter.MapId(m.Bank, m.Number));
+
+        foreach (byte family in (byte[])[0x10, 0x1C, 0x08])
+        {
+            List<MovementLists.Reading> readings = MovementLists.Derive(lists, maps, family);
+
+            if (readings.Count == 0 || readings[0].Paths == 0) continue;
+
+            Console.WriteLine();
+            Console.WriteLine($"  Reading 0x{family:X2}..0x{family + 3:X2} as steps, best four of twenty-four:");
+
+            foreach (MovementLists.Reading reading in readings.Take(4))
+                Console.WriteLine($"    {reading}");
+        }
+
+        List<MovementLists.Reading> joint =
+            MovementLists.DeriveJoint(lists, maps, [0x08, 0x10, 0x1C]);
+
+        if (joint.Count > 0 && joint[0].Paths > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine("  All three families at once, one ordering shared, best six of twenty-four:");
+
+            foreach (MovementLists.Reading reading in joint.Take(6))
+                Console.WriteLine($"    {reading}");
+        }
+
+        List<MovementLists.Reading> fromTriggers =
+            MovementLists.DeriveFromTriggers(lists, maps, [0x08, 0x10, 0x1C]);
+
+        if (fromTriggers.Count > 0 && fromTriggers[0].Paths > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine("  The player's own lists, walked from the trigger square that started them:");
+
+            foreach (MovementLists.Reading reading in fromTriggers.Take(4))
+                Console.WriteLine($"    {reading}");
+        }
+
+        // The verdict, stated rather than left to be eyeballed. Two samples that share
+        // no scripts, no maps and no starting squares; the answer is whichever ordering
+        // is top of both, and there is no answer at all unless exactly one is.
+        if (joint.Count > 0 && fromTriggers.Count > 0 && joint[0].Paths > 0 && fromTriggers[0].Paths > 0)
+        {
+            double bestJoint = joint[0].Share;
+            double bestPlayer = fromTriggers[0].Share;
+
+            List<string> agreed =
+            [
+                .. joint.Where(r => r.Share >= bestJoint - 0.0001)
+                    .Select(r => string.Join(",", r.Directions))
+                    .Intersect(fromTriggers
+                        .Where(r => r.Share >= bestPlayer - 0.0001)
+                        .Select(r => string.Join(",", r.Directions))),
+            ];
+
+            Console.WriteLine();
+            Console.WriteLine(agreed.Count == 1
+                ? $"  Both samples put one ordering first and it is the same one: {agreed[0].ToLowerInvariant()}"
+                : $"  undecided — {agreed.Count} orderings are top of both samples");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("  A few lists as they are:");
+
+        foreach (MovementList list in lists.Take(8))
+        {
+            Console.WriteLine(
+                $"    {list.MapId,-8} person 0x{list.PersonId:X2} 0x{list.Address:X8}  " +
+                string.Join(" ", list.Steps.Select(s => $"{s:X2}")));
+        }
+    }
+
     /// <summary>
     /// The shape of the four event lists, scored against the whole cartridge.
     /// <para>
@@ -2364,6 +2477,8 @@ public static class Program
 
         public bool Events { get; private init; }
 
+        public bool Movements { get; private init; }
+
         /// <summary>Dump everything reachable from one cartridge address.</summary>
         public uint ScriptAt { get; private init; }
         public bool DumpMoves { get; private init; }
@@ -2403,6 +2518,7 @@ public static class Program
             string whoSays = "";
             int? whoGives = null;
             bool events = false;
+            bool movements = false;
             uint scriptAt = 0;
             bool dumpMoves = false, dumpEncounters = false;
             string? behaviourMap = null;
@@ -2508,6 +2624,9 @@ public static class Program
                     case "--events":
                         events = true;
                         break;
+                    case "--movements":
+                        movements = true;
+                        break;
                     case "--who-gives":
                         string item = Next(args, ref i, "--who-gives");
                         whoGives = item.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
@@ -2579,6 +2698,7 @@ public static class Program
                 WhoSays = whoSays,
                 WhoGives = whoGives,
                 Events = events,
+                Movements = movements,
                 ScriptAt = scriptAt,
                 DumpMoves = dumpMoves,
                 DumpEncounters = dumpEncounters,
