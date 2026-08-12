@@ -1597,6 +1597,13 @@ public sealed class GameWorld
                 return [];
             }
 
+            // Off the cast list, whatever comes of the placement. This message is the
+            // scene saying where it left somebody, which is the last thing a scene does
+            // with them — so a release afterwards is the scene ending, not the scene
+            // coming apart. Reporting those was five identical lines per visit to one
+            // room, and the whole value of that diagnostic is that it is rare.
+            player.SceneCast.Remove(localId);
+
             // The scene window, not the hold. The hold was only ever a proxy for "there
             // is a scene going on", and it is a bad one: it depends on two messages
             // arriving in the order they were sent, and in play they did not — a text box

@@ -242,6 +242,13 @@ public static class Program
         // anywhere, and a fade that plays for a refused door is worse than none.
         float fadingIn = 0f;
 
+        // The longest frame in the last couple of seconds, and how long is left of that
+        // window. Kept rather than averaged: a stutter is one frame that took ten times
+        // as long as the rest, and every average this could be replaced with is designed
+        // to hide it.
+        float worstFrame = 0f;
+        float worstUntil = 0f;
+
         // How long before this side may ask to step again. The client's half of the
         // server's rate limit, and until now it did not exist because it did not have to:
         // a step cannot begin before the last one's animation ends, and that animation is
@@ -271,6 +278,18 @@ public static class Program
         while (!Raylib.WindowShouldClose())
         {
             float delta = Raylib.GetFrameTime();
+
+            worstUntil -= delta;
+
+            if (worstUntil <= 0f)
+            {
+                worstUntil = 2f;
+                worstFrame = delta;
+            }
+            else if (delta > worstFrame)
+            {
+                worstFrame = delta;
+            }
 
             ApplyServerMessages(
                 network, others, player, view, data, trainers, items, script, carrying,
@@ -524,7 +543,8 @@ public static class Program
                     new Color((byte)0, (byte)0, (byte)0, (byte)(255 * (fadingIn / FadeSeconds))));
             }
 
-            DrawStatus(view.Map, player, network, others.Count, money, bag.Count, camera.Target, sprite);
+            DrawStatus(
+                view.Map, player, network, others.Count, money, bag.Count, camera.Target, sprite, worstFrame);
             // A scene's line goes in the same box a conversation's does. There is only
             // one box on screen and only one thing being said at a time.
             (scene?.Saying ?? talking)?.Draw(WindowWidth, WindowHeight);
@@ -1072,7 +1092,7 @@ public static class Program
 
     private static void DrawStatus(
         LoadedMap map, WalkingCharacter player, NetworkClient network, int others, int money, int carrying,
-        System.Numerics.Vector2 camera, CharacterSprite? sprite)
+        System.Numerics.Vector2 camera, CharacterSprite? sprite, float worstFrame)
     {
         string connection = network.Failure is { } failure
             ? $"   offline: {failure}"
@@ -1093,9 +1113,13 @@ public static class Program
         // and perfectly visible on grass, which is exactly the shape of the report.
         (float px, float py) = player.PixelPosition;
 
+        // Frame time as well as position, because "jittery" is a word and this is a
+        // number. A stutter is one long frame, so the longest recent one is the reading
+        // that matters — an average hides exactly the thing being complained about.
         string second =
             $"you {px:F0},{py:F0}   map {map.PixelWidth}x{map.PixelHeight}   " +
             $"camera {camera.X:F0},{camera.Y:F0}   " +
+            $"{Raylib.GetFPS()} fps, worst {worstFrame * 1000f:F0} ms   " +
             (sprite is null ? "SPRITE MISSING — drawing the placeholder box" : "sprite loaded");
 
         Raylib.DrawText(second, 13, 37, 20, Color.Black);
