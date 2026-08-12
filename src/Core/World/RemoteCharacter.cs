@@ -76,8 +76,8 @@ public sealed class RemoteCharacter
             float toY = Square.Y * WalkingCharacter.SquarePixels;
 
             return (
-                _fromX + (toX - _fromX) * _progress,
-                _fromY + (toY - _fromY) * _progress);
+                WalkingCharacter.Between(_fromX, toX, _progress),
+                WalkingCharacter.Between(_fromY, toY, _progress));
         }
     }
 }

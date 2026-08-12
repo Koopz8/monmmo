@@ -25,6 +25,9 @@ public static class Program
     private const int WindowHeight = 640;
     private const float ViewZoom = 3f;
 
+    /// <summary>How long the black over a new map takes to clear.</summary>
+    private const float FadeSeconds = 0.22f;
+
     public static int Main(string[] args)
     {
         // The working directory, not the build output, so the file sits alongside the
@@ -232,6 +235,13 @@ public static class Program
         // view has only just switched to it.
         bool arrived = false;
 
+        // How much black is still over the screen after arriving somewhere. The original
+        // fades through black at every door; cutting straight to the far side is the
+        // single harshest thing about moving between maps here. Only the fade in — the
+        // fade out would have to start before the server has agreed the player is going
+        // anywhere, and a fade that plays for a refused door is worse than none.
+        float fadingIn = 0f;
+
         // Where the server last said we are, when that disagreed with where we think we
         // are. Held rather than applied on the spot: a correction almost always arrives
         // mid-step, and snapping a character sideways through a stride looks worse than
@@ -250,7 +260,7 @@ public static class Program
             ApplyServerMessages(
                 network, others, player, view, data, trainers, items, script, carrying,
                 ref talking, ref battle, ref shop, ref bag, ref party, ref money,
-                ref correction, ref watching, ref exclaimFor, ref scene, ref arrived);
+                ref correction, ref watching, ref exclaimFor, ref scene, ref arrived, ref fadingIn);
 
             // A battle suspends the overworld entirely: the server is running it, and
             // walking on meanwhile would put the two sides out of step.
@@ -476,6 +486,15 @@ public static class Program
             else
                 DrawPlayer(playerX, playerY, player.Facing);
             Raylib.EndMode2D();
+
+            if (fadingIn > 0f)
+            {
+                fadingIn = Math.Max(0f, fadingIn - delta);
+
+                Raylib.DrawRectangle(
+                    0, 0, WindowWidth, WindowHeight,
+                    new Color((byte)0, (byte)0, (byte)0, (byte)(255 * (fadingIn / FadeSeconds))));
+            }
 
             DrawStatus(view.Map, player, network, others.Count, money, bag.Count, camera.Target, sprite);
             // A scene's line goes in the same box a conversation's does. There is only
@@ -735,7 +754,8 @@ public static class Program
         ref int? watching,
         ref float exclaimFor,
         ref Cutscene? scene,
-        ref bool arrived)
+        ref bool arrived,
+        ref float fadingIn)
     {
         foreach (NetMessage message in network.Drain())
         {
@@ -880,6 +900,7 @@ public static class Program
                     // the others are cleared, one line up.
                     scene = null;
                     arrived = true;
+                    fadingIn = FadeSeconds;
 
                     if (view.SwitchTo(changed.MapId))
                     {
@@ -980,7 +1001,12 @@ public static class Program
             ? map.PixelHeight / 2f
             : Math.Clamp(centreY, halfHeight, map.PixelHeight - halfHeight);
 
-        return new System.Numerics.Vector2(x, y);
+        // On a whole pixel, for the same reason a character is. The camera is what every
+        // tile in the world is drawn relative to, so half a pixel here is half a pixel on
+        // four hundred tiles at once — and at three times scale with point filtering, the
+        // rounding lands differently for each of them. It reads as the whole map
+        // shimmering rather than as the camera being slightly off.
+        return new System.Numerics.Vector2(MathF.Round(x), MathF.Round(y));
     }
 
     /// <summary>

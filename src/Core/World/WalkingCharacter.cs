@@ -18,8 +18,34 @@ public sealed class WalkingCharacter
     /// <summary>Map squares are 16 pixels across.</summary>
     public const int SquarePixels = 16;
 
-    /// <summary>Seconds to cross one square, roughly the original walking speed.</summary>
-    public const float StepSeconds = 0.16f;
+    /// <summary>
+    /// How many sixtieths of a second one square takes.
+    /// <para>
+    /// Sixteen, because a square is sixteen pixels and the screen is drawn sixty times a
+    /// second: one pixel a frame, exactly, for every frame of the step. That is the whole
+    /// reason this is a frame count rather than a duration. The previous value was 0.16
+    /// seconds, which is 9.6 frames, which is 1.67 pixels a frame — and a scene drawn at
+    /// three times scale with point filtering does not have a third of a pixel to put
+    /// anything in, so every tile in the world jumped between two and five screen pixels
+    /// at random. That is what "janky" was.
+    /// </para>
+    /// </summary>
+    public const int StepFrames = 16;
+
+    /// <summary>Seconds to cross one square.</summary>
+    public const float StepSeconds = StepFrames / 60f;
+
+    /// <summary>
+    /// Where something is drawn, part-way between two squares, on a whole pixel.
+    /// <para>
+    /// Rounded rather than interpolated freely, and shared so that everything walking —
+    /// the player, the people, other players, a scene's cast — lands on the same grid.
+    /// A character on a half pixel is a character whose outline shimmers, and one on a
+    /// different half pixel from the map it is standing on is worse.
+    /// </para>
+    /// </summary>
+    public static float Between(float from, float to, float progress) =>
+        MathF.Round(from + (to - from) * progress);
 
     private CollisionGrid _grid = new(1, 1, [0]);
     private GridPosition _stepFrom;
@@ -130,8 +156,8 @@ public sealed class WalkingCharacter
             float toY = Square.Y * SquarePixels;
 
             return (
-                fromX + (toX - fromX) * _stepProgress,
-                fromY + (toY - fromY) * _stepProgress);
+                Between(fromX, toX, _stepProgress),
+                Between(fromY, toY, _stepProgress));
         }
     }
 }

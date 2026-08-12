@@ -27,8 +27,15 @@ namespace PokeMmo.Client;
 /// </summary>
 public sealed class Cutscene
 {
-    /// <summary>How long one square of a scripted walk takes.</summary>
-    private const float StepSeconds = 0.22f;
+    /// <summary>
+    /// How long one square of a scripted walk takes.
+    /// <para>
+    /// The same as a walked one. It was 0.22 against the player's 0.16, so a professor
+    /// walking across a town moved at a visibly different pace from the person watching
+    /// him, and two people walking side by side drifted apart.
+    /// </para>
+    /// </summary>
+    private const float StepSeconds = WalkingCharacter.StepSeconds;
 
     /// <summary>
     /// What each step byte does. Derived once, beside the lists it was derived from —

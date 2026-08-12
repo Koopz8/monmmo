@@ -61,6 +61,43 @@ public class WalkingCharacterTests
     }
 
     [Fact]
+    public void AStepIsOnePixelAFrameAndNeverHalfOfOne()
+    {
+        // The whole of what "janky" was. A square is sixteen pixels and the screen is
+        // drawn sixty times a second, so a step of sixteen frames is one pixel a frame,
+        // exactly. At the old 0.16 seconds it was 1.67 pixels a frame, and a world drawn
+        // at three times scale with point filtering has nowhere to put a third of a
+        // pixel — so every tile on screen jumped between two and five screen pixels at
+        // random, differently for each tile.
+        WalkingCharacter character = At(1, 1);
+
+        // The square it starts on, then one reading after every frame of the step. The
+        // frame that starts a step also advances it, which is why the first reading is
+        // already a pixel along.
+        List<float> seen = [character.PixelPosition.X];
+
+        character.Update(1f / 60f, Direction.Right);
+        seen.Add(character.PixelPosition.X);
+
+        while (character.IsStepping)
+        {
+            character.Update(1f / 60f, null);
+            seen.Add(character.PixelPosition.X);
+        }
+
+        // Whole pixels, all the way across.
+        Assert.All(seen, x => Assert.Equal(x, MathF.Round(x)));
+
+        // And one at a time: sixteen pixels over sixteen frames, no frame skipped and
+        // none doubled.
+        Assert.Equal(WalkingCharacter.StepFrames + 1, seen.Count);
+        Assert.Equal(16f, seen[0]);
+        Assert.Equal(32f, seen[^1]);
+
+        for (int i = 1; i < seen.Count; i++) Assert.Equal(1f, seen[i] - seen[i - 1]);
+    }
+
+    [Fact]
     public void IgnoresInputUntilTheCurrentStepFinishes()
     {
         // Grid-locked movement: a step that has started cannot be diverted, or a
