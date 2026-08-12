@@ -913,6 +913,36 @@ public class SpecialBranchTests
         [(byte)address, (byte)(address >> 8), (byte)(address >> 16), (byte)(address >> 24)];
 
     [Fact]
+    public void OnlyTheVeryNextCommandCounts()
+    {
+        // A looser rule finds forks near a command rather than forks about it. Swept over
+        // every opcode it ranked `compare` and `goto_if` themselves among the best
+        // evidenced answerers in the game, which is retraction 2 wearing a different hat.
+        //
+        // Here: a call, then something in between, then a compare. The compare is not
+        // about the call, and a reader that says it is will name the wrong thing.
+        var image = new byte[0x400];
+
+        byte[] script =
+        [
+            0x25, 0x74, 0x01,                               // special 0x0174
+            0x6B,                                           // faceplayer — anything at all
+            0x21, 0x0D, 0x80, 0x00, 0x00,                   // compare 0x800D, 0
+            ScriptCommands.GotoIf, 0x01, .. At(Yes),
+            ScriptCommands.End,
+        ];
+
+        script.CopyTo(image, 0);
+
+        List<ScriptCommand> commands = ScriptReader.Read(new Rom(image), Start);
+
+        // The gap is the whole point: one command between the call and the compare is
+        // enough for the compare to be about something else.
+        Assert.Equal(0x6B, commands[1].Code);
+        Assert.Equal(0x21, commands[2].Code);
+    }
+
+    [Fact]
     public void AnAnswerBelongsToWhoeverAnsweredLast()
     {
         // The mistake this guard exists for, and it cost a wrong claim in a commit

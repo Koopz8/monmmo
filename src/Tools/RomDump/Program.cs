@@ -147,6 +147,8 @@ public static class Program
 
         if (options.Answers is { } answering) WriteAnswers(rom, answering);
 
+        if (options.AnswerSweep) WriteAnswerSweep(rom);
+
         if (options.Shared) WriteSharedScripts(rom);
 
         if (options.Silent) WriteSilentPeople(rom);
@@ -1167,6 +1169,87 @@ public static class Program
             SpecialCalls.AllOf(rom, library, code),
             sites);
     }
+
+    /// <summary>
+    /// Every command whose answer a script branches on, ranked by how readable the fork is.
+    /// <para>
+    /// The sweep rather than one guess at a time. A fork whose two arms both speak is the
+    /// strongest shape this project has: the cartridge saying, in its own words, what it
+    /// thinks the difference is. That is how 0xA0 was read, and it is worth asking which
+    /// other commands are sitting in front of one.
+    /// </para>
+    /// <para>
+    /// Ranked by *speaking* sites and not by call count on purpose. A command called four
+    /// hundred times whose arms never say anything is unreadable by this instrument, and
+    /// a command called four times with eight lines of dialogue around it is not.
+    /// </para>
+    /// </summary>
+    private static void WriteAnswerSweep(Rom rom, int top = 16)
+    {
+        Console.WriteLine();
+        Console.WriteLine("Commands whose answer is branched on, by how much the branches say");
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        var ranked = new List<(byte Code, int Sites, int Speaking, string Example)>();
+
+        foreach (byte code in Enumerable.Range(0, 256).Select(c => (byte)c))
+        {
+            // Only the ones with a known width — an unknown command stops the read and is
+            // never reached, so it can have no forks to look at.
+            if (ScriptCommands.ArgumentLength(code) is null) continue;
+
+            List<SpecialCall> calls = SpecialCalls.AllOf(rom, library, code);
+
+            List<Branch> forks = [.. calls.SelectMany(c => c.Branches)];
+            if (forks.Count == 0) continue;
+
+            int speaking = 0;
+            string example = "";
+
+            foreach (Branch fork in forks)
+            {
+                string said = Says(rom, fork.Taken);
+                string other = Says(rom, fork.NotTaken);
+
+                if (said.Length == 0 || other.Length == 0) continue;
+
+                speaking++;
+
+                if (example.Length == 0) example = $"{said}  /  {other}";
+            }
+
+            ranked.Add((code, forks.Count, speaking, example));
+        }
+
+        foreach ((byte code, int sites, int speaking, string example) in ranked
+                     .OrderByDescending(r => r.Speaking)
+                     .ThenByDescending(r => r.Sites)
+                     .Take(top))
+        {
+            Console.WriteLine();
+            Console.WriteLine(
+                $"  0x{code:X2} {ScriptCommands.NameOf(code),-16} {sites,4} forks, " +
+                $"{speaking,3} with words on both arms");
+
+            if (example.Length > 0) Console.WriteLine($"       {example}");
+        }
+    }
+
+    /// <summary>The first thing an arm says, or nothing when it says nothing.</summary>
+    private static string Says(Rom rom, uint address)
+    {
+        if (address == 0 || rom.ToOffsetOrNull(address) is null) return "";
+
+        ScriptRun run = ScriptRunner.Run(rom, address);
+
+        return run.Pages.Count == 0
+            ? ""
+            : $"\"{Shorten(GameText.ToAscii(run.Pages[0]).Replace('\n', ' '))}\"";
+    }
+
+    private static string Shorten(string line, int most = 44) =>
+        line.Length <= most ? line : line[..most] + "...";
 
     private static void WriteForks(Rom rom, string title, List<SpecialCall> calls, int sites)
     {
@@ -2552,6 +2635,8 @@ public static class Program
 
         public byte? Answers { get; private init; }
 
+        public bool AnswerSweep { get; private init; }
+
         /// <summary>Count the scripts map objects hand their work to.</summary>
         public bool Shared { get; private init; }
 
@@ -2611,6 +2696,7 @@ public static class Program
             bool specials = false;
             int? special = null;
             byte? answers = null;
+            bool answerSweep = false;
             bool shared = false;
             bool silent = false;
             bool derive = false;
@@ -2694,6 +2780,9 @@ public static class Program
                         break;
                     case "--script-runs":
                         scriptRuns = true;
+                        break;
+                    case "--answered":
+                        answerSweep = true;
                         break;
                     case "--answers":
                         string answerer = Next(args, ref i, "--answers");
@@ -2804,6 +2893,7 @@ public static class Program
                 Specials = specials,
                 Special = special,
                 Answers = answers,
+                AnswerSweep = answerSweep,
                 Shared = shared,
                 Silent = silent,
                 Derive = derive,

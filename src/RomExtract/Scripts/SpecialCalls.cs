@@ -262,17 +262,31 @@ public static class SpecialCalls
         return compared;
     }
 
-    /// <summary>Where each arm of the branch after a call actually goes.</summary>
+    /// <summary>
+    /// Where each arm of the branch after a call actually goes.
+    /// <para>
+    /// The compare has to be the <em>very next</em> command, not merely a nearby one. A
+    /// looser rule finds forks near a command rather than forks about it, and ranks
+    /// <c>compare</c> and <c>goto_if</c> themselves among the best-evidenced answerers in
+    /// the game — which is retraction 2 again, wearing a different hat.
+    /// </para>
+    /// <para>
+    /// It costs recall: a call whose answer is compared two commands later is not seen.
+    /// That is the right way to be wrong here. A missed reading is a reading nobody makes;
+    /// a false one goes into a doc as a fact.
+    /// </para>
+    /// <para>
+    /// All three commands read this way so far — 0x46, 0x7C and 0xA0 — put the compare
+    /// immediately after themselves at every site. The shape is not a compromise.
+    /// </para>
+    /// </summary>
     private static List<Branch> Forks(List<ScriptCommand> commands, int at, int answer)
     {
         var forks = new List<Branch>();
 
-        for (int i = at + 1; i < commands.Count - 1 && i <= at + Window; i++)
+        for (int i = at + 1; i < commands.Count - 1 && i <= at + 1; i++)
         {
             if (!Adjacent(commands[i - 1], commands[i])) break;
-
-            if (Answering.Contains(commands[i].Code)) break;
-            if (commands[i].Code == SetVar && commands[i].Word() == answer) break;
 
             if (commands[i].Code != Compare) continue;
             if (commands[i].Word() != answer) continue;
