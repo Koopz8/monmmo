@@ -79,6 +79,19 @@ public sealed class InMemoryPlayerStore : IPlayerStore
         return Task.CompletedTask;
     }
 
+    public Task<bool> WipeAsync(string username, SavedCharacter fresh, CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            if (!_byFoldedName.TryGetValue(UsernameRules.Fold(username), out Row? row))
+                return Task.FromResult(false);
+
+            row.Character = fresh;
+
+            return Task.FromResult(true);
+        }
+    }
+
     public Task<int> ForgetStoryAsync(string username, CancellationToken cancellationToken = default)
     {
         lock (_gate)

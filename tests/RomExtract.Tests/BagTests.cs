@@ -150,7 +150,7 @@ public class MoneyAndBallTests
     {
         GameWorld world = GrassyWorld();
 
-        (ServerPlayer player, _) = world.Join(1, "Mason", world.FreshCharacter());
+        (ServerPlayer player, _) = world.Join(1, "Mason", TestRules.Equipped(world));
 
         double now = 0;
 
@@ -188,7 +188,7 @@ public class MoneyAndBallTests
     {
         GameWorld world = GrassyWorld();
 
-        (ServerPlayer player, _) = world.Join(1, "Mason", world.FreshCharacter());
+        (ServerPlayer player, _) = world.Join(1, "Mason", TestRules.Equipped(world));
         player.Bag.Add(TestRules.PotionItem, 4);
 
         (_, _, BattleStarted start) = InBattleWith(world, player);
@@ -275,7 +275,7 @@ public class MoneyAndBallTests
         // target an ordinary ball cannot catch, so the two answers look different.
         GameWorld world = StubbornWorld();
 
-        (ServerPlayer player, _) = world.Join(1, "Mason", world.FreshCharacter());
+        (ServerPlayer player, _) = world.Join(1, "Mason", TestRules.Equipped(world));
         player.Bag.Add(TestRules.MasterBallItem, 1);
 
         (_, _, _) = InBattleWith(world, player);
@@ -301,7 +301,7 @@ public class MoneyAndBallTests
         // not that the ball is what caught it.
         GameWorld world = StubbornWorld();
 
-        (ServerPlayer player, _) = world.Join(1, "Mason", world.FreshCharacter());
+        (ServerPlayer player, _) = world.Join(1, "Mason", TestRules.Equipped(world));
 
         (_, _, _) = InBattleWith(world, player);
 

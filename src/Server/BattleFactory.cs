@@ -16,11 +16,6 @@ namespace PokeMmo.Server;
 /// </summary>
 public sealed class BattleFactory(GameRules rules)
 {
-    /// <summary>What a new account is given, so a first encounter is not a loss by default.</summary>
-    public const int StarterSpecies = 1;
-
-    public const int StarterLevel = 5;
-
     /// <summary>Rebuilds a party member exactly as it was saved.</summary>
     public Battler? Restore(SavedMon saved)
     {
@@ -165,17 +160,4 @@ public sealed class BattleFactory(GameRules rules)
 
     /// <summary>True when this one can still fight.</summary>
     public bool CanFight(SavedMon saved) => Restore(saved) is { HasFainted: false };
-
-    /// <summary>
-    /// The creature a new account begins with.
-    /// <para>
-    /// Given at registration rather than conjured at the first encounter, so that a
-    /// party is never empty and the server never has to invent a battler mid-battle.
-    /// </para>
-    /// </summary>
-    public SavedMon? Starter()
-    {
-        Battler? starter = Wild(StarterSpecies, StarterLevel);
-        return starter is null ? null : Save(starter);
-    }
 }

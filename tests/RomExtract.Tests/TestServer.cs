@@ -16,5 +16,5 @@ internal static class TestJoin
     private static long _nextAccountId;
 
     public static (ServerPlayer Player, List<Outgoing> Send) Join(this GameWorld world, string name) =>
-        world.Join(Interlocked.Increment(ref _nextAccountId), name, world.FreshCharacter());
+        world.Join(Interlocked.Increment(ref _nextAccountId), name, TestRules.Equipped(world));
 }

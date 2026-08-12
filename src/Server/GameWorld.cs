@@ -205,8 +205,15 @@ public sealed class GameWorld
     private readonly BattleRng _objectRng = new(0x5EED);
 
 
-    public GameWorld(WorldData world, string startingMapId, GameRules? rules = null, uint encounterSeed = 1)
+    public GameWorld(
+        WorldData world,
+        string startingMapId,
+        GameRules? rules = null,
+        uint encounterSeed = 1,
+        GridPosition? startingSquare = null)
     {
+        _startingSquare = startingSquare;
+
         _world = world;
         _rng = new BattleRng(encounterSeed);
         _rules = rules;
@@ -220,6 +227,22 @@ public sealed class GameWorld
 
     /// <summary>Where a new character begins. Every other map is reachable by walking.</summary>
     public MapData StartingMap { get; }
+
+    /// <summary>
+    /// The square on it, when somebody has said which.
+    /// <para>
+    /// Without one, the first walkable square of the map is used — which is fine for a
+    /// route and arbitrary for a bedroom, where there is a bed and a television and a
+    /// place somebody would actually be standing.
+    /// </para>
+    /// </summary>
+    private readonly GridPosition? _startingSquare;
+
+    /// <summary>Where a brand new character will be put, for the startup report.</summary>
+    public GridPosition StartingSquare =>
+        _startingSquare is { } chosen && GridFor(StartingMap.Id).IsWalkable(chosen)
+            ? chosen
+            : FindSpawn(StartingMap.Id);
 
     /// <summary>Kept for callers that still think of the server as hosting one map.</summary>
     public MapData Map => StartingMap;
@@ -287,17 +310,19 @@ public sealed class GameWorld
     {
         lock (_gate)
         {
-            GridPosition spawn = FindSpawn(StartingMap.Id);
+            GridPosition spawn = StartingSquare;
             SavedCharacter fresh = SavedCharacter.Fresh(StartingMap.Id, spawn.X, spawn.Y);
 
-            // A starter at registration rather than one conjured at the first
-            // encounter, so a party is never empty and the server never has to invent
-            // a battler in the middle of a battle.
-            SavedCharacter withBalls = fresh with { Items = StartingItems() };
-
-            return _battles?.Starter() is { } starter
-                ? withBalls with { Party = [starter] }
-                : withBalls;
+            // No party. There used to be one handed out here, from before this game had
+            // an opening: a party that was never empty meant the server never had to
+            // invent a battler mid-battle, and mid-battle was the only place a party
+            // came from. It has an opening now — the professor takes you to his lab and
+            // there are three balls on the table — and starting with the thing the first
+            // hour of the game is about is worse than starting with nothing.
+            //
+            // Nothing needs the party to be non-empty. Grass is already declined for
+            // somebody with nobody able to fight, and so is being challenged.
+            return fresh with { Items = StartingItems() };
         }
     }
 

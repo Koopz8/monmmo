@@ -40,7 +40,7 @@ public class ServerBattleTests
     {
         GameWorld world = GrassyWorld(seed);
 
-        (ServerPlayer player, _) = world.Join(1, "Mason", world.FreshCharacter());
+        (ServerPlayer player, _) = world.Join(1, "Mason", TestRules.Equipped(world));
 
         double now = 0;
 
@@ -60,17 +60,34 @@ public class ServerBattleTests
     }
 
     [Fact]
-    public void ANewAccountIsGivenSomethingToFightWith()
+    public void ANewAccountStartsWithNothingToFightWith()
     {
+        // There used to be a party handed out here, from before this game had an
+        // opening. It has one now — the professor takes you to his lab and there are
+        // three balls on the table — and starting with the thing the first hour is about
+        // is worse than starting with nothing.
         GameWorld world = GrassyWorld();
         SavedCharacter fresh = world.FreshCharacter();
 
-        // Handed out at registration rather than conjured at the first encounter, so
-        // the server never has to invent a battler mid-battle.
-        SavedMon starter = Assert.Single(fresh.Party);
+        Assert.Empty(fresh.Party);
 
-        Assert.Equal(BattleFactory.StarterSpecies, starter.Species);
-        Assert.NotEmpty(starter.Moves);
+        // Balls, though. Those are the bag, not the party, and the opening does not
+        // hand them over.
+        Assert.NotEmpty(fresh.Items);
+    }
+
+    [Fact]
+    public void NothingHappensInGrassWithNobodyToSendOut()
+    {
+        // What the free starter was really protecting against. An empty party has to be
+        // survivable, because it is now the first thing every character has.
+        GameWorld world = GrassyWorld();
+
+        (ServerPlayer player, _) = world.Join(1, "Koop", world.FreshCharacter());
+
+        for (int i = 0; i < 200; i++) world.Move(player.Id, i % 2 == 0 ? Direction.Right : Direction.Left, i);
+
+        Assert.Null(player.Battle);
     }
 
     [Fact]
@@ -279,7 +296,7 @@ public class ServerBattleTests
     public void ATurnFromSomebodyNotInABattleIsRefused()
     {
         GameWorld world = GrassyWorld();
-        (ServerPlayer player, _) = world.Join(1, "Mason", world.FreshCharacter());
+        (ServerPlayer player, _) = world.Join(1, "Mason", TestRules.Equipped(world));
 
         List<Outgoing> send = world.TakeBattleTurn(player.Id, new BattleAction.UseMove(0));
 
@@ -307,7 +324,7 @@ public class ServerBattleTests
 
         Assert.False(world.CanResolveBattles);
 
-        (ServerPlayer player, _) = world.Join(1, "Mason", world.FreshCharacter());
+        (ServerPlayer player, _) = world.Join(1, "Mason", TestRules.Equipped(world));
 
         double now = 0;
 
@@ -421,7 +438,7 @@ public class LosingTests
     {
         GameWorld world = GrassyWorld(seed: 3);
 
-        (ServerPlayer player, _) = world.Join(1, "Mason", world.FreshCharacter());
+        (ServerPlayer player, _) = world.Join(1, "Mason", TestRules.Equipped(world));
 
         // A single point of health, so the loss arrives quickly.
         player.Party[0] = player.Party[0] with { CurrentHp = 1 };

@@ -10,6 +10,42 @@ namespace PokeMmo.RomExtract.Tests;
 public class PasswordHasherTests
 {
     [Fact]
+    public async Task WipingLeavesTheLoginAndNothingElse()
+    {
+        using SqlitePlayerStore store = SqlitePlayerStore.InMemory();
+
+        SavedCharacter fresh = SavedCharacter.Fresh("3.0", 1, 1);
+
+        AuthOutcome.Success made = Assert.IsType<AuthOutcome.Success>(
+            await store.RegisterAsync("Mason", "a-good-password", fresh));
+
+        await store.SaveAsync(made.Account.Id, fresh with
+        {
+            MapId = "4.3",
+            Party = [new SavedMon(4, 5, null, 11, StatusCondition.None, Nature.Hardy, [1])],
+            Flags = [0x2C],
+            Variables = [new SavedVariable(0x4055, 2)],
+            ItemsTaken = ["mon:4.3"],
+        });
+
+        Assert.True(await store.WipeAsync("Mason", fresh));
+
+        AuthOutcome.Success back = Assert.IsType<AuthOutcome.Success>(
+            await store.LoginAsync("Mason", "a-good-password"));
+
+        // The login is the whole point of wiping rather than deleting: registering again
+        // to test registering is the one thing this is meant to make easy.
+        Assert.Equal("3.0", back.Character.MapId);
+        Assert.Empty(back.Character.Party);
+        Assert.Empty(back.Character.Flags);
+        Assert.Empty(back.Character.Variables);
+
+        // And the three that only ever grow, which are exactly what makes a wiped
+        // character not a new one if they are left behind.
+        Assert.Empty(back.Character.ItemsTaken);
+    }
+
+    [Fact]
     public void AcceptsTheRightPasswordAndRefusesEveryOther()
     {
         string hash = PasswordHasher.Hash("correct horse battery");

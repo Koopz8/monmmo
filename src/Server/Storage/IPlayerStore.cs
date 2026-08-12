@@ -48,6 +48,22 @@ public interface IPlayerStore
     /// </para>
     /// </summary>
     Task<int> ForgetStoryAsync(string username, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Throws away everything a character has ever done, keeping the account.
+    /// <para>
+    /// The bigger hammer beside <see cref="ForgetStoryAsync"/>, and it exists for the
+    /// same reason: this project is building the beginning of a game, and the beginning
+    /// is the part you can only see once per character. Forgetting the story leaves the
+    /// party, the bag and everything picked up — which is right for re-watching a scene
+    /// and wrong for testing what a new player actually meets.
+    /// </para>
+    /// <para>
+    /// The login survives. Deleting the account would mean registering again to test
+    /// registering, which is the one thing this is meant to make easy.
+    /// </para>
+    /// </summary>
+    Task<bool> WipeAsync(string username, SavedCharacter fresh, CancellationToken cancellationToken = default);
 }
 
 /// <summary>What a username is allowed to be, shared by every store.</summary>

@@ -304,6 +304,41 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
         return await forget.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    public async Task<bool> WipeAsync(
+        string username, SavedCharacter fresh, CancellationToken cancellationToken = default)
+    {
+        await using SqliteConnection connection = Open();
+
+        await using SqliteCommand find = connection.CreateCommand();
+        find.CommandText = "SELECT id FROM accounts WHERE username_folded = $folded;";
+        find.Parameters.AddWithValue("$folded", UsernameRules.Fold(username));
+
+        if (await find.ExecuteScalarAsync(cancellationToken) is not long accountId) return false;
+
+        await using SqliteTransaction transaction =
+            (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+
+        // Everything keyed on the account except the account. WriteCharacterAsync clears
+        // and rewrites most of these itself; the three it does not are the ones that only
+        // ever grow — what has been beaten, what has been picked up, where they last
+        // rested — and those are exactly what makes a wiped character not a new one.
+        await using (SqliteCommand clear = connection.CreateCommand())
+        {
+            clear.Transaction = transaction;
+            clear.CommandText =
+                "DELETE FROM defeated_trainers WHERE account_id = $id; " +
+                "DELETE FROM items_taken WHERE account_id = $id; " +
+                "DELETE FROM resting_places WHERE account_id = $id;";
+            clear.Parameters.AddWithValue("$id", accountId);
+            await clear.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await WriteCharacterAsync(connection, transaction, accountId, fresh, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        return true;
+    }
+
     public async Task SaveAsync(long accountId, SavedCharacter character, CancellationToken cancellationToken = default)
     {
         await using SqliteConnection connection = Open();

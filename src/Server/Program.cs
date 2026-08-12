@@ -27,7 +27,14 @@ public static class Program
         string worldPath = ArgumentValue(args, "--world") ?? "world.dat";
         string databasePath = ArgumentValue(args, "--db") ?? SqlitePlayerStore.DefaultFileName;
         string rulesPath = ArgumentValue(args, "--rules") ?? "rules.dat";
-        string startingMap = ArgumentValue(args, "--map") ?? "pallet town";
+        // Your bedroom, which is where this game begins and not where it used to put
+        // anybody. It is a choice rather than a derivation, and worth saying so: nothing
+        // in the map data marks the player's own house, so this is 4.1 because 4.1 is
+        // the room with the bed, the television and the stairs down into 4.0, whose door
+        // opens onto Pallet Town four squares from where the professor stops you.
+        //
+        // --map moves it, and --spawn puts you on a particular square of it.
+        string startingMap = ArgumentValue(args, "--map") ?? "4.1";
         int port = int.TryParse(ArgumentValue(args, "--port"), out int parsed) ? parsed : DefaultPort;
         bool verbose = args.Contains("--verbose");
 
@@ -46,7 +53,7 @@ public static class Program
 
         try
         {
-            game = new GameWorld(world, startingMap, rules);
+            game = new GameWorld(world, startingMap, rules, startingSquare: Square(ArgumentValue(args, "--spawn")));
         }
         catch (ArgumentException)
         {
@@ -70,7 +77,7 @@ public static class Program
         Console.WriteLine($"Loaded {world.Count} maps from {Path.GetFullPath(worldPath)}");
         Console.WriteLine(
             $"Starting players on {game.StartingMap.Name} ({game.StartingMap.Id}) — " +
-            $"{game.StartingMap.Width}x{game.StartingMap.Height}");
+            $"{game.StartingMap.Width}x{game.StartingMap.Height}, on {game.StartingSquare}");
 
         ReportWorldLinks(world);
         ReportStartingMapLinks(game);
@@ -80,6 +87,16 @@ public static class Program
 
         using var store = new SqlitePlayerStore(databasePath);
         Console.WriteLine($"Accounts in {Path.GetFullPath(databasePath)}");
+
+        if (ArgumentValue(args, "--wipe") is { } wiping)
+        {
+            bool wiped = await store.WipeAsync(wiping, game.FreshCharacter());
+
+            Console.WriteLine(
+                wiped
+                    ? $"  {wiping} is a new character again, keeping the login"
+                    : $"  no character called {wiping} — nothing wiped");
+        }
 
         // Before anybody connects, because the state being thrown away is state a
         // connected character is holding in memory and would write straight back.
@@ -110,6 +127,13 @@ public static class Program
     /// and the real one is never nearer.
     /// </para>
     /// </summary>
+    /// <summary>Reads an <c>x,y</c> argument, or nothing when it was not given or is not one.</summary>
+    private static GridPosition? Square(string? text) =>
+        text?.Split(',', StringSplitOptions.TrimEntries) is [string x, string y] &&
+        int.TryParse(x, out int atX) && int.TryParse(y, out int atY)
+            ? new GridPosition(atX, atY)
+            : null;
+
     private static void ReportReach(WorldData world, string startingMapId)
     {
         Reach reach = WorldWalker.Walk(world, startingMapId);

@@ -113,12 +113,21 @@ public class RestartTests : IDisposable
 
             Welcome welcome = await ExpectAsync<Welcome>(channel);
 
-            // Registration hands out a starter, so a party is never empty and the
-            // server never has to invent a battler in the middle of a battle.
-            starter = Assert.Single(welcome.Party);
+            // Registration hands out nothing any more — the opening is where a party
+            // comes from — so this test puts one in the file itself. What it is about is
+            // whether a party written to a file comes back out of it, which was never a
+            // question about where the party originally came from.
+            Assert.Empty(welcome.Party);
 
             socket.Close();
-            await WaitForSaveAsync(store, c => c.Party.Count == 1, "held a party");
+            await WaitForSaveAsync(store, c => c.MapId.Length > 0, "been written at all");
+
+            AuthOutcome outcome = await store.LoginAsync("Mason", "a-good-password");
+            AuthOutcome.Success success = Assert.IsType<AuthOutcome.Success>(outcome);
+
+            starter = new SavedMon(1, 5, null, 11, StatusCondition.None, Nature.Hardy, [TestRules.FirstMove]);
+
+            await store.SaveAsync(success.Account.Id, success.Character with { Party = [starter] });
         });
 
         // Everything above is gone now: the server, the world, the connection. Only

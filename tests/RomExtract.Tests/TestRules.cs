@@ -1,5 +1,7 @@
 using PokeMmo.Core.Battle;
 using PokeMmo.Core.Data;
+using PokeMmo.Core.Save;
+using PokeMmo.Server;
 
 namespace PokeMmo.RomExtract.Tests;
 
@@ -14,6 +16,28 @@ namespace PokeMmo.RomExtract.Tests;
 internal static class TestRules
 {
     public const int FirstMove = 1;
+
+    /// <summary>
+    /// A fresh character with something to fight with.
+    /// <para>
+    /// New accounts used to be handed a party. They are not any more — the game has an
+    /// opening now and the opening is where a party comes from — so every test about
+    /// battles, bags, shops and travel has to say out loud that it needs one. Which is
+    /// the right way round: those tests were never about registration.
+    /// </para>
+    /// </summary>
+    public static SavedCharacter Equipped(GameWorld world, int species = 1, int level = 5)
+    {
+        // Built the way the server used to build it, so every test that was written
+        // against the free starter is testing the same creature it always was. A
+        // different species or a different level would be a silent rebalance of two
+        // dozen battles.
+        var factory = new BattleFactory(All);
+
+        return factory.Wild(species, level) is { } starter
+            ? world.FreshCharacter() with { Party = [BattleFactory.Save(starter)] }
+            : world.FreshCharacter();
+    }
 
     /// <summary>A trainer with three creatures, so a fight is more than one battle.</summary>
     public const int ThreeStrong = 7;
