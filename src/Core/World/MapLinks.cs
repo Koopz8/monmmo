@@ -110,7 +110,7 @@ public sealed record MapObject(
     /// interaction, the other has to be held still while their lines are read.
     /// </para>
     /// <para>
-    /// Sixteen people in FireRed are the second kind, and every one of them would have
+    /// Fifteen people in FireRed are the second kind, and every one of them would have
     /// had their line replaced by "Found one POTION!" — the Silph president included.
     /// </para>
     /// </summary>

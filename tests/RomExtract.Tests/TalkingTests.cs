@@ -821,7 +821,7 @@ public class PickingThingsUpTests
     [Fact]
     public void SomebodyWhoHandsSomethingOverIsHeldStill()
     {
-        // The other kind. Sixteen people in FireRed give you something as part of saying
+        // The other kind. Fifteen people in FireRed give you something as part of saying
         // something, and letting them go the moment the item lands would have them turn
         // away mid-line.
         (GameWorld world, ServerPlayer player) = Standing(Giver(1, TestRules.PotionItem));

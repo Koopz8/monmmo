@@ -33,7 +33,7 @@ public sealed class DialogueBox
     /// Adds a page to the end of an open box.
     /// <para>
     /// For lines the server supplies part-way through a conversation somebody else
-    /// started. Sixteen people in this game hand something over while talking, and the
+    /// started. Fifteen people in this game hand something over while talking, and the
     /// "Found one POTION!" arrives a round trip after their own first page is already
     /// on screen — replacing the box would throw away what they were saying, which is
     /// how the president of SILPH came to thank nobody.

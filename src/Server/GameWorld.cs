@@ -632,7 +632,7 @@ public sealed class GameWorld
             }
 
             // Something handed over, before anything else. For a ball on the ground that
-            // is the whole interaction and there is nobody to hold still. For the sixteen
+            // is the whole interaction and there is nobody to hold still. For the fifteen
             // people who hand something over *while* talking it is the first thing that
             // happens and not the last, so those fall through to be held and read.
             List<Outgoing> given = [];
