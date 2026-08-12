@@ -451,7 +451,12 @@ public static class Program
                 player.Square, player.Facing, view.Map.Objects, live,
                 square => !view.Map.Collision.IsWalkable(square)) is not { } person)
         {
-            return null;
+            // Nobody there, but there may still be something written there. A sign is
+            // not a person: it has no local id, occupies no square anybody could stand
+            // on, and there is nothing for the server to arbitrate — nobody stands still
+            // to be read, nothing changes hands, and the words are on an image the
+            // server has never seen. So this one never leaves the machine.
+            return Read(data, view, player, network, script, party);
         }
 
         // Sent whether or not there is anything to read, because what happens next is
@@ -492,6 +497,45 @@ public static class Program
         }
 
         return box;
+    }
+
+    /// <summary>
+    /// Reads whatever is written on the square in front, if anything is.
+    /// <para>
+    /// Signs are the fourth list in a map's events record and this project has never
+    /// opened it, so every notice board, bookshelf and television in the world has been
+    /// a solid block of scenery with nothing behind it. There are seven hundred of them.
+    /// </para>
+    /// <para>
+    /// The buried items are in the same list and are skipped here. They are found by
+    /// searching a square rather than by reading it, which is a different interaction
+    /// and not one this game has yet.
+    /// </para>
+    /// </summary>
+    private static DialogueBox? Read(
+        GameData data, MapView view, WalkingCharacter player, NetworkClient network, ScriptState script,
+        IReadOnlyList<SavedMon> party)
+    {
+        GridPosition front = player.Square.Step(player.Facing);
+
+        if (view.Map.Signs.FirstOrDefault(s => s.Square == front && s.HasScript) is not { } sign) return null;
+
+        ScriptRun run = ScriptRunner.Run(
+            data.Rom, sign.ScriptAddress, script.WithParty(party.Select(m => m.Moves)));
+
+        foreach (int flag in run.FlagsSet) script.Set(flag);
+        foreach (int flag in run.FlagsCleared) script.Clear(flag);
+        foreach ((int id, int value) in run.VariablesWritten) script.Write(id, value);
+
+        // Told even though nobody is being held. What a sign changes is the same save
+        // the people share, and a flag set by reading a notice board that never reached
+        // the server is a flag that comes back unset on the next login.
+        if (run.FlagsSet.Count + run.FlagsCleared.Count + run.VariablesWritten.Count > 0)
+            network.SendScriptRan(run);
+
+        var box = new DialogueBox(run.Pages);
+
+        return box.IsEmpty ? null : box;
     }
 
     /// <summary>

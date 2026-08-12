@@ -210,6 +210,67 @@ public static class MapLinkExtractor
         return connections;
     }
 
+    /// <summary>A sign record: a square, an elevation, a kind, and one word.</summary>
+    private const int SignSizeBytes = 12;
+
+    private const int SignKindOffset = 5;
+
+    private const int SignPointerOffset = 8;
+
+    /// <summary>
+    /// Reads the signs on one map.
+    /// <para>
+    /// The fourth of the events record's four lists, and one this project has never
+    /// opened. Its shape was derived by scoring every plausible one against the whole
+    /// cartridge and asking which produced squares inside the map with readable scripts
+    /// behind them — twelve bytes, the square first, the word last, at seventy per cent.
+    /// </para>
+    /// <para>
+    /// The other thirty per cent were not a wrong shape. They are the buried items, and
+    /// they say so: the byte at +5 is 7 for every one of the hundred and eighty-three
+    /// records whose last word is not a usable pointer, and for none of the others. That
+    /// is the difference between a shape that is wrong and a list that holds two kinds
+    /// of thing, and the only way to tell them apart is to look at what the misses have
+    /// in common.
+    /// </para>
+    /// </summary>
+    public static List<MapSign> ReadSigns(
+        Rom rom, MapHeaderRecord header, int width, int height, Action<string>? log = null)
+    {
+        var signs = new List<MapSign>();
+
+        if (EventLayout.Table(rom, header.EventsPointer, EventLayout.Signs, SignSizeBytes)
+            is not { } list)
+        {
+            return signs;
+        }
+
+        (int table, int count) = list;
+
+        for (int i = 0; i < count; i++)
+        {
+            int at = table + i * SignSizeBytes;
+
+            int x = (short)rom.ReadU16(at);
+            int y = (short)rom.ReadU16(at + 2);
+            int kind = rom.ReadU8(at + SignKindOffset);
+
+            if (x < 0 || x >= width || y < 0 || y >= height)
+            {
+                log?.Invoke($"    sign {i} at ({x}, {y}) is outside a {width}x{height} map — dropped");
+                continue;
+            }
+
+            // The buried ones keep an item id in the same four bytes a script pointer
+            // lives in, so reading it as an address is following a pointer to nowhere.
+            uint script = kind == MapSign.HiddenItem ? 0 : rom.ReadU32(at + SignPointerOffset);
+
+            signs.Add(new MapSign(x, y, kind, script));
+        }
+
+        return signs;
+    }
+
     /// <summary>
     /// The cartridge's direction numbering. One-based, and in an order that is not
     /// the one anybody would choose — which is exactly why it is written down here

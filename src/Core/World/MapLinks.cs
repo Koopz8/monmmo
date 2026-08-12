@@ -41,6 +41,42 @@ public sealed record Warp(int X, int Y, int TargetWarpId, string TargetMapId)
 }
 
 /// <summary>
+/// Something written on a map that can be read from the square in front of it: a sign,
+/// a notice board, a bookshelf, a television.
+/// <para>
+/// The third of the four lists in a map's events record, and one this project never
+/// read. It is not a person — it occupies no square, moves for nobody, and has no
+/// local id — which is why every sign in the game has until now been a solid block of
+/// scenery with nothing behind it.
+/// </para>
+/// <para>
+/// <see cref="Kind"/> is the cartridge's own tag and the reason it is kept: one value
+/// of it means the record holds an item id where every other value holds a script
+/// pointer. A hundred and eighty-three of the seven hundred are that kind, and reading
+/// their item id as an address is how a reader ends up following a pointer to 0x0000.
+/// </para>
+/// </summary>
+public sealed record MapSign(int X, int Y, int Kind, uint ScriptAddress)
+{
+    /// <summary>
+    /// The tag that means "there is something buried here", not "here is a script".
+    /// <para>
+    /// Derived rather than known: of the seven hundred sign records on FireRed, the
+    /// hundred and eighty-three whose last word is not a usable pointer are exactly the
+    /// hundred and eighty-three carrying this tag, and no others.
+    /// </para>
+    /// </summary>
+    public const int HiddenItem = 7;
+
+    public bool IsHiddenItem => Kind == HiddenItem;
+
+    /// <summary>True when there is something here to read.</summary>
+    public bool HasScript => ScriptAddress != 0 && !IsHiddenItem;
+
+    public GridPosition Square => new(X, Y);
+}
+
+/// <summary>
 /// Somebody standing on a map: a person, a sign-poster, a rooted tree.
 /// <para>
 /// Called an object event on the cartridge, which covers anything that occupies a

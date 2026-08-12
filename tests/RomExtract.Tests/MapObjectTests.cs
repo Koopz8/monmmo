@@ -1,6 +1,7 @@
 using PokeMmo.Core.Save;
 using PokeMmo.Core.World;
 using PokeMmo.RomExtract.Maps;
+using PokeMmo.RomExtract.Scripts;
 using PokeMmo.Server;
 
 namespace PokeMmo.RomExtract.Tests;
@@ -240,5 +241,73 @@ public class CollisionWithPeopleTests
                 Assert.Equal(serverAllows, predicted.IsWalkable(square));
             }
         }
+    }
+}
+
+/// <summary>
+/// Reading the signs: the fourth of the four lists in a map's events record, and the
+/// one this project never opened.
+/// <para>
+/// Seven hundred of them on FireRed — every notice board, bookshelf and television in
+/// the game — and until now each was a solid block of scenery with nothing behind it.
+/// </para>
+/// </summary>
+public class SignTests
+{
+    private static readonly SyntheticRom Fixture = new();
+
+    private static List<MapSign> Read(int mapIndex) =>
+        MapLibrary.Open(Fixture.ToRom()).TryLoad(SyntheticRom.MapIdAt(mapIndex))!.Signs.ToList();
+
+    [Fact]
+    public void SignsComeOffTheFourthListAndNotTheThird()
+    {
+        // The four lists share a record and differ only by which count and which pointer
+        // are read. Taking the pair next door gives a plausible number of plausible
+        // records in entirely the wrong places, which is the same trap the objects and
+        // the warps each set once already.
+        // Map 2, not map 3: map 3 is the fixture's deliberately event-less one, and a
+        // test that read it would have passed on an empty list for the right reason and
+        // the wrong list.
+        List<MapSign> signs = Read(2);
+
+        Assert.Equal(SyntheticRom.SignsFor(2).Select(s => s.Square), signs.Select(s => s.Square));
+    }
+
+    [Fact]
+    public void ABuriedItemIsNotAPointer()
+    {
+        // Two kinds of record in one list, told apart by the byte at +5. On a real image
+        // 183 of the 702 are this kind, and every one of them keeps an item id exactly
+        // where the others keep an address — so a reader that does not check ends up
+        // running a script at 0x00010001.
+        MapSign buried = Read(2).Single(s => s.IsHiddenItem);
+
+        Assert.Equal(0u, buried.ScriptAddress);
+        Assert.False(buried.HasScript);
+    }
+
+    [Fact]
+    public void AReadableSignKeepsItsScript()
+    {
+        MapSign readable = Read(2).Single(s => !s.IsHiddenItem);
+
+        Assert.True(readable.HasScript);
+        Assert.Equal(SyntheticRom.DialogueFor(2, 1), ScriptReader.ReadDialogue(Fixture.ToRom(), readable.ScriptAddress));
+    }
+
+    [Fact]
+    public void OneOutsideTheMapIsDropped()
+    {
+        // Real images carry these, left over from editing. A sign nobody can stand in
+        // front of is not worth carrying, and reading it as a square would put a
+        // readable notice board past the edge of the world.
+        Assert.All(Read(2), sign => Assert.InRange(sign.X, 0, SyntheticRom.MapWidth - 1));
+    }
+
+    [Fact]
+    public void AMapWithNoEventsRecordHasNoSigns()
+    {
+        Assert.Empty(Read(SyntheticRom.MapWithoutEvents));
     }
 }

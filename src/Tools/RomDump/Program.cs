@@ -159,6 +159,8 @@ public static class Program
 
         if (options.WhoGives is { } wanted) WriteWhoGives(rom, wanted);
 
+        if (options.Events) WriteEventShapes(rom);
+
         if (options.ScriptAt != 0) WriteScriptAt(rom, options.ScriptAt);
 
         Console.WriteLine();
@@ -1164,6 +1166,100 @@ public static class Program
     /// milestone 14.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// The shape of the four event lists, scored against the whole cartridge.
+    /// <para>
+    /// Two of them have been read since the beginning and their answers are known, which
+    /// is what makes this trustworthy rather than merely plausible: the same scan is run
+    /// over the people and the warps, and if it does not rediscover 24 and 8 then it is
+    /// not a scan worth believing about the two lists nobody has read.
+    /// </para>
+    /// </summary>
+    private static void WriteEventShapes(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("Event lists, scored by record size and where the script pointer sits");
+
+        MapBankTable banks = MapBankLocator.Locate(rom, Console.WriteLine)
+            ?? throw new InvalidDataException("No map bank table found.");
+
+        List<(int Width, int Height, uint EventsPointer)> maps =
+        [
+            .. banks.AllMaps.Select(m => (m.Header.Layout.Width, m.Header.Layout.Height, m.Header.EventsPointer)),
+        ];
+
+        (string Name, int List)[] lists =
+        [
+            ("people   (known: 24 bytes)", EventLayout.People),
+            ("warps    (known:  8 bytes)", EventLayout.Warps),
+            ("triggers (never read)", EventLayout.Triggers),
+            ("signs    (never read)", EventLayout.Signs),
+        ];
+
+        foreach ((string name, int list) in lists)
+        {
+            Console.WriteLine();
+            Console.WriteLine($"  {name}");
+
+            List<EventShape> scored = EventLayout.Derive(rom, maps, list);
+
+            if (scored.Count == 0)
+            {
+                Console.WriteLine("    nothing scored — no map has any of these");
+                continue;
+            }
+
+            foreach (EventShape shape in scored.Take(5)) Console.WriteLine($"    {shape}");
+
+            if (list is not (EventLayout.Triggers or EventLayout.Signs)) continue;
+
+            // What the misses have in common. A share short of a hundred per cent is a
+            // question rather than an answer: either the shape is wrong, or the rest are
+            // a second kind of record sharing one list.
+            List<(EventLayout.Miss Why, byte Kind)> explained =
+                EventLayout.Explain(rom, maps, list, scored[0], kindOffset: 5);
+
+            Console.WriteLine(
+                "      why: " +
+                string.Join(", ", explained
+                    .GroupBy(e => e.Why)
+                    .OrderByDescending(g => g.Count())
+                    .Select(g => $"{g.Key} {g.Count()}")));
+
+            Console.WriteLine(
+                "      byte at +5, by outcome: " +
+                string.Join("; ", explained
+                    .GroupBy(e => e.Why == EventLayout.Miss.Fine ? "read" : "missed")
+                    .OrderBy(g => g.Key)
+                    .Select(g =>
+                        $"{g.Key} -> " +
+                        string.Join(" ", g.GroupBy(e => e.Kind).OrderBy(k => k.Key).Select(k => $"{k.Key}x{k.Count()}")))));
+        }
+
+        // And then the point of all of it: things nobody in this game has ever been able
+        // to read. A derivation that stops at a percentage has not been checked.
+        Console.WriteLine();
+        Console.WriteLine("  What some of them say:");
+
+        int shown = 0;
+
+        foreach (LoadedMap map in MapLibrary.Open(rom).All())
+        {
+            foreach (MapSign sign in map.Signs.Where(s => s.HasScript))
+            {
+                ScriptRun run = ScriptRunner.Run(rom, sign.ScriptAddress);
+
+                if (run.Pages.Count == 0) continue;
+
+                Console.WriteLine(
+                    $"    {map.Name,-20} ({sign.X,3},{sign.Y,3})  " +
+                    $"\"{GameText.ToAscii(run.Pages[0]).Replace('\n', ' ')}\"");
+
+                if (++shown >= 10) return;
+            }
+        }
+    }
+
     /// <summary>
     /// Where an item is handed over, and by whom.
     /// <para>
@@ -2203,6 +2299,8 @@ public static class Program
 
         public int? WhoGives { get; private init; }
 
+        public bool Events { get; private init; }
+
         /// <summary>Dump everything reachable from one cartridge address.</summary>
         public uint ScriptAt { get; private init; }
         public bool DumpMoves { get; private init; }
@@ -2241,6 +2339,7 @@ public static class Program
             uint font = 0;
             string whoSays = "";
             int? whoGives = null;
+            bool events = false;
             uint scriptAt = 0;
             bool dumpMoves = false, dumpEncounters = false;
             string? behaviourMap = null;
@@ -2343,6 +2442,9 @@ public static class Program
                     case "--who-says":
                         whoSays = Next(args, ref i, "--who-says");
                         break;
+                    case "--events":
+                        events = true;
+                        break;
                     case "--who-gives":
                         string item = Next(args, ref i, "--who-gives");
                         whoGives = item.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
@@ -2413,6 +2515,7 @@ public static class Program
                 Font = font,
                 WhoSays = whoSays,
                 WhoGives = whoGives,
+                Events = events,
                 ScriptAt = scriptAt,
                 DumpMoves = dumpMoves,
                 DumpEncounters = dumpEncounters,

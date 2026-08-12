@@ -22,6 +22,16 @@ public sealed record LoadedMap(
     /// <summary>The doors and stairways on this map.</summary>
     public IReadOnlyList<Warp> Warps { get; init; } = [];
 
+    /// <summary>
+    /// The signs, notice boards and bookshelves on this map.
+    /// <para>
+    /// Client-side only, and deliberately so. A sign has nothing the server needs to
+    /// arbitrate: nobody stands still to be read, nothing changes hands, and the words
+    /// are on an image the server has never seen. It is read exactly where the map is.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<MapSign> Signs { get; init; } = [];
+
     /// <summary>The map as a PNG, which is the simplest thing for a renderer to consume.</summary>
     public byte[] ToPng() => Graphics.PngWriter.ToArray(PixelWidth, PixelHeight, Rgba);
 }

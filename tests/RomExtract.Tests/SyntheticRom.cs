@@ -155,6 +155,24 @@ public sealed class SyntheticRom
 
     public const int MapObjectsOffset = 0x078000;
 
+    public const int MapSignsOffset = 0x07C000;
+
+    private const int SignsStride = 64;
+
+    /// <summary>
+    /// The signs written for a map: one that can be read, and one that is a buried item.
+    /// <para>
+    /// Both, always, because the two share a list and are told apart only by the byte at
+    /// +5. A fixture with only the readable kind would never catch a reader following an
+    /// item id as though it were an address.
+    /// </para>
+    /// </summary>
+    public static List<MapSign> SignsFor(int index) =>
+    [
+        new(2, 3, 0, Rom.BaseAddress + (uint)ScriptFor(index, 0)),
+        new(4, 1, MapSign.HiddenItem, 0),
+    ];
+
     public const int ScriptsOffset = 0x0A0000;
     public const int ScriptTextOffset = 0x0A4000;
 
@@ -512,6 +530,7 @@ public sealed class SyntheticRom
                 WriteScriptsFor(index);
                 WriteObjectsFor(index);
                 WriteWarpsFor(index);
+                WriteSignsFor(index);
                 WriteConnectionsFor(index);
                 WriteU16(header + 16, (ushort)(100 + index));       // music
                 WriteU16(header + 18, 1);                           // layout id
@@ -614,11 +633,53 @@ public sealed class SyntheticRom
 
         _data[events + 1] = (byte)written;
         _data[events + 2] = 1;              // coord events
-        _data[events + 3] = 2;              // background events
 
         WriteU32(events + 8, Rom.BaseAddress + (uint)table);
         WriteU32(events + 12, 0);
-        WriteU32(events + 16, 0);
+    }
+
+    /// <summary>
+    /// Writes the sign table and the <em>fourth</em> of the events record's four counts
+    /// and pointers.
+    /// <para>
+    /// The fourth, and the stray-square case gets one too. Everything that is true of
+    /// the other three lists is true of this one: a count, a pointer, records that can
+    /// sit outside the map, and a neighbouring pair that would read as a plausible
+    /// number of plausible-looking somethings.
+    /// </para>
+    /// </summary>
+    private void WriteSignsFor(int index)
+    {
+        if (index == MapWithoutEvents) return;
+
+        List<MapSign> signs = SignsFor(index);
+        int table = MapSignsOffset + index * SignsStride;
+
+        for (int i = 0; i < signs.Count; i++)
+        {
+            MapSign sign = signs[i];
+            int at = table + i * 12;
+
+            WriteU16(at, (ushort)sign.X);
+            WriteU16(at + 2, (ushort)sign.Y);
+            _data[at + 4] = 0;                      // elevation
+            _data[at + 5] = (byte)sign.Kind;
+
+            // A buried item keeps an item id in the same four bytes a script pointer
+            // lives in. Written as one, so that reading it as an address is a mistake
+            // this fixture can actually catch.
+            WriteU32(at + 8, sign.IsHiddenItem ? 0x00010001u : sign.ScriptAddress);
+        }
+
+        // One sign beyond the map's own edge, which extraction should drop.
+        int stray = table + signs.Count * 12;
+        WriteU16(stray, (ushort)(MapWidth + 6));
+        WriteU16(stray + 2, 2);
+
+        int events = MapEventsOffset + index * EventsStride;
+
+        _data[events + 3] = (byte)(signs.Count + 1);
+        WriteU32(events + 16, Rom.BaseAddress + (uint)table);
     }
 
     private void WriteWarp(int at, Warp warp)
