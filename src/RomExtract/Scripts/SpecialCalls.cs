@@ -132,6 +132,43 @@ public static class SpecialCalls
         return found;
     }
 
+    /// <summary>
+    /// Every command that is branched on, in one pass over the world.
+    /// <para>
+    /// The reason this exists rather than calling <see cref="AllOf"/> two hundred and
+    /// fifty-six times: opening a map decompresses and renders it, and asking the library
+    /// for all of them once per opcode does that work two hundred and fifty-six times
+    /// over. Reading four hundred maps is a few seconds; reading them a hundred thousand
+    /// times is an afternoon, and the first anybody knows about it is a tool that has
+    /// printed its heading and stopped.
+    /// </para>
+    /// </summary>
+    public static Dictionary<byte, List<SpecialCall>> Sweep(Rom rom, MapLibrary library)
+    {
+        var found = new Dictionary<byte, List<SpecialCall>>();
+
+        foreach ((string mapId, string what, uint address) in Scripts(library))
+        {
+            List<ScriptCommand> commands = ScriptReader.ReadAll(rom, address);
+
+            for (int i = 0; i < commands.Count; i++)
+            {
+                List<Branch> forks = Forks(commands, i, 0x800D);
+                if (forks.Count == 0) continue;
+
+                byte code = commands[i].Code;
+
+                if (!found.TryGetValue(code, out List<SpecialCall>? calls))
+                    found[code] = calls = [];
+
+                calls.Add(new SpecialCall(
+                    mapId, what, code, 0x800D, Before(commands, i), After(commands, i, 0x800D), forks));
+            }
+        }
+
+        return found;
+    }
+
     /// <summary>Every script on every map, with where it came from.</summary>
     private static IEnumerable<(string MapId, string What, uint Address)> Scripts(MapLibrary library)
     {

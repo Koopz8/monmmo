@@ -1193,14 +1193,11 @@ public static class Program
 
         var ranked = new List<(byte Code, int Sites, int Speaking, string Example)>();
 
-        foreach (byte code in Enumerable.Range(0, 256).Select(c => (byte)c))
+        // One pass over the world, not one per opcode. Opening a map decompresses and
+        // renders it, so asking for all of them 256 times over is the difference between
+        // a few seconds and an afternoon.
+        foreach ((byte code, List<SpecialCall> calls) in SpecialCalls.Sweep(rom, library))
         {
-            // Only the ones with a known width — an unknown command stops the read and is
-            // never reached, so it can have no forks to look at.
-            if (ScriptCommands.ArgumentLength(code) is null) continue;
-
-            List<SpecialCall> calls = SpecialCalls.AllOf(rom, library, code);
-
             List<Branch> forks = [.. calls.SelectMany(c => c.Branches)];
             if (forks.Count == 0) continue;
 
