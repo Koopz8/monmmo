@@ -1111,6 +1111,61 @@ public class TriggerTests
     }
 
     [Fact]
+    public void ASceneCanWalkThePlayer()
+    {
+        // The half a scene could not do until now. Where the player stands is the
+        // server's to say, so the client asks with directions rather than a destination
+        // and the server walks them.
+        (GameWorld world, ServerPlayer player) = Standing(new MapTrigger(3, 4, Variable, 0));
+
+        world.FireTrigger(player.Id, 3, 4, 10);
+
+        world.WalkThroughScene(player.Id, [Direction.Up, Direction.Up, Direction.Left], 11);
+
+        Assert.Equal(new GridPosition(2, 2), player.Square);
+        Assert.Equal(Direction.Left, player.Facing);
+    }
+
+    [Fact]
+    public void AWalkWithNoSceneBehindItIsRefused()
+    {
+        // What replaces the rate limit. A scripted walk cannot be rate limited — the
+        // games step somebody eight squares faster than anybody could ask — so instead it
+        // is only accepted inside a window opened by a trigger the server itself agreed
+        // to fire.
+        (GameWorld world, ServerPlayer player) = Standing(new MapTrigger(3, 4, Variable, 0));
+
+        Assert.Empty(world.WalkThroughScene(player.Id, [Direction.Up], 11));
+        Assert.Contains("no scene is running", world.LastSceneWalk);
+        Assert.Equal(new GridPosition(3, 4), player.Square);
+    }
+
+    [Fact]
+    public void AWalkStopsAtTheFirstThingInTheWay()
+    {
+        // Ended where it stands rather than refused outright. A scene half performed is
+        // still a scene; a player left where they started is a player standing inside the
+        // next line of dialogue.
+        var collision = new byte[64];
+        collision[2 * 8 + 3] = 1;
+
+        MapData map = new(Town, "PALLET TOWN", 8, 8, collision)
+        {
+            Triggers = [new MapTrigger(3, 4, Variable, 0)],
+        };
+
+        var world = new GameWorld(new WorldData([map]), Town, TestRules.All);
+
+        (ServerPlayer player, _) = world.Join(1, "Koop", SavedCharacter.Fresh(Town, 3, 4));
+
+        world.FireTrigger(player.Id, 3, 4, 10);
+        world.WalkThroughScene(player.Id, [Direction.Up, Direction.Up, Direction.Up], 11);
+
+        Assert.Equal(new GridPosition(3, 3), player.Square);
+        Assert.Contains("then something was in the way", world.LastSceneWalk);
+    }
+
+    [Fact]
     public void TriggersSurviveTheWorldFile()
     {
         MapData map = new(Town, "PALLET TOWN", 8, 8, new byte[64])

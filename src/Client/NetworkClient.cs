@@ -133,6 +133,9 @@ public sealed class NetworkClient : IDisposable
     public void SendTriggerFired(int x, int y) => Send(new TriggerFired(x, y));
 
     /// <summary>Says where a scene left somebody, for the server to accept or refuse.</summary>
+    /// <summary>Asks the server to walk the player the way a scene says.</summary>
+    public void SendSceneWalk(IReadOnlyList<Direction> steps) => Send(new SceneWalk(steps));
+
     public void SendScenePlaced(int localId, GridPosition square, Direction facing) =>
         Send(new ScenePlaced(localId, square.X, square.Y, facing));
 

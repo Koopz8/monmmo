@@ -33,6 +33,7 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(ObstacleShifted), "shifted")]
 [JsonDerivedType(typeof(TriggerFired), "triggered")]
 [JsonDerivedType(typeof(ScenePlaced), "sceneplaced")]
+[JsonDerivedType(typeof(SceneWalk), "scenewalk")]
 [JsonDerivedType(typeof(BuyRequest), "buy")]
 [JsonDerivedType(typeof(SellRequest), "sell")]
 [JsonDerivedType(typeof(ShopOpened), "shop")]
@@ -114,6 +115,23 @@ public sealed record TriggerFired(int X, int Y) : NetMessage;
 /// </para>
 /// </summary>
 public sealed record ScenePlaced(int LocalId, int X, int Y, Direction Facing) : NetMessage;
+
+/// <summary>
+/// Where a scene wants to walk the player.
+/// <para>
+/// Directions rather than a destination, and the difference is the whole point: the
+/// server cannot read the movement list — it is on a cartridge — but it can walk the
+/// steps itself and refuse any that leaves the map or lands on somebody. A destination
+/// would have to be taken on trust; a path can be checked square by square.
+/// </para>
+/// <para>
+/// Ordinary movement is rate limited, and a scripted walk cannot be: the games step
+/// somebody eight squares in a row faster than a player could ask for it. What replaces
+/// the limit is a window — this is only accepted for a short while after a trigger the
+/// server itself agreed to fire, so a client cannot send one out of nowhere.
+/// </para>
+/// </summary>
+public sealed record SceneWalk(IReadOnlyList<Direction> Steps) : NetMessage;
 
 /// <summary>
 /// What a script the player just ran did to their save.

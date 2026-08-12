@@ -344,6 +344,11 @@ public static class Program
             {
                 scene.Update(delta);
 
+                // Asked once per beat, with the directions rather than a destination, so
+                // the server can walk them square by square and refuse any it does not
+                // like. This side animates its own prediction meanwhile.
+                if (scene.Ask() is { Count: > 0 } asking) network.SendSceneWalk(asking);
+
                 if (scene.IsFinished)
                 {
                     // Where it left everybody, for the server to accept or refuse. Sent
@@ -375,7 +380,13 @@ public static class Program
             // Nothing is read while somebody is on their way over. Refusing to predict
             // is the point: the server refuses the step either way, and a client that
             // predicts one anyway spends the whole walk snapping backwards.
-            Direction? input = talking is null && watching is null && scene is null ? ReadDirection() : null;
+            // A scene drives the player through the same path a key does, so a scripted
+            // step animates, collides and turns exactly like a walked one rather than
+            // being a second kind of movement with its own bugs.
+            Direction? input = scene is not null
+                ? scene.PlayerInput
+                : talking is null && watching is null ? ReadDirection() : null;
+
             player.Update(delta, input);
 
             edgeCooldown = Math.Max(0f, edgeCooldown - delta);
@@ -391,7 +402,7 @@ public static class Program
                 network.SendMove(wanted);
                 edgeCooldown = WalkingCharacter.StepSeconds;
             }
-            else if (player.ToReport is { } report)
+            else if (player.ToReport is { } report && scene is null)
             {
                 // Told the moment a step begins, not when it finishes — it is already
                 // predicted locally, so waiting would add a round trip of lag to every

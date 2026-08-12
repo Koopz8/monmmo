@@ -77,6 +77,17 @@ public sealed record ServerPlayer(int Id, long AccountId, string Name)
     public HashSet<string> ItemsTaken { get; } = [];
 
     /// <summary>
+    /// How long a scene may go on walking this player about.
+    /// <para>
+    /// Ordinary movement is rate limited and a scripted walk cannot be — the games step
+    /// somebody eight squares in a row faster than anybody could ask for it. This is what
+    /// replaces the limit: a window opened by a trigger the server itself agreed to fire,
+    /// so a client cannot send a walk out of nowhere and cannot keep sending them.
+    /// </para>
+    /// </summary>
+    public double SceneUntil { get; set; }
+
+    /// <summary>
     /// Things this player has moved out of the way on the map they are standing on.
     /// <para>
     /// Per player, because a felled tree that everybody could walk through would let one
@@ -1333,6 +1344,83 @@ public sealed class GameWorld
         }
     }
 
+    /// <summary>
+    /// How long after a trigger a scene may still be walking the player.
+    /// <para>
+    /// Generous, because a scene is as long as its text and somebody reads at their own
+    /// pace. It is a bound rather than a schedule — what it stops is a walk arriving with
+    /// no scene behind it at all.
+    /// </para>
+    /// </summary>
+    private const double SceneSeconds = 120;
+
+    /// <summary>How many squares one scripted walk may cover. The longest list is 63.</summary>
+    private const int LongestSceneWalk = 64;
+
+    /// <summary>What the last scene walk came to.</summary>
+    public string? LastSceneWalk { get; private set; }
+
+    /// <summary>
+    /// Walks the player the way a scene says, checking every square on the way.
+    /// <para>
+    /// Directions rather than a destination, because a destination would have to be taken
+    /// on trust and a path can be walked. Every square is checked exactly as an ordinary
+    /// step is — on the map, walkable, nobody standing there — and the first one that
+    /// fails ends the walk where it stands rather than refusing the whole thing. A scene
+    /// half performed is a scene; a player left behind where they started is a player
+    /// standing inside the next line of dialogue.
+    /// </para>
+    /// </summary>
+    public List<Outgoing> WalkThroughScene(int playerId, IReadOnlyList<Direction> steps, double nowSeconds)
+    {
+        lock (_gate)
+        {
+            LastSceneWalk = null;
+
+            if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
+
+            if (nowSeconds > player.SceneUntil)
+            {
+                LastSceneWalk = "refused: no scene is running for them";
+                return [];
+            }
+
+            if (steps.Count is 0 or > LongestSceneWalk)
+            {
+                LastSceneWalk = $"refused: {steps.Count} steps";
+                return [];
+            }
+
+            CollisionGrid grid = GridFor(player.MapId);
+
+            int walked = 0;
+
+            foreach (Direction step in steps)
+            {
+                GridPosition next = player.Square.Step(step);
+
+                player.Facing = step;
+
+                if (!grid.Contains(next) || !grid.IsWalkable(next) ||
+                    IsOccupiedFor(player, player.MapId, next))
+                {
+                    break;
+                }
+
+                player.Square = next;
+                walked++;
+            }
+
+            LastSceneWalk = walked == steps.Count
+                ? $"walked {walked} to {player.Square}"
+                : $"walked {walked} of {steps.Count} to {player.Square}, then something was in the way";
+
+            return [new Outgoing(
+                new PlayerMoved(playerId, player.Square.X, player.Square.Y, player.Facing),
+                OnMap: player.MapId)];
+        }
+    }
+
     /// <summary>What the last scene placement came to. Same arrangement as the rest.</summary>
     public string? LastScenePlacement { get; private set; }
 
@@ -1444,7 +1532,7 @@ public sealed class GameWorld
     /// forever, and the variable that was supposed to spend it counts for nothing.
     /// </para>
     /// </summary>
-    public List<Outgoing> FireTrigger(int playerId, int x, int y)
+    public List<Outgoing> FireTrigger(int playerId, int x, int y, double nowSeconds = 0)
     {
         lock (_gate)
         {
@@ -1474,6 +1562,11 @@ public sealed class GameWorld
 
                 return [];
             }
+
+            // The window opens whether or not there is a fight here: a scene that walks
+            // the player is exactly the kind with nothing to arbitrate, and it is the one
+            // that needs it.
+            player.SceneUntil = nowSeconds + SceneSeconds;
 
             if (!trigger.CanBeFought)
             {
