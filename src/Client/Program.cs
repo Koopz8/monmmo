@@ -226,6 +226,12 @@ public static class Program
         // arriving somewhere fires once, and standing there does not fire at all.
         GridPosition standingOn = player.Square;
 
+        // Whether the map has just changed under us, so its own arrival script gets a
+        // chance to run. Held rather than acted on where the message lands, because the
+        // scene it may start has to be built from the map the player is now on and the
+        // view has only just switched to it.
+        bool arrived = false;
+
         // Where the server last said we are, when that disagreed with where we think we
         // are. Held rather than applied on the spot: a correction almost always arrives
         // mid-step, and snapping a character sideways through a stride looks worse than
@@ -244,7 +250,7 @@ public static class Program
             ApplyServerMessages(
                 network, others, player, view, data, trainers, items, script, carrying,
                 ref talking, ref battle, ref shop, ref bag, ref party, ref money,
-                ref correction, ref watching, ref exclaimFor, ref scene);
+                ref correction, ref watching, ref exclaimFor, ref scene, ref arrived);
 
             // A battle suspends the overworld entirely: the server is running it, and
             // walking on meanwhile would put the two sides out of step.
@@ -415,7 +421,14 @@ public static class Program
             // rather than on setting off, because a trigger that fires as the foot
             // leaves the previous square runs a cutscene about a place the player is
             // not yet standing in.
-            if (!player.IsStepping && player.Square != standingOn && scene is null)
+            if (arrived && scene is null)
+            {
+                arrived = false;
+                standingOn = player.Square;
+
+                (talking, scene) = OnArrival(data, view, network, script, party, talking);
+            }
+            else if (!player.IsStepping && player.Square != standingOn && scene is null)
             {
                 standingOn = player.Square;
 
@@ -580,8 +593,47 @@ public static class Program
         // says nothing could never challenge anybody.
         network.SendTriggerFired(player.Square.X, player.Square.Y);
 
-        ScriptRun run = ScriptRunner.Run(
-            data.Rom, trigger.ScriptAddress, script.WithParty(party.Select(m => m.Moves)));
+        return Play(data, view, network, script, party, talking, trigger.ScriptAddress);
+    }
+
+    /// <summary>
+    /// Runs whatever the map itself runs on arrival, if anything is armed.
+    /// <para>
+    /// The fifth list, and the third way a script starts. Nothing was stepped on and
+    /// nobody was spoken to: you came through a door, and the map had something waiting
+    /// for the state you came through it in. It is what carries the story between the
+    /// scenes attached to squares — the professor's lab has three of those waiting on a
+    /// variable that nothing in the world's people, signs or triggers ever sets.
+    /// </para>
+    /// <para>
+    /// Nothing is sent to say this happened, unlike a trigger. The server reads the same
+    /// conditions out of its own world file and the same variables out of its own copy of
+    /// the save, so it already knows — and a message would only be a chance to disagree.
+    /// </para>
+    /// </summary>
+    private static (DialogueBox? Talking, Cutscene? Scene) OnArrival(
+        GameData data, MapView view, NetworkClient network, ScriptState script,
+        IReadOnlyList<SavedMon> party, DialogueBox? talking)
+    {
+        if (view.Map.OnEntry.FirstOrDefault(e => e.HasScript && e.Armed(script.Read(e.Variable))) is not { } entry)
+            return (talking, null);
+
+        return Play(data, view, network, script, party, talking, entry.ScriptAddress);
+    }
+
+    /// <summary>
+    /// Runs a script and turns it into whatever the player should be looking at.
+    /// <para>
+    /// Shared by the two ways a script starts without being spoken to, because what
+    /// happens after the address is decided is identical: run it, tell the server what it
+    /// wrote down, and hand back either a box or a scene.
+    /// </para>
+    /// </summary>
+    private static (DialogueBox? Talking, Cutscene? Scene) Play(
+        GameData data, MapView view, NetworkClient network, ScriptState script,
+        IReadOnlyList<SavedMon> party, DialogueBox? talking, uint address)
+    {
+        ScriptRun run = ScriptRunner.Run(data.Rom, address, script.WithParty(party.Select(m => m.Moves)));
 
         foreach (int flag in run.FlagsSet) script.Set(flag);
         foreach (int flag in run.FlagsCleared) script.Clear(flag);
@@ -674,7 +726,8 @@ public static class Program
         ref GridPosition? correction,
         ref int? watching,
         ref float exclaimFor,
-        ref Cutscene? scene)
+        ref Cutscene? scene,
+        ref bool arrived)
     {
         foreach (NetMessage message in network.Drain())
         {
@@ -810,6 +863,7 @@ public static class Program
                     // far side of it are about people who are not here — the same reason
                     // the others are cleared, one line up.
                     scene = null;
+                    arrived = true;
 
                     if (view.SwitchTo(changed.MapId))
                     {

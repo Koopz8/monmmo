@@ -119,6 +119,28 @@ public sealed record MapSign(int X, int Y, int Kind, uint ScriptAddress)
 }
 
 /// <summary>
+/// Something a map runs on arrival, when one of its variables says so.
+/// <para>
+/// The fifth list — the one the map header has always pointed at and nothing has ever
+/// read. It is what advances the story between the scenes attached to squares: the
+/// professor's lab has three squares waiting for 0x4055 to hold 2, and nothing anywhere
+/// in the world's people, signs or triggers ever sets it to 2. Walking through the door
+/// does.
+/// </para>
+/// <para>
+/// Same shape as a trigger's condition on purpose, because it is the same question asked
+/// somewhere else: does this variable hold this value. What differs is only when it is
+/// asked — on a square, or on a doorway.
+/// </para>
+/// </summary>
+public sealed record MapEntryScript(int Variable, int Value, uint ScriptAddress)
+{
+    public bool HasScript => ScriptAddress != 0;
+
+    public bool Armed(int held) => held == Value;
+}
+
+/// <summary>
 /// Somebody standing on a map: a person, a sign-poster, a rooted tree.
 /// <para>
 /// Called an object event on the cartridge, which covers anything that occupies a

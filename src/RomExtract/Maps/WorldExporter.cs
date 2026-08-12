@@ -61,6 +61,10 @@ public static class WorldExporter
                     Warps = MapLinkExtractor.ReadWarps(rom, header, grid.Width, grid.Height, log),
                     Objects = MapLinkExtractor.ReadObjects(rom, header, grid.Width, grid.Height, log),
                     Triggers = MapLinkExtractor.ReadTriggers(rom, header, grid.Width, grid.Height, log),
+
+                    // The fifth list. Only the conditions travel — the addresses stay on
+                    // the cartridge, exactly as they do for a trigger.
+                    OnEntry = MapScripts.OnEntry(rom, header),
                 });
             }
             catch (Exception ex)
@@ -157,6 +161,16 @@ public static class WorldExporter
                 $"  {triggers.Count} squares run a script when you walk onto them, across " +
                 $"{maps.Count(m => m.Triggers.Count > 0)} maps, " +
                 $"{triggers.Count(t => t.CanBeFought)} of them a fight");
+        }
+
+        var arrivals = maps.SelectMany(m => m.OnEntry).ToList();
+
+        if (arrivals.Count > 0)
+        {
+            log?.Invoke(
+                $"  {arrivals.Count} things run on arriving somewhere, across " +
+                $"{maps.Count(m => m.OnEntry.Count > 0)} maps, " +
+                $"gated on {arrivals.Select(e => e.Variable).Distinct().Count()} variables");
         }
 
         var obstacles = maps

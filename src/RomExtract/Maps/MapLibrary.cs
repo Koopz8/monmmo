@@ -101,6 +101,7 @@ public sealed class MapLibrary
             Signs = MapLinkExtractor.ReadSigns(_rom, entry.Header, collision.Width, collision.Height),
             Triggers = MapLinkExtractor.ReadTriggers(_rom, entry.Header, collision.Width, collision.Height),
             Warps = warps,
+            OnEntry = MapScripts.OnEntry(_rom, entry.Header),
         };
     }
 

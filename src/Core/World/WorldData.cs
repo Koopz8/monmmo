@@ -33,6 +33,21 @@ public sealed record MapData(string Id, string Name, int Width, int Height, byte
     /// </summary>
     public IReadOnlyList<MapTrigger> Triggers { get; init; } = [];
 
+    /// <summary>
+    /// What this map runs on arrival, when one of its variables says so.
+    /// <para>
+    /// Carried for the same reason triggers are, and with the same hole in it: no script
+    /// address, because that is a cartridge address and this file is the server's. What
+    /// the server needs is the condition, so it can agree that arriving here does start
+    /// something and open a scene window for it.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<MapEntryScript> OnEntry { get; init; } = [];
+
+    /// <summary>The arrival script armed by what this player's variables hold, if any.</summary>
+    public MapEntryScript? EntryFor(Func<int, int> read) =>
+        OnEntry.FirstOrDefault(e => e.Armed(read(e.Variable)));
+
     /// <summary>The trigger on a square, if there is one.</summary>
     public MapTrigger? TriggerAt(GridPosition square) =>
         Triggers.FirstOrDefault(t => t.X == square.X && t.Y == square.Y);
@@ -110,7 +125,7 @@ public sealed class WorldData
     /// <summary>Identifies the format, so a wrong or stale file fails loudly.</summary>
     private static readonly byte[] Magic = "MONWORLD"u8.ToArray();
 
-    private const int Version = 14;
+    private const int Version = 15;
 
     private readonly Dictionary<string, MapData> _maps;
 
@@ -206,6 +221,7 @@ public sealed class WorldData
             (IReadOnlyList<MapConnection> connections, IReadOnlyList<Warp> warps) = ReadLinks(reader, id);
             IReadOnlyList<MapObject> objects = ReadObjects(reader, id);
             IReadOnlyList<MapTrigger> triggers = ReadTriggers(reader);
+            IReadOnlyList<MapEntryScript> onEntry = ReadEntryScripts(reader);
 
             maps.Add(new MapData(id, name, width, height, collision)
             {
@@ -215,6 +231,7 @@ public sealed class WorldData
                 Warps = warps,
                 Objects = objects,
                 Triggers = triggers,
+                OnEntry = onEntry,
             });
         }
 
@@ -286,6 +303,29 @@ public sealed class WorldData
             // cartridge address and this file is the server's.
             writer.Write(trigger.TrainerId);
         }
+
+        writer.Write(map.OnEntry.Count);
+
+        foreach (MapEntryScript entry in map.OnEntry)
+        {
+            writer.Write(entry.Variable);
+            writer.Write(entry.Value);
+        }
+    }
+
+    private static List<MapEntryScript> ReadEntryScripts(BinaryReader reader)
+    {
+        int count = reader.ReadInt32();
+
+        if (count is < 0 or > 64)
+            throw new InvalidDataException($"A map claims {count} arrival scripts.");
+
+        var entries = new List<MapEntryScript>(count);
+
+        for (int i = 0; i < count; i++)
+            entries.Add(new MapEntryScript(reader.ReadInt32(), reader.ReadInt32(), ScriptAddress: 0));
+
+        return entries;
     }
 
     private static List<MapTrigger> ReadTriggers(BinaryReader reader)

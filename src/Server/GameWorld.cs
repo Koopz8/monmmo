@@ -498,7 +498,7 @@ public sealed class GameWorld
 
         player.LastStepAt = nowSeconds;
 
-        List<Outgoing> send = Transfer(player, target.Id, arrival, player.Facing);
+        List<Outgoing> send = Transfer(player, target.Id, arrival, player.Facing, nowSeconds);
 
         // An edge crossing is ordinary walking: grass on the far side counts, and so
         // does a door on the far side.
@@ -1483,7 +1483,7 @@ public sealed class GameWorld
             // ambushed by a wild encounter while the professor is talking is exactly the
             // kind of thing the ordinary arrival rules would do here.
             if (_world.Find(player.MapId)?.WarpAt(player.Square) is { } door)
-                send.AddRange(TakeWarp(player, door));
+                send.AddRange(TakeWarp(player, door, nowSeconds));
 
             return send;
         }
@@ -1869,7 +1869,7 @@ public sealed class GameWorld
     {
         if (_world.Find(player.MapId)?.WarpAt(player.Square) is { } warp)
         {
-            send.AddRange(TakeWarp(player, warp));
+            send.AddRange(TakeWarp(player, warp, nowSeconds));
             return;
         }
 
@@ -1895,7 +1895,7 @@ public sealed class GameWorld
     /// run time — the player arrives at a spawn instead of nowhere.
     /// </para>
     /// </summary>
-    private List<Outgoing> TakeWarp(ServerPlayer player, Warp warp)
+    private List<Outgoing> TakeWarp(ServerPlayer player, Warp warp, double nowSeconds)
     {
         if (_world.Find(warp.TargetMapId) is not { } target)
             return [];
@@ -1906,14 +1906,15 @@ public sealed class GameWorld
 
         if (!GridFor(target.Id).IsWalkable(arrival)) arrival = FindSpawn(target.Id);
 
-        return Transfer(player, target.Id, arrival, player.Facing);
+        return Transfer(player, target.Id, arrival, player.Facing, nowSeconds);
     }
 
     /// <summary>
     /// Moves a player between maps: gone to everyone on the old one, arrived to
     /// everyone on the new one, and a fresh view of the world for the player.
     /// </summary>
-    private List<Outgoing> Transfer(ServerPlayer player, string mapId, GridPosition arrival, Direction facing)
+    private List<Outgoing> Transfer(
+        ServerPlayer player, string mapId, GridPosition arrival, Direction facing, double nowSeconds)
     {
         string previous = player.MapId;
 
@@ -1954,8 +1955,40 @@ public sealed class GameWorld
 
         send.Add(new Outgoing(player.ToAppeared(), Except: player.Id, OnMap: mapId));
 
+        OpenWindowForArrival(player, nowSeconds);
+
         return send;
     }
+
+    /// <summary>
+    /// Opens a scene window when the map somebody just arrived on runs something.
+    /// <para>
+    /// The counterpart of the trigger doing it, and it has to be here rather than asked
+    /// for: an arrival script is a scene like any other, and a scene needs a window
+    /// before its first message. Unlike a trigger, nothing has to be taken on trust —
+    /// the server has the conditions in its own world file and the variables in its own
+    /// copy of the save, so it decides on its own that a scene starts here.
+    /// </para>
+    /// <para>
+    /// Tenth time this project has needed both halves of one rule, and the first time the
+    /// server's half needs no message at all.
+    /// </para>
+    /// </summary>
+    private void OpenWindowForArrival(ServerPlayer player, double nowSeconds)
+    {
+        LastArrivalScript = null;
+
+        if (_world.Find(player.MapId)?.EntryFor(player.Script.Read) is not { } entry) return;
+
+        player.SceneUntil = nowSeconds + SceneSeconds;
+        player.SceneOn = player.MapId;
+        player.SceneCast.Clear();
+
+        LastArrivalScript = $"arriving runs something here: 0x{entry.Variable:X4} holds {entry.Value}";
+    }
+
+    /// <summary>What the map somebody last arrived on had to say for itself.</summary>
+    public string? LastArrivalScript { get; private set; }
 
     /// <summary>
     /// Rolls for a wild encounter on whatever square the player is now standing on.
@@ -2070,7 +2103,7 @@ public sealed class GameWorld
         // is solid now would wake somebody inside a wall with no way out.
         if (!GridFor(mapId).IsWalkable(square)) square = GridFor(mapId).FirstWalkable();
 
-        List<Outgoing> send = Transfer(player, mapId, square, player.Facing);
+        List<Outgoing> send = Transfer(player, mapId, square, player.Facing, LastTickAt);
 
         send.Add(new Outgoing(new BlackedOut(mapId, square.X, square.Y, player.Money, [.. player.Party]), OnlyTo: player.Id));
 

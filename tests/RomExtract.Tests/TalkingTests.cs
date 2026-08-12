@@ -1033,6 +1033,7 @@ public class ShiftingWhatIsInTheWayTests
 public class TriggerTests
 {
     private const string Town = "3.0";
+    private const string Elsewhere = "4.3";
     private const int Variable = 0x4001;
 
     private static (GameWorld World, ServerPlayer Player) Standing(params MapTrigger[] triggers)
@@ -1235,7 +1236,7 @@ public class TriggerTests
             Warps = [new Warp(3, 2, 0, "4.3")],
         };
 
-        MapData lab = new("4.3", "RESEARCH LAB", 8, 8, new byte[64])
+        MapData lab = new(Elsewhere, "RESEARCH LAB", 8, 8, new byte[64])
         {
             Warps = [new Warp(6, 6, 0, Town)],
         };
@@ -1247,7 +1248,7 @@ public class TriggerTests
         world.FireTrigger(player.Id, 3, 4, 10);
         world.WalkThroughScene(player.Id, [Direction.Up, Direction.Up], 11);
 
-        Assert.Equal("4.3", player.MapId);
+        Assert.Equal(Elsewhere, player.MapId);
         Assert.Equal(new GridPosition(6, 6), player.Square);
     }
 
@@ -1263,7 +1264,7 @@ public class TriggerTests
             Warps = [new Warp(3, 3, 0, "4.3")],
         };
 
-        MapData lab = new("4.3", "RESEARCH LAB", 8, 8, new byte[64])
+        MapData lab = new(Elsewhere, "RESEARCH LAB", 8, 8, new byte[64])
         {
             Warps = [new Warp(6, 6, 0, Town)],
         };
@@ -1292,7 +1293,7 @@ public class TriggerTests
             Warps = [new Warp(3, 2, 0, "4.3")],
         };
 
-        MapData lab = new("4.3", "RESEARCH LAB", 8, 8, new byte[64])
+        MapData lab = new(Elsewhere, "RESEARCH LAB", 8, 8, new byte[64])
         {
             Objects = [new MapObject(3, 5, 1, 1, Direction.Down, 0, false)],
             Warps = [new Warp(6, 6, 0, Town)],
@@ -1366,6 +1367,70 @@ public class TriggerTests
         MapTrigger reloaded = WorldData.Load(buffer).Find(Town)!.Triggers.Single();
 
         Assert.Equal(new MapTrigger(3, 4, Variable, 2, ScriptAddress: 0, TrainerId: 7), reloaded);
+    }
+
+    [Fact]
+    public void ArrivalScriptsSurviveTheWorldFileToo()
+    {
+        MapData map = new(Town, "PALLET TOWN", 8, 8, new byte[64])
+        {
+            OnEntry = [new MapEntryScript(Variable, 1, ScriptAddress: 0x08123456)],
+        };
+
+        using var buffer = new MemoryStream();
+        new WorldData([map]).Save(buffer);
+
+        buffer.Position = 0;
+
+        MapEntryScript reloaded = WorldData.Load(buffer).Find(Town)!.OnEntry.Single();
+
+        Assert.Equal(new MapEntryScript(Variable, 1, ScriptAddress: 0), reloaded);
+    }
+
+    [Fact]
+    public void ArrivingSomewhereWithSomethingArmedOpensASceneWindow()
+    {
+        // The server's half of the fifth list, and the first one that needs no message.
+        // It has the conditions in its own world file and the variables in its own copy
+        // of the save, so a client saying "a scene started when I came through that door"
+        // is not something it has to take anybody's word for.
+        MapData town = new(Town, "PALLET TOWN", 8, 8, new byte[64])
+        {
+            Warps = [new Warp(3, 3, 0, Elsewhere)],
+        };
+
+        MapData lab = new(Elsewhere, "RESEARCH LAB", 8, 8, new byte[64])
+        {
+            Warps = [new Warp(6, 6, 0, Town)],
+            OnEntry = [new MapEntryScript(Variable, 1, ScriptAddress: 0)],
+        };
+
+        var world = new GameWorld(new WorldData([town, lab]), Town, TestRules.All);
+
+        (ServerPlayer player, _) = world.Join(1, "Koop", SavedCharacter.Fresh(Town, 3, 4));
+
+        // Through the door with the variable unset: the lab has something waiting, but
+        // not for this.
+        world.Move(player.Id, Direction.Up, 10);
+
+        Assert.Equal(Elsewhere, player.MapId);
+        Assert.Null(world.LastArrivalScript);
+
+        // Back out, and in again with it set. Off the door and onto it, because a warp
+        // fires on arriving at a square and not on standing there.
+        world.Move(player.Id, Direction.Up, 11);
+        world.Move(player.Id, Direction.Down, 12);
+
+        Assert.Equal(Town, player.MapId);
+
+        player.Script.Write(Variable, 1);
+
+        world.Move(player.Id, Direction.Down, 13);
+        world.Move(player.Id, Direction.Up, 14);
+
+        Assert.Equal(Elsewhere, player.MapId);
+        Assert.Contains("arriving runs something here", world.LastArrivalScript);
+        Assert.True(player.SceneUntil > 14);
     }
 }
 

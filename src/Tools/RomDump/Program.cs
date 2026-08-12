@@ -178,6 +178,10 @@ public static class Program
 
         if (options.Doors) WriteDoorCommands(rom);
 
+        if (options.Variable is { } variable) WriteVariable(rom, variable);
+
+        if (options.Probe) WriteMapScripts(rom);
+
         if (options.ScriptAt != 0) WriteScriptAt(rom, options.ScriptAt);
 
         Console.WriteLine();
@@ -867,6 +871,132 @@ public static class Program
     }
 
     /// <summary>
+    /// The fifth list, checked against itself across every map on the cartridge.
+    /// <para>
+    /// Every number here would come out differently if the shape were wrong: a list that
+    /// ran past its terminator, a pointer that did not resolve, a condition naming a
+    /// variable outside the range every other part of this project sees. That is the only
+    /// kind of evidence available for a record with no length field and no header.
+    /// </para>
+    /// </summary>
+    private static void WriteMapScripts(Rom rom)
+    {
+        MapBankTable banks = MapBankLocator.Locate(rom)!;
+        MapScripts.Survey survey = MapScripts.Check(rom, banks);
+
+        Console.WriteLine();
+        Console.WriteLine("The fifth list — what a map runs by itself");
+        Console.WriteLine();
+        Console.WriteLine($"  {survey.Maps} maps, {survey.WithNone} with an empty list");
+        Console.WriteLine($"  longest list {survey.LongestSeen} entries, {survey.Entries} entries in all");
+        Console.WriteLine($"  {survey.PointersThatResolve} of {survey.Entries} pointers resolve into the cartridge");
+        Console.WriteLine();
+
+        foreach ((byte kind, int count) in survey.ByKind.OrderBy(e => e.Key))
+        {
+            Console.WriteLine(
+                $"    kind {kind}: {count,4} entries — " +
+                (MapScripts.IsConditional(kind) ? "a table of conditions" : "a script, with no condition attached"));
+        }
+
+        Console.WriteLine();
+        Console.WriteLine($"  {survey.Conditions} conditions across the two table kinds");
+        Console.WriteLine(
+            $"  {survey.ConditionsInVariableRange} of them name a variable in the range everything " +
+            $"else in this project uses, over {survey.DistinctVariables} distinct variables");
+    }
+
+    /// <summary>
+    /// Everything in the world that writes one variable, and everything that waits on it.
+    /// <para>
+    /// The story is a chain of these and nothing else. At any moment the next thing that
+    /// can happen is a square or a person gated on a variable holding a particular value,
+    /// and the only question worth asking is who sets it to that. Standing in the
+    /// professor's lab with 0x4055 holding 1 and three triggers wanting 2 is not a bug
+    /// report, it is the next link, and finding it by reading maps one at a time is how
+    /// an evening goes.
+    /// </para>
+    /// <para>
+    /// Both halves are printed because both halves are the answer. A variable with
+    /// writers and no readers is bookkeeping; one with readers and no writers is a wall.
+    /// </para>
+    /// </summary>
+    private static void WriteVariable(Rom rom, int variable)
+    {
+        MapLibrary library = MapLibrary.Open(rom);
+
+        var writes = new List<string>();
+        var waits = new List<string>();
+
+        foreach (LoadedMap map in library.All())
+        {
+            string mapId = WorldExporter.MapId(map.Bank, map.Number);
+
+            List<(string Who, uint Script)> scripts =
+            [
+                .. map.Objects.Where(o => o.HasScript).Select(o => ($"person {o.LocalId} at {o.Square}", o.ScriptAddress)),
+                .. map.Triggers.Where(t => t.HasScript).Select(t => ($"square {t.Square}", t.ScriptAddress)),
+                .. map.Signs.Where(s => s.HasScript).Select(s => ($"sign at {s.Square}", s.ScriptAddress)),
+
+                // The fifth list. Left out of the first version of this sweep, which is
+                // exactly why it reported that nothing in the world sets 0x4055 to 2.
+                .. map.OnEntry.Where(e => e.HasScript).Select(e => ("arriving here", e.ScriptAddress)),
+            ];
+
+            foreach (MapEntryScript arrival in map.OnEntry.Where(e => e.Variable == variable))
+            {
+                waits.Add(
+                    $"    {mapId} {map.Name}: arriving runs 0x{arrival.ScriptAddress:X8} " +
+                    $"while it holds {arrival.Value}");
+            }
+
+            // The gate side comes off the map, not the script: a trigger names its
+            // variable and its value in the event record, which is why the server can
+            // refuse one without ever having read a byte of script.
+            foreach (MapTrigger trigger in map.Triggers.Where(t => t.Variable == variable))
+            {
+                waits.Add(
+                    $"    {mapId} {map.Name}: square {trigger.Square} runs 0x{trigger.ScriptAddress:X8} " +
+                    $"while it holds {trigger.Value}");
+            }
+
+            foreach ((string who, uint script) in scripts.DistinctBy(s => s.Script))
+            {
+                foreach (ScriptCommand command in ScriptReader.ReadAll(rom, script))
+                {
+                    string what = command.Code switch
+                    {
+                        0x16 when command.Arguments.Length >= 4 && command.Word() == variable
+                            => $"sets it to {command.Word(2)}",
+                        0x17 when command.Arguments.Length >= 4 && command.Word() == variable
+                            => $"adds {command.Word(2)} to it",
+                        0x21 when command.Arguments.Length >= 4 && command.Word() == variable
+                            => $"compares it with {command.Word(2)}",
+                        _ => "",
+                    };
+
+                    if (what.Length == 0) continue;
+
+                    (what.StartsWith("compares", StringComparison.Ordinal) ? waits : writes)
+                        .Add($"    {mapId} {map.Name}: {who} {what} (0x{script:X8})");
+                }
+            }
+        }
+
+        Console.WriteLine();
+        Console.WriteLine($"Variable 0x{variable:X4}");
+        Console.WriteLine();
+        Console.WriteLine($"  written by {writes.Count}");
+
+        foreach (string line in writes.Take(30)) Console.WriteLine(line);
+
+        Console.WriteLine();
+        Console.WriteLine($"  waited on by {waits.Count}");
+
+        foreach (string line in waits.Take(30)) Console.WriteLine(line);
+    }
+
+    /// <summary>
     /// Whether the two commands bracketing a scripted walk are naming doors.
     /// <para>
     /// 0xAC and 0xAD were adopted as four-byte commands because the column said four, and
@@ -1279,11 +1409,21 @@ public static class Program
 
         foreach (LoadedMap map in library.All())
         {
-            foreach (MapObject person in map.Objects.Where(o => o.HasScript))
+            // People, and what the map itself runs on arrival. The fifth list was outside
+            // this count for as long as it was unread, which is the same thing as saying
+            // the wrongness detector could not see the part of the cartridge the story
+            // is carried in.
+            IEnumerable<uint> addresses =
+            [
+                .. map.Objects.Where(o => o.HasScript).Select(o => o.ScriptAddress),
+                .. map.OnEntry.Where(e => e.HasScript).Select(e => e.ScriptAddress),
+            ];
+
+            foreach (uint address in addresses)
             {
                 people++;
 
-                ScriptRun run = ScriptRunner.Run(rom, person.ScriptAddress);
+                ScriptRun run = ScriptRunner.Run(rom, address);
 
                 if (run.StoppedAt is { } code)
                 {
@@ -1293,7 +1433,7 @@ public static class Program
 
                     // Three addresses is enough to read the bytes at; the count above is
                     // the number that says how much it matters.
-                    if (where.Count < 3) where.Add(person.ScriptAddress);
+                    if (where.Count < 3) where.Add(address);
 
                     continue;
                 }
@@ -1307,7 +1447,7 @@ public static class Program
             }
         }
 
-        Console.WriteLine($"  {people} people with a script");
+        Console.WriteLine($"  {people} scripts on people and doorways");
         Console.WriteLine($"  {finished} run to a proper end, {people - finished} stop somewhere");
         Console.WriteLine($"  {silent} of those that finish do nothing at all — no line, no shop, no fight");
 
@@ -2905,6 +3045,12 @@ public static class Program
         /// <summary>Check the two commands that bracket a scripted walk against the warps.</summary>
         public bool Doors { get; private init; }
 
+        /// <summary>A script variable to trace: who writes it, and who is waiting on it.</summary>
+        public int? Variable { get; private init; }
+
+        /// <summary>Check the map's own script list — the fifth pointer in every header.</summary>
+        public bool Probe { get; private init; }
+
         /// <summary>The map whose scripts to run, rather than read.</summary>
         public string ScriptRun { get; private init; } = "";
 
@@ -2996,6 +3142,8 @@ public static class Program
             bool movements = false;
             byte? step = null;
             bool doors = false;
+            int? variable = null;
+            bool probe = false;
             uint scriptAt = 0;
             bool dumpMoves = false, dumpEncounters = false;
             string? behaviourMap = null;
@@ -3130,6 +3278,12 @@ public static class Program
                     case "--doors":
                         doors = true;
                         break;
+                    case "--map-scripts":
+                        probe = true;
+                        break;
+                    case "--variable":
+                        variable = Convert.ToInt32(Next(args, ref i, "--variable"), 16);
+                        break;
                     case "--who-gives":
                         string item = Next(args, ref i, "--who-gives");
                         whoGives = item.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
@@ -3192,6 +3346,8 @@ public static class Program
                 At = at,
                 Step = step,
                 Doors = doors,
+                Variable = variable,
+                Probe = probe,
                 ScriptRun = scriptRun,
                 ScriptRuns = scriptRuns,
                 Specials = specials,

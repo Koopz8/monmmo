@@ -26,6 +26,15 @@ public sealed record LoadedMap(
     public IReadOnlyList<MapTrigger> Triggers { get; init; } = [];
 
     /// <summary>
+    /// What this map runs on arrival, when one of its variables says so.
+    /// <para>
+    /// With the script addresses, unlike the server's copy — this side has the cartridge,
+    /// which is the whole arrangement collision and triggers already use.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<MapEntryScript> OnEntry { get; init; } = [];
+
+    /// <summary>
     /// The signs, notice boards and bookshelves on this map.
     /// <para>
     /// Client-side only, and deliberately so. A sign has nothing the server needs to

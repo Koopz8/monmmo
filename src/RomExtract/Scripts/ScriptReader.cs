@@ -185,11 +185,52 @@ public static class ScriptCommands
         [0x29] = 2,     // setflag
         [0x2A] = 2,     // clearflag
         [0x2B] = 2,     // checkflag
+        // Two bytes, on two sites that share nothing and both resume on something
+        // unmistakable:
+        //
+        //   34 00 00 | 35 | 0F 00 94 DC 18 08 | 09 04 | 68     4.3   arriving
+        //   34 10 01 | 29 01 40 | 29 A2 00 | 28 14 00          12.5  person 7
+        //
+        // The first resumes on a loadpointer, a callstd and a waitbutton — which is the
+        // shape of every text box in this game — and the second on two setflags. At one
+        // byte or three, neither does.
+        [0x34] = 2,
+        // Nothing, and on one site only, which is thin and is the whole argument: the
+        // byte after it is 0x0F, and what follows that is a text pointer into the region
+        // every other message in this game points into, a callstd 04 and a waitbutton.
+        // Any argument at all here eats the 0x0F and the box with it.
+        [0x35] = 0,
         [0x39] = 1,
         [0x3A] = 0,
         [0x53] = 2,     // givemoney-ish
         [0x54] = 2,
         [0x55] = 2,
+        // Six bytes — three words — on ten sites across four maps, and the argument is
+        // legible as well as the length:
+        //
+        //   08 00 17 00 00 00 | 05 CC 64 16 08 02      3.3   person 8 is at (22, 0)
+        //   01 00 19 00 05 00 | 05 BE 82 16 08 02      3.41  person 1 is at (25, 4)
+        //   08 00 05 00 0A 00 | 55 08 00               4.3   person 8 exists
+        //   02 00 05 00 00 00 | 55 02 00               1.120 person 2 exists
+        //
+        // Every site resumes on a goto or a 0x55, which five bytes or seven do not. And
+        // the first word names a person who is really on that map, every time, with the
+        // two words after it landing on or beside where the cartridge put them — near
+        // enough to be about that person, not near enough to be their placement, which
+        // is what a command that moves somebody would look like. Not named here: what it
+        // does is a guess, what it takes is not.
+        [0x63] = 6,
+        // Three bytes, on two sites that disagree about what four would mean:
+        //
+        //   65 02 00 08 | 65 03 00 08 | 03            1.97 trigger (37, 43)
+        //   65 04 00 08 | 2A 2B 00 | 4F FF 00 ...     4.3  arriving with 0x4055 at 1
+        //
+        // At three, the first pair reads as two of the same command in a row and then a
+        // return, and the second reads as a clearflag followed by an applymovement. At
+        // four, the second swallows the clearflag's opcode and the read is one byte out
+        // from there on. The first word is a person id again — 2, 3 and 4, all of whom
+        // are on their map — which is the same shape as the command above it.
+        [0x65] = 3,
         // Nothing at all, and this one byte was the whole problem.
         //
         // Almost every person in FireRed opens with `6A 5A` — lock, then this. Taking an

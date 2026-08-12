@@ -732,6 +732,11 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                                 Console.WriteLine($"| #{playerId} stood on {silent}");
                             }
 
+                            if (world.LastArrivalScript is { } arrival)
+                            {
+                                Console.WriteLine($"* #{playerId} {arrival}");
+                            }
+
                             if (world.LastSightRefusal is { } unseen)
                             {
                                 Console.WriteLine($"| #{playerId} was not challenged: {unseen}");
