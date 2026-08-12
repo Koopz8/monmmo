@@ -1171,7 +1171,15 @@ public static class Program
     }
 
     /// <summary>
-    /// Every command whose answer a script branches on, ranked by how readable the fork is.
+    /// Every command with a test of the result variable immediately after it, ranked by
+    /// how readable the fork is.
+    /// <para>
+    /// <b>Followed by, not answered by.</b> A conditional jump answers nothing and turns
+    /// up here anyway, because a test can legitimately sit after one. Calling the column
+    /// "commands whose answer is branched on" claims more than the instrument can see —
+    /// which is the same mistake as crediting a special with the reply of the command
+    /// that ran between it and the compare, made in a heading instead of a sentence.
+    /// </para>
     /// <para>
     /// The sweep rather than one guess at a time. A fork whose two arms both speak is the
     /// strongest shape this project has: the cartridge saying, in its own words, what it
@@ -1187,7 +1195,10 @@ public static class Program
     private static void WriteAnswerSweep(Rom rom, int top = 16)
     {
         Console.WriteLine();
-        Console.WriteLine("Commands whose answer is branched on, by how much the branches say");
+        Console.WriteLine("Commands followed immediately by a test of the result variable");
+        Console.WriteLine("  Followed by, which is not the same as answered by. A conditional jump does not");
+        Console.WriteLine("  answer anything; it is here because a test legitimately sits after it. What the");
+        Console.WriteLine("  words on the two arms are evidence about is whatever last wrote that variable.");
 
         MapLibrary library = MapLibrary.Open(rom);
 
