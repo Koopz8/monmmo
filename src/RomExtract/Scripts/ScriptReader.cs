@@ -337,6 +337,70 @@ public static class ScriptCommands
         // 0x8004 against nine. A command taking two variables and then being asked
         // about one of them is not a coincidence that four bytes could produce twice.
         [0x42] = 4,
+
+        // Five. All five sites, and only readable because 0x30 is known now — every one
+        // of them is followed by a 0x30 and then a message:
+        //
+        //   B6 | 90 00 32 00 00 | 30 A1 90 00 02 00 | 67 ...
+        //   B6 | 91 00 32 00 00 | 30 A1 91 00 02 00 | 67 ...
+        //   B6 | 65 00 22 00 00 | 30 A1 65 00 02 00 | 28 ...
+        //
+        // Word, word, byte, with the first word repeated inside the 0x30 that follows
+        // it. Two commands sharing a number is a pair working together, and the shape
+        // only appeared once the second of them could be read.
+        [0xB6] = 5,
+
+        // Two, and every one of the four sites is followed by a conditional branch:
+        //
+        //   60 | AA 00 | 06 01 11 07 16 08     gotoif -> 0x08160711
+        //   60 | 19 02 | 06 01 9E 39 16 08     gotoif -> 0x0816399E
+        //
+        // A command asked about on the very next line takes its argument and no more.
+        [0x60] = 2,
+
+        // Three. Bytes zero, one and two are 00 at all four sites, and three of the four
+        // then continue into something known — a message, an 0xA0, a specialvar. The
+        // fourth runs into 0xC0, which is where this goes next.
+        [0x93] = 3,
+
+        // Three. Bytes one and two are `01 00` at all four sites, and all four continue
+        // into something known — waitstate twice, a compare, and a 0x4F.
+        [0x33] = 3,
+
+        // Two. Three sites, and every one continues into the same pair:
+        //
+        //   8F | 03 00 | 19 08 80 0D 80 | 21 08 80 00 00
+        //   8F | 04 00 | 19 08 80 0D 80 | 21 08 80 00 00
+        //
+        // copyvar 0x8008 <- 0x800D, then compare 0x8008 against zero. Reading a result
+        // out and testing it, which is what follows a command that produces one.
+        [0x8F] = 2,
+
+        // Four, and the same pairing 0xB6 has. Bytes two and three are `0A 03` at all
+        // three sites, and the word in front of them turns up again immediately:
+        //
+        //   75 | 6A 00 0A 03 | 16 01 40 6A 00 | 4F ...   setvar 0x4001 <- 0x006A
+        //   75 | 6B 00 0A 03 | 16 01 40 6B 00 | 4F ...   setvar 0x4001 <- 0x006B
+        //
+        // Two commands sharing a number is a pair, and a pair is not a coincidence.
+        [0x75] = 4,
+
+        // Two. Three sites and the twelve bytes after each of them are identical:
+        // `15 00 4F 01 00 DB 75 1A 08 51 00 00`. Read as two it is an argument followed
+        // by the 0x4F and 0x51 pair derived earlier in this run.
+        [0x2F] = 2,
+
+        // Four, and the same shape as giveitem: an id, a count, then the result
+        // variable tested on the very next line.
+        //
+        //   47 | 1A 00 01 00 | 21 0D 80 01 00 | 07 01 ...
+        //   47 | 50 00 01 00 | 21 0D 80 01 00 | 06 01 ...
+        //   47 | 68 00 01 00 | 21 0D 80 01 00 | 07 01 ...
+        //
+        // Compared against one rather than zero, so it asks a different question than
+        // 0x46 does — which is as far as the bytes go, and further than a name would
+        // have been earned.
+        [0x47] = 4,
     };
 
     /// <summary>
