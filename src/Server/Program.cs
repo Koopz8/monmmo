@@ -67,7 +67,7 @@ public static class Program
             return 1;
         }
 
-        Console.WriteLine($"Loaded {world.Count} maps from {worldPath}");
+        Console.WriteLine($"Loaded {world.Count} maps from {Path.GetFullPath(worldPath)}");
         Console.WriteLine(
             $"Starting players on {game.StartingMap.Name} ({game.StartingMap.Id}) — " +
             $"{game.StartingMap.Width}x{game.StartingMap.Height}");
@@ -172,7 +172,7 @@ public static class Program
             GameRules rules = GameRules.Load(path);
 
             Console.WriteLine(
-                $"Rules from {path}: {rules.SpeciesCount} species, " +
+                $"Rules from {Path.GetFullPath(path)}: {rules.SpeciesCount} species, " +
                 $"{rules.MoveCount} moves, {rules.LearnsetCount} learnsets, " +
                 $"{rules.TrainerCount} trainers");
 
@@ -180,7 +180,7 @@ public static class Program
         }
         catch (InvalidDataException ex)
         {
-            Console.WriteLine($"Could not read {path}: {ex.Message}");
+            Console.WriteLine($"Could not read {Path.GetFullPath(path)}: {ex.Message}");
             Console.WriteLine("  encounters are disabled until this is re-exported");
             return null;
         }

@@ -468,9 +468,27 @@ public sealed class WorldData
             tables.GetValueOrDefault(EncounterKind.Fishing));
     }
 
+    /// <summary>
+    /// Loads a world file, naming it in anything that goes wrong.
+    /// <para>
+    /// The path matters more than it looks. The server reads a relative name against
+    /// whatever directory it was started from, so "world.dat is the wrong version" is
+    /// only half a sentence — there can be two of them, and the one being read is not
+    /// always the one that was just written. An operator who is told the version and
+    /// not the path goes and re-exports the file that was already correct.
+    /// </para>
+    /// </summary>
     public static WorldData Load(string path)
     {
         using FileStream file = File.OpenRead(path);
-        return Load(file);
+
+        try
+        {
+            return Load(file);
+        }
+        catch (InvalidDataException ex)
+        {
+            throw new InvalidDataException($"{Path.GetFullPath(path)}: {ex.Message}", ex);
+        }
     }
 }
