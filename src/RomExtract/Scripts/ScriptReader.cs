@@ -210,20 +210,28 @@ public static class ScriptCommands
         // value and a script, whose shape was derived from the other end entirely. A
         // width that reads one record as another is wrong however cleanly it parses.
         [0x5B] = 3,
-        // Fifteen. Four sites, no two of them on the same map, and at fifteen every one
-        // resumes on a real command where thirteen, fourteen and sixteen resume on none:
+        // Fourteen. Four sites, no two of them on the same map, and at fourteen every
+        // one resumes on a real command where thirteen and fifteen resume on none:
         //
         //   79 | 02 40 05 00 00 ... | 19 31 40 01 40      4.3   person 5
         //   79 | 01 40 19 00 00 ... | 21 0D 80 00 00      14.2  person 6
         //   79 | 83 00 19 00 00 ... | 21 0D 80 00 00      1.53  person 2
         //   79 | 85 00 19 00 00 ... | 21 0D 80 00 00      10.11 person 2
         //
+        // It was adopted as fifteen first, and the reason is worth keeping: the four
+        // addresses were taken from a report that names where a command's *arguments*
+        // begin, and then used as though they named the command. Every width came out
+        // one too many, and fifteen passed the same test fourteen passes because the
+        // test was being run one byte to the left. What caught it was not the test — it
+        // was the professor's ball reading `givemon` and then `0x31`, which is not a
+        // command, in the middle of the one script this project has read most.
+        //
         // And the arguments say what it is without being asked. The first word is a
         // species or a variable holding one, the second is a level: 131 at level 25 and
         // 133 at level 25 are LAPRAS and EEVEE, at the levels this game gives them, on
         // Silph's top floor and in Celadon. The starter is the one whose species comes
         // out of a variable, at level 5.
-        [0x79] = 15,     // gives a monster
+        [0x79] = 14,     // gives a monster
         [0x39] = 1,
         [0x3A] = 0,
         // Eight bytes — four words — and the cleanest column this project has seen. The
