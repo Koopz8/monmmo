@@ -149,6 +149,8 @@ public static class Program
 
         if (options.Derive) WriteDerivedLengths(rom);
 
+        if (options.BytesAfter is { } after) WriteBytesAfter(rom, after);
+
         if (options.Glyphs) WriteGlyphCandidates(rom, options.OutputDirectory);
 
         if (options.Font != 0) WriteFontSheet(rom, options.Font, options.OutputDirectory);
@@ -1773,6 +1775,47 @@ public static class Program
         return (false, good, total, read);
     }
 
+    /// <summary>
+    /// The bytes after one unknown command, at every place it stops a run.
+    /// <para>
+    /// The oldest instrument in this project and still the one that settles things.
+    /// Scoring narrows and the tie it leaves is real; what breaks it is looking at every
+    /// site at once, where a constant first argument or a length that never varies shows
+    /// up as a column rather than as a hunch.
+    /// </para>
+    /// </summary>
+    private static void WriteBytesAfter(Rom rom, byte code, int width = 12)
+    {
+        Console.WriteLine();
+        Console.WriteLine($"Every place 0x{code:X2} stops a run, and what follows it");
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        var seen = new HashSet<int>();
+
+        foreach (LoadedMap map in library.All())
+        {
+            foreach (MapObject person in map.Objects.Where(o => o.HasScript))
+            {
+                ScriptRun run = ScriptRunner.Run(rom, person.ScriptAddress);
+
+                if (run.StoppedAt != code || run.StoppedAtOffset is not { } at) continue;
+                if (!seen.Add(at)) continue;
+
+                string hex = string.Join(
+                    " ",
+                    Enumerable.Range(1, width)
+                        .Where(i => at + i < rom.Length)
+                        .Select(i => $"{rom.ReadU8(at + i):X2}"));
+
+                Console.WriteLine($"  {Rom.BaseAddress + (uint)at:X8}  {hex}");
+            }
+        }
+
+        Console.WriteLine();
+        Console.WriteLine($"  {seen.Count} sites. A column that never changes is an argument, not a coincidence.");
+    }
+
     private static void WriteItems(Rom rom)
     {
         Console.WriteLine();
@@ -2026,6 +2069,9 @@ public static class Program
         /// <summary>Score every argument width for the commands that stop a run.</summary>
         public bool Derive { get; private init; }
 
+        /// <summary>Print what follows one unknown command, everywhere it appears.</summary>
+        public byte? BytesAfter { get; private init; }
+
         /// <summary>Hunt for the cartridge's lettering and write the candidates out.</summary>
         public bool Glyphs { get; private init; }
 
@@ -2068,6 +2114,7 @@ public static class Program
             bool shared = false;
             bool silent = false;
             bool derive = false;
+            byte? bytesAfter = null;
             bool glyphs = false;
             uint font = 0;
             string whoSays = "";
@@ -2157,6 +2204,11 @@ public static class Program
                     case "--derive":
                         derive = true;
                         break;
+                    case "--bytes-after":
+                        string which = Next(args, ref i, "--bytes-after");
+                        bytesAfter = Convert.ToByte(
+                            which.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? which[2..] : which, 16);
+                        break;
                     case "--glyphs":
                         glyphs = true;
                         break;
@@ -2227,6 +2279,7 @@ public static class Program
                 Shared = shared,
                 Silent = silent,
                 Derive = derive,
+                BytesAfter = bytesAfter,
                 Glyphs = glyphs,
                 Font = font,
                 WhoSays = whoSays,

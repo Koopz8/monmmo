@@ -574,11 +574,15 @@ public class ScriptRunnerTests
         // Per run rather than per script, because a script can now stop somewhere it
         // only reaches on one branch: the same person reads cleanly today and stops
         // tomorrow, and the difference is a flag.
-        Rom rom = Image((Start, [ScriptCommands.Message, .. At(SaysA), 0x30, ScriptCommands.End]), (SaysA, Speech('A')));
+        // 0xEE rather than a byte off the real command set. This test used 0x30, which
+        // was unknown when it was written and is five bytes wide now — so the test broke
+        // the moment the thing it was standing for got derived. A fixture that borrows a
+        // real unknown is a fixture with a fuse in it.
+        Rom rom = Image((Start, [ScriptCommands.Message, .. At(SaysA), 0xEE, ScriptCommands.End]), (SaysA, Speech('A')));
 
         ScriptRun run = ScriptRunner.Run(rom, Start);
 
-        Assert.Equal((byte)0x30, run.StoppedAt);
+        Assert.Equal((byte)0xEE, run.StoppedAt);
         Assert.Equal("AAAAAA", Assert.Single(run.Pages));
 
         // And where, so the bytes around it can be printed. A run follows jumps, so this

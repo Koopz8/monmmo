@@ -230,6 +230,49 @@ public static class ScriptCommands
         // and is not there. The correct width scored *worst* on continuation, because
         // the correct width stops at the next thing this project cannot read.
         [0x4F] = 6,
+
+        // Two: a word. Read from three sites, and all three agree — which is what the
+        // scorer could not do here, because no width of this one ends on a pointer and
+        // the continuation test is the one that prefers skipping unknowns.
+        //
+        //   4F 01 00 E5 75 1A 08 | 51 00 00 | 6C 02        release, end
+        //   4F 01 00 E1 75 1A 08 | 51 00 00 | 0F 00 C8 ... loadpointer
+        //   4F 03 00 E5 75 1A 08 | 51 00 00 | 6C 02        release, end
+        //
+        // The pair is the evidence. 0x4F takes a word and a pointer, 0x51 follows it
+        // immediately with a word of its own, and what comes after that is a real
+        // command every time. Deriving either alone was impossible; they only make
+        // sense together, which is exactly the entanglement that made the scoring tie.
+        [0x51] = 2,
+
+        // Five, and this overturns a decision milestone 14 made deliberately.
+        //
+        // That round parked 0x30 because two readings of its bytes both reached the
+        // same next command, and refused to guess between them. Right call on the
+        // evidence it had, which was one script. Twenty-five sites side by side say
+        // something one site cannot:
+        //
+        //   A1 28 00 00 00 | 0F 00 61 3B 17 08     loadpointer
+        //   A1 43 00 00 00 | 0F 00 44 44 17 08     loadpointer
+        //   A1 96 00 02 00 | 67 9F 7F 17 08        message
+        //   ... twenty more, every one the same shape
+        //
+        // The fifth byte is zero at every site without exception. Read as four, that
+        // byte is a separate nop instruction — and it would be a nop sitting in front
+        // of twenty-two of twenty-five loadpointers, which is not something anything
+        // emits. A column that never changes is an argument.
+        //
+        // Read as five it is a byte and two words, and the words hold small sensible
+        // numbers. The first byte is usually 0xA1 and is not always, so it is an
+        // argument too rather than a second opcode.
+        [0x30] = 5,
+
+        // Nothing at all, and it only became visible once 0x30 was five bytes wide —
+        // the same twenty-four scripts moved from stopping at one to stopping at the
+        // other, which is the loop doing its job. Every site is followed immediately by
+        // a real command: release-end at most of them, loadpointer at several, a call at
+        // one. Taking an argument here would swallow the first byte of all of those.
+        [0xC5] = 0,
     };
 
     /// <summary>
