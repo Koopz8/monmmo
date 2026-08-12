@@ -200,8 +200,28 @@ public static class ScriptCommands
         // every other message in this game points into, a callstd 04 and a waitbutton.
         // Any argument at all here eats the 0x0F and the box with it.
         [0x35] = 0,
+        // Three bytes, on four sites that are byte-for-byte identical:
+        //
+        //   5B FF 00 02 | 02 | 55 40 01 00 3E 92 16 08 ...
+        //
+        // The argument is what settles it. At three the `02` is an `end` and the script
+        // is over; at four the read carries on into `55 40 01 00 <pointer>`, which is not
+        // code at all — it is the next record in the map's own script list, a variable, a
+        // value and a script, whose shape was derived from the other end entirely. A
+        // width that reads one record as another is wrong however cleanly it parses.
+        [0x5B] = 3,
         [0x39] = 1,
         [0x3A] = 0,
+        // Eight bytes — four words — and the cleanest column this project has seen. The
+        // command sits in a packed run of itself, so the evidence is that the byte eight
+        // along is another one, at every one of eighty sites:
+        //
+        //   A2 | 05 00 08 00 35 03 00 00 | A2 | 06 00 08 00 ...
+        //   A2 | 09 00 0B 00 47 03 01 00 | A2 | 0A 00 0B 00 ...
+        //
+        // A hundred and thirty-nine scripts stopped here, which was the largest single
+        // stop on the cartridge once the fifth list was being read at all.
+        [0xA2] = 8,
         [0x53] = 2,     // givemoney-ish
         [0x54] = 2,
         [0x55] = 2,

@@ -1370,6 +1370,24 @@ public class TriggerTests
     }
 
     [Fact]
+    public void ADoorwayRunsEverythingItHasArmed()
+    {
+        // Not the first. The professor's lab has two arrival scripts on the same value
+        // of the same variable, the first of them reads as one command and an end, and
+        // the second is the scene that carries the story out of the room.
+        MapEntryScript[] entries =
+        [
+            new(Variable, 1, 0x08168FEB),
+            new(Variable, 7, 0x08169002),
+            new(Variable, 1, 0x0816923E),
+        ];
+
+        Assert.Equal([0x08168FEBu, 0x0816923Eu], MapEntryScript.ArmedIn(entries, _ => 1));
+        Assert.Equal([0x08169002u], MapEntryScript.ArmedIn(entries, _ => 7));
+        Assert.Empty(MapEntryScript.ArmedIn(entries, _ => 2));
+    }
+
+    [Fact]
     public void ArrivalScriptsSurviveTheWorldFileToo()
     {
         MapData map = new(Town, "PALLET TOWN", 8, 8, new byte[64])

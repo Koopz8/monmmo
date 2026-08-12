@@ -593,7 +593,7 @@ public static class Program
         // says nothing could never challenge anybody.
         network.SendTriggerFired(player.Square.X, player.Square.Y);
 
-        return Play(data, view, network, script, party, talking, trigger.ScriptAddress);
+        return Play(data, view, network, script, party, talking, [trigger.ScriptAddress]);
     }
 
     /// <summary>
@@ -615,10 +615,9 @@ public static class Program
         GameData data, MapView view, NetworkClient network, ScriptState script,
         IReadOnlyList<SavedMon> party, DialogueBox? talking)
     {
-        if (view.Map.OnEntry.FirstOrDefault(e => e.HasScript && e.Armed(script.Read(e.Variable))) is not { } entry)
-            return (talking, null);
+        List<uint> armed = MapEntryScript.ArmedIn(view.Map.OnEntry, script.Read);
 
-        return Play(data, view, network, script, party, talking, entry.ScriptAddress);
+        return armed.Count == 0 ? (talking, null) : Play(data, view, network, script, party, talking, armed);
     }
 
     /// <summary>
@@ -631,20 +630,34 @@ public static class Program
     /// </summary>
     private static (DialogueBox? Talking, Cutscene? Scene) Play(
         GameData data, MapView view, NetworkClient network, ScriptState script,
-        IReadOnlyList<SavedMon> party, DialogueBox? talking, uint address)
+        IReadOnlyList<SavedMon> party, DialogueBox? talking, IReadOnlyList<uint> addresses)
     {
-        ScriptRun run = ScriptRunner.Run(data.Rom, address, script.WithParty(party.Select(m => m.Moves)));
+        // All of them, in the order the cartridge wrote them, rather than the first.
+        // A doorway can have more than one thing armed at once — the professor's lab has
+        // two on the same value of the same variable — and taking the first meant taking
+        // the one whose read stops at its first command and does nothing. The scene that
+        // carries the story was second in the list.
+        var beats = new List<SceneBeat>();
+        var pages = new List<string>();
 
-        foreach (int flag in run.FlagsSet) script.Set(flag);
-        foreach (int flag in run.FlagsCleared) script.Clear(flag);
-        foreach ((int id, int value) in run.VariablesWritten) script.Write(id, value);
-
-        if (run.FlagsSet.Count + run.FlagsCleared.Count + run.VariablesWritten.Count > 0)
-            network.SendScriptRan(run);
-
-        if (run.IsScene)
+        foreach (uint address in addresses)
         {
-            var playing = new Cutscene(run.Beats, view);
+            ScriptRun run = ScriptRunner.Run(data.Rom, address, script.WithParty(party.Select(m => m.Moves)));
+
+            foreach (int flag in run.FlagsSet) script.Set(flag);
+            foreach (int flag in run.FlagsCleared) script.Clear(flag);
+            foreach ((int id, int value) in run.VariablesWritten) script.Write(id, value);
+
+            if (run.FlagsSet.Count + run.FlagsCleared.Count + run.VariablesWritten.Count > 0)
+                network.SendScriptRan(run);
+
+            if (run.IsScene) beats.AddRange(run.Beats);
+            else pages.AddRange(run.Pages);
+        }
+
+        if (beats.Count > 0)
+        {
+            var playing = new Cutscene(beats, view);
 
             // Held before a foot is moved, and not by talking to them. Talking checks
             // that somebody is within reach — rightly, since a conversation across a town
@@ -655,7 +668,7 @@ public static class Program
             return (talking, playing);
         }
 
-        var box = new DialogueBox(run.Pages);
+        var box = new DialogueBox(pages);
 
         return (box.IsEmpty ? talking : box, null);
     }

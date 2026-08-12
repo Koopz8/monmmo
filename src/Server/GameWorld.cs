@@ -400,6 +400,11 @@ public sealed class GameWorld
             // reporting the same reason over and over long after it stopped applying.
             LastEdgeRefusal = null;
 
+            // Cleared here rather than only where it is set, or it is reported on every
+            // step for as long as the player stays on the map — which is exactly what it
+            // did, twenty times in one visit to one room.
+            LastArrivalScript = null;
+
             if (!_players.TryGetValue(playerId, out ServerPlayer? player))
                 return [new Outgoing(new Rejected("Not in the world."), OnlyTo: playerId)];
 

@@ -2714,6 +2714,11 @@ public static class Program
                 .. map.Objects.Where(o => o.HasScript).Select(o => ($"person {o.LocalId}", o.ScriptAddress)),
                 .. map.Triggers.Where(t => t.HasScript).Select(t => ($"trigger ({t.X},{t.Y})", t.ScriptAddress)),
                 .. map.Signs.Where(s => s.HasScript).Select(s => ($"sign ({s.X},{s.Y})", s.ScriptAddress)),
+
+                // And the doorways. Left out until the fifth list was read at all, which
+                // meant asking this tool about 0x5B — the first command of an arrival
+                // script — and being told it turns up nowhere in the game.
+                .. map.OnEntry.Where(e => e.HasScript).Select(e => ("arriving", e.ScriptAddress)),
             ];
 
             foreach ((string what, uint address) in scripts)

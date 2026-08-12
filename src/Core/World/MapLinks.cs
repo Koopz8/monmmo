@@ -138,6 +138,24 @@ public sealed record MapEntryScript(int Variable, int Value, uint ScriptAddress)
     public bool HasScript => ScriptAddress != 0;
 
     public bool Armed(int held) => held == Value;
+
+    /// <summary>
+    /// Every script a doorway has armed, in the order the cartridge wrote them.
+    /// <para>
+    /// All of them, and this is the whole point of the method existing. A doorway can
+    /// have more than one thing armed at once — the professor's lab has two on the same
+    /// value of the same variable — and taking the first one meant taking the one whose
+    /// read stops at its first command and does nothing at all. The scene that carries
+    /// the story out of that room was second in the list.
+    /// </para>
+    /// </summary>
+    public static List<uint> ArmedIn(IEnumerable<MapEntryScript> entries, Func<int, int> read) =>
+    [
+        .. entries
+            .Where(e => e.HasScript && e.Armed(read(e.Variable)))
+            .Select(e => e.ScriptAddress)
+            .Distinct(),
+    ];
 }
 
 /// <summary>
