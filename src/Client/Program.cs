@@ -585,6 +585,17 @@ public static class Program
 
                     break;
 
+                case ItemFound found:
+                    bag = found.Bag;
+
+                    said = new DialogueBox([
+                        found.Count > 1
+                            ? $"Found {found.Count} {items.Of(found.ItemId)}!"
+                            : $"Found one {items.Of(found.ItemId)}!",
+                    ]);
+
+                    break;
+
                 case BagUpdated updated:
                     bag = updated.Bag;
                     party = updated.Party;

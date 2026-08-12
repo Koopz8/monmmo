@@ -14,6 +14,24 @@ public sealed record ScriptRun
     /// <summary>The fight this run picks, if it picks one.</summary>
     public int? TrainerId { get; init; }
 
+    /// <summary>
+    /// What this run hands over, if it hands over anything.
+    /// <para>
+    /// A ball lying on the ground is a script like any other: it puts an item id in one
+    /// of the argument variables, a count in the next, and calls a standard routine to
+    /// do the giving. This project has never followed a standard routine — the table of
+    /// them is code-referenced and has never been located — so all of those people ran
+    /// to a clean end and produced nothing at all.
+    /// </para>
+    /// <para>
+    /// Following the routine is not needed. Both numbers are written down in front of
+    /// the call, in plain sight, by the script that is about to make it.
+    /// </para>
+    /// </summary>
+    public int? GivesItem { get; init; }
+
+    public int GivesCount { get; init; }
+
     /// <summary>Flags this run set, in order, and the ones it cleared.</summary>
     public IReadOnlyList<int> FlagsSet { get; init; } = [];
 
@@ -45,7 +63,7 @@ public sealed record ScriptRun
     public int? StoppedAtOffset { get; init; }
 
     public bool IsEmpty =>
-        Pages.Count == 0 && Stock.Count == 0 && TrainerId is null &&
+        Pages.Count == 0 && Stock.Count == 0 && TrainerId is null && GivesItem is null &&
         FlagsSet.Count == 0 && FlagsCleared.Count == 0 && VariablesWritten.Count == 0;
 }
 
@@ -93,6 +111,8 @@ public static class ScriptRunner
         var stack = new Stack<uint>();
 
         int? trainerId = null;
+        int? gives = null;
+        int givesCount = 0;
         byte? stoppedAt = null;
         int? stoppedAtOffset = null;
 
@@ -189,6 +209,14 @@ public static class ScriptRunner
                     written[command.Word()] = command.Word(2);
                     break;
 
+                case 0x1A:                              // copyvarifnotzero
+                    // The argument slots a standard routine reads from. Written here
+                    // rather than treated as ordinary variables because that is what
+                    // they are: 0x8000 and 0x8001 are how a script passes two numbers
+                    // to a routine, and an item on the ground is exactly two numbers.
+                    save.Write(command.Word(), command.Word(2));
+                    break;
+
                 case 0x17:                              // addvar
                     save.Write(command.Word(), save.Read(command.Word()) + command.Word(2));
                     written[command.Word()] = save.Read(command.Word());
@@ -206,6 +234,19 @@ public static class ScriptRunner
                 case ScriptCommands.Message:
                     Say(rom, command.Pointer(), pages, maxPages);
                     pending = 0;
+                    break;
+
+                case ScriptCommands.CallStandard when save.Read(0x8000) != 0 && pending == 0:
+                case 0x08 when save.Read(0x8000) != 0 && pending == 0:
+                    // Something is being handed over. Which routine does the handing is
+                    // a number this project cannot resolve, and does not need to: the
+                    // item and the count were written down immediately before the call.
+                    gives ??= save.Read(0x8000);
+                    givesCount = Math.Max(1, save.Read(0x8001));
+
+                    save.Write(0x8000, 0);
+                    save.Write(0x8001, 0);
+
                     break;
 
                 case ScriptCommands.CallStandard:
@@ -268,6 +309,8 @@ public static class ScriptRunner
             Pages = pages,
             Stock = stock,
             TrainerId = trainerId,
+            GivesItem = gives,
+            GivesCount = givesCount,
             FlagsSet = set,
             FlagsCleared = cleared,
             VariablesWritten = written,

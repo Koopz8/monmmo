@@ -29,6 +29,7 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(BlackedOut), "blackedout")]
 [JsonDerivedType(typeof(TrainerSpotted), "spotted")]
 [JsonDerivedType(typeof(ApproachEnded), "approachover")]
+[JsonDerivedType(typeof(ItemFound), "itemfound")]
 [JsonDerivedType(typeof(BuyRequest), "buy")]
 [JsonDerivedType(typeof(SellRequest), "sell")]
 [JsonDerivedType(typeof(ShopOpened), "shop")]
@@ -245,6 +246,15 @@ public sealed record TrainerSpotted(int LocalId) : NetMessage;
 /// </para>
 /// </summary>
 public sealed record ApproachEnded : NetMessage;
+
+/// <summary>
+/// Something picked up off the ground.
+/// <para>
+/// The id rather than the name, because the server has never seen a cartridge and the
+/// client has one open. Same arrangement as the party: numbers here, names there.
+/// </para>
+/// </summary>
+public sealed record ItemFound(int ItemId, int Count, IReadOnlyList<BagEntry> Bag) : NetMessage;
 
 public sealed record BlackedOut(
     string MapId,

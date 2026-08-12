@@ -118,6 +118,12 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
                 PRIMARY KEY (account_id, trainer_id)
             );
 
+            CREATE TABLE IF NOT EXISTS items_taken (
+                account_id INTEGER NOT NULL REFERENCES characters(account_id) ON DELETE CASCADE,
+                what       TEXT    NOT NULL,
+                PRIMARY KEY (account_id, what)
+            );
+
             CREATE TABLE IF NOT EXISTS resting_places (
                 account_id INTEGER PRIMARY KEY REFERENCES characters(account_id) ON DELETE CASCADE,
                 map_id     TEXT    NOT NULL,
@@ -356,6 +362,18 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
             await beaten.ExecuteNonQueryAsync(cancellationToken);
         }
 
+        // Inserted rather than rewritten, for the reason the beaten trainers are: a ball
+        // picked up off the ground is never put back.
+        foreach (string what in character.ItemsTaken)
+        {
+            await using SqliteCommand taken = connection.CreateCommand();
+            taken.Transaction = transaction;
+            taken.CommandText = "INSERT OR IGNORE INTO items_taken (account_id, what) VALUES ($id, $what);";
+            taken.Parameters.AddWithValue("$id", accountId);
+            taken.Parameters.AddWithValue("$what", what);
+            await taken.ExecuteNonQueryAsync(cancellationToken);
+        }
+
         // A row rather than a column on characters, so a database made before centres
         // existed gains it without a migration. Absent means "has never rested
         // anywhere", which is a real answer and not a missing one.
@@ -589,6 +607,17 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
                 variables.Add(new SavedVariable(reader.GetInt32(0), reader.GetInt32(1)));
         }
 
+        var taken = new List<string>();
+
+        await using (SqliteCommand command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT what FROM items_taken WHERE account_id = $id ORDER BY what;";
+            command.Parameters.AddWithValue("$id", accountId);
+
+            await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken)) taken.Add(reader.GetString(0));
+        }
+
         string? restingAt = null;
         int restingX = 0;
         int restingY = 0;
@@ -610,6 +639,7 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
 
         return new SavedCharacter(mapId, x, y, facing, party)
         {
+            ItemsTaken = taken,
             RestingAt = restingAt,
             RestingX = restingX,
             RestingY = restingY,

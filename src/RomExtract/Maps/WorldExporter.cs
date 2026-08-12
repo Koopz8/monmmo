@@ -69,6 +69,29 @@ public static class WorldExporter
             }
         }
 
+        // What each person hands over, which is a fact about their script rather than
+        // about the record they stand on. Read here rather than at extraction because
+        // running a script is a different job from reading an object event.
+        for (int i = 0; i < maps.Count; i++)
+        {
+            maps[i] = maps[i] with
+            {
+                Objects =
+                [
+                    .. maps[i].Objects.Select(o =>
+                    {
+                        if (!o.HasScript) return o;
+
+                        Scripts.ScriptRun run = Scripts.ScriptRunner.Run(rom, o.ScriptAddress);
+
+                        return run.GivesItem is { } item
+                            ? o with { GivesItemId = item, GivesCount = Math.Max(1, run.GivesCount) }
+                            : o;
+                    }),
+                ],
+            };
+        }
+
         // Located rather than known, and only once every map's people have been read:
         // the nurse is whoever hands their work to the script that one person on each of
         // the most maps hands theirs to, which is not a question a single map can answer.
@@ -99,6 +122,13 @@ public static class WorldExporter
 
         log?.Invoke($"  {warps} warps, {connections} edge connections");
         log?.Invoke($"  {objects} objects, {trainers} of them trainers");
+
+        int lying = maps.Sum(m => m.Objects.Count(o => o.GivesItem));
+
+        log?.Invoke(
+            lying == 0
+                ? "  nothing is lying around to be picked up"
+                : $"  {lying} items lying on the ground across {maps.Count(m => m.Objects.Any(o => o.GivesItem))} maps");
 
         int healers = maps.Sum(m => m.Objects.Count(o => o.Heals));
 

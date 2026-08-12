@@ -734,3 +734,83 @@ public class BlackingOutTests
         Assert.Equal((3, 4), (saved.RestingX, saved.RestingY));
     }
 }
+
+/// <summary>
+/// Picking things up off the ground.
+/// <para>
+/// A ball lying on a route is a person with a script, and that script writes an item id
+/// and a count into two argument variables before calling a standard routine to do the
+/// giving. This project has never followed one of those routines — the table is
+/// code-referenced and was never located — so a hundred and seventy-three of them ran to
+/// a clean end and produced nothing at all. Following the routine was never needed: both
+/// numbers are written down in front of the call.
+/// </para>
+/// </summary>
+public class PickingThingsUpTests
+{
+    private const string Town = "3.0";
+
+    private static MapObject Ball(int localId, int itemId, int count = 1) =>
+        new(localId, 5, 3, 3, Direction.Down, 0, false) { GivesItemId = itemId, GivesCount = count };
+
+    private static (GameWorld World, ServerPlayer Player) Standing(params MapObject[] people)
+    {
+        MapData map = new(Town, "PALLET TOWN", 8, 8, new byte[64]) { Objects = people };
+
+        var world = new GameWorld(new WorldData([map]), Town, TestRules.All);
+
+        (ServerPlayer player, _) = world.Join(1, "Koop", SavedCharacter.Fresh(Town, 3, 4));
+
+        player.Facing = Direction.Up;
+
+        return (world, player);
+    }
+
+    [Fact]
+    public void WhatIsOnTheGroundGoesInTheBag()
+    {
+        (GameWorld world, ServerPlayer player) = Standing(Ball(1, TestRules.PotionItem, 2));
+
+        ItemFound found = world.StartTalking(player.Id, 1).Select(o => o.Message).OfType<ItemFound>().Single();
+
+        Assert.Equal(TestRules.PotionItem, found.ItemId);
+        Assert.Equal(2, found.Count);
+        Assert.Equal(2, player.Bag.CountOf(TestRules.PotionItem));
+    }
+
+    [Fact]
+    public void APickedUpBallIsNotThereTwice()
+    {
+        // The one thing that must not happen. A ball whose script runs every time it is
+        // spoken to is an unlimited supply of whatever is in it.
+        (GameWorld world, ServerPlayer player) = Standing(Ball(1, TestRules.PotionItem));
+
+        world.StartTalking(player.Id, 1);
+        world.StopTalking(player.Id);
+
+        Assert.Empty(world.StartTalking(player.Id, 1));
+        Assert.Equal(1, player.Bag.CountOf(TestRules.PotionItem));
+    }
+
+    [Fact]
+    public void WhatHasBeenPickedUpOutlivesTheConnection()
+    {
+        (GameWorld world, ServerPlayer player) = Standing(Ball(1, TestRules.PotionItem));
+
+        world.StartTalking(player.Id, 1);
+
+        Assert.Equal([$"{Town}:1"], world.Snapshot(player.Id)!.ItemsTaken);
+    }
+
+    [Fact]
+    public void ABallIsNotHeldStillToBeSpokenTo()
+    {
+        // There is nobody there. Holding it would be holding a ball to attention, and
+        // the release only ever comes from a text box that was never opened.
+        (GameWorld world, ServerPlayer player) = Standing(Ball(1, TestRules.PotionItem));
+
+        world.StartTalking(player.Id, 1);
+
+        Assert.Null(world.TalkingTo(player.Id));
+    }
+}

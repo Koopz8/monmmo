@@ -81,6 +81,7 @@ public class MessageChannelTests
             new BlackedOut("3.0", 7, 4, 1500, []),
             new TrainerSpotted(3),
             new ApproachEnded(),
+            new ItemFound(13, 2, [new BagEntry(13, 2)]),
             new BuyRequest(4, 5),
             new SellRequest(13, 2),
             new ShopOpened([new ShopEntry(4, 200)], 5000, [new BagEntry(4, 3)]),

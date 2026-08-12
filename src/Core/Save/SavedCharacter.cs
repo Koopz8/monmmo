@@ -145,6 +145,17 @@ public sealed record SavedCharacter(
     /// their money's worth back.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Things already picked up off the ground, as "map:person".
+    /// <para>
+    /// This project's own naming rather than the cartridge's. Every ball on the ground
+    /// has a flag in the games and that flag is not written in the script — the same
+    /// dead end the trainer flag turned out to be — while a map id and a local id are
+    /// both things the world file already carries.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<string> ItemsTaken { get; init; } = [];
+
     public string? RestingAt { get; init; }
 
     public int RestingX { get; init; }

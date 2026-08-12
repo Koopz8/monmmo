@@ -73,6 +73,9 @@ public sealed record ServerPlayer(int Id, long AccountId, string Name)
     /// </summary>
     public ScriptState Script { get; init; } = new();
 
+    /// <summary>Balls already picked up off the ground, as "map:person".</summary>
+    public HashSet<string> ItemsTaken { get; } = [];
+
     /// <summary>
     /// Everything this player is carrying.
     /// <para>
@@ -290,6 +293,7 @@ public sealed class GameWorld
             };
 
             foreach (int beaten in saved.DefeatedTrainers) player.DefeatedTrainers.Add(beaten);
+            foreach (string taken in saved.ItemsTaken) player.ItemsTaken.Add(taken);
 
             // A save from before healing existed, or one written mid-wipe, would leave
             // this account unable to start a battle for good. Waking up healthy is the
@@ -625,6 +629,32 @@ public sealed class GameWorld
             {
                 LastTalkOutcome = $"a fight with trainer {person.Template.TrainerId}";
                 return challenge;
+            }
+
+            // Something on the ground, before anything else: a ball is not a
+            // conversation and there is nothing to hold still.
+            if (person.Template.GivesItem && _rules is not null)
+            {
+                string what = $"{player.MapId}:{person.LocalId}";
+
+                if (!player.ItemsTaken.Add(what))
+                {
+                    LastTalkOutcome = "an item that has already been picked up";
+                    return [];
+                }
+
+                int count = Math.Max(1, person.Template.GivesCount);
+
+                player.Bag.Add(person.Template.GivesItemId, count);
+
+                LastTalkOutcome = $"item {person.Template.GivesItemId} x{count} off the ground";
+
+                return
+                [
+                    new Outgoing(
+                        new ItemFound(person.Template.GivesItemId, count, player.Bag.Entries),
+                        OnlyTo: playerId),
+                ];
             }
 
             // A counter that heals, before the one that sells. Both are counters and
@@ -1739,6 +1769,7 @@ public sealed class GameWorld
                 Money = player.Money,
                 Flags = [.. player.Script.Flags],
                 Variables = [.. player.Script.Variables.Select(v => new SavedVariable(v.Key, v.Value))],
+                ItemsTaken = [.. player.ItemsTaken],
                 RestingAt = player.RestingAt,
                 RestingX = player.RestingSquare.X,
                 RestingY = player.RestingSquare.Y,

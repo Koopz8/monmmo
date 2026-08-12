@@ -145,6 +145,8 @@ public static class Program
 
         if (options.Shared) WriteSharedScripts(rom);
 
+        if (options.Silent) WriteSilentPeople(rom);
+
         if (options.Glyphs) WriteGlyphCandidates(rom, options.OutputDirectory);
 
         if (options.Font != 0) WriteFontSheet(rom, options.Font, options.OutputDirectory);
@@ -1432,6 +1434,105 @@ public static class Program
         Console.WriteLine("  which row and how far along fixes the mapping for every other letter.");
     }
 
+    /// <summary>
+    /// Why a conversation that read perfectly says nothing at all.
+    /// <para>
+    /// The run histogram counts the scripts that stop somewhere. It also turned up a
+    /// bigger number that nobody had asked about: 170 people whose script runs to a
+    /// proper end and produces no line, no shop and no fight. A script that stops is
+    /// visibly broken. A script that finishes empty is the failure that looks like
+    /// success, and one number covering all of them is no use — some of those people
+    /// are rocks.
+    /// </para>
+    /// <para>
+    /// So this splits the number. The interesting causes are the ones where something
+    /// was found and thrown away: a text pointer this project decided was not text, or a
+    /// handoff to a standard script it has never been able to follow.
+    /// </para>
+    /// </summary>
+    private static void WriteSilentPeople(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("People whose script finishes and says nothing");
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        var causes = new Dictionary<string, int>();
+        var examples = new Dictionary<string, List<string>>();
+
+        int people = 0;
+        int silent = 0;
+
+        foreach (LoadedMap map in library.All())
+        {
+            foreach (MapObject person in map.Objects.Where(o => o.HasScript))
+            {
+                people++;
+
+                ScriptRun run = ScriptRunner.Run(rom, person.ScriptAddress);
+
+                if (run.GivesItem is { } given)
+                {
+                    string handed = $"hands over an item — {given} of them so far";
+
+                    handed = "hands over an item";
+
+                    causes[handed] = causes.GetValueOrDefault(handed) + 1;
+
+                    if (!examples.TryGetValue(handed, out List<string>? found)) examples[handed] = found = [];
+
+                    if (found.Count < 4)
+                    {
+                        found.Add(
+                            $"{WorldExporter.MapId(map.Bank, map.Number)} person {person.LocalId}: " +
+                            $"item {given} x{run.GivesCount}");
+                    }
+
+                    continue;
+                }
+
+                if (run.StoppedAt is not null || !run.IsEmpty) continue;
+
+                silent++;
+
+                List<ScriptCommand> commands = [.. ScriptReader.ReadAll(rom, person.ScriptAddress)];
+
+                // Text was found and rejected. LooksLikeDialogue is the only thing that
+                // can throw a page away once a pointer has been read, so if a script
+                // loaded one and nothing came out, that check is the reason.
+                bool loaded = commands.Any(c =>
+                    c.Code is ScriptCommands.LoadPointer or ScriptCommands.Message &&
+                    rom.IsRomAddress(c.Code == ScriptCommands.Message ? c.Pointer() : c.Pointer(1)));
+
+                // A handoff into the table of standard scripts, which this has never
+                // located and so has never followed.
+                bool standard = commands.Any(c => c.Code is ScriptCommands.CallStandard or 0x08 or 0x0A or 0x0B);
+
+                string cause =
+                    loaded ? "carried text this project decided was not text"
+                    : standard ? "handed off to a standard script, which is never followed"
+                    : commands.Count <= 2 ? "genuinely empty — a sign post with nothing on it"
+                    : "ran several commands, none of which this models";
+
+                causes[cause] = causes.GetValueOrDefault(cause) + 1;
+
+                if (!examples.TryGetValue(cause, out List<string>? where)) examples[cause] = where = [];
+
+                if (where.Count < 3)
+                    where.Add($"{WorldExporter.MapId(map.Bank, map.Number)} person {person.LocalId} 0x{person.ScriptAddress:X8}");
+            }
+        }
+
+        Console.WriteLine($"  {silent} of {people} people with a script");
+
+        foreach ((string cause, int count) in causes.OrderByDescending(e => e.Value))
+        {
+            Console.WriteLine($"    {count,4}  {cause}");
+
+            foreach (string where in examples[cause]) Console.WriteLine($"          {where}");
+        }
+    }
+
     private static void WriteItems(Rom rom)
     {
         Console.WriteLine();
@@ -1679,6 +1780,9 @@ public static class Program
         /// <summary>Count the scripts map objects hand their work to.</summary>
         public bool Shared { get; private init; }
 
+        /// <summary>Split the people whose script finishes and says nothing by cause.</summary>
+        public bool Silent { get; private init; }
+
         /// <summary>Hunt for the cartridge's lettering and write the candidates out.</summary>
         public bool Glyphs { get; private init; }
 
@@ -1719,6 +1823,7 @@ public static class Program
             bool scriptRuns = false;
             bool specials = false;
             bool shared = false;
+            bool silent = false;
             bool glyphs = false;
             uint font = 0;
             string whoSays = "";
@@ -1802,6 +1907,9 @@ public static class Program
                     case "--shared":
                         shared = true;
                         break;
+                    case "--silent":
+                        silent = true;
+                        break;
                     case "--glyphs":
                         glyphs = true;
                         break;
@@ -1870,6 +1978,7 @@ public static class Program
                 ScriptRuns = scriptRuns,
                 Specials = specials,
                 Shared = shared,
+                Silent = silent,
                 Glyphs = glyphs,
                 Font = font,
                 WhoSays = whoSays,

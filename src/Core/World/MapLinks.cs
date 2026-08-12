@@ -82,6 +82,26 @@ public sealed record MapObject(
     public bool Heals { get; init; }
 
     /// <summary>
+    /// What talking to this one hands over, if it hands over anything.
+    /// <para>
+    /// A ball lying on the ground is a person like any other, with a script that writes
+    /// an item id and a count into the two argument variables and calls a standard
+    /// routine to do the giving. This project has never been able to follow one of those
+    /// routines and did not need to: both numbers are written down in front of the call.
+    /// </para>
+    /// <para>
+    /// A hundred and seventy-three of them across the world, and every one was a person
+    /// whose script ran to a clean end and produced nothing at all.
+    /// </para>
+    /// </summary>
+    public int GivesItemId { get; init; }
+
+    public int GivesCount { get; init; }
+
+    /// <summary>True when there is something here to pick up.</summary>
+    public bool GivesItem => GivesItemId != 0;
+
+    /// <summary>
     /// Compares stock by its contents.
     /// <para>
     /// A record compares its members with <c>Equals</c>, and for a list that is
@@ -104,6 +124,8 @@ public sealed record MapObject(
         TrainerId == other.TrainerId &&
         SightRange == other.SightRange &&
         Heals == other.Heals &&
+        GivesItemId == other.GivesItemId &&
+        GivesCount == other.GivesCount &&
         Stock.SequenceEqual(other.Stock);
 
     public override int GetHashCode()
