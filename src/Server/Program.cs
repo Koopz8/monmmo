@@ -649,7 +649,12 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                             break;
 
                         case ScriptRan ran when playerId != 0:
-                            world.RunScript(playerId, ran);
+                            List<Outgoing> handed = world.RunScript(playerId, ran);
+
+                            if (world.LastGift is { } gift)
+                                Console.WriteLine($"* #{playerId} was handed {gift}");
+
+                            await DispatchAsync(handed, playerId, cancellationToken).ConfigureAwait(false);
 
                             if (ran.Set.Count + ran.Cleared.Count + ran.Written.Count > 0)
                             {

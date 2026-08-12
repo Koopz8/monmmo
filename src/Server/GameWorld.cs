@@ -790,56 +790,6 @@ public sealed class GameWorld
                 }
             }
 
-            // And the other kind of handover. The party is the server's — it is one of
-            // the two things it keeps for itself — so a monster arrives the same way an
-            // item does: the world file says who gives what, and this decides whether it
-            // has been given yet.
-            if (person.Template.GivesMon && _rules is not null && _battles is not null)
-            {
-                string what = $"mon:{player.MapId}:{person.LocalId}";
-
-                // A species, or a variable holding one. The three balls on the
-                // professor's table are one script that reads whichever was pressed, and
-                // the value it read is in this server's own copy of the save because the
-                // client sent it along with everything else that script wrote.
-                int species = person.Template.GivesSpecies >= MapObject.FirstVariable
-                    ? player.Script.Read(person.Template.GivesSpecies)
-                    : person.Template.GivesSpecies;
-
-                if (player.Party.Count >= MaxPartySize)
-                {
-                    gift = "a monster, but there is no room in the party for it";
-                }
-                else if (species <= 0)
-                {
-                    gift = $"a monster whose species 0x{person.Template.GivesSpecies:X4} has not been chosen yet";
-                }
-                else if (!player.ItemsTaken.Add(what))
-                {
-                    gift = "a monster that has already been taken";
-                }
-                else if (_battles.Wild(species, Math.Max(1, person.Template.GivesLevel)) is not { } handed)
-                {
-                    gift = $"species {species}, which is not one this server can field";
-                }
-                else
-                {
-                    player.Party.Add(BattleFactory.Save(handed));
-
-                    gift = $"species {species} at level {person.Template.GivesLevel}";
-
-                    given.Add(new Outgoing(
-                        new BagUpdated(player.Bag.Entries, [.. player.Party], "Received a new team member!"),
-                        OnlyTo: playerId));
-                }
-
-                if (!person.Template.Talks)
-                {
-                    LastTalkOutcome = gift;
-                    return given;
-                }
-            }
-
             List<Outgoing> said = Talk();
 
             LastTalkOutcome = gift is null
@@ -1314,16 +1264,96 @@ public sealed class GameWorld
     /// money and what is in the party, are decided here and are not in this message.
     /// </para>
     /// </summary>
-    public void RunScript(int playerId, ScriptRan ran)
+    public List<Outgoing> RunScript(int playerId, ScriptRan ran)
     {
         lock (_gate)
         {
-            if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return;
+            if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
 
             foreach (int flag in ran.Set) player.Script.Set(flag);
             foreach (int flag in ran.Cleared) player.Script.Clear(flag);
             foreach (SavedVariable variable in ran.Written) player.Script.Write(variable.Id, variable.Value);
+
+            return HandOverMonster(player);
         }
+    }
+
+    /// <summary>What the last attempt to hand over a monster came to.</summary>
+    public string? LastGift { get; private set; }
+
+    /// <summary>
+    /// Gives the player whatever the person they are talking to hands over.
+    /// <para>
+    /// Here rather than at the moment the conversation starts, and the difference is the
+    /// whole of it: the species is often a variable, and the variable is set by the very
+    /// script this message is reporting. Handing over at the start of the conversation
+    /// reads the value the <em>last</em> ball wrote — which is how pressing a different
+    /// ball produced a second one of the same creature.
+    /// </para>
+    /// <para>
+    /// The party is one of the two things this server keeps for itself, so what is given
+    /// still comes from the world file and never from the client. All that has changed is
+    /// when the question is asked.
+    /// </para>
+    /// </summary>
+    private List<Outgoing> HandOverMonster(ServerPlayer player)
+    {
+        LastGift = null;
+
+        if (_rules is null || _battles is null) return [];
+        if (!_populated.TryGetValue(player.MapId, out MapPopulation? people)) return [];
+
+        if (people.Objects.FirstOrDefault(o => o.HeldBy == player.Id && o.Template.GivesMon) is not { } person)
+            return [];
+
+        MapObject template = person.Template;
+
+        // One of a set, or one of a kind, and the cartridge says which. Of the seven
+        // people in the game who hand over a monster, five name a variable rather than a
+        // species — and those five are exactly the two places where you choose: three
+        // balls on the professor's table, two fighting types in Saffron. The other two,
+        // Lapras on Silph's top floor and Eevee in Celadon, name a species outright and
+        // are nobody's alternative.
+        //
+        // So a variable is not only how the species is found, it is the mark of a choice,
+        // and taking one closes the rest of the room.
+        bool oneOfASet = template.GivesSpecies >= MapObject.FirstVariable;
+
+        string what = oneOfASet ? $"mon:{player.MapId}" : $"mon:{player.MapId}:{person.LocalId}";
+
+        int species = oneOfASet ? player.Script.Read(template.GivesSpecies) : template.GivesSpecies;
+
+        if (player.Party.Count >= MaxPartySize)
+        {
+            LastGift = "a monster, but there is no room in the party for it";
+            return [];
+        }
+
+        if (species <= 0)
+        {
+            LastGift = $"a monster whose species 0x{template.GivesSpecies:X4} has not been chosen yet";
+            return [];
+        }
+
+        if (!player.ItemsTaken.Add(what))
+        {
+            LastGift = oneOfASet ? "one of these, and one is all anybody gets" : "a monster already taken";
+            return [];
+        }
+
+        if (_battles.Wild(species, Math.Max(1, template.GivesLevel)) is not { } handed)
+        {
+            LastGift = $"species {species}, which is not one this server can field";
+            return [];
+        }
+
+        player.Party.Add(BattleFactory.Save(handed));
+
+        LastGift = $"species {species} at level {template.GivesLevel}";
+
+        return [new Outgoing(
+            new BagUpdated(player.Bag.Entries, [.. player.Party], "Received a new team member!"),
+            OnlyTo: player.Id)];
     }
 
     /// <summary>

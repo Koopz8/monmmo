@@ -1276,23 +1276,29 @@ public class TriggerTests
         Assert.Empty(MapEntryScript.ArmedIn(entries, _ => 2));
     }
 
+    /// <summary>A person who hands something over, and nothing else.</summary>
+    private static MapObject Handing(int localId, int x, int y, int species, int level = 5) =>
+        new(localId, 5, x, y, Direction.Down, 0, false, ScriptAddress: 0x08123456)
+        {
+            GivesSpecies = species,
+            GivesLevel = level,
+        };
+
+    /// <summary>Talking to somebody and then telling the server what the script wrote.</summary>
+    private static List<Outgoing> TalkAndRun(GameWorld world, int playerId, int localId, params (int Id, int Value)[] wrote)
+    {
+        world.StartTalking(playerId, localId);
+
+        return world.RunScript(playerId, new ScriptRan([], [], [.. wrote.Select(w => new SavedVariable(w.Id, w.Value))]));
+    }
+
     [Fact]
     public void SomebodyWhoHandsOverAMonsterDoesItOnce()
     {
         // How a starter arrives. The party is one of the two things the server keeps for
         // itself, so this cannot come from the client saying it happened: the world file
         // says who gives what, and the server decides whether it has been given yet.
-        MapData map = new(Town, "PALLET TOWN", 8, 8, new byte[64])
-        {
-            Objects =
-            [
-                new MapObject(1, 5, 3, 3, Direction.Down, 0, false, ScriptAddress: 0x08123456)
-                {
-                    GivesSpecies = 4,
-                    GivesLevel = 5,
-                },
-            ],
-        };
+        MapData map = new(Town, "PALLET TOWN", 8, 8, new byte[64]) { Objects = [Handing(1, 3, 3, 4)] };
 
         var world = new GameWorld(new WorldData([map]), Town, TestRules.All);
 
@@ -1300,36 +1306,52 @@ public class TriggerTests
 
         player.Facing = Direction.Up;
 
-        world.StartTalking(player.Id, 1);
+        TalkAndRun(world, player.Id, 1);
 
-        Assert.Single(player.Party);
-        Assert.Equal(4, player.Party[0].Species);
+        Assert.Equal(4, Assert.Single(player.Party).Species);
         Assert.Equal(5, player.Party[0].Level);
 
         world.StopTalking(player.Id);
-        world.StartTalking(player.Id, 1);
+        TalkAndRun(world, player.Id, 1);
 
         Assert.Single(player.Party);
-        Assert.Contains("already been taken", world.LastTalkOutcome);
+        Assert.Contains("already taken", world.LastGift);
     }
 
     [Fact]
     public void AStarterIsWhicheverBallWasPressed()
     {
-        // The three balls on the professor's table are one script that reads whichever
-        // was pressed into a variable, so the world file carries the variable rather
-        // than a species. The value is in the server's own copy of the save, because the
-        // client sent it along with everything else that script wrote.
+        // The species is a variable, and the variable is written by the very script the
+        // message reports. Asking at the start of the conversation reads what the *last*
+        // ball wrote, which is how pressing a different one produced a second of the
+        // same creature.
+        MapData map = new(Town, "PALLET TOWN", 8, 8, new byte[64]) { Objects = [Handing(1, 3, 3, 0x4002)] };
+
+        var world = new GameWorld(new WorldData([map]), Town, TestRules.All);
+
+        (ServerPlayer player, _) = world.Join(1, "Koop", SavedCharacter.Fresh(Town, 3, 4));
+
+        player.Facing = Direction.Up;
+
+        // A stale value from some earlier conversation, which is exactly the trap.
+        player.Script.Write(0x4002, 4);
+
+        TalkAndRun(world, player.Id, 1, (0x4002, 7));
+
+        Assert.Equal(7, Assert.Single(player.Party).Species);
+    }
+
+    [Fact]
+    public void TakingOneBallClosesTheOthers()
+    {
+        // Three balls on one table are one choice. The cartridge marks which gifts are
+        // like that and it does not need a list: of the seven people in the game who
+        // hand over a monster, the five whose species is a variable are exactly the two
+        // rooms where you pick one — three in the lab, two in Saffron. The other two name
+        // a species outright and are nobody's alternative.
         MapData map = new(Town, "PALLET TOWN", 8, 8, new byte[64])
         {
-            Objects =
-            [
-                new MapObject(1, 5, 3, 3, Direction.Down, 0, false, ScriptAddress: 0x08123456)
-                {
-                    GivesSpecies = 0x4002,
-                    GivesLevel = 5,
-                },
-            ],
+            Objects = [Handing(1, 3, 3, 0x4002), Handing(2, 4, 3, 0x4002), Handing(3, 5, 3, 0x4002)],
         };
 
         var world = new GameWorld(new WorldData([map]), Town, TestRules.All);
@@ -1338,19 +1360,39 @@ public class TriggerTests
 
         player.Facing = Direction.Up;
 
-        // Nothing chosen yet: nothing handed over, and said out loud rather than
-        // silently handing over species zero.
-        world.StartTalking(player.Id, 1);
-
-        Assert.Empty(player.Party);
-        Assert.Contains("has not been chosen yet", world.LastTalkOutcome);
-
+        TalkAndRun(world, player.Id, 1, (0x4002, 1));
         world.StopTalking(player.Id);
 
-        player.Script.Write(0x4002, 7);
-        world.StartTalking(player.Id, 1);
+        player.Square = new GridPosition(4, 4);
+        TalkAndRun(world, player.Id, 2, (0x4002, 4));
 
-        Assert.Equal(7, Assert.Single(player.Party).Species);
+        Assert.Equal(1, Assert.Single(player.Party).Species);
+        Assert.Contains("one is all anybody gets", world.LastGift);
+    }
+
+    [Fact]
+    public void TwoDifferentPeopleWithFixedGiftsBothGive()
+    {
+        // And the other side of that rule, or it would be a way to lose Eevee by having
+        // picked up Lapras. A named species is a gift in its own right.
+        MapData map = new(Town, "PALLET TOWN", 8, 8, new byte[64])
+        {
+            Objects = [Handing(1, 3, 3, 4), Handing(2, 4, 3, 7)],
+        };
+
+        var world = new GameWorld(new WorldData([map]), Town, TestRules.All);
+
+        (ServerPlayer player, _) = world.Join(1, "Koop", SavedCharacter.Fresh(Town, 3, 4));
+
+        player.Facing = Direction.Up;
+
+        TalkAndRun(world, player.Id, 1);
+        world.StopTalking(player.Id);
+
+        player.Square = new GridPosition(4, 4);
+        TalkAndRun(world, player.Id, 2);
+
+        Assert.Equal([4, 7], player.Party.Select(m => m.Species));
     }
 
     [Fact]

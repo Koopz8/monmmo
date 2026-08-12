@@ -950,7 +950,13 @@ public static class Program
                     scene = null;
                     arrived = true;
                     fadingIn = FadeSeconds;
-                    holdInput = (float)WalkingCharacter.MinimumStepSeconds;
+                    // A whole step, not the bare minimum. Arriving somewhere is a step —
+                    // one was taken to get here — so the next one waits as long as any
+                    // other would. Holding for exactly the server's limit put every
+                    // arrival on the boundary of it, and half the time the boundary went
+                    // the other way: "too fast: 0.20s since the last step, and the limit
+                    // is 0.20s".
+                    holdInput = WalkingCharacter.StepSeconds;
 
                     if (view.SwitchTo(changed.MapId))
                     {
