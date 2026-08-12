@@ -214,6 +214,22 @@ public static class ScriptCommands
         [0xC7] = 1,
         [0xCF] = 0,
         [0x88] = 4,     // and the other decoration shop
+
+        // Six: a word and then a pointer. Derived twice and the two agree.
+        //
+        // By eye, at 0x08164D84: `4F 01 00 E5 75 1A 08 51 00 00 6C 02` reads as this
+        // command taking (1, 0x081A75E5), then 0x51 taking a word, then release, end.
+        // One clean parse, with a cartridge address sitting in plain sight.
+        //
+        // By counting, across all twenty places it stops a run: six is the only width
+        // where a real pointer ends exactly on the argument boundary.
+        //
+        // Worth knowing how nearly this went the other way. Every test based on what
+        // follows the command preferred four, because at four the read skips over 0x51 —
+        // which is also unknown — and lands on a copyvarifnotzero that parses beautifully
+        // and is not there. The correct width scored *worst* on continuation, because
+        // the correct width stops at the next thing this project cannot read.
+        [0x4F] = 6,
     };
 
     /// <summary>

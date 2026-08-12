@@ -1007,6 +1007,9 @@ public static class Program
         int people = 0;
         int silent = 0;
         int finished = 0;
+        int pages = 0;
+        int shops = 0;
+        int fights = 0;
 
         foreach (LoadedMap map in library.All())
         {
@@ -1031,12 +1034,22 @@ public static class Program
 
                 finished++;
                 if (run.IsEmpty) silent++;
+
+                pages += run.Pages.Count;
+                shops += run.Stock.Count > 0 ? 1 : 0;
+                fights += run.TrainerId is not null ? 1 : 0;
             }
         }
 
         Console.WriteLine($"  {people} people with a script");
         Console.WriteLine($"  {finished} run to a proper end, {people - finished} stop somewhere");
         Console.WriteLine($"  {silent} of those that finish do nothing at all — no line, no shop, no fight");
+
+        // What actually comes out, which is a far sharper measure than whether a read
+        // ended. A wrong argument width resumes inside an argument and every command
+        // after it is invented, so the pages it produces change even when the count of
+        // clean endings does not.
+        Console.WriteLine($"  {pages} pages of dialogue, {shops} shops, {fights} fights");
 
         foreach ((byte code, int count) in counts.OrderByDescending(e => e.Value))
         {
@@ -1591,9 +1604,12 @@ public static class Program
                 int landed = 0;
 
                 int depth = 0;
+                int carries = 0;
 
                 foreach (int at in where)
                 {
+                    if (CarriesAPointer(rom, at + 1, width)) carries++;
+
                     (bool ended, int good, int total, int read) = ReadsOn(rom, at + 1 + width);
 
                     if (ended) clean++;
@@ -1610,34 +1626,86 @@ public static class Program
                     width,
                     clean / (double)where.Count,
                     landed == 0 ? 0 : pointers / (double)landed,
-                    depth / (double)where.Count));
+                    carries / (double)where.Count));
             }
 
-            double top = scores.Max(s => s.Clean + s.Pointers);
+            // Scored on what the argument holds, not on what follows it. What follows
+            // is a trap: the correct width often lands on the *next* unknown command and
+            // stops dead, while a wrong one skips over that unknown and reads on into
+            // something plausible. At 0x08164D84 the right answer scores worst on every
+            // continuation test, and the bytes it swallows are 01 00 E5 75 1A 08 — a
+            // pointer to 0x081A75E5, sitting in plain sight.
+            // The pointer test only gets to decide when it actually fires. Half the
+            // sites is the bar: below that it is a coincidence being promoted over a
+            // real signal, which is how 0x51 was briefly declared eight bytes wide on
+            // the strength of three sites out of twenty-one.
+            double top = scores.Max(s => s.Depth) >= 0.5 ? scores.Max(s => s.Depth) : 0;
 
             // Everything close to the top, not just the top. A single arrow claims more
             // than this evidence supports, and claiming more than the evidence supports
             // is the specific mistake this whole method exists to avoid.
-            int[] shortlist = [.. scores.Where(s => s.Clean + s.Pointers >= top - 0.1).Select(s => s.Width)];
+            int[] shortlist = top <= 0
+                ? [.. scores.Where(s => s.Clean + s.Pointers >= scores.Max(x => x.Clean + x.Pointers) - 0.1).Select(s => s.Width)]
+                : [.. scores.Where(s => s.Depth >= top - 0.05).Select(s => s.Width)];
 
             Console.WriteLine();
             Console.WriteLine($"  0x{code:X2}  stops {where.Count} people");
 
             foreach ((int width, double cleanly, double pointing, double deep) in scores)
             {
-                string mark = shortlist.Contains(width) ? " <-" : "";
+                string mark = top > 0 && shortlist.Contains(width) ? " <-" : "";
 
                 Console.WriteLine(
-                    $"      {width} bytes:  {cleanly,5:P0} end properly, " +
-                    $"{pointing,5:P0} of pointers land on a script, {deep,4:0.0} commands read{mark}");
+                    $"      {width} bytes:  {deep,5:P0} carry a real pointer, " +
+                    $"{cleanly,5:P0} read on to an end, {pointing,5:P0} of those pointers land{mark}");
             }
 
             Console.WriteLine(
-                shortlist.Length == 1
-                    ? $"      -> {shortlist[0]} bytes, and nothing else comes close"
-                    : $"      -> {string.Join(" or ", shortlist)} bytes. Not decided: " +
-                      "the reads run into other unknown commands, which caps every width alike");
+                top <= 0
+                    ? "      -> undecided. No width ends on a real pointer, and the continuation " +
+                      "test is not to be trusted alone: read the bytes"
+                    : shortlist.Length == 1
+                        ? $"      -> {shortlist[0]} bytes, ending on a pointer that lands on something real"
+                        : $"      -> {string.Join(" or ", shortlist)} bytes, equally");
         }
+    }
+
+    /// <summary>
+    /// True when the argument bytes hold something that is recognisably a pointer.
+    /// <para>
+    /// The sharpest test there is, and the one milestone 14 actually used: a pointer
+    /// into a GBA cartridge is recognisable on sight, and a width that swallows one
+    /// whole is a width that swallowed an argument. A width that cuts one in half is
+    /// not.
+    /// </para>
+    /// </summary>
+    private static bool CarriesAPointer(Rom rom, int from, int width)
+    {
+        // Ending exactly at the argument boundary, not merely sitting somewhere inside
+        // it. Any width longer than the true one still contains the same pointer, with
+        // extra bytes swallowed after it — so "carries one" alone cannot tell six from
+        // eight, and "ends with one" can. A trailing pointer is the commonest shape a
+        // command of this kind has.
+        for (int at = width - 4; at >= width - 4 && at >= 0; at--)
+        {
+            if (from + at + 4 > rom.Length) break;
+
+            uint candidate = rom.ReadU32(from + at);
+
+            if (!rom.IsRomAddress(candidate)) continue;
+
+            // It has to lead somewhere, and the bar is one recognisable command or one
+            // page of speech. Demanding a whole readable script was too much: these
+            // pointers often lead to more of the same unknown territory, which is the
+            // whole reason the command is unknown.
+            if (rom.ToOffsetOrNull(candidate) is not { } target) continue;
+
+            if (ScriptCommands.ArgumentLength(rom.ReadU8(target), rom.ReadU8(target + 1)) is not null) return true;
+
+            if (GameText.LooksLikeDialogue(rom.Span[target..])) return true;
+        }
+
+        return false;
     }
 
     /// <summary>
