@@ -137,7 +137,6 @@ public sealed class NetworkClient : IDisposable
     public void SendSceneCast(IReadOnlyList<int> localIds) => Send(new SceneCast(localIds));
 
     /// <summary>Asks the server to walk the player the way a scene says.</summary>
-    public void SendSceneWalk(IReadOnlyList<Direction> steps) => Send(new SceneWalk(steps));
 
     public void SendScenePlaced(int localId, GridPosition square, Direction facing) =>
         Send(new ScenePlaced(localId, square.X, square.Y, facing));

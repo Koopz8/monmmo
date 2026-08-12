@@ -85,7 +85,6 @@ public class MessageChannelTests
             new ObstacleShifted(4, 15, 1),
             new TriggerFired(9, 12),
             new ScenePlaced(2, 5, 6, Direction.Left),
-            new SceneWalk([Direction.Up, Direction.Left]),
             new SceneCast([3, 4]),
             new BuyRequest(4, 5),
             new SellRequest(13, 2),

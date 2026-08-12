@@ -626,15 +626,6 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
 
                             break;
 
-                        case SceneWalk walk when playerId != 0:
-                            List<Outgoing> walked = world.WalkThroughScene(playerId, walk.Steps, Now);
-
-                            if (world.LastSceneWalk is { } sceneWalk)
-                                Console.WriteLine($"* #{playerId} scene walk: {sceneWalk}");
-
-                            await DispatchAsync(walked, playerId, cancellationToken).ConfigureAwait(false);
-                            break;
-
                         case ScenePlaced placed when playerId != 0:
                             List<Outgoing> after = world.PlaceAfterScene(
                                 playerId, placed.LocalId, new GridPosition(placed.X, placed.Y), placed.Facing, Now);

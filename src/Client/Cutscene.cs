@@ -12,11 +12,17 @@ namespace PokeMmo.Client;
 /// and then moved everybody would be showing the same content and none of the scene.
 /// </para>
 /// <para>
-/// The player's own movements are performed too, but not decided here. This side asks —
-/// with the directions, not a destination, so the server can walk them square by square
-/// and refuse any that leaves the map or lands on somebody — and animates its own
-/// prediction meanwhile. A destination would have to be taken on trust; a path can be
-/// checked.
+/// The player is never moved. The cartridge does move them — seventy-five of the world's
+/// scenes walk the player somewhere — and this deliberately does not, because a game
+/// where other people are also playing cannot take somebody's character away from them
+/// for four seconds at a time. The scene happens around them and they walk to it.
+/// </para>
+/// <para>
+/// The cost of that is measured rather than assumed: of the seventy-five, six leave the
+/// player standing on a door, and those six are two places — the professor's lab and a
+/// house on One Island. Both are doors anybody can walk into. Everything else the
+/// cartridge uses the player's feet for is a walk across a map they can take themselves,
+/// which is the whole point of not taking it from them.
 /// </para>
 /// </summary>
 public sealed class Cutscene
@@ -60,31 +66,6 @@ public sealed class Cutscene
     public IEnumerable<int> Cast =>
         _beats.OfType<SceneBeat.Walk>().Where(w => !w.IsPlayer).Select(w => w.PersonId).Distinct();
 
-    /// <summary>
-    /// The direction the player should be stepping this instant, if a beat is walking
-    /// them.
-    /// <para>
-    /// Handed back rather than applied, because the client's walking figure is driven by
-    /// input and this is input — it just did not come from a key. Feeding it through the
-    /// same path means a scripted step animates, collides and turns exactly like a
-    /// walked one, instead of being a second kind of movement with its own bugs.
-    /// </para>
-    /// </summary>
-    public Direction? PlayerInput { get; private set; }
-
-    /// <summary>Directions this scene has asked the server to walk, not yet sent.</summary>
-    private readonly List<Direction> _asked = [];
-
-    /// <summary>What to ask the server for, once and at the start of the beat.</summary>
-    public IReadOnlyList<Direction> Ask()
-    {
-        List<Direction> asking = [.. _asked];
-
-        _asked.Clear();
-
-        return asking;
-    }
-
     public void Update(float deltaSeconds)
     {
         if (Saying is not null)
@@ -105,9 +86,10 @@ public sealed class Cutscene
                     Saying = new DialogueBox([say.Page]);
                     return;
 
+                // Skipped, not performed. See the note at the top: the player's feet are
+                // theirs. The beat still costs nothing to pass over, and everything the
+                // scene does around them keeps its order.
                 case SceneBeat.Walk walk when walk.IsPlayer:
-                    if (!StepPlayer(walk, deltaSeconds)) return;
-
                     _beat++;
                     _step = 0;
                     _elapsed = 0f;
@@ -122,43 +104,6 @@ public sealed class Cutscene
                     continue;
             }
         }
-    }
-
-    /// <summary>
-    /// Advances the player through one walk beat, returning true when it has finished.
-    /// <para>
-    /// The whole list is asked for at the start rather than a square at a time. The
-    /// server checks it square by square either way, and one message per scene beats one
-    /// message per footstep for something that happens while a text box is open.
-    /// </para>
-    /// </summary>
-    private bool StepPlayer(SceneBeat.Walk walk, float deltaSeconds)
-    {
-        if (_step == 0 && _elapsed == 0f)
-        {
-            foreach (byte step in walk.Steps)
-            {
-                if (DirectionOf(step) is { } direction) _asked.Add(direction);
-            }
-        }
-
-        _elapsed += deltaSeconds;
-
-        PlayerInput = null;
-
-        while (_step < walk.Steps.Count)
-        {
-            if (_elapsed < StepSeconds) return false;
-
-            _elapsed -= StepSeconds;
-
-            PlayerInput = DirectionOf(walk.Steps[_step]);
-            _step++;
-
-            return false;
-        }
-
-        return true;
     }
 
     /// <summary>Advances one walk beat, returning true when it has finished.</summary>

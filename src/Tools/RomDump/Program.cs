@@ -178,6 +178,8 @@ public static class Program
 
         if (options.Doors) WriteDoorCommands(rom);
 
+        if (options.PlayerWalks) WritePlayerWalks(rom);
+
         if (options.Variable is { } variable) WriteVariable(rom, variable);
 
         if (options.Probe) WriteMapScripts(rom);
@@ -994,6 +996,77 @@ public static class Program
         Console.WriteLine($"  waited on by {waits.Count}");
 
         foreach (string line in waits.Take(30)) Console.WriteLine(line);
+    }
+
+    /// <summary>
+    /// What the cartridge uses scripted player movement for, before deciding to stop
+    /// performing it.
+    /// <para>
+    /// The question a design choice turns on. A scene that walks the player somewhere on
+    /// the same map costs nothing to drop — they walk there themselves, which is the
+    /// point. A scene that walks them onto a door is the only thing that puts them
+    /// through it, and dropping that one leaves them outside a building the story is
+    /// about. So: how many of each.
+    /// </para>
+    /// </summary>
+    private static void WritePlayerWalks(Rom rom)
+    {
+        MapLibrary library = MapLibrary.Open(rom);
+
+        int scenes = 0, moveThePlayer = 0, ontoADoor = 0;
+        var doors = new List<string>();
+
+        foreach (LoadedMap map in library.All())
+        {
+            string mapId = WorldExporter.MapId(map.Bank, map.Number);
+
+            foreach (MapTrigger trigger in map.Triggers.Where(t => t.HasScript))
+            {
+                ScriptRun run = ScriptRunner.Run(rom, trigger.ScriptAddress);
+
+                if (!run.IsScene) continue;
+
+                scenes++;
+
+                // Every walk the player is given, in the order the scene performs them,
+                // chained from the square that started it. Beats rather than a read of
+                // the script, because a read follows both arms of every branch and a
+                // scene only walks one of them — chaining across arms would put the
+                // player somewhere the game never puts them.
+                GridPosition at = trigger.Square;
+                bool walked = false;
+
+                foreach (SceneBeat.Walk walk in run.Beats.OfType<SceneBeat.Walk>().Where(w => w.IsPlayer))
+                {
+                    walked = true;
+
+                    foreach (byte step in walk.Steps)
+                    {
+                        if (MovementLists.DirectionOf(step) is { } direction) at = at.Step(direction);
+                    }
+                }
+
+                if (!walked) continue;
+
+                moveThePlayer++;
+
+                if (!map.Warps.Any(w => w.Square == at)) continue;
+
+                ontoADoor++;
+
+                if (doors.Count < 12)
+                    doors.Add($"    {mapId} {map.Name}: from {trigger.Square} to the door at {at}");
+            }
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("What a script uses the player's own feet for");
+        Console.WriteLine();
+        Console.WriteLine($"  {scenes} squares in the world start a scene");
+        Console.WriteLine($"  {moveThePlayer} of those scenes walk the player somewhere");
+        Console.WriteLine($"  {ontoADoor} of those leave them standing on a door");
+
+        foreach (string door in doors) Console.WriteLine(door);
     }
 
     /// <summary>
@@ -3050,6 +3123,9 @@ public static class Program
         /// <summary>Check the two commands that bracket a scripted walk against the warps.</summary>
         public bool Doors { get; private init; }
 
+        /// <summary>What the cartridge uses scripted player movement for.</summary>
+        public bool PlayerWalks { get; private init; }
+
         /// <summary>A script variable to trace: who writes it, and who is waiting on it.</summary>
         public int? Variable { get; private init; }
 
@@ -3147,6 +3223,7 @@ public static class Program
             bool movements = false;
             byte? step = null;
             bool doors = false;
+            bool playerWalks = false;
             int? variable = null;
             bool probe = false;
             uint scriptAt = 0;
@@ -3283,6 +3360,9 @@ public static class Program
                     case "--doors":
                         doors = true;
                         break;
+                    case "--player-walks":
+                        playerWalks = true;
+                        break;
                     case "--map-scripts":
                         probe = true;
                         break;
@@ -3351,6 +3431,7 @@ public static class Program
                 At = at,
                 Step = step,
                 Doors = doors,
+                PlayerWalks = playerWalks,
                 Variable = variable,
                 Probe = probe,
                 ScriptRun = scriptRun,

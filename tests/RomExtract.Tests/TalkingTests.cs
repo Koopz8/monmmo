@@ -1177,29 +1177,11 @@ public class TriggerTests
 
         for (double now = 10.2; now < 14; now += 0.2) world.Tick(now);
 
-        world.WalkThroughScene(player.Id, [Direction.Down, Direction.Down], 14);
-
         for (double now = 14.2; now < 18; now += 0.2) world.Tick(now);
 
         world.PlaceAfterScene(player.Id, 3, new GridPosition(11, 8), Direction.Left);
 
         Assert.Contains("left at", world.LastScenePlacement);
-    }
-
-    [Fact]
-    public void ASceneCanWalkThePlayer()
-    {
-        // The half a scene could not do until now. Where the player stands is the
-        // server's to say, so the client asks with directions rather than a destination
-        // and the server walks them.
-        (GameWorld world, ServerPlayer player) = Standing(new MapTrigger(3, 4, Variable, 0));
-
-        world.FireTrigger(player.Id, 3, 4, 10);
-
-        world.WalkThroughScene(player.Id, [Direction.Up, Direction.Up, Direction.Left], 11);
-
-        Assert.Equal(new GridPosition(2, 2), player.Square);
-        Assert.Equal(Direction.Left, player.Facing);
     }
 
     [Fact]
@@ -1221,63 +1203,6 @@ public class TriggerTests
 
         Assert.Contains("spent", world.WhySilent(player.Id));
         Assert.Contains("holds 1", world.WhySilent(player.Id));
-    }
-
-    [Fact]
-    public void AWalkOntoADoorGoesThroughIt()
-    {
-        // How anybody gets into the professor's lab. His script opens the door at (16,
-        // 13), walks him and the player onto it, waits, and closes the door again — and
-        // warps nobody. Delivering a player to a doorway and stopping is what left them
-        // outside the building the whole scene was about.
-        MapData town = new(Town, "PALLET TOWN", 8, 8, new byte[64])
-        {
-            Triggers = [new MapTrigger(3, 4, Variable, 0)],
-            Warps = [new Warp(3, 2, 0, "4.3")],
-        };
-
-        MapData lab = new(Elsewhere, "RESEARCH LAB", 8, 8, new byte[64])
-        {
-            Warps = [new Warp(6, 6, 0, Town)],
-        };
-
-        var world = new GameWorld(new WorldData([town, lab]), Town, TestRules.All);
-
-        (ServerPlayer player, _) = world.Join(1, "Koop", SavedCharacter.Fresh(Town, 3, 4));
-
-        world.FireTrigger(player.Id, 3, 4, 10);
-        world.WalkThroughScene(player.Id, [Direction.Up, Direction.Up], 11);
-
-        Assert.Equal(Elsewhere, player.MapId);
-        Assert.Equal(new GridPosition(6, 6), player.Square);
-    }
-
-    [Fact]
-    public void AWalkThatOnlyPassesADoorKeepsGoing()
-    {
-        // Only the square it stops on. A scene walking somebody past their own front
-        // door on the way somewhere else is a scene, and warping them into the house
-        // halfway through it is not a thing any cartridge does.
-        MapData town = new(Town, "PALLET TOWN", 8, 8, new byte[64])
-        {
-            Triggers = [new MapTrigger(3, 4, Variable, 0)],
-            Warps = [new Warp(3, 3, 0, "4.3")],
-        };
-
-        MapData lab = new(Elsewhere, "RESEARCH LAB", 8, 8, new byte[64])
-        {
-            Warps = [new Warp(6, 6, 0, Town)],
-        };
-
-        var world = new GameWorld(new WorldData([town, lab]), Town, TestRules.All);
-
-        (ServerPlayer player, _) = world.Join(1, "Koop", SavedCharacter.Fresh(Town, 3, 4));
-
-        world.FireTrigger(player.Id, 3, 4, 10);
-        world.WalkThroughScene(player.Id, [Direction.Up, Direction.Up], 11);
-
-        Assert.Equal(Town, player.MapId);
-        Assert.Equal(new GridPosition(3, 2), player.Square);
     }
 
     [Fact]
@@ -1304,49 +1229,13 @@ public class TriggerTests
         (ServerPlayer player, _) = world.Join(1, "Koop", SavedCharacter.Fresh(Town, 3, 4));
 
         world.FireTrigger(player.Id, 3, 4, 10);
-        world.WalkThroughScene(player.Id, [Direction.Up, Direction.Up], 11);
+        world.Move(player.Id, Direction.Up, 11);
+        world.Move(player.Id, Direction.Up, 12);
 
-        Assert.Empty(world.PlaceAfterScene(player.Id, 3, new GridPosition(2, 2), Direction.Left, 12));
+        Assert.Equal(Elsewhere, player.MapId);
+
+        Assert.Empty(world.PlaceAfterScene(player.Id, 3, new GridPosition(2, 2), Direction.Left, 13));
         Assert.Contains("no scene is running for them here", world.LastScenePlacement);
-    }
-
-    [Fact]
-    public void AWalkWithNoSceneBehindItIsRefused()
-    {
-        // What replaces the rate limit. A scripted walk cannot be rate limited — the
-        // games step somebody eight squares faster than anybody could ask — so instead it
-        // is only accepted inside a window opened by a trigger the server itself agreed
-        // to fire.
-        (GameWorld world, ServerPlayer player) = Standing(new MapTrigger(3, 4, Variable, 0));
-
-        Assert.Empty(world.WalkThroughScene(player.Id, [Direction.Up], 11));
-        Assert.Contains("no scene is running", world.LastSceneWalk);
-        Assert.Equal(new GridPosition(3, 4), player.Square);
-    }
-
-    [Fact]
-    public void AWalkStopsAtTheFirstThingInTheWay()
-    {
-        // Ended where it stands rather than refused outright. A scene half performed is
-        // still a scene; a player left where they started is a player standing inside the
-        // next line of dialogue.
-        var collision = new byte[64];
-        collision[2 * 8 + 3] = 1;
-
-        MapData map = new(Town, "PALLET TOWN", 8, 8, collision)
-        {
-            Triggers = [new MapTrigger(3, 4, Variable, 0)],
-        };
-
-        var world = new GameWorld(new WorldData([map]), Town, TestRules.All);
-
-        (ServerPlayer player, _) = world.Join(1, "Koop", SavedCharacter.Fresh(Town, 3, 4));
-
-        world.FireTrigger(player.Id, 3, 4, 10);
-        world.WalkThroughScene(player.Id, [Direction.Up, Direction.Up, Direction.Up], 11);
-
-        Assert.Equal(new GridPosition(3, 3), player.Square);
-        Assert.Contains("then something was in the way", world.LastSceneWalk);
     }
 
     [Fact]

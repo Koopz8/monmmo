@@ -286,16 +286,7 @@ public static class Program
             // Applied between steps, which is the only moment it can be applied without
             // tearing the animation. Dropping it instead — which is what happened before
             // — leaves the client a square ahead of the server for good.
-            //
-            // And never during a scene. A scripted walk is sent as a whole list, so the
-            // server walks all eighteen squares of it and answers with the far end while
-            // this side is still on the first — and applying that answer is not a
-            // correction, it is a teleport to the end of a walk that has not happened
-            // yet. It was the whole reason the opening looked like the character was
-            // being flung about. The answer is not thrown away, only held: whatever the
-            // server last said is applied the moment the scene finishes, which is when
-            // the two sides are supposed to agree again.
-            if (!player.IsStepping && scene is null && correction is { } square)
+            if (!player.IsStepping && correction is { } square)
             {
                 if (square != player.Square) player.Place(view.Collision, square);
                 correction = null;
@@ -359,11 +350,6 @@ public static class Program
             {
                 scene.Update(delta);
 
-                // Asked once per beat, with the directions rather than a destination, so
-                // the server can walk them square by square and refuse any it does not
-                // like. This side animates its own prediction meanwhile.
-                if (scene.Ask() is { Count: > 0 } asking) network.SendSceneWalk(asking);
-
                 if (scene.IsFinished)
                 {
                     // Where it left everybody, for the server to accept or refuse. Sent
@@ -395,12 +381,12 @@ public static class Program
             // Nothing is read while somebody is on their way over. Refusing to predict
             // is the point: the server refuses the step either way, and a client that
             // predicts one anyway spends the whole walk snapping backwards.
-            // A scene drives the player through the same path a key does, so a scripted
-            // step animates, collides and turns exactly like a walked one rather than
-            // being a second kind of movement with its own bugs.
-            Direction? input = scene is not null
-                ? scene.PlayerInput
-                : talking is null && watching is null ? ReadDirection() : null;
+            // A scene reads exactly like a conversation here: it stops the world and it
+            // does not move anybody. What plays out is other people's, and when it is
+            // over the player is standing where they were and free to walk to it.
+            Direction? input = scene is null && talking is null && watching is null
+                ? ReadDirection()
+                : null;
 
             player.Update(delta, input);
 

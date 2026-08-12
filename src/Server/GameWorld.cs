@@ -1390,9 +1390,6 @@ public sealed class GameWorld
     /// </summary>
     private const double SceneSeconds = 120;
 
-    /// <summary>How many squares one scripted walk may cover. The longest list is 63.</summary>
-    private const int LongestSceneWalk = 64;
-
     /// <summary>
     /// The clock as of the last tick, for the places that are told nothing about time.
     /// <para>
@@ -1403,103 +1400,13 @@ public sealed class GameWorld
     /// </summary>
     private double LastTickAt { get; set; }
 
-    /// <summary>What the last scene walk came to.</summary>
-    public string? LastSceneWalk { get; private set; }
-
-    /// <summary>
-    /// Walks the player the way a scene says, checking every square on the way.
-    /// <para>
-    /// Directions rather than a destination, because a destination would have to be taken
-    /// on trust and a path can be walked. Every square is checked exactly as an ordinary
-    /// step is — on the map, walkable, nobody standing there — and the first one that
-    /// fails ends the walk where it stands rather than refusing the whole thing. A scene
-    /// half performed is a scene; a player left behind where they started is a player
-    /// standing inside the next line of dialogue.
-    /// </para>
-    /// </summary>
-    public List<Outgoing> WalkThroughScene(int playerId, IReadOnlyList<Direction> steps, double nowSeconds)
-    {
-        lock (_gate)
-        {
-            LastSceneWalk = null;
-
-            if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
-
-            if (!InScene(player, nowSeconds))
-            {
-                LastSceneWalk = "refused: no scene is running for them here";
-                return [];
-            }
-
-            if (steps.Count is 0 or > LongestSceneWalk)
-            {
-                LastSceneWalk = $"refused: {steps.Count} steps";
-                return [];
-            }
-
-            CollisionGrid grid = GridFor(player.MapId);
-
-            int walked = 0;
-
-            foreach (Direction step in steps)
-            {
-                GridPosition next = player.Square.Step(step);
-
-                player.Facing = step;
-
-                if (!grid.Contains(next) || !grid.IsWalkable(next) ||
-                    IsOccupiedFor(player, player.MapId, next))
-                {
-                    break;
-                }
-
-                player.Square = next;
-                walked++;
-            }
-
-            LastSceneWalk = walked == steps.Count
-                ? $"walked {walked} to {player.Square}"
-                : $"walked {walked} of {steps.Count} to {player.Square}, then something was in the way";
-
-            var send = new List<Outgoing>
-            {
-                new(new PlayerMoved(playerId, player.Square.X, player.Square.Y, player.Facing),
-                    OnMap: player.MapId),
-            };
-
-            // A scene that walks somebody onto a door means them to go through it, and
-            // the opening of this game is written that way. Its script names the square
-            // (16, 13) twice — once before the two movements and once after them — and
-            // (16, 13) is the warp to the professor's lab. It warps nobody itself. The
-            // player's own movement list ends by stepping right and then up, which lands
-            // exactly there, and (16, 13) has one walkable neighbour: the square they
-            // came from. Delivered to the doorway and stopped, with nothing that fires on
-            // standing still, they stay outside the building the whole scene was about.
-            //
-            // What those two bracketing commands are is a smaller question than it looks.
-            // There are four of them in the game and one of those is a misread; of the
-            // three real ones, two name a warp square on their own map and the third
-            // names a doorway alcove on Route 25. Enough to believe they are about doors,
-            // not enough to build on — so this is built on the warp instead, which is
-            // read from the map rather than guessed from a script.
-            //
-            // Only the door. Grass and a trainer's line of sight are also things that
-            // happen on arrival, and neither belongs in the middle of a cutscene — being
-            // ambushed by a wild encounter while the professor is talking is exactly the
-            // kind of thing the ordinary arrival rules would do here.
-            if (_world.Find(player.MapId)?.WarpAt(player.Square) is { } door)
-                send.AddRange(TakeWarp(player, door, nowSeconds));
-
-            return send;
-        }
-    }
-
     /// <summary>
     /// Whether a scene is running for this player, on the map it started on.
     /// <para>
-    /// Both halves matter. The window is what makes a scripted walk something other than
-    /// a client asking to teleport; the map is what stops the tail of one scene landing
-    /// on the map the same scene just walked the player into.
+    /// Both halves matter. The window is what makes a scene's messages something other
+    /// than a client rearranging a map it happens to be standing on; the map is what
+    /// stops the tail of one scene landing on the map the same scene just walked the
+    /// player into.
     /// </para>
     /// </summary>
     private static bool InScene(ServerPlayer player, double nowSeconds) =>
@@ -1552,7 +1459,7 @@ public sealed class GameWorld
     /// placement refused as well, since nothing was holding them.
     /// </para>
     /// <para>
-    /// The bound is the scene window instead, which is the same one a scene walk uses: a
+    /// The bound is the scene window instead, the same one a scene placement uses: a
     /// trigger this server agreed to fire, recently. Without one, holding is refused —
     /// otherwise this is a way to freeze anybody on a map from anywhere on it, which is
     /// the exact thing the reachability check was protecting against.
@@ -1632,8 +1539,8 @@ public sealed class GameWorld
             // closing let go of the cast between the walk and the placement, and the
             // placement was refused for a reason that had nothing to do with it.
             //
-            // The window is the real thing, it is already what bounds a scene walk and a
-            // scene cast, and it does not care what order anything arrives in.
+            // The window is the real thing, it is already what bounds a scene's cast, and
+            // it does not care what order anything arrives in.
             if (!InScene(player, nowSeconds))
             {
                 LastScenePlacement = $"object {localId}: no scene is running for them here";
