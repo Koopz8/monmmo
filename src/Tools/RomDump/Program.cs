@@ -147,6 +147,8 @@ public static class Program
 
         if (options.Silent) WriteSilentPeople(rom);
 
+        if (options.Derive) WriteDerivedLengths(rom);
+
         if (options.Glyphs) WriteGlyphCandidates(rom, options.OutputDirectory);
 
         if (options.Font != 0) WriteFontSheet(rom, options.Font, options.OutputDirectory);
@@ -1533,6 +1535,176 @@ public static class Program
         }
     }
 
+    /// <summary>
+    /// Works out how long an unknown command's arguments are, by trying every width.
+    /// <para>
+    /// Milestone 14 derived six of these by hand: print the bytes, try a width, see
+    /// whether what follows parses as a sensible script and whether its pointers land on
+    /// anything. That method was right and doing it by eye was the slow part — and eyes
+    /// are also how a wrong width gets talked into looking plausible.
+    /// </para>
+    /// <para>
+    /// So it is scored instead, over every place the command actually appears. A correct
+    /// width leaves a run of well-formed instructions ending properly, at site after
+    /// site. A wrong one resumes inside an argument, and the further it reads the worse
+    /// it gets. The difference between the two is not subtle across two hundred sites,
+    /// which is exactly why it is worth counting rather than reading.
+    /// </para>
+    /// <para>
+    /// It proposes. It does not decide, and nothing here writes a length into the table —
+    /// this project has twice been sure of a number it could not see.
+    /// </para>
+    /// </summary>
+    private static void WriteDerivedLengths(Rom rom, int maxWidth = 8, int sitesPer = 200)
+    {
+        Console.WriteLine();
+        Console.WriteLine("Argument widths, scored against every place the command appears");
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        // Where each unknown command actually stopped a run. Only real sites: a search
+        // of the whole image for a byte would mostly find that byte inside an argument.
+        var sites = new Dictionary<byte, List<int>>();
+
+        foreach (LoadedMap map in library.All())
+        {
+            foreach (MapObject person in map.Objects.Where(o => o.HasScript))
+            {
+                ScriptRun run = ScriptRunner.Run(rom, person.ScriptAddress);
+
+                if (run.StoppedAt is not { } code || run.StoppedAtOffset is not { } at) continue;
+
+                if (!sites.TryGetValue(code, out List<int>? where)) sites[code] = where = [];
+
+                if (where.Count < sitesPer && !where.Contains(at)) where.Add(at);
+            }
+        }
+
+        foreach ((byte code, List<int> where) in sites.OrderByDescending(e => e.Value.Count))
+        {
+            var scores = new List<(int Width, double Clean, double Pointers, double Depth)>();
+
+            for (int width = 0; width <= maxWidth; width++)
+            {
+                int clean = 0;
+                int pointers = 0;
+                int landed = 0;
+
+                int depth = 0;
+
+                foreach (int at in where)
+                {
+                    (bool ended, int good, int total, int read) = ReadsOn(rom, at + 1 + width);
+
+                    if (ended) clean++;
+
+                    pointers += good;
+                    landed += total;
+                    depth += read;
+                }
+
+                // No pointers at all is not evidence of anything, and scoring it as
+                // perfect would hand the answer to whichever width happened to avoid
+                // them. It counts as nothing either way.
+                scores.Add((
+                    width,
+                    clean / (double)where.Count,
+                    landed == 0 ? 0 : pointers / (double)landed,
+                    depth / (double)where.Count));
+            }
+
+            double top = scores.Max(s => s.Clean + s.Pointers);
+
+            // Everything close to the top, not just the top. A single arrow claims more
+            // than this evidence supports, and claiming more than the evidence supports
+            // is the specific mistake this whole method exists to avoid.
+            int[] shortlist = [.. scores.Where(s => s.Clean + s.Pointers >= top - 0.1).Select(s => s.Width)];
+
+            Console.WriteLine();
+            Console.WriteLine($"  0x{code:X2}  stops {where.Count} people");
+
+            foreach ((int width, double cleanly, double pointing, double deep) in scores)
+            {
+                string mark = shortlist.Contains(width) ? " <-" : "";
+
+                Console.WriteLine(
+                    $"      {width} bytes:  {cleanly,5:P0} end properly, " +
+                    $"{pointing,5:P0} of pointers land on a script, {deep,4:0.0} commands read{mark}");
+            }
+
+            Console.WriteLine(
+                shortlist.Length == 1
+                    ? $"      -> {shortlist[0]} bytes, and nothing else comes close"
+                    : $"      -> {string.Join(" or ", shortlist)} bytes. Not decided: " +
+                      "the reads run into other unknown commands, which caps every width alike");
+        }
+    }
+
+    /// <summary>
+    /// Reads forward from an offset and says whether it goes anywhere sensible.
+    /// <para>
+    /// Two questions, because either alone is fooled. Ending properly is cheap to hit by
+    /// accident — a stray 0x02 in the middle of a pointer is a perfectly good <c>end</c>.
+    /// Pointers landing on real addresses is the harder test, and a width that satisfies
+    /// both across every site is not a coincidence.
+    /// </para>
+    /// </summary>
+    private static (bool Ended, int GoodPointers, int TotalPointers, int Read) ReadsOn(
+        Rom rom, int from, int maxCommands = 12)
+    {
+        int offset = from;
+        int good = 0;
+        int total = 0;
+        int read = 0;
+
+        for (int i = 0; i < maxCommands; i++)
+        {
+            if (offset < 0 || offset + 1 >= rom.Length) return (false, good, total, read);
+
+            byte code = rom.ReadU8(offset);
+            byte first = rom.ReadU8(offset + 1);
+
+            if (ScriptCommands.ArgumentLength(code, first) is not { } length) return (false, good, total, read);
+            if (offset + 1 + length > rom.Length) return (false, good, total, read);
+
+            read++;
+
+            // Only the commands that are pointers by definition, and only the real
+            // test: does the thing it points at read as a script? Counting any word
+            // whose top byte is 0x08 was circular — that is the same check twice.
+            uint target = code switch
+            {
+                ScriptCommands.Call or ScriptCommands.Goto => new ScriptCommand(
+                    offset, code, rom.Slice(offset + 1, length).ToArray()).Pointer(),
+                ScriptCommands.CallIf or ScriptCommands.GotoIf => new ScriptCommand(
+                    offset, code, rom.Slice(offset + 1, length).ToArray()).Pointer(1),
+                _ => 0,
+            };
+
+            if (target != 0)
+            {
+                total++;
+
+                // Two commands and a proper ending is a low bar and a real one: a
+                // pointer that resumed inside an argument lands on a byte that means
+                // nothing, and reading from there stops almost immediately.
+                if (rom.IsRomAddress(target) &&
+                    ScriptReader.Read(rom, target) is { Count: >= 2 } landed &&
+                    landed[^1].Code is ScriptCommands.End or ScriptCommands.Return or ScriptCommands.Goto)
+                {
+                    good++;
+                }
+            }
+
+            offset += 1 + length;
+
+            if (code is ScriptCommands.End or ScriptCommands.Return or ScriptCommands.Goto)
+                return (true, good, total, read);
+        }
+
+        return (false, good, total, read);
+    }
+
     private static void WriteItems(Rom rom)
     {
         Console.WriteLine();
@@ -1783,6 +1955,9 @@ public static class Program
         /// <summary>Split the people whose script finishes and says nothing by cause.</summary>
         public bool Silent { get; private init; }
 
+        /// <summary>Score every argument width for the commands that stop a run.</summary>
+        public bool Derive { get; private init; }
+
         /// <summary>Hunt for the cartridge's lettering and write the candidates out.</summary>
         public bool Glyphs { get; private init; }
 
@@ -1824,6 +1999,7 @@ public static class Program
             bool specials = false;
             bool shared = false;
             bool silent = false;
+            bool derive = false;
             bool glyphs = false;
             uint font = 0;
             string whoSays = "";
@@ -1910,6 +2086,9 @@ public static class Program
                     case "--silent":
                         silent = true;
                         break;
+                    case "--derive":
+                        derive = true;
+                        break;
                     case "--glyphs":
                         glyphs = true;
                         break;
@@ -1979,6 +2158,7 @@ public static class Program
                 Specials = specials,
                 Shared = shared,
                 Silent = silent,
+                Derive = derive,
                 Glyphs = glyphs,
                 Font = font,
                 WhoSays = whoSays,
