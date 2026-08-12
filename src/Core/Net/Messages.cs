@@ -31,6 +31,7 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(ApproachEnded), "approachover")]
 [JsonDerivedType(typeof(ItemFound), "itemfound")]
 [JsonDerivedType(typeof(ObstacleShifted), "shifted")]
+[JsonDerivedType(typeof(TriggerFired), "triggered")]
 [JsonDerivedType(typeof(BuyRequest), "buy")]
 [JsonDerivedType(typeof(SellRequest), "sell")]
 [JsonDerivedType(typeof(ShopOpened), "shop")]
@@ -83,6 +84,17 @@ public sealed record TalkRequest(int LocalId) : NetMessage;
 
 /// <summary>The text box is closed; whoever was held may carry on. Also shuts a shop.</summary>
 public sealed record TalkFinished : NetMessage;
+
+/// <summary>
+/// A square was stepped onto that runs a script.
+/// <para>
+/// The square rather than a name, because a trigger has no local id — it is not a person
+/// and there is nothing standing there. The server checks the player is actually on it
+/// and that the trigger's own condition still holds, which is the whole of its
+/// involvement unless the square starts a fight.
+/// </para>
+/// </summary>
+public sealed record TriggerFired(int X, int Y) : NetMessage;
 
 /// <summary>
 /// What a script the player just ran did to their save.

@@ -540,6 +540,18 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                             world.StopTalking(playerId);
                             break;
 
+                        case TriggerFired stepped when playerId != 0:
+                            List<Outgoing> fired = world.FireTrigger(playerId, stepped.X, stepped.Y);
+
+                            if (world.LastTriggerOutcome is { } triggerOutcome)
+                            {
+                                Console.WriteLine(
+                                    $"* #{playerId} stood on ({stepped.X}, {stepped.Y}): {triggerOutcome}");
+                            }
+
+                            await DispatchAsync(fired, playerId, cancellationToken).ConfigureAwait(false);
+                            break;
+
                         case ScriptRan ran when playerId != 0:
                             world.RunScript(playerId, ran);
 

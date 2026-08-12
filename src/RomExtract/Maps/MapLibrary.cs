@@ -99,6 +99,7 @@ public sealed class MapLibrary
             // collision already uses.
             Objects = MapLinkExtractor.ReadObjects(_rom, entry.Header, collision.Width, collision.Height),
             Signs = MapLinkExtractor.ReadSigns(_rom, entry.Header, collision.Width, collision.Height),
+            Triggers = MapLinkExtractor.ReadTriggers(_rom, entry.Header, collision.Width, collision.Height),
             Warps = warps,
         };
     }

@@ -210,6 +210,76 @@ public static class MapLinkExtractor
         return connections;
     }
 
+    /// <summary>A trigger record: a square, an elevation, a condition, and a script.</summary>
+    private const int TriggerSizeBytes = 16;
+
+    private const int TriggerVariableOffset = 6;
+
+    private const int TriggerPointerOffset = 12;
+
+    /// <summary>
+    /// Reads the squares that run a script when somebody walks onto them.
+    /// <para>
+    /// The third of the events record's four lists. Sixteen bytes, derived the same way
+    /// as the signs — by scoring every plausible shape against every map and asking
+    /// which one produces squares inside the map with readable scripts behind them.
+    /// Two hundred and three of the two hundred and twenty-eight came out clean; the
+    /// twenty-five that did not are scripts opening with a command still unknown, which
+    /// is a gap in the reader rather than in the shape.
+    /// </para>
+    /// <para>
+    /// The condition is a variable and a value, and it is what stops a story beat
+    /// happening twice: the script's last act is to write the variable to something
+    /// else, and the square goes quiet.
+    /// </para>
+    /// </summary>
+    public static List<MapTrigger> ReadTriggers(
+        Rom rom, MapHeaderRecord header, int width, int height, Action<string>? log = null)
+    {
+        var triggers = new List<MapTrigger>();
+
+        if (EventLayout.Table(rom, header.EventsPointer, EventLayout.Triggers, TriggerSizeBytes)
+            is not { } list)
+        {
+            return triggers;
+        }
+
+        (int table, int count) = list;
+
+        for (int i = 0; i < count; i++)
+        {
+            int at = table + i * TriggerSizeBytes;
+
+            int x = (short)rom.ReadU16(at);
+            int y = (short)rom.ReadU16(at + 2);
+
+            if (x < 0 || x >= width || y < 0 || y >= height)
+            {
+                log?.Invoke($"    trigger {i} at ({x}, {y}) is outside a {width}x{height} map — dropped");
+                continue;
+            }
+
+            uint script = rom.ReadU32(at + TriggerPointerOffset);
+            bool real = rom.IsRomAddress(script);
+
+            triggers.Add(new MapTrigger(
+                x,
+                y,
+                rom.ReadU16(at + TriggerVariableOffset),
+                rom.ReadU16(at + TriggerVariableOffset + 2),
+                real ? script : 0,
+
+                // Which trainer, if any, this square picks a fight as. The same question
+                // asked of people, answered the same way: the id is an argument to a
+                // command inside the script, not a field of the record. A rival waiting
+                // on a route is a trigger, and the server has to be able to field him
+                // without ever seeing a cartridge.
+                real ? Scripts.ScriptReader.FindTrainer(rom, script) ?? 0 : 0));
+        }
+
+        return triggers;
+    }
+
     /// <summary>A sign record: a square, an elevation, a kind, and one word.</summary>
     private const int SignSizeBytes = 12;
 

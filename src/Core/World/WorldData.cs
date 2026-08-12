@@ -22,6 +22,21 @@ public sealed record MapData(string Id, string Name, int Width, int Height, byte
     /// <summary>People and other things standing on this map.</summary>
     public IReadOnlyList<MapObject> Objects { get; init; } = [];
 
+    /// <summary>
+    /// Squares that run a script when somebody walks onto them.
+    /// <para>
+    /// Carried for the server even though it cannot run one. What it can do is know that
+    /// a square is a trigger at all — so a client claiming a cutscene started somewhere
+    /// there is no cutscene can be told no — and which trainer that trigger fields, so a
+    /// rival waiting on a route is a fight it can actually run.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<MapTrigger> Triggers { get; init; } = [];
+
+    /// <summary>The trigger on a square, if there is one.</summary>
+    public MapTrigger? TriggerAt(GridPosition square) =>
+        Triggers.FirstOrDefault(t => t.X == square.X && t.Y == square.Y);
+
     /// <summary>Whatever is standing on a square, if anything.</summary>
     public MapObject? ObjectAt(GridPosition square) =>
         Objects.FirstOrDefault(o => o.X == square.X && o.Y == square.Y);
@@ -95,7 +110,7 @@ public sealed class WorldData
     /// <summary>Identifies the format, so a wrong or stale file fails loudly.</summary>
     private static readonly byte[] Magic = "MONWORLD"u8.ToArray();
 
-    private const int Version = 13;
+    private const int Version = 14;
 
     private readonly Dictionary<string, MapData> _maps;
 
@@ -190,6 +205,7 @@ public sealed class WorldData
             MapEncounters? mapEncounters = ReadEncounters(reader, id);
             (IReadOnlyList<MapConnection> connections, IReadOnlyList<Warp> warps) = ReadLinks(reader, id);
             IReadOnlyList<MapObject> objects = ReadObjects(reader, id);
+            IReadOnlyList<MapTrigger> triggers = ReadTriggers(reader);
 
             maps.Add(new MapData(id, name, width, height, collision)
             {
@@ -198,6 +214,7 @@ public sealed class WorldData
                 Connections = connections,
                 Warps = warps,
                 Objects = objects,
+                Triggers = triggers,
             });
         }
 
@@ -255,6 +272,45 @@ public sealed class WorldData
             writer.Write(entry.Stock.Count);
             foreach (int itemId in entry.Stock) writer.Write(itemId);
         }
+
+        writer.Write(map.Triggers.Count);
+
+        foreach (MapTrigger trigger in map.Triggers)
+        {
+            writer.Write(trigger.X);
+            writer.Write(trigger.Y);
+            writer.Write(trigger.Variable);
+            writer.Write(trigger.Value);
+
+            // No script address, for the same reason an object carries none: it is a
+            // cartridge address and this file is the server's.
+            writer.Write(trigger.TrainerId);
+        }
+    }
+
+    private static List<MapTrigger> ReadTriggers(BinaryReader reader)
+    {
+        int count = reader.ReadInt32();
+
+        // Generous, and there to fail on a wrong file rather than allocate gigabytes
+        // from a bad length. The busiest map in FireRed has fewer than twenty.
+        if (count is < 0 or > 256)
+            throw new InvalidDataException($"A map claims {count} triggers.");
+
+        var triggers = new List<MapTrigger>(count);
+
+        for (int i = 0; i < count; i++)
+        {
+            triggers.Add(new MapTrigger(
+                reader.ReadInt32(),
+                reader.ReadInt32(),
+                reader.ReadInt32(),
+                reader.ReadInt32(),
+                ScriptAddress: 0,
+                TrainerId: reader.ReadInt32()));
+        }
+
+        return triggers;
     }
 
     /// <summary>

@@ -60,6 +60,7 @@ public static class WorldExporter
                     Connections = MapLinkExtractor.ReadConnections(rom, header, log),
                     Warps = MapLinkExtractor.ReadWarps(rom, header, grid.Width, grid.Height, log),
                     Objects = MapLinkExtractor.ReadObjects(rom, header, grid.Width, grid.Height, log),
+                    Triggers = MapLinkExtractor.ReadTriggers(rom, header, grid.Width, grid.Height, log),
                 });
             }
             catch (Exception ex)
@@ -147,6 +148,16 @@ public static class WorldExporter
 
         if (chatty > 0)
             log?.Invoke($"  {chatty} of those are people who say something as they hand it over");
+
+        var triggers = maps.SelectMany(m => m.Triggers).ToList();
+
+        if (triggers.Count > 0)
+        {
+            log?.Invoke(
+                $"  {triggers.Count} squares run a script when you walk onto them, across " +
+                $"{maps.Count(m => m.Triggers.Count > 0)} maps, " +
+                $"{triggers.Count(t => t.CanBeFought)} of them a fight");
+        }
 
         var obstacles = maps
             .SelectMany(m => m.Objects)

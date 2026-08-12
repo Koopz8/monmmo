@@ -22,6 +22,9 @@ public sealed record LoadedMap(
     /// <summary>The doors and stairways on this map.</summary>
     public IReadOnlyList<Warp> Warps { get; init; } = [];
 
+    /// <summary>Squares that run a script when somebody walks onto them.</summary>
+    public IReadOnlyList<MapTrigger> Triggers { get; init; } = [];
+
     /// <summary>
     /// The signs, notice boards and bookshelves on this map.
     /// <para>

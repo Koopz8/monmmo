@@ -1019,3 +1019,114 @@ public class ShiftingWhatIsInTheWayTests
         Assert.Equal(Cut, WorldData.Load(buffer).Find(Town)!.Objects.Single().ShiftedBy);
     }
 }
+
+/// <summary>
+/// Standing somewhere as a way of starting a script — the third of the four event lists,
+/// and where most of a Pokémon game's story lives.
+/// <para>
+/// Two hundred and twenty-eight squares across fifty-two maps of FireRed, nineteen of
+/// which field a trainer. The professor stopping you at the edge of town, the rival
+/// waiting on a route: none of it is talked to, all of it happens because you stood
+/// somewhere.
+/// </para>
+/// </summary>
+public class TriggerTests
+{
+    private const string Town = "3.0";
+    private const int Variable = 0x4001;
+
+    private static (GameWorld World, ServerPlayer Player) Standing(params MapTrigger[] triggers)
+    {
+        MapData map = new(Town, "PALLET TOWN", 8, 8, new byte[64]) { Triggers = triggers };
+
+        var world = new GameWorld(new WorldData([map]), Town, TestRules.All);
+
+        (ServerPlayer player, _) = world.Join(1, "Koop", SavedCharacter.Fresh(Town, 3, 4));
+
+        player.Party =
+        [
+            new SavedMon(3, 20, null, 50, StatusCondition.None, Nature.Hardy, [TestRules.FirstMove]),
+        ];
+
+        return (world, player);
+    }
+
+    private static MapTrigger Rival(int x, int y, int value = 0) =>
+        new(x, y, Variable, value, ScriptAddress: 0, TrainerId: TestRules.OneAlone);
+
+    [Fact]
+    public void AnArmedSquareWithATrainerOnItStartsAFight()
+    {
+        (GameWorld world, ServerPlayer player) = Standing(Rival(3, 4));
+
+        Assert.Contains(
+            world.FireTrigger(player.Id, 3, 4).Select(o => o.Message),
+            m => m is BattleStarted);
+    }
+
+    [Fact]
+    public void ASquareTheyAreNotStandingOnIsRefused()
+    {
+        // The whole reason this message names a square rather than being taken on trust.
+        // A client is a thing a player can rewrite.
+        (GameWorld world, ServerPlayer player) = Standing(Rival(6, 6));
+
+        Assert.Empty(world.FireTrigger(player.Id, 6, 6));
+        Assert.Contains("they are at", world.LastTriggerOutcome);
+    }
+
+    [Fact]
+    public void ASquareThatRunsNothingIsRefused()
+    {
+        (GameWorld world, ServerPlayer player) = Standing(Rival(6, 6));
+
+        Assert.Empty(world.FireTrigger(player.Id, 3, 4));
+        Assert.Contains("nothing on that square", world.LastTriggerOutcome);
+    }
+
+    [Fact]
+    public void ASpentTriggerStaysSpent()
+    {
+        // What stops a story beat happening twice: the script writes the variable to
+        // something else and the square goes quiet. Checked here as well as on the
+        // client, because otherwise "I stepped on the rival's square again" is a fight
+        // that can be had forever.
+        (GameWorld world, ServerPlayer player) = Standing(Rival(3, 4));
+
+        player.Script.Write(Variable, 1);
+
+        Assert.Empty(world.FireTrigger(player.Id, 3, 4));
+        Assert.Contains("holds 1", world.LastTriggerOutcome);
+    }
+
+    [Fact]
+    public void ASquareWithNoTrainerIsTheClientsBusinessAndNobodyElses()
+    {
+        // Two hundred and nine of the two hundred and twenty-eight. The server cannot
+        // run a script and never will, so for these it says so and does nothing.
+        (GameWorld world, ServerPlayer player) = Standing(new MapTrigger(3, 4, Variable, 0));
+
+        Assert.Empty(world.FireTrigger(player.Id, 3, 4));
+        Assert.Contains("nothing here to arbitrate", world.LastTriggerOutcome);
+    }
+
+    [Fact]
+    public void TriggersSurviveTheWorldFile()
+    {
+        MapData map = new(Town, "PALLET TOWN", 8, 8, new byte[64])
+        {
+            // A script address on the way in, and none on the way out. It is a cartridge
+            // address and the world file is the server's.
+            Triggers = [new MapTrigger(3, 4, Variable, 2, ScriptAddress: 0x08123456, TrainerId: 7)],
+        };
+
+        using var buffer = new MemoryStream();
+        new WorldData([map]).Save(buffer);
+
+        buffer.Position = 0;
+
+        MapTrigger reloaded = WorldData.Load(buffer).Find(Town)!.Triggers.Single();
+
+        Assert.Equal(new MapTrigger(3, 4, Variable, 2, ScriptAddress: 0, TrainerId: 7), reloaded);
+    }
+}

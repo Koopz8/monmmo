@@ -214,6 +214,11 @@ public static class Program
         int? watching = null;
         float exclaimFor = 0f;
 
+        // Which square the player is standing on, as far as the trigger check is
+        // concerned. Held rather than compared against the last frame's position so that
+        // arriving somewhere fires once, and standing there does not fire at all.
+        GridPosition standingOn = player.Square;
+
         // Where the server last said we are, when that disagreed with where we think we
         // are. Held rather than applied on the spot: a correction almost always arrives
         // mid-step, and snapping a character sideways through a stride looks worse than
@@ -373,6 +378,16 @@ public static class Program
                 network.SendMove(report);
             }
 
+            // Standing somewhere is the other way a script starts. Checked on arrival
+            // rather than on setting off, because a trigger that fires as the foot
+            // leaves the previous square runs a cutscene about a place the player is
+            // not yet standing in.
+            if (!player.IsStepping && player.Square != standingOn)
+            {
+                standingOn = player.Square;
+                talking ??= Arrive(data, view, player, network, script, party);
+            }
+
             foreach (RemoteCharacter other in others.Values) other.Update(delta);
 
             view.Update(delta);
@@ -497,6 +512,51 @@ public static class Program
         }
 
         return box;
+    }
+
+    /// <summary>
+    /// Runs whatever this square runs, if it runs anything.
+    /// <para>
+    /// The other way a script starts, and the one most of a Pokémon game's story is made
+    /// of: nothing is talked to, it happens because you stood somewhere. The professor
+    /// stopping you at the edge of town, the rival waiting on a route.
+    /// </para>
+    /// <para>
+    /// The condition is checked here as well as on the server, and both need it. This
+    /// side needs it to know whether to open a box at all; that side needs it because a
+    /// client is a thing a player can rewrite, and "I stepped on the rival's square
+    /// again" would otherwise be a fight that can be had forever.
+    /// </para>
+    /// </summary>
+    private static DialogueBox? Arrive(
+        GameData data, MapView view, WalkingCharacter player, NetworkClient network, ScriptState script,
+        IReadOnlyList<SavedMon> party)
+    {
+        if (view.Map.Triggers.FirstOrDefault(t =>
+                t.Square == player.Square && t.HasScript && t.Armed(script.Read(t.Variable))) is not { } trigger)
+        {
+            return null;
+        }
+
+        // Sent whether or not there is anything to read, for the same reason talking is:
+        // what happens next is not this side's decision. Nineteen of these squares start
+        // a fight, and gating the message on finding dialogue would mean a rival who
+        // says nothing could never challenge anybody.
+        network.SendTriggerFired(player.Square.X, player.Square.Y);
+
+        ScriptRun run = ScriptRunner.Run(
+            data.Rom, trigger.ScriptAddress, script.WithParty(party.Select(m => m.Moves)));
+
+        foreach (int flag in run.FlagsSet) script.Set(flag);
+        foreach (int flag in run.FlagsCleared) script.Clear(flag);
+        foreach ((int id, int value) in run.VariablesWritten) script.Write(id, value);
+
+        if (run.FlagsSet.Count + run.FlagsCleared.Count + run.VariablesWritten.Count > 0)
+            network.SendScriptRan(run);
+
+        var box = new DialogueBox(run.Pages);
+
+        return box.IsEmpty ? null : box;
     }
 
     /// <summary>

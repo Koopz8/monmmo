@@ -41,6 +41,48 @@ public sealed record Warp(int X, int Y, int TargetWarpId, string TargetMapId)
 }
 
 /// <summary>
+/// A square that runs a script when somebody walks onto it.
+/// <para>
+/// The third of the four lists in a map's events record, and the one most of a Pokémon
+/// game's story is made of: the professor stopping you at the edge of town, the rival
+/// waiting on a route, every cutscene in the game. Nothing here is talked to — it
+/// happens because you stood somewhere.
+/// </para>
+/// <para>
+/// <see cref="Variable"/> and <see cref="Value"/> are the condition. A trigger fires
+/// only while that variable holds that value, which is how a beat that has already
+/// happened stops happening: the script's last act is to write the variable to
+/// something else, and the square goes quiet forever.
+/// </para>
+/// </summary>
+public sealed record MapTrigger(
+    int X,
+    int Y,
+    int Variable,
+    int Value,
+    uint ScriptAddress = 0,
+    int TrainerId = 0)
+{
+    public GridPosition Square => new(X, Y);
+
+    /// <summary>True when there is anything at all to run here.</summary>
+    public bool HasScript => ScriptAddress != 0;
+
+    /// <summary>True when walking onto this one starts a fight.</summary>
+    public bool CanBeFought => TrainerId != 0;
+
+    /// <summary>
+    /// Whether this one is armed, given what a save holds.
+    /// <para>
+    /// Zero and absent are the same thing here, as everywhere else in this project: the
+    /// games start every save with the variable space zeroed, so a trigger asking for
+    /// zero is a trigger that is armed from the beginning.
+    /// </para>
+    /// </summary>
+    public bool Armed(int held) => held == Value;
+}
+
+/// <summary>
 /// Something written on a map that can be read from the square in front of it: a sign,
 /// a notice board, a bookshelf, a television.
 /// <para>

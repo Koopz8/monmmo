@@ -129,6 +129,9 @@ public sealed class NetworkClient : IDisposable
 
     public void SendTalkFinished() => Send(new TalkFinished());
 
+    /// <summary>Says a square was stepped onto, so the server can decide what that means.</summary>
+    public void SendTriggerFired(int x, int y) => Send(new TriggerFired(x, y));
+
     /// <summary>Tells the server what a script the player just ran did to their save.</summary>
     public void SendScriptRan(ScriptRun run) =>
         Send(new ScriptRan(

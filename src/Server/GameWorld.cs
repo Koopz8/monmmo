@@ -1356,6 +1356,80 @@ public sealed class GameWorld
     /// </summary>
     public string? LastTalkOutcome { get; private set; }
 
+    /// <summary>What the last square somebody stood on came to. Same arrangement.</summary>
+    public string? LastTriggerOutcome { get; private set; }
+
+    /// <summary>
+    /// A square was stepped onto that runs a script.
+    /// <para>
+    /// The server cannot run one and never will — the bytes are on an image it has never
+    /// seen — so almost all of this is the client's work, and almost all of this method
+    /// is refusing. What it does own is the fight: nineteen of the two hundred and
+    /// twenty-eight of these squares field a trainer, and a rival waiting on a route has
+    /// to be a fight the server runs rather than one the client announces.
+    /// </para>
+    /// <para>
+    /// Both checks matter and neither is redundant with the client's. The player has to
+    /// actually be standing there, and the trigger's own condition has to still hold —
+    /// otherwise "I stepped on the rival's square again" is a fight that can be had
+    /// forever, and the variable that was supposed to spend it counts for nothing.
+    /// </para>
+    /// </summary>
+    public List<Outgoing> FireTrigger(int playerId, int x, int y)
+    {
+        lock (_gate)
+        {
+            LastTriggerOutcome = null;
+
+            if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
+
+            var square = new GridPosition(x, y);
+
+            if (player.Square != square)
+            {
+                LastTriggerOutcome = $"refused: they are at {player.Square}, not {square}";
+                return [];
+            }
+
+            if (_world.Find(player.MapId)?.TriggerAt(square) is not { } trigger)
+            {
+                LastTriggerOutcome = "refused: nothing on that square runs anything";
+                return [];
+            }
+
+            if (!trigger.Armed(player.Script.Read(trigger.Variable)))
+            {
+                LastTriggerOutcome =
+                    $"refused: variable 0x{trigger.Variable:X4} holds " +
+                    $"{player.Script.Read(trigger.Variable)}, and this wants {trigger.Value}";
+
+                return [];
+            }
+
+            if (!trigger.CanBeFought)
+            {
+                LastTriggerOutcome = "a script the client runs; nothing here to arbitrate";
+                return [];
+            }
+
+            // Built as a person for a moment, because a fight is a fight and the one
+            // routine that starts them has been right about parties, beaten trainers and
+            // healthy leads since trainers existed.
+            var asPerson = new MapObject(
+                0, 0, x, y, player.Facing, 0, IsTrainer: true, TrainerId: trigger.TrainerId);
+
+            if (StartTrainerBattle(player, asPerson) is not { Count: > 0 } challenge)
+            {
+                LastTriggerOutcome = $"trainer {trigger.TrainerId} is not one this server can field right now";
+                return [];
+            }
+
+            LastTriggerOutcome = $"a fight with trainer {trigger.TrainerId}";
+
+            return challenge;
+        }
+    }
+
     /// <summary>Who this player is currently holding still, for tests and for reporting.</summary>
     public int? TalkingTo(int playerId)
     {
