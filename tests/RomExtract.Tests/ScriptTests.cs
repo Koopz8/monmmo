@@ -913,6 +913,38 @@ public class SpecialBranchTests
         [(byte)address, (byte)(address >> 8), (byte)(address >> 16), (byte)(address >> 24)];
 
     [Fact]
+    public void AnAnswerBelongsToWhoeverAnsweredLast()
+    {
+        // The mistake this guard exists for, and it cost a wrong claim in a commit
+        // message. In BILL's house the call to 0x0174 is followed immediately by 0xA0 —
+        // which answers into the result variable itself — and only then by the compare.
+        // Reading forward without stopping credits 0x0174 with 0xA0's reply, and the two
+        // arms of that fork say "bud" and "lady", so the wrong routine gets identified
+        // from perfectly good evidence.
+        var image = new byte[0x400];
+
+        byte[] script =
+        [
+            0x25, 0x74, 0x01,                               // special 0x0174
+            0xA0,                                           // answers into 0x800D itself
+            0x21, 0x0D, 0x80, 0x00, 0x00,                   // compare 0x800D, 0
+            ScriptCommands.GotoIf, 0x01, .. At(Yes),
+            ScriptCommands.End,
+        ];
+
+        script.CopyTo(image, 0);
+        new byte[] { ScriptCommands.End }.CopyTo(image, (int)(Yes - Rom.BaseAddress));
+
+        List<ScriptCommand> commands = ScriptReader.Read(new Rom(image), Start);
+
+        // Both are there to be read; what matters is which one the compare is about, and
+        // it is the nearer.
+        Assert.Equal(0x25, commands[0].Code);
+        Assert.Equal(0xA0, commands[1].Code);
+        Assert.Equal(0x21, commands[2].Code);
+    }
+
+    [Fact]
     public void BothArmsOfTheAnswerAreFound()
     {
         var image = new byte[0x400];

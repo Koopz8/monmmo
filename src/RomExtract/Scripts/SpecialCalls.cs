@@ -74,6 +74,25 @@ public static class SpecialCalls
     /// <summary>How many commands either side count as "around" the call.</summary>
     private const int Window = 4;
 
+    /// <summary>
+    /// Commands that put their own answer in the result variable.
+    /// <para>
+    /// Scanning forward for "the compare that reads this routine's answer" has to stop at
+    /// the first of these, and getting that wrong is not a small error — it credits one
+    /// routine with another's reply. On a real image the call to 0x0174 in BILL's house
+    /// is followed immediately by 0xA0 and only then by a compare, so the whole reading
+    /// of what 0x0174 answers came from a routine that is not 0x0174.
+    /// </para>
+    /// </summary>
+    private static readonly byte[] Answering =
+    [
+        Special, SpecialVar,
+        0xA0,           // answers into the result variable and takes nothing
+        0x46, 0x47,     // giveitem, and the one shaped like it
+        0x7C,           // findmove
+        0x09, 0x08,     // callstd, gotostd — a standard routine answers too
+    ];
+
     public static List<SpecialCall> All(Rom rom, MapLibrary library)
     {
         var found = new List<SpecialCall>();
@@ -132,7 +151,16 @@ public static class SpecialCalls
     private static bool Adjacent(ScriptCommand first, ScriptCommand second) =>
         second.Offset == first.Offset + 1 + first.Arguments.Length;
 
-    /// <summary>The argument slots written immediately in front of the call.</summary>
+    /// <summary>
+    /// The argument slots written immediately in front of the call.
+    /// <para>
+    /// Candidates rather than certainties, and the report says so. A setvar contiguous
+    /// with a call is where an argument would be written, but nothing in the bytes
+    /// distinguishes that from two neighbours that happen to be adjacent — and on a real
+    /// image the pair in front of 0x0174 look far more like arguments to the routine that
+    /// hands over the S.S. TICKET a few lines later.
+    /// </para>
+    /// </summary>
     private static List<(int, int)> Before(List<ScriptCommand> commands, int at)
     {
         var arguments = new List<(int, int)>();
@@ -157,6 +185,11 @@ public static class SpecialCalls
         for (int i = at + 1; i < commands.Count && i <= at + Window; i++)
         {
             if (!Adjacent(commands[i - 1], commands[i])) break;
+
+            // Somebody else has answered; anything after this is about them.
+            if (Answering.Contains(commands[i].Code)) break;
+            if (commands[i].Code == SetVar && commands[i].Word() == answer) break;
+
             if (commands[i].Code != Compare) continue;
             if (commands[i].Word() != answer) continue;
 
@@ -180,6 +213,10 @@ public static class SpecialCalls
         for (int i = at + 1; i < commands.Count - 1 && i <= at + Window; i++)
         {
             if (!Adjacent(commands[i - 1], commands[i])) break;
+
+            if (Answering.Contains(commands[i].Code)) break;
+            if (commands[i].Code == SetVar && commands[i].Word() == answer) break;
+
             if (commands[i].Code != Compare) continue;
             if (commands[i].Word() != answer) continue;
             if (!Adjacent(commands[i], commands[i + 1])) continue;

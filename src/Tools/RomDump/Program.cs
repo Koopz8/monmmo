@@ -1180,7 +1180,7 @@ public static class Program
                     $"  {call.MapId} {call.What}" +
                     (call.Arguments.Count == 0
                         ? ""
-                        : "  given " + string.Join(", ", call.Arguments.Select(a => $"0x{a.Variable:X4}={a.Value}"))));
+                        : "  preceded by " + string.Join(", ", call.Arguments.Select(a => $"0x{a.Variable:X4}={a.Value}"))));
 
                 Console.WriteLine($"    answer is {fork.Value}  -> {First(fork.Taken)}");
                 Console.WriteLine($"    otherwise      -> {First(fork.NotTaken)}");
