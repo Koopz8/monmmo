@@ -579,3 +579,88 @@ public class ApproachTests
         Assert.Empty(Run(world, 10).OfType<BattleStarted>());
     }
 }
+
+/// <summary>
+/// Ending a walk that produced no fight.
+/// <para>
+/// A walk almost always ends in a battle, and a battle announces itself. These are the
+/// times it does not — and without a word from the server the player goes on standing
+/// still, refused every step, waiting for something that is not coming. Same class of
+/// bug as a conversation nobody ever ends.
+/// </para>
+/// </summary>
+public class ApproachEndingTests
+{
+    private const string Route = "3.19";
+    private const string Town = "3.0";
+
+    private static MapObject Watcher(int localId, int trainerId) =>
+        new(localId, 5, 4, 1, Direction.Down, 0, true, 0, 0, 0, trainerId, 4);
+
+    private static GameWorld World(MapObject watcher, PokeMmo.Core.Data.GameRules? rules) =>
+        new(
+            new WorldData([
+                new MapData(Route, "ROUTE 1", 8, 8, new byte[64]) { Objects = [watcher] },
+                new MapData(Town, "PALLET TOWN", 8, 8, new byte[64]),
+            ]),
+            Route,
+            rules);
+
+    private static ServerPlayer Spotted(GameWorld world)
+    {
+        (ServerPlayer player, _) = world.Join(1, "Koop", new SavedCharacter(Route, 3, 5, Direction.Down, [
+            new SavedMon(3, 30, null, 100, StatusCondition.None, Nature.Hardy, [TestRules.FirstMove]),
+        ]));
+
+        player.LastStepAt = double.NegativeInfinity;
+        world.Move(player.Id, Direction.Right, 1000);
+
+        Assert.NotNull(player.WatchedBy);
+
+        return player;
+    }
+
+    private static List<NetMessage> Run(GameWorld world, double seconds = 10, double from = 1000)
+    {
+        var said = new List<NetMessage>();
+
+        for (double now = from; now < from + seconds; now += 0.1)
+            said.AddRange(world.Tick(now).Select(o => o.Message));
+
+        return said;
+    }
+
+    [Fact]
+    public void SomebodyWhoCannotFightSaysSoRatherThanStandingThere()
+    {
+        // A trainer the server has no party for. They still walk over — the sight line
+        // is real — and then there is nothing to start.
+        GameWorld world = World(Watcher(1, 9999), TestRules.All);
+
+        ServerPlayer player = Spotted(world);
+
+        List<NetMessage> said = Run(world);
+
+        Assert.Empty(said.OfType<BattleStarted>());
+        Assert.Single(said.OfType<ApproachEnded>());
+        Assert.Null(player.WatchedBy);
+    }
+
+    [Fact]
+    public void WalkingThroughADoorMidApproachReleasesThePlayer()
+    {
+        // The walk is abandoned on the route, and the player is on another map being
+        // refused every step by somebody who is no longer following them.
+        GameWorld world = World(Watcher(1, TestRules.OneAlone), TestRules.All);
+
+        ServerPlayer player = Spotted(world);
+
+        player.MapId = Town;
+        player.Square = new GridPosition(1, 1);
+
+        List<NetMessage> said = Run(world);
+
+        Assert.Single(said.OfType<ApproachEnded>());
+        Assert.Null(player.WatchedBy);
+    }
+}

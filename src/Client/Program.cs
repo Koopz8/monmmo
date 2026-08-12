@@ -125,6 +125,35 @@ public static class Program
         return 0;
     }
 
+    /// <summary>How long the mark stays up. About as long as the games leave it.</summary>
+    private const float ExclaimSeconds = 0.9f;
+
+    /// <summary>Which id a person is filed under, so the right head gets the mark.</summary>
+    private static int? KeyOf(Dictionary<int, WalkingPerson> people, WalkingPerson person)
+    {
+        foreach ((int id, WalkingPerson candidate) in people)
+        {
+            if (ReferenceEquals(candidate, person)) return id;
+        }
+
+        return null;
+    }
+
+    /// <summary>A speech bubble with an exclamation mark in it, above somebody's head.</summary>
+    private static void DrawExclamation(float x, float y)
+    {
+        var bubble = new Rectangle(x + 3, y - 15, 10, 13);
+
+        Raylib.DrawRectangleRec(bubble, Color.White);
+        Raylib.DrawRectangleLinesEx(bubble, 1, new Color(40, 40, 48, 255));
+
+        // The tail, and then the mark: a stroke and a dot, which is all an exclamation
+        // mark is at this size.
+        Raylib.DrawRectangle((int)x + 6, (int)y - 3, 2, 2, Color.White);
+        Raylib.DrawRectangle((int)x + 7, (int)y - 13, 2, 6, new Color(40, 40, 48, 255));
+        Raylib.DrawRectangle((int)x + 7, (int)y - 6, 2, 2, new Color(40, 40, 48, 255));
+    }
+
     private static (string Host, int Port) ParseServer(string value)
     {
         string[] parts = value.Split(':');
@@ -177,6 +206,14 @@ public static class Program
         IReadOnlyList<SavedMon> party = [];
         BagScreen? carrying = null;
 
+        // Who has spotted the player and is walking over, and how long the mark above
+        // their head has left. The server refuses movement for the duration; this is the
+        // client's half of that rule, and without it the client predicts a step, has it
+        // refused, and snaps back — which reads as a broken game rather than as being
+        // caught. Fifth time this project has needed both halves of one rule.
+        int? watching = null;
+        float exclaimFor = 0f;
+
         // Where the server last said we are, when that disagreed with where we think we
         // are. Held rather than applied on the spot: a correction almost always arrives
         // mid-step, and snapping a character sideways through a stride looks worse than
@@ -194,7 +231,8 @@ public static class Program
 
             ApplyServerMessages(
                 network, others, player, view, data, trainers, items, script, carrying,
-                ref talking, ref battle, ref shop, ref bag, ref party, ref money, ref correction);
+                ref talking, ref battle, ref shop, ref bag, ref party, ref money,
+                ref correction, ref watching, ref exclaimFor);
 
             // A battle suspends the overworld entirely: the server is running it, and
             // walking on meanwhile would put the two sides out of step.
@@ -305,7 +343,12 @@ public static class Program
                 talking = Talk(data, view, player, network, script);
             }
 
-            Direction? input = talking is null ? ReadDirection() : null;
+            exclaimFor = Math.Max(0f, exclaimFor - delta);
+
+            // Nothing is read while somebody is on their way over. Refusing to predict
+            // is the point: the server refuses the step either way, and a client that
+            // predicts one anyway spends the whole walk snapping backwards.
+            Direction? input = talking is null && watching is null ? ReadDirection() : null;
             player.Update(delta, input);
 
             edgeCooldown = Math.Max(0f, edgeCooldown - delta);
@@ -353,6 +396,12 @@ public static class Program
                     theirs.Draw(ox, oy, standing.Facing, standing.IsWalking, standing.Stride);
                 else
                     DrawPlayer(ox, oy, standing.Facing, new Color(200, 180, 140, 255));
+
+                // The mark over the head of whoever just noticed. Drawn with rectangles
+                // rather than read off the cartridge, and it is placeholder exactly like
+                // the rest of the chrome — but a walk that starts with no warning at all
+                // reads as the game deciding something on its own.
+                if (exclaimFor > 0f && watching == KeyOf(view.People, standing)) DrawExclamation(ox, oy);
             }
 
             foreach (RemoteCharacter other in others.Values)
@@ -465,7 +514,9 @@ public static class Program
         ref IReadOnlyList<BagEntry> bag,
         ref IReadOnlyList<SavedMon> party,
         ref int money,
-        ref GridPosition? correction)
+        ref GridPosition? correction,
+        ref int? watching,
+        ref float exclaimFor)
     {
         foreach (NetMessage message in network.Drain())
         {
@@ -480,6 +531,8 @@ public static class Program
                     bag = welcome.Bag;
                     party = welcome.Party;
                     money = welcome.Money;
+
+                    watching = null;
 
                     foreach (int flag in welcome.Flags) script.Set(flag);
                     foreach (SavedVariable variable in welcome.Variables) script.Write(variable.Id, variable.Value);
@@ -506,15 +559,17 @@ public static class Program
 
                     break;
 
-                case TrainerSpotted:
-                    // Nothing to draw yet, and deliberately nothing rather than a text
-                    // box: a box has to be dismissed, and dismissing it would mean
-                    // pressing a button through the walk it exists to announce. The
-                    // exclamation mark over their head is a sprite, and sprites are the
-                    // milestone this one stopped short of.
-                    //
-                    // What the player does see is the walk, which arrives as ordinary
-                    // ObjectMoved messages, and the fight at the end of it.
+                case TrainerSpotted noticed:
+                    // Not a text box. A box has to be dismissed, and dismissing it means
+                    // pressing a button through the walk it exists to announce.
+                    watching = noticed.LocalId;
+                    exclaimFor = ExclaimSeconds;
+
+                    break;
+
+                case ApproachEnded:
+                    watching = null;
+
                     break;
 
                 case PartyHealed healed:
@@ -592,6 +647,11 @@ public static class Program
 
                 case BattleStarted started:
                     battle = new BattleScreen(started, data, trainers, items);
+
+                    // The walk is over the moment the fight begins, which is the ending
+                    // almost every walk has.
+                    watching = null;
+
                     break;
 
                 case BattlerSentOut sent:

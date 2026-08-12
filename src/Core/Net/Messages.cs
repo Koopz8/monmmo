@@ -28,6 +28,7 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(PartyHealed), "healed")]
 [JsonDerivedType(typeof(BlackedOut), "blackedout")]
 [JsonDerivedType(typeof(TrainerSpotted), "spotted")]
+[JsonDerivedType(typeof(ApproachEnded), "approachover")]
 [JsonDerivedType(typeof(BuyRequest), "buy")]
 [JsonDerivedType(typeof(SellRequest), "sell")]
 [JsonDerivedType(typeof(ShopOpened), "shop")]
@@ -231,6 +232,19 @@ public sealed record PartyHealed(IReadOnlyList<SavedMon> Party, bool Needed) : N
 /// </para>
 /// </summary>
 public sealed record TrainerSpotted(int LocalId) : NetMessage;
+
+/// <summary>
+/// Nobody is walking over any more, and no fight came of it.
+/// <para>
+/// The end of a walk is almost always a battle, and a battle says so loudly. This is
+/// for the times it is not: a trainer with no party the server can field, a player
+/// whose own party is in no state to fight, a walk abandoned because its target went
+/// through a door. Without it the client would keep standing still and waiting for a
+/// fight that is not coming, which is the same class of bug as a conversation nobody
+/// ever ends.
+/// </para>
+/// </summary>
+public sealed record ApproachEnded : NetMessage;
 
 public sealed record BlackedOut(
     string MapId,

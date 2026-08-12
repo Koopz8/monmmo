@@ -542,6 +542,20 @@ public sealed class GameWorld
             foreach (string mapId in _populated.Keys.ToList())
             {
                 if (_players.Values.Any(p => p.MapId == mapId)) continue;
+
+                // A map about to stop being simulated may still hold somebody walking
+                // towards a player who left it by some route that did not go through a
+                // transfer. Letting it go quietly leaves that player standing still.
+                foreach (ServerObject person in _populated[mapId].Objects)
+                {
+                    if (person.Approaching is not { } waiting) continue;
+                    if (!_players.TryGetValue(waiting, out ServerPlayer? gone)) continue;
+                    if (gone.WatchedBy is null) continue;
+
+                    gone.WatchedBy = null;
+                    send.Add(new Outgoing(new ApproachEnded(), OnlyTo: waiting));
+                }
+
                 _populated.Remove(mapId);
             }
 
@@ -763,6 +777,16 @@ public sealed class GameWorld
             {
                 person.Approaching = null;
                 person.Approach.Clear();
+
+                // The player may still be connected and simply somewhere else, in which
+                // case they are standing still on another map waiting for somebody who
+                // is not following them.
+                if (_players.ContainsKey(playerId))
+                {
+                    _players[playerId].WatchedBy = null;
+                    send.Add(new Outgoing(new ApproachEnded(), OnlyTo: playerId));
+                }
+
                 continue;
             }
 
@@ -803,14 +827,18 @@ public sealed class GameWorld
             }
 
             // A fight that cannot start — no rules file, no healthy lead, a party
-            // already wiped — must still end the walk. Otherwise the player is held
-            // still by somebody standing next to them with nothing to say.
-            send.AddRange(StartTrainerBattle(player, person.Template with
+            // already wiped — must still end the walk, and must say so. Otherwise the
+            // player stands still waiting for something that is not coming.
+            List<Outgoing> fight = StartTrainerBattle(player, person.Template with
             {
                 X = person.Square.X,
                 Y = person.Square.Y,
                 Facing = person.Facing,
-            }));
+            });
+
+            send.AddRange(fight);
+
+            if (fight.Count == 0) send.Add(new Outgoing(new ApproachEnded(), OnlyTo: player.Id));
         }
 
         return send;
@@ -1218,9 +1246,16 @@ public sealed class GameWorld
             new(new PlayerLeft(player.Id), Except: player.Id, OnMap: previous),
         };
 
-        // Whoever was walking over is walking over to an empty square now.
+        // Whoever was walking over is walking over to an empty square now. Saying so
+        // matters: the player is standing still because somebody was coming, and
+        // nothing else is going to tell them that stopped being true.
         AbandonApproaches(player.Id);
-        player.WatchedBy = null;
+
+        if (player.WatchedBy is not null)
+        {
+            player.WatchedBy = null;
+            send.Add(new Outgoing(new ApproachEnded(), OnlyTo: player.Id));
+        }
 
         player.MapId = mapId;
         player.Square = arrival;
