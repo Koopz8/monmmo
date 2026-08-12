@@ -573,7 +573,7 @@ public static class Program
     /// script that ran and said nothing, and a box that opened and was not drawn.
     /// </para>
     /// </summary>
-    private static string LastTalk = "nothing yet";
+    private static readonly List<string> Talks = ["nothing yet"];
 
     /// <summary>
     /// Says something on the client's own terminal, as well as on the status bar.
@@ -587,8 +587,15 @@ public static class Program
     /// </summary>
     private static void Note(string what)
     {
-        LastTalk = what;
         Console.WriteLine($"  {what}");
+
+        // The last three rather than the last one. A status bar that shows only the most
+        // recent thing is a status bar that has already forgotten the interesting one by
+        // the time anybody looks at it — press the button at two people and the first
+        // answer is gone.
+        Talks.Add(what);
+
+        while (Talks.Count > 3) Talks.RemoveAt(0);
     }
 
     private static DialogueBox? Talk(
@@ -1183,13 +1190,14 @@ public static class Program
             $"{Raylib.GetFPS()} fps, worst {worstFrame * 1000f:F0} ms   " +
             (sprite is null ? "NO SPRITE" : "sprite ok");
 
-        string third = $"last talk: {LastTalk}";
-
         Raylib.DrawText(second, 13, 37, 20, Color.Black);
         Raylib.DrawText(second, 12, 36, 20, Color.White);
 
-        Raylib.DrawText(third, 13, 61, 20, Color.Black);
-        Raylib.DrawText(third, 12, 60, 20, Color.White);
+        for (int i = 0; i < Talks.Count; i++)
+        {
+            Raylib.DrawText(Talks[i], 13, 61 + i * 24, 20, Color.Black);
+            Raylib.DrawText(Talks[i], 12, 60 + i * 24, 20, Color.White);
+        }
     }
 
     /// <summary>Opens a window that just explains what went wrong, rather than exiting silently.</summary>
