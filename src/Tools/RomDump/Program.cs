@@ -147,6 +147,8 @@ public static class Program
 
         if (options.Glyphs) WriteGlyphCandidates(rom, options.OutputDirectory);
 
+        if (options.Font != 0) WriteFontSheet(rom, options.Font, options.OutputDirectory);
+
         if (!string.IsNullOrEmpty(options.WhoSays)) WriteWhoSays(rom, options.WhoSays);
 
         if (options.ScriptAt != 0) WriteScriptAt(rom, options.ScriptAt);
@@ -1389,6 +1391,47 @@ public static class Program
         Console.WriteLine("  else on a cartridge looks like writing.");
     }
 
+    /// <summary>
+    /// One address, drawn as a numbered sheet, so somebody can say where a letter is.
+    /// <para>
+    /// Finding lettering turned out to be the easy half. A block at 0x08231A60 holds
+    /// kana and a clean Latin lowercase alphabet and no capitals or digits at all, and
+    /// treating a character's code as its tile index renders lowercase in nearly the
+    /// right order with nonsense on both sides. So the mapping from code to glyph is not
+    /// identity, and guessing at it from a thumbnail is how an afternoon goes missing.
+    /// </para>
+    /// <para>
+    /// This asks instead. The rows are counted in dots down the margin; one person
+    /// saying "the capital A is row six, third along" fixes the whole mapping, and no
+    /// heuristic here is going to do better.
+    /// </para>
+    /// </summary>
+    private static void WriteFontSheet(Rom rom, uint address, string directory, int tiles = 256)
+    {
+        Console.WriteLine();
+        Console.WriteLine($"The sheet at 0x{address:X8}");
+
+        if (rom.ToOffsetOrNull(address) is not { } offset)
+        {
+            Console.WriteLine("  that address is not on this cartridge");
+            return;
+        }
+
+        Directory.CreateDirectory(Path.Combine(directory, "glyphs"));
+
+        string name = $"sheet-{address:X8}.png";
+
+        File.WriteAllBytes(
+            Path.Combine(directory, "glyphs", name),
+            GlyphScanner.NumberedSheet(rom, offset, tiles));
+
+        Console.WriteLine($"  {tiles} tiles, 16 across, rows counted in dots down the left");
+        Console.WriteLine($"  glyphs/{name}");
+        Console.WriteLine();
+        Console.WriteLine("  Row n holds tiles n*16 to n*16+15. If a capital A is in there, saying");
+        Console.WriteLine("  which row and how far along fixes the mapping for every other letter.");
+    }
+
     private static void WriteItems(Rom rom)
     {
         Console.WriteLine();
@@ -1639,6 +1682,9 @@ public static class Program
         /// <summary>Hunt for the cartridge's lettering and write the candidates out.</summary>
         public bool Glyphs { get; private init; }
 
+        /// <summary>Draw the sheet at one address, with its rows numbered.</summary>
+        public uint Font { get; private init; }
+
         /// <summary>Find everybody who says this, and report what their script calls.</summary>
         public string WhoSays { get; private init; } = "";
 
@@ -1674,6 +1720,7 @@ public static class Program
             bool specials = false;
             bool shared = false;
             bool glyphs = false;
+            uint font = 0;
             string whoSays = "";
             uint scriptAt = 0;
             bool dumpMoves = false, dumpEncounters = false;
@@ -1758,6 +1805,11 @@ public static class Program
                     case "--glyphs":
                         glyphs = true;
                         break;
+                    case "--font":
+                        string sheetAt = Next(args, ref i, "--font");
+                        font = Convert.ToUInt32(
+                            sheetAt.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? sheetAt[2..] : sheetAt, 16);
+                        break;
                     case "--who-says":
                         whoSays = Next(args, ref i, "--who-says");
                         break;
@@ -1819,6 +1871,7 @@ public static class Program
                 Specials = specials,
                 Shared = shared,
                 Glyphs = glyphs,
+                Font = font,
                 WhoSays = whoSays,
                 ScriptAt = scriptAt,
                 DumpMoves = dumpMoves,

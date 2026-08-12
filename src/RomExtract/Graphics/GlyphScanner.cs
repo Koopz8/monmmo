@@ -170,6 +170,76 @@ public static class GlyphScanner
     }
 
     /// <summary>
+    /// A sheet with its rows counted down the left-hand margin, in dots.
+    /// <para>
+    /// The scan can find lettering and cannot say which letter is which. Rendering a
+    /// font by treating a character's code as its tile index gives lowercase in almost
+    /// the right order and nonsense either side of it, so the mapping from code to glyph
+    /// is something other than identity — and one look at a numbered sheet settles what
+    /// an afternoon of guessing did not.
+    /// </para>
+    /// <para>
+    /// Dots rather than numerals, because numerals would need a font, and the font is
+    /// the thing being looked for.
+    /// </para>
+    /// </summary>
+    public static byte[] NumberedSheet(Rom rom, int offset, int tiles, int across = 16)
+    {
+        const int margin = 8;
+
+        int rows = (tiles + across - 1) / across;
+        int width = margin + across * TileDecoder.TileWidth;
+        int height = rows * TileDecoder.TileHeight;
+
+        var rgba = new byte[width * height * 4];
+
+        for (int i = 0; i < rgba.Length; i += 4)
+        {
+            rgba[i] = rgba[i + 1] = rgba[i + 2] = 255;
+            rgba[i + 3] = 255;
+        }
+
+        void Plot(int x, int y, byte level)
+        {
+            if (x < 0 || y < 0 || x >= width || y >= height) return;
+
+            int at = (y * width + x) * 4;
+            rgba[at] = rgba[at + 1] = rgba[at + 2] = level;
+        }
+
+        for (int tile = 0; tile < tiles; tile++)
+        {
+            int at = offset + tile * TileDecoder.BytesPerTile;
+            if (at + TileDecoder.BytesPerTile > rom.Length) break;
+
+            int tx = margin + tile % across * TileDecoder.TileWidth;
+            int ty = tile / across * TileDecoder.TileHeight;
+
+            for (int y = 0; y < TileDecoder.TileHeight; y++)
+            {
+                for (int x = 0; x < TileDecoder.TileWidth; x += 2)
+                {
+                    byte packed = rom.ReadU8(at + (y * TileDecoder.TileWidth + x) / 2);
+
+                    Plot(tx + x, ty + y, Level(packed & 0x0F));
+                    Plot(tx + x + 1, ty + y, Level((packed >> 4) & 0x0F));
+                }
+            }
+        }
+
+        // One dot per row index, stacked down the margin: row three has three.
+        for (int row = 0; row < rows; row++)
+        {
+            for (int dot = 0; dot <= row && dot < TileDecoder.TileHeight; dot++)
+                Plot(dot % 4 * 2, row * TileDecoder.TileHeight + dot / 4 * 2 + 1, 0);
+        }
+
+        return PngWriter.ToArray(width, height, rgba);
+    }
+
+    private static byte Level(int index) => index == 0 ? (byte)255 : (byte)Math.Max(0, 200 - index * 40);
+
+    /// <summary>
     /// A run drawn as a sheet, sixteen tiles across, in greys.
     /// <para>
     /// Greys rather than a palette because which palette goes with a font is a separate
