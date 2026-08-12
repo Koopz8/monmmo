@@ -401,6 +401,38 @@ public static class ScriptCommands
         // 0x46 does — which is as far as the bytes go, and further than a name would
         // have been earned.
         [0x47] = 4,
+
+        // Nothing. All three sites are followed immediately by `6C 02` — release, end —
+        // or by a loadpointer. A command that sits at the tail of a script and takes no
+        // arguments; anything swallowed here eats the release.
+        [0x76] = 0,
+
+        // Nothing, and the three sites make a chain of known commands the moment it is
+        // read that way:
+        //
+        //   B7 | 2A 07 08 | 25 88 01 | 26 0D 80 B4 00 | 21 ...
+        //        clearflag  special    specialvar        compare
+        //
+        // Four commands in a row, each one parsing into the next. That does not happen
+        // by accident at any other width.
+        [0xB7] = 0,
+
+        // Nothing, on two of three sites:
+        //
+        //   35 | 53 02 00 | 2A 50 00 | 6C 02      clearflag, release, end
+        //   35 | 53 05 00 | 2A 2E 00 | 6C 02      clearflag, release, end
+        //
+        // The third site does not fit that shape and is not claimed by it.
+        [0x35] = 0,
+
+        // Four, and giveitem's shape a third time — an id and a count. Both sites are
+        // followed by a loadpointer carrying a real address, which is a script about to
+        // say something about whatever it just handed over.
+        [0x44] = 4,
+
+        // Two. Both sites read `94 00 00 | 6C 02` — an argument of zero, then release
+        // and end.
+        [0x94] = 2,
     };
 
     /// <summary>
