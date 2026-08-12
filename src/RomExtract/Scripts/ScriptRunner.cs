@@ -2,11 +2,45 @@ using PokeMmo.Core.Scripts;
 
 namespace PokeMmo.RomExtract.Scripts;
 
+/// <summary>
+/// One thing a scene does, in the order it does it.
+/// <para>
+/// A list of pages and a list of movements says what happened but not when, and a
+/// cutscene is entirely about when: the professor's line lands while he is walking over,
+/// not before he sets off and not after he arrives. The order is the content.
+/// </para>
+/// </summary>
+public abstract record SceneBeat
+{
+    /// <summary>One page of text.</summary>
+    public sealed record Say(string Page) : SceneBeat;
+
+    /// <summary>Somebody walks. The steps are the cartridge's own bytes.</summary>
+    public sealed record Walk(int PersonId, IReadOnlyList<byte> Steps) : SceneBeat
+    {
+        public bool IsPlayer => PersonId == MovementList.Player;
+    }
+}
+
 /// <summary>What running a script actually came to.</summary>
 public sealed record ScriptRun
 {
     /// <summary>The pages that get said, in the order they get said.</summary>
     public IReadOnlyList<string> Pages { get; init; } = [];
+
+    /// <summary>
+    /// Everything the scene does, in order — the same pages, with the movements in
+    /// between them where they belong.
+    /// <para>
+    /// <see cref="Pages"/> is kept beside this rather than derived away from it. Most of
+    /// what runs a script wants only the words, and a shopkeeper's one line does not
+    /// need a scene player.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<SceneBeat> Beats { get; init; } = [];
+
+    /// <summary>True when this run is a scene rather than a conversation.</summary>
+    public bool IsScene => Beats.OfType<SceneBeat.Walk>().Any();
 
     /// <summary>What a shop opened by this run sells, if it opened one.</summary>
     public IReadOnlyList<int> Stock { get; init; } = [];
@@ -115,6 +149,7 @@ public static class ScriptRunner
         ScriptState save = (state ?? new ScriptState()).Copy();
 
         var pages = new List<string>();
+        var beats = new List<SceneBeat>();
         var stock = new List<int>();
         var set = new List<int>();
         var cleared = new List<int>();
@@ -244,8 +279,17 @@ public static class ScriptRunner
                     break;
 
                 case ScriptCommands.Message:
-                    Say(rom, command.Pointer(), pages, maxPages);
+                    Say(rom, command.Pointer(), pages, beats, maxPages);
                     pending = 0;
+                    break;
+
+                case MovementLists.ApplyMovement:
+                    // Whose movement and which list. Both are written down in front of
+                    // the command; what the individual step bytes mean was derived by
+                    // walking them across every map and asking who ends up inside a wall.
+                    if (MovementLists.Read(rom, command.Pointer(2)) is { Length: > 0 } steps)
+                        beats.Add(new SceneBeat.Walk(command.Word(), steps));
+
                     break;
 
                 case ScriptCommands.CallStandard when save.Read(0x8000) is not 0 && pending == 0:
@@ -274,7 +318,7 @@ public static class ScriptRunner
                     // pointer is the thing to say and the routine number is not read.
                     if (pending != 0)
                     {
-                        Say(rom, pending, pages, maxPages);
+                        Say(rom, pending, pages, beats, maxPages);
                         pending = 0;
                     }
 
@@ -340,7 +384,7 @@ public static class ScriptRunner
 
                     // Every variant but one opens with the line they say on sight, and
                     // that line belongs to the fight rather than to what comes after it.
-                    if (command.Arguments[0] != 3) Say(rom, command.Pointer(5), pages, maxPages);
+                    if (command.Arguments[0] != 3) Say(rom, command.Pointer(5), pages, beats, maxPages);
 
                     stop = true;
                     break;
@@ -361,6 +405,7 @@ public static class ScriptRunner
         return new ScriptRun
         {
             Pages = pages,
+            Beats = beats,
             Stock = stock,
             TrainerId = trainerId,
             GivesItem = gives,
@@ -374,7 +419,7 @@ public static class ScriptRunner
         };
     }
 
-    private static void Say(Rom rom, uint address, List<string> pages, int maxPages)
+    private static void Say(Rom rom, uint address, List<string> pages, List<SceneBeat> beats, int maxPages)
     {
         if (address == 0) return;
         if (rom.ToOffsetOrNull(address) is not { } at) return;
@@ -386,7 +431,9 @@ public static class ScriptRunner
         foreach (string page in GameText.DecodeDialogue(bytes))
         {
             if (pages.Count >= maxPages) return;
+
             pages.Add(page);
+            beats.Add(new SceneBeat.Say(page));
         }
     }
 

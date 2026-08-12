@@ -32,6 +32,7 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(ItemFound), "itemfound")]
 [JsonDerivedType(typeof(ObstacleShifted), "shifted")]
 [JsonDerivedType(typeof(TriggerFired), "triggered")]
+[JsonDerivedType(typeof(ScenePlaced), "sceneplaced")]
 [JsonDerivedType(typeof(BuyRequest), "buy")]
 [JsonDerivedType(typeof(SellRequest), "sell")]
 [JsonDerivedType(typeof(ShopOpened), "shop")]
@@ -95,6 +96,24 @@ public sealed record TalkFinished : NetMessage;
 /// </para>
 /// </summary>
 public sealed record TriggerFired(int X, int Y) : NetMessage;
+
+/// <summary>
+/// Where a scene left somebody.
+/// <para>
+/// The client plays the scene, because the movements are on a cartridge the server has
+/// never seen. That leaves the two sides disagreeing about where a person is standing the
+/// moment the scene ends, and somebody has to say — so this says.
+/// </para>
+/// <para>
+/// It is trusted narrowly and on purpose. The server accepts it only for somebody it is
+/// already holding still for this player, only onto a square that is walkable and empty,
+/// and only on the map they are both on. What that buys a determined client is the
+/// ability to shuffle an NPC they are already standing in front of onto a walkable square
+/// — which is worth strictly less than the alternative, which is every scene in the game
+/// snapping its cast back the instant it ends.
+/// </para>
+/// </summary>
+public sealed record ScenePlaced(int LocalId, int X, int Y, Direction Facing) : NetMessage;
 
 /// <summary>
 /// What a script the player just ran did to their save.

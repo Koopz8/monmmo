@@ -192,6 +192,11 @@ public static class Program
         var others = new Dictionary<int, RemoteCharacter>();
         BattleScreen? battle = null;
         DialogueBox? talking = null;
+
+        // A scene, when a script turns out to be one. Kept beside the text box rather
+        // than inside it: a box is one thing being said and a scene is an order of
+        // things happening, and most scripts are the first kind.
+        Cutscene? scene = null;
         ShopScreen? shop = null;
         IReadOnlyList<BagEntry> bag = [];
         int money = 0;
@@ -333,7 +338,22 @@ public static class Program
             // A conversation stops the world the same way a battle does, except the map
             // stays on screen behind it. Reading movement here would have the player
             // walking away from somebody mid-sentence.
-            if (talking is not null)
+            if (scene is not null)
+            {
+                scene.Update(delta);
+
+                if (scene.IsFinished)
+                {
+                    // Where it left everybody, for the server to accept or refuse. Sent
+                    // before letting go, because the hold is what makes it acceptable.
+                    foreach ((int localId, GridPosition left, Direction facing) in scene.Moved)
+                        network.SendScenePlaced(localId, left, facing);
+
+                    scene = null;
+                    network.SendTalkFinished();
+                }
+            }
+            else if (talking is not null)
             {
                 talking.Update();
 
@@ -353,7 +373,7 @@ public static class Program
             // Nothing is read while somebody is on their way over. Refusing to predict
             // is the point: the server refuses the step either way, and a client that
             // predicts one anyway spends the whole walk snapping backwards.
-            Direction? input = talking is null && watching is null ? ReadDirection() : null;
+            Direction? input = talking is null && watching is null && scene is null ? ReadDirection() : null;
             player.Update(delta, input);
 
             edgeCooldown = Math.Max(0f, edgeCooldown - delta);
@@ -382,10 +402,11 @@ public static class Program
             // rather than on setting off, because a trigger that fires as the foot
             // leaves the previous square runs a cutscene about a place the player is
             // not yet standing in.
-            if (!player.IsStepping && player.Square != standingOn)
+            if (!player.IsStepping && player.Square != standingOn && scene is null)
             {
                 standingOn = player.Square;
-                talking ??= Arrive(data, view, player, network, script, party);
+
+                (talking, scene) = Arrive(data, view, player, network, script, party, talking);
             }
 
             foreach (RemoteCharacter other in others.Values) other.Update(delta);
@@ -436,7 +457,9 @@ public static class Program
             Raylib.EndMode2D();
 
             DrawStatus(view.Map, player, network, others.Count, money, bag.Count);
-            talking?.Draw(WindowWidth, WindowHeight);
+            // A scene's line goes in the same box a conversation's does. There is only
+            // one box on screen and only one thing being said at a time.
+            (scene?.Saying ?? talking)?.Draw(WindowWidth, WindowHeight);
             Raylib.EndDrawing();
         }
 
@@ -528,14 +551,14 @@ public static class Program
     /// again" would otherwise be a fight that can be had forever.
     /// </para>
     /// </summary>
-    private static DialogueBox? Arrive(
+    private static (DialogueBox? Talking, Cutscene? Scene) Arrive(
         GameData data, MapView view, WalkingCharacter player, NetworkClient network, ScriptState script,
-        IReadOnlyList<SavedMon> party)
+        IReadOnlyList<SavedMon> party, DialogueBox? talking)
     {
         if (view.Map.Triggers.FirstOrDefault(t =>
                 t.Square == player.Square && t.HasScript && t.Armed(script.Read(t.Variable))) is not { } trigger)
         {
-            return null;
+            return (talking, null);
         }
 
         // Sent whether or not there is anything to read, for the same reason talking is:
@@ -554,9 +577,21 @@ public static class Program
         if (run.FlagsSet.Count + run.FlagsCleared.Count + run.VariablesWritten.Count > 0)
             network.SendScriptRan(run);
 
+        if (run.IsScene)
+        {
+            var playing = new Cutscene(run.Beats, view);
+
+            // Held before a foot is moved. The server is the only thing that can stop
+            // these people wandering off mid-scene, and it holds one person per message
+            // — the same message talking to them sends.
+            foreach (int localId in playing.Cast) network.SendTalk(localId);
+
+            return (talking, playing);
+        }
+
         var box = new DialogueBox(run.Pages);
 
-        return box.IsEmpty ? null : box;
+        return (box.IsEmpty ? talking : box, null);
     }
 
     /// <summary>

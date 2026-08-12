@@ -1333,6 +1333,75 @@ public sealed class GameWorld
         }
     }
 
+    /// <summary>What the last scene placement came to. Same arrangement as the rest.</summary>
+    public string? LastScenePlacement { get; private set; }
+
+    /// <summary>
+    /// Accepts where a scene left somebody, if it is a place they could be.
+    /// <para>
+    /// The client plays the scene because the movements are on a cartridge this has never
+    /// seen, so the two sides end a scene disagreeing about where its cast is standing.
+    /// Refusing to be told means every scene in the game snaps its people back the moment
+    /// it ends, which is worse than the alternative and worse in a way everybody can see.
+    /// </para>
+    /// <para>
+    /// Trusted narrowly: only somebody already held still for this player, only on the
+    /// map they are both on, and only onto a square that is walkable and empty. What that
+    /// buys a determined client is shuffling an NPC they are already standing in front of
+    /// onto a square a person could stand on, which is not worth defending against at the
+    /// cost of every cutscene in the game.
+    /// </para>
+    /// </summary>
+    public List<Outgoing> PlaceAfterScene(int playerId, int localId, GridPosition square, Direction facing)
+    {
+        lock (_gate)
+        {
+            LastScenePlacement = null;
+
+            if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
+            if (!_populated.TryGetValue(player.MapId, out MapPopulation? people)) return [];
+
+            if (people.ById(localId) is not { } person)
+            {
+                LastScenePlacement = $"no object {localId} on {player.MapId}";
+                return [];
+            }
+
+            if (person.HeldBy != playerId)
+            {
+                LastScenePlacement = $"object {localId} is not being held by them";
+                return [];
+            }
+
+            if (!GridFor(player.MapId).IsWalkable(square))
+            {
+                LastScenePlacement = $"{square} is not somewhere anybody can stand";
+                return [];
+            }
+
+            if (people.At(square) is { } standing && standing.LocalId != localId)
+            {
+                LastScenePlacement = $"{square} already has object {standing.LocalId} on it";
+                return [];
+            }
+
+            if (person.Square == square && person.Facing == facing)
+            {
+                LastScenePlacement = $"object {localId} is already at {square}";
+                return [];
+            }
+
+            person.Square = square;
+            person.Facing = facing;
+
+            LastScenePlacement = $"object {localId} left at {square} facing {facing}";
+
+            return [new Outgoing(
+                new ObjectMoved(localId, square.X, square.Y, facing),
+                OnMap: player.MapId)];
+        }
+    }
+
     /// <summary>The text box is closed. Whoever this player was holding carries on.</summary>
     public void StopTalking(int playerId)
     {

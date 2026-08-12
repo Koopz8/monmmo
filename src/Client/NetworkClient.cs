@@ -132,6 +132,10 @@ public sealed class NetworkClient : IDisposable
     /// <summary>Says a square was stepped onto, so the server can decide what that means.</summary>
     public void SendTriggerFired(int x, int y) => Send(new TriggerFired(x, y));
 
+    /// <summary>Says where a scene left somebody, for the server to accept or refuse.</summary>
+    public void SendScenePlaced(int localId, GridPosition square, Direction facing) =>
+        Send(new ScenePlaced(localId, square.X, square.Y, facing));
+
     /// <summary>Tells the server what a script the player just ran did to their save.</summary>
     public void SendScriptRan(ScriptRun run) =>
         Send(new ScriptRan(

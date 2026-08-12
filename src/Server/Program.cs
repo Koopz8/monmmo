@@ -540,6 +540,16 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                             world.StopTalking(playerId);
                             break;
 
+                        case ScenePlaced placed when playerId != 0:
+                            List<Outgoing> after = world.PlaceAfterScene(
+                                playerId, placed.LocalId, new GridPosition(placed.X, placed.Y), placed.Facing);
+
+                            if (world.LastScenePlacement is { } placement)
+                                Console.WriteLine($"* #{playerId} scene: {placement}");
+
+                            await DispatchAsync(after, playerId, cancellationToken).ConfigureAwait(false);
+                            break;
+
                         case TriggerFired stepped when playerId != 0:
                             List<Outgoing> fired = world.FireTrigger(playerId, stepped.X, stepped.Y);
 

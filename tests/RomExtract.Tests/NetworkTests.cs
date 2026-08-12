@@ -84,6 +84,7 @@ public class MessageChannelTests
             new ItemFound(13, 2, [new BagEntry(13, 2)]),
             new ObstacleShifted(4, 15, 1),
             new TriggerFired(9, 12),
+            new ScenePlaced(2, 5, 6, Direction.Left),
             new BuyRequest(4, 5),
             new SellRequest(13, 2),
             new ShopOpened([new ShopEntry(4, 200)], 5000, [new BagEntry(4, 3)]),

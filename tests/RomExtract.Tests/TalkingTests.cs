@@ -1130,3 +1130,101 @@ public class TriggerTests
         Assert.Equal(new MapTrigger(3, 4, Variable, 2, ScriptAddress: 0, TrainerId: 7), reloaded);
     }
 }
+
+/// <summary>
+/// Where a scene leaves its cast.
+/// <para>
+/// The client plays a scene because the movements are on a cartridge the server has never
+/// seen, so the two sides end one disagreeing about where everybody is standing. Refusing
+/// to be told means every scene in the game snaps its people back the instant it ends.
+/// </para>
+/// </summary>
+public class ScenePlacementTests
+{
+    private const string Town = "3.0";
+
+    private static MapObject Somebody(int localId, int x, int y) =>
+        new(localId, 5, x, y, Direction.Down, 0, false);
+
+    private static (GameWorld World, ServerPlayer Player) Standing(params MapObject[] people)
+    {
+        MapData map = new(Town, "PALLET TOWN", 8, 8, new byte[64]) { Objects = people };
+
+        var world = new GameWorld(new WorldData([map]), Town, TestRules.All);
+
+        (ServerPlayer player, _) = world.Join(1, "Koop", SavedCharacter.Fresh(Town, 3, 4));
+
+        player.Facing = Direction.Up;
+
+        return (world, player);
+    }
+
+    [Fact]
+    public void SomebodyBeingHeldCanBeLeftSomewhereElse()
+    {
+        (GameWorld world, ServerPlayer player) = Standing(Somebody(1, 3, 3));
+
+        world.StartTalking(player.Id, 1);
+
+        ObjectMoved moved = world.PlaceAfterScene(player.Id, 1, new GridPosition(5, 5), Direction.Left)
+            .Select(o => o.Message).OfType<ObjectMoved>().Single();
+
+        Assert.Equal((5, 5), (moved.X, moved.Y));
+        Assert.Equal(Direction.Left, moved.Facing);
+    }
+
+    [Fact]
+    public void SomebodyNobodyIsHoldingStaysWhereTheyAre()
+    {
+        // The hold is what makes this acceptable at all. Without it, any client could
+        // rearrange anybody on any map they happened to be standing on.
+        (GameWorld world, ServerPlayer player) = Standing(Somebody(1, 3, 3));
+
+        Assert.Empty(world.PlaceAfterScene(player.Id, 1, new GridPosition(5, 5), Direction.Left));
+        Assert.Contains("not being held", world.LastScenePlacement);
+    }
+
+    [Fact]
+    public void NobodyIsLeftInsideAWall()
+    {
+        var collision = new byte[64];
+        collision[5 * 8 + 5] = 1;
+
+        MapData map = new(Town, "PALLET TOWN", 8, 8, collision) { Objects = [Somebody(1, 3, 3)] };
+
+        var world = new GameWorld(new WorldData([map]), Town, TestRules.All);
+
+        (ServerPlayer player, _) = world.Join(1, "Koop", SavedCharacter.Fresh(Town, 3, 4));
+        player.Facing = Direction.Up;
+
+        world.StartTalking(player.Id, 1);
+
+        Assert.Empty(world.PlaceAfterScene(player.Id, 1, new GridPosition(5, 5), Direction.Left));
+        Assert.Contains("not somewhere anybody can stand", world.LastScenePlacement);
+    }
+
+    [Fact]
+    public void NobodyIsLeftStandingOnSomebodyElse()
+    {
+        (GameWorld world, ServerPlayer player) = Standing(Somebody(1, 3, 3), Somebody(2, 5, 5));
+
+        world.StartTalking(player.Id, 1);
+
+        Assert.Empty(world.PlaceAfterScene(player.Id, 1, new GridPosition(5, 5), Direction.Left));
+        Assert.Contains("already has object 2", world.LastScenePlacement);
+    }
+
+    [Fact]
+    public void ASceneThatMovedNobodySaysNothing()
+    {
+        // Every scene ends by reporting its cast, and most of a cast has not moved by
+        // the end of it. Broadcasting "they are exactly where you left them" to the
+        // whole map, once per person, once per scene, is noise nobody needs.
+        (GameWorld world, ServerPlayer player) = Standing(Somebody(1, 3, 3));
+
+        world.StartTalking(player.Id, 1);
+
+        Assert.Empty(world.PlaceAfterScene(player.Id, 1, new GridPosition(3, 3), Direction.Down));
+        Assert.Contains("already at", world.LastScenePlacement);
+    }
+}
