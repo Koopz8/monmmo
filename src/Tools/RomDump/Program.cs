@@ -157,6 +157,8 @@ public static class Program
 
         if (!string.IsNullOrEmpty(options.WhoSays)) WriteWhoSays(rom, options.WhoSays);
 
+        if (options.WhoGives is { } wanted) WriteWhoGives(rom, wanted);
+
         if (options.ScriptAt != 0) WriteScriptAt(rom, options.ScriptAt);
 
         Console.WriteLine();
@@ -1162,6 +1164,64 @@ public static class Program
     /// milestone 14.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Where an item is handed over, and by whom.
+    /// <para>
+    /// Written for one question — "can a player actually get an HM in this world, or is
+    /// every field move unreachable?" — and it is the sort of question that comes up
+    /// once a feature exists. A count of two hundred cut trees means nothing if nobody
+    /// in the game will give you CUT.
+    /// </para>
+    /// </summary>
+    private static void WriteWhoGives(Rom rom, int itemId)
+    {
+        Console.WriteLine();
+        Console.WriteLine(itemId == 0
+            ? "Everywhere something is handed over"
+            : $"Everywhere item {itemId} is handed over");
+
+        List<ItemRecord> items = ItemTable.Locate(rom) is { } at ? ItemTable.Read(rom, at) : [];
+
+        string NameOf(int id) => items.FirstOrDefault(i => i.Id == id)?.Name ?? $"item {id}";
+
+        int shown = 0;
+
+        foreach (LoadedMap map in MapLibrary.Open(rom).All())
+        {
+            foreach (MapObject person in map.Objects.Where(o => o.HasScript))
+            {
+                // Read rather than run: what somebody hands over is a fact about them,
+                // and half the game's gifts sit behind a flag a fresh save has not set.
+                //
+                // Both ways of handing something over. There is the giveitem command,
+                // and there is the older shape a ball on the ground uses: write the item
+                // into 0x8000 and the count into 0x8001, then call a standard routine.
+                // Looking for only the first finds a hundred and seventy fewer things,
+                // and every HM in the game is handed over the second way.
+                foreach (ScriptCommand command in ScriptReader.ReadAll(rom, person.ScriptAddress))
+                {
+                    int given = command.Code switch
+                    {
+                        0x46 => command.Word(),
+                        0x1A when command.Word() == 0x8000 => command.Word(2),
+                        _ => 0,
+                    };
+
+                    if (given == 0) continue;
+                    if (itemId != 0 && given != itemId) continue;
+
+                    Console.WriteLine(
+                        $"  {WorldExporter.MapId(map.Bank, map.Number),-8} {map.Name,-24} " +
+                        $"person {person.LocalId,-3} {NameOf(given)}");
+
+                    shown++;
+                }
+            }
+        }
+
+        if (shown == 0) Console.WriteLine("  nowhere — nobody in this world hands that over");
+    }
+
     private static void WriteWhoSays(Rom rom, string needle, int top = 12)
     {
         Console.WriteLine();
@@ -1899,6 +1959,30 @@ public static class Program
                 $"{item.BattleUsage,5} {item.SecondaryId,9}");
         }
 
+        // The machines, and the one question worth asking of them: does a record say
+        // which move it teaches, or is that a second table somewhere else?
+        //
+        // There is an answer already in hand to check against. Three move ids came out
+        // of the obstacle scripts — 15, 70 and 249, CUT, STRENGTH and ROCK SMASH — and
+        // whichever column holds those three among the HMs is the column that holds the
+        // move. Asking a question you already know part of the answer to is the cheapest
+        // way to identify a field, and the only way to be sure it is not a coincidence.
+        List<ItemRecord> machines = [.. items.Where(i => i.Pocket == Pocket.Machines)];
+
+        if (machines.Count > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine($"  Machines — {machines.Count} of them, first and last few:");
+            Console.WriteLine("        id name           hold param usage secondary importance price");
+
+            foreach (ItemRecord item in machines.Take(3).Concat(machines.TakeLast(9)))
+            {
+                Console.WriteLine(
+                    $"    {item.Id,6} {item.Name,-14} {item.HoldEffect,4} {item.HoldEffectParam,5} " +
+                    $"{item.BattleUsage,5} {item.SecondaryId,9} {item.Importance,10} {item.Price,5}");
+            }
+        }
+
         Console.WriteLine();
         Console.WriteLine("  Spot check — compare these names and prices against the games:");
 
@@ -2117,6 +2201,8 @@ public static class Program
         /// <summary>Find everybody who says this, and report what their script calls.</summary>
         public string WhoSays { get; private init; } = "";
 
+        public int? WhoGives { get; private init; }
+
         /// <summary>Dump everything reachable from one cartridge address.</summary>
         public uint ScriptAt { get; private init; }
         public bool DumpMoves { get; private init; }
@@ -2154,6 +2240,7 @@ public static class Program
             bool glyphs = false;
             uint font = 0;
             string whoSays = "";
+            int? whoGives = null;
             uint scriptAt = 0;
             bool dumpMoves = false, dumpEncounters = false;
             string? behaviourMap = null;
@@ -2256,6 +2343,12 @@ public static class Program
                     case "--who-says":
                         whoSays = Next(args, ref i, "--who-says");
                         break;
+                    case "--who-gives":
+                        string item = Next(args, ref i, "--who-gives");
+                        whoGives = item.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+                            ? Convert.ToInt32(item[2..], 16)
+                            : int.Parse(item);
+                        break;
                     case "--script-at":
                         string where = Next(args, ref i, "--script-at");
                         scriptAt = Convert.ToUInt32(
@@ -2319,6 +2412,7 @@ public static class Program
                 Glyphs = glyphs,
                 Font = font,
                 WhoSays = whoSays,
+                WhoGives = whoGives,
                 ScriptAt = scriptAt,
                 DumpMoves = dumpMoves,
                 DumpEncounters = dumpEncounters,

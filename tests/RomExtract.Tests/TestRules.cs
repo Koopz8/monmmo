@@ -33,6 +33,16 @@ internal static class TestRules
     /// <summary>The kind that restores all of it, whatever the maximum happens to be.</summary>
     public const int FullPotionItem = 20;
 
+    /// <summary>A machine that is used up, and one that is not.</summary>
+    public const int DiscItem = 289;
+
+    public const int HiddenMachineItem = 339;
+
+    /// <summary>What each of them teaches. The second is the one that moves trees.</summary>
+    public const int TaughtMove = 2;
+
+    public const int FieldMove = 15;
+
     /// <summary>The one that always works, so a kind can be told from a count.</summary>
     public const int MasterBallItem = 1;
 
@@ -104,6 +114,11 @@ internal static class TestRules
             new(MasterBallItem, 0, Pocket.Balls, 0, 0, 0, 0, 0, BallKind.Master),
             new(PotionItem, 300, Pocket.Items, 0, 20, 0, 1, 0),
             new(FullPotionItem, 2500, Pocket.Items, 0, ItemData.FullRestore, 0, 1, 0),
+
+            // A machine of each kind, as the cartridge distinguishes them: the disc has
+            // a price and no importance, the hidden machine has importance and no price.
+            new(DiscItem, 3000, Pocket.Machines, 0, 0, 0, 0, 0) { Teaches = TaughtMove },
+            new(HiddenMachineItem, 0, Pocket.Machines, 0, 0, 1, 0, 0) { Teaches = FieldMove },
         };
 
         return new GameRules(species, moves, learnsets, trainers, items);

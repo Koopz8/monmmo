@@ -41,6 +41,36 @@ public sealed record ItemData(
     /// <summary>True when throwing this at something could catch it.</summary>
     public bool IsBall => Ball is not null;
 
+    /// <summary>
+    /// The move this teaches, or zero for anything that teaches nothing.
+    /// <para>
+    /// Not read from the item's own record, because it is not in there: all four data
+    /// fields are zero for every one of the fifty-eight machines. It comes from a
+    /// separate list of move ids in machine order, matched to the machines by position.
+    /// </para>
+    /// </summary>
+    public int Teaches { get; init; }
+
+    /// <summary>
+    /// True when using this on a party member teaches them something.
+    /// <para>
+    /// The pocket as well as the move, so that an ordinary item which happened to be
+    /// given a move id by a mismatched list cannot quietly become a teaching machine.
+    /// </para>
+    /// </summary>
+    public bool CanTeach => Teaches != 0 && Pocket == Pocket.Machines;
+
+    /// <summary>
+    /// True when using this does not use it up.
+    /// <para>
+    /// The cartridge draws this line itself and it costs nothing to read: the fifty TMs
+    /// have importance 0 and a price of 3000, and the eight HMs have importance 1 and no
+    /// price at all. Importance is the key-item mark, so the reusable ones are exactly
+    /// the ones already treated as too important to sell.
+    /// </para>
+    /// </summary>
+    public bool IsReusableMachine => CanTeach && IsKeyItem;
+
     /// <summary>A restore amount meaning "all of it", as the cartridge writes it.</summary>
     public const int FullRestore = 255;
 

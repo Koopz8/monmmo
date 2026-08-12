@@ -1236,8 +1236,12 @@ public sealed class GameWorld
                 return [new Outgoing(new Rejected("Not in the middle of a battle."), OnlyTo: playerId)];
 
             if (slot < 0 || slot >= player.Party.Count) return [];
-            if (_battles is null || _rules?.ItemAt(itemId) is not { Restores: not null } medicine) return [];
             if (player.Bag.CountOf(itemId) == 0) return [];
+
+            if (_rules?.ItemAt(itemId) is { CanTeach: true } machine)
+                return Teach(player, slot, machine);
+
+            if (_battles is null || _rules?.ItemAt(itemId) is not { Restores: not null } medicine) return [];
 
             (SavedMon healed, int restored) = _battles.Restored(player.Party[slot], medicine);
 
@@ -1255,6 +1259,60 @@ public sealed class GameWorld
                 new BagUpdated(player.Bag.Entries, [.. player.Party], $"Restored {restored} health."),
                 OnlyTo: playerId)];
         }
+    }
+
+    /// <summary>
+    /// How many moves one of them can hold. Four, everywhere, forever.
+    /// </summary>
+    private const int MoveSlots = 4;
+
+    /// <summary>
+    /// Teaches a party member what a machine teaches.
+    /// <para>
+    /// Which move that is came off the cartridge and is in the rules file; whether this
+    /// particular species is allowed to learn it did not. The games keep a compatibility
+    /// bitfield per species and this project has not located it, so for now anybody can
+    /// learn anything. That is wrong in a way worth writing down rather than hiding: a
+    /// PIDGEY that knows STRENGTH is not what the cartridge says.
+    /// </para>
+    /// <para>
+    /// A full set of four is refused rather than overwritten. Choosing which move to
+    /// lose is a decision belonging to the player, and there is nowhere yet for them to
+    /// make it — silently discarding the first one would be the server making it for
+    /// them.
+    /// </para>
+    /// </summary>
+    private List<Outgoing> Teach(ServerPlayer player, int slot, ItemData machine)
+    {
+        SavedMon member = player.Party[slot];
+
+        if (member.Moves.Contains(machine.Teaches))
+        {
+            return [new Outgoing(
+                new BagUpdated(player.Bag.Entries, [.. player.Party], "It already knows that move."),
+                OnlyTo: player.Id)];
+        }
+
+        if (member.Moves.Count >= MoveSlots)
+        {
+            return [new Outgoing(
+                new BagUpdated(
+                    player.Bag.Entries,
+                    [.. player.Party],
+                    "It already knows four moves, and there is no way to forget one yet."),
+                OnlyTo: player.Id)];
+        }
+
+        player.Party[slot] = member with { Moves = [.. member.Moves, machine.Teaches] };
+
+        // The cartridge draws this line itself: the fifty TMs have a price and no
+        // importance, and the eight HMs have importance and no price. The reusable ones
+        // are exactly the ones already marked too important to sell.
+        if (!machine.IsReusableMachine) player.Bag.Remove(machine.Id);
+
+        return [new Outgoing(
+            new BagUpdated(player.Bag.Entries, [.. player.Party], "Learned a new move."),
+            OnlyTo: player.Id)];
     }
 
     /// <summary>

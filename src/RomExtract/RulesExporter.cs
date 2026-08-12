@@ -1,6 +1,7 @@
 using PokeMmo.Core.Battle;
 using PokeMmo.Core.Data;
 using PokeMmo.RomExtract.Items;
+using PokeMmo.RomExtract.Scripts;
 using PokeMmo.RomExtract.Trainers;
 
 namespace PokeMmo.RomExtract;
@@ -48,7 +49,7 @@ public static class RulesExporter
 
         List<TrainerParty> trainers = ExtractTrainers(rom, species.Count, log);
 
-        List<ItemData> items = ExtractItems(rom, log);
+        List<ItemData> items = ExtractItems(rom, moves.Count, log);
 
         var rules = new GameRules(anonymousSpecies, anonymousMoves, learnsets.Values, trainers, items);
 
@@ -95,7 +96,7 @@ public static class RulesExporter
     /// Everything else in the file still works and there is simply nothing to buy.
     /// </para>
     /// </summary>
-    private static List<ItemData> ExtractItems(Rom rom, Action<string>? log)
+    private static List<ItemData> ExtractItems(Rom rom, int moveCount, Action<string>? log)
     {
         if (ItemTable.Locate(rom, log) is not { } table)
         {
@@ -103,7 +104,54 @@ public static class RulesExporter
             return [];
         }
 
-        return ItemTable.Read(rom, table).Select(i => i.ToData() with { Ball = BallFor(i) }).ToList();
+        List<ItemData> items =
+            [.. ItemTable.Read(rom, table).Select(i => i.ToData() with { Ball = BallFor(i) })];
+
+        return Teach(rom, items, moveCount, log);
+    }
+
+    /// <summary>
+    /// Tells each teaching machine what it teaches.
+    /// <para>
+    /// Matched by position rather than by id arithmetic. The machines are a contiguous
+    /// stretch of item ids on this cartridge and the list is fifty-eight entries in the
+    /// same order, but "the machines, in id order" is a thing the item table can be
+    /// asked for and "289" is a thing that would have to be believed.
+    /// </para>
+    /// <para>
+    /// The counts have to agree. If the pocket holds a different number of machines than
+    /// the list holds moves then one of the two was found wrongly, and teaching every
+    /// machine the move one along from its own is worse than teaching nothing.
+    /// </para>
+    /// </summary>
+    private static List<ItemData> Teach(Rom rom, List<ItemData> items, int moveCount, Action<string>? log)
+    {
+        List<int> known = ObstacleMoves.Find(rom, log);
+
+        if (MachineMoves.Locate(rom, moveCount, known, log) is not { } at) return items;
+
+        List<int> moves = MachineMoves.Read(rom, at);
+
+        List<ItemData> machines = [.. items.Where(i => i.Pocket == Pocket.Machines).OrderBy(i => i.Id)];
+
+        if (machines.Count != moves.Count)
+        {
+            log?.Invoke(
+                $"  machines: {machines.Count} in the pocket but {moves.Count} in the list — " +
+                "not matching them up, since one of the two is located wrongly");
+
+            return items;
+        }
+
+        var taught = machines
+            .Select((machine, index) => (machine.Id, Move: moves[index]))
+            .ToDictionary(m => m.Id, m => m.Move);
+
+        log?.Invoke(
+            $"  machines: {machines.Count} of them teach something, " +
+            $"{machines.Count(m => m.IsKeyItem)} of those reusable");
+
+        return [.. items.Select(i => taught.TryGetValue(i.Id, out int move) ? i with { Teaches = move } : i)];
     }
 
     /// <summary>

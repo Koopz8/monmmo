@@ -23,7 +23,7 @@ public sealed class GameRules
 {
     private static readonly byte[] Magic = "MONRULES"u8.ToArray();
 
-    private const int Version = 4;
+    private const int Version = 5;
 
     private readonly Dictionary<int, SpeciesData> _species;
     private readonly Dictionary<int, MoveData> _moves;
@@ -170,6 +170,11 @@ public sealed class GameRules
             // Which ball this is, worked out from its name at export time and written
             // as a number. Minus one for "not a ball", so the field is always present.
             writer.Write(item.Ball is { } ball ? (int)ball : -1);
+
+            // What this teaches, which is in no field of the item's own record on the
+            // cartridge — it comes from a separate list matched to the machines by
+            // position. Zero for everything that teaches nothing, which is most of it.
+            writer.Write(item.Teaches);
         }
     }
 
@@ -295,7 +300,10 @@ public sealed class GameRules
                 reader.ReadInt32(),
                 reader.ReadInt32(),
                 reader.ReadInt32(),
-                reader.ReadInt32() is var ball && ball >= 0 ? (BallKind)ball : null));
+                reader.ReadInt32() is var ball && ball >= 0 ? (BallKind)ball : null)
+            {
+                Teaches = reader.ReadInt32(),
+            });
         }
 
         return new GameRules(species, moves, learnsets, trainers, items);

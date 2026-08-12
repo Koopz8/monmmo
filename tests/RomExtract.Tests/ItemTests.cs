@@ -232,3 +232,93 @@ public class ItemRulesTests
         Assert.True(loaded.ItemCount > 0, $"items {loaded.ItemCount}");
     }
 }
+
+/// <summary>
+/// Finding the list that says what each teaching machine teaches.
+/// <para>
+/// It is not in the item record — all four data fields are zero for every one of the
+/// fifty-eight machines, which is the cartridge saying plainly that it lives elsewhere.
+/// Nothing points at it from anything already located, so it is found by shape: fifty-
+/// eight distinct valid move ids whose last eight include moves already known to be
+/// machine moves.
+/// </para>
+/// <para>
+/// Those known moves came from the obstacle scripts, which name CUT, STRENGTH and ROCK
+/// SMASH by id. Using an answer you already have to find the table that contains it is
+/// what makes finding it the same act as checking it.
+/// </para>
+/// </summary>
+public class MachineMoveTests
+{
+    private const int MoveCount = 355;
+
+    private static readonly int[] Known = [15, 70, 249];
+
+    private static void Put(byte[] image, int at, IEnumerable<int> values)
+    {
+        int i = at;
+
+        foreach (int value in values)
+        {
+            image[i++] = (byte)value;
+            image[i++] = (byte)(value >> 8);
+        }
+    }
+
+    /// <summary>Fifty-eight distinct ids, with the known three among the last eight.</summary>
+    private static int[] Real() =>
+        [.. Enumerable.Range(300, MachineMoves.Count - Known.Length).Take(MachineMoves.Count - 3), .. Known];
+
+    [Fact]
+    public void TheListIsFoundByTheMovesAlreadyKnown()
+    {
+        var image = new byte[0x400];
+        Put(image, 0x100, Real());
+
+        Assert.Equal(0x100, MachineMoves.Locate(new Rom(image), MoveCount, Known));
+    }
+
+    [Fact]
+    public void ARunOfSmallNumbersIsNotAList()
+    {
+        // Without an upper bound the scan latches onto any block of small numbers, and
+        // a sixteen-megabyte image is mostly blocks of small numbers.
+        var image = new byte[0x400];
+        Put(image, 0x100, Enumerable.Repeat(1, MachineMoves.Count));
+
+        Assert.Null(MachineMoves.Locate(new Rom(image), MoveCount, Known));
+    }
+
+    [Fact]
+    public void AListWithoutTheKnownMovesIsNotIt()
+    {
+        var image = new byte[0x400];
+        Put(image, 0x100, Enumerable.Range(30, MachineMoves.Count));
+
+        Assert.Null(MachineMoves.Locate(new Rom(image), MoveCount, Known));
+    }
+
+    [Fact]
+    public void TheKnownMovesHaveToBeAmongTheLastEight()
+    {
+        // The machines run fifty discs then eight hidden machines, and the field moves
+        // are on the hidden ones. A list carrying CUT at position three is some other
+        // list of numbers that happens to contain fifteen.
+        var image = new byte[0x400];
+        Put(image, 0x100, [.. Known, .. Enumerable.Range(300, MachineMoves.Count - Known.Length)]);
+
+        Assert.Null(MachineMoves.Locate(new Rom(image), MoveCount, Known));
+    }
+
+    [Fact]
+    public void AMoveTwiceInOneListIsNotAList()
+    {
+        var image = new byte[0x400];
+        int[] repeated = [.. Real()];
+        repeated[0] = repeated[1];
+
+        Put(image, 0x100, repeated);
+
+        Assert.Null(MachineMoves.Locate(new Rom(image), MoveCount, Known));
+    }
+}

@@ -565,3 +565,109 @@ public class UsingItemsOutOfBattleTests
         Assert.Empty(world.UseItem(player.Id, TestRules.PotionItem, -1));
     }
 }
+
+/// <summary>
+/// Teaching a move off a machine, which is what makes the two hundred obstacles
+/// reachable at all.
+/// <para>
+/// Nothing in this game taught a move outside a level-up until now, so every cut tree,
+/// boulder and heap of rubble in the world refused everybody. The three field moves are
+/// on three HMs — one on the S.S. ANNE, one in FUCHSIA CITY, one at EMBER SPA — and all
+/// three are handed over by people this project already models.
+/// </para>
+/// </summary>
+public class TeachingTests
+{
+    private const string Town = "3.0";
+
+    private static (GameWorld World, ServerPlayer Player) Standing(params int[] moves)
+    {
+        MapData map = new(Town, "PALLET TOWN", 8, 8, new byte[64]);
+
+        var world = new GameWorld(new WorldData([map]), Town, TestRules.All);
+
+        (ServerPlayer player, _) = world.Join(1, "Koop", SavedCharacter.Fresh(Town, 3, 4));
+
+        player.Party = [new SavedMon(3, 10, null, 20, StatusCondition.None, Nature.Hardy, moves)];
+
+        return (world, player);
+    }
+
+    [Fact]
+    public void UsingAMachineTeachesWhatItTeaches()
+    {
+        (GameWorld world, ServerPlayer player) = Standing(TestRules.FirstMove);
+
+        player.Bag.Add(TestRules.HiddenMachineItem, 1);
+        world.UseItem(player.Id, TestRules.HiddenMachineItem, 0);
+
+        Assert.Contains(TestRules.FieldMove, player.Party[0].Moves);
+    }
+
+    [Fact]
+    public void TheOnesWithAPriceAreUsedUpAndTheOnesWithoutAreNot()
+    {
+        // The cartridge draws this line itself and it costs nothing to read: the fifty
+        // discs have a price and no importance, the eight hidden machines have
+        // importance and no price. Nothing here had to know which is which by name.
+        (GameWorld world, ServerPlayer player) = Standing(TestRules.FirstMove);
+
+        player.Bag.Add(TestRules.DiscItem, 1);
+        player.Bag.Add(TestRules.HiddenMachineItem, 1);
+
+        world.UseItem(player.Id, TestRules.DiscItem, 0);
+        world.UseItem(player.Id, TestRules.HiddenMachineItem, 0);
+
+        Assert.Equal(0, player.Bag.CountOf(TestRules.DiscItem));
+        Assert.Equal(1, player.Bag.CountOf(TestRules.HiddenMachineItem));
+    }
+
+    [Fact]
+    public void TeachingTheSameThingTwiceIsNotAWayToLoseAMachine()
+    {
+        (GameWorld world, ServerPlayer player) = Standing(TestRules.FirstMove);
+
+        player.Bag.Add(TestRules.DiscItem, 1);
+
+        world.UseItem(player.Id, TestRules.DiscItem, 0);
+        world.UseItem(player.Id, TestRules.DiscItem, 0);
+
+        Assert.Equal(1, player.Party[0].Moves.Count(m => m == TestRules.TaughtMove));
+        Assert.Equal(0, player.Bag.CountOf(TestRules.DiscItem));
+    }
+
+    [Fact]
+    public void AFullSetOfFourIsRefusedRatherThanOverwritten()
+    {
+        // Choosing which move to lose belongs to the player, and there is nowhere yet
+        // for them to make that choice. Silently discarding the first one would be the
+        // server making it for them — and it would be the move they liked.
+        (GameWorld world, ServerPlayer player) = Standing(1, 2, 3, 4);
+
+        player.Bag.Add(TestRules.HiddenMachineItem, 1);
+
+        BagUpdated said = world.UseItem(player.Id, TestRules.HiddenMachineItem, 0)
+            .Select(o => o.Message).OfType<BagUpdated>().Single();
+
+        Assert.Equal(4, player.Party[0].Moves.Count);
+        Assert.DoesNotContain(TestRules.FieldMove, player.Party[0].Moves);
+        Assert.Contains("four moves", said.Message);
+    }
+
+    [Fact]
+    public void WhatAMachineTeachesSurvivesTheRulesFile()
+    {
+        using var buffer = new MemoryStream();
+        TestRules.All.Save(buffer);
+
+        buffer.Position = 0;
+        GameRules reloaded = GameRules.Load(buffer);
+
+        Assert.Equal(TestRules.FieldMove, reloaded.ItemAt(TestRules.HiddenMachineItem)!.Teaches);
+        Assert.True(reloaded.ItemAt(TestRules.HiddenMachineItem)!.IsReusableMachine);
+        Assert.False(reloaded.ItemAt(TestRules.DiscItem)!.IsReusableMachine);
+
+        // And nothing that is not a machine claims to teach anything.
+        Assert.False(reloaded.ItemAt(TestRules.PotionItem)!.CanTeach);
+    }
+}
