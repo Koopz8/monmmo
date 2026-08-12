@@ -30,6 +30,18 @@ public sealed class DialogueBox
     public bool IsFinished { get; private set; }
 
     /// <summary>
+    /// Adds a page to the end of an open box.
+    /// <para>
+    /// For lines the server supplies part-way through a conversation somebody else
+    /// started. Sixteen people in this game hand something over while talking, and the
+    /// "Found one POTION!" arrives a round trip after their own first page is already
+    /// on screen — replacing the box would throw away what they were saying, which is
+    /// how the president of SILPH came to thank nobody.
+    /// </para>
+    /// </summary>
+    public void Add(string page) => _pages.Add(GameText.ToAscii(page));
+
+    /// <summary>
     /// True when there is nothing worth opening a box for.
     /// <para>
     /// A script with no dialogue in it is ordinary — plenty of them only set a flag or

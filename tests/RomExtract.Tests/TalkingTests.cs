@@ -753,6 +753,10 @@ public class PickingThingsUpTests
     private static MapObject Ball(int localId, int itemId, int count = 1) =>
         new(localId, 5, 3, 3, Direction.Down, 0, false) { GivesItemId = itemId, GivesCount = count };
 
+    /// <summary>The same thing with somebody behind it.</summary>
+    private static MapObject Giver(int localId, int itemId, int count = 1) =>
+        Ball(localId, itemId, count) with { Talks = true };
+
     private static (GameWorld World, ServerPlayer Player) Standing(params MapObject[] people)
     {
         MapData map = new(Town, "PALLET TOWN", 8, 8, new byte[64]) { Objects = people };
@@ -812,5 +816,56 @@ public class PickingThingsUpTests
         world.StartTalking(player.Id, 1);
 
         Assert.Null(world.TalkingTo(player.Id));
+    }
+
+    [Fact]
+    public void SomebodyWhoHandsSomethingOverIsHeldStill()
+    {
+        // The other kind. Sixteen people in FireRed give you something as part of saying
+        // something, and letting them go the moment the item lands would have them turn
+        // away mid-line.
+        (GameWorld world, ServerPlayer player) = Standing(Giver(1, TestRules.PotionItem));
+
+        List<Outgoing> talk = world.StartTalking(player.Id, 1);
+
+        Assert.Equal(1, player.Bag.CountOf(TestRules.PotionItem));
+        Assert.Single(talk.Select(o => o.Message).OfType<ItemFound>());
+        Assert.Equal(1, world.TalkingTo(player.Id));
+    }
+
+    [Fact]
+    public void SomebodyWhoHasAlreadyGivenItStillHasTheirLines()
+    {
+        // What the item guard used to do was end the conversation. For a ball that is
+        // right — an empty ball is nothing to talk to — but a person who has already
+        // handed something over is still a person, and every one of them says something
+        // different the second time.
+        (GameWorld world, ServerPlayer player) = Standing(Giver(1, TestRules.PotionItem));
+
+        world.StartTalking(player.Id, 1);
+        world.StopTalking(player.Id);
+
+        List<Outgoing> again = world.StartTalking(player.Id, 1);
+
+        Assert.Empty(again.Select(o => o.Message).OfType<ItemFound>());
+        Assert.Equal(1, player.Bag.CountOf(TestRules.PotionItem));
+        Assert.Equal(1, world.TalkingTo(player.Id));
+    }
+
+    [Fact]
+    public void WhatIsHandedOverArrivesBeforeWhatIsSaid()
+    {
+        // Order matters on the wire, because the client appends the found-line to the
+        // box that is already open. Arriving the other way round would put "Found one
+        // POTION!" first and the thanks after it.
+        // Facing away to begin with, so that being turned round to answer is a second
+        // message and there is an order to check at all.
+        (GameWorld world, ServerPlayer player) =
+            Standing(Giver(1, TestRules.PotionItem) with { Facing = Direction.Up });
+
+        List<object> messages = [.. world.StartTalking(player.Id, 1).Select(o => o.Message)];
+
+        Assert.IsType<ItemFound>(messages[0]);
+        Assert.IsType<ObjectMoved>(messages[1]);
     }
 }

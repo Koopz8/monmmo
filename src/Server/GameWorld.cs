@@ -631,98 +631,120 @@ public sealed class GameWorld
                 return challenge;
             }
 
-            // Something on the ground, before anything else: a ball is not a
-            // conversation and there is nothing to hold still.
+            // Something handed over, before anything else. For a ball on the ground that
+            // is the whole interaction and there is nobody to hold still. For the sixteen
+            // people who hand something over *while* talking it is the first thing that
+            // happens and not the last, so those fall through to be held and read.
+            List<Outgoing> given = [];
+            string? gift = null;
+
             if (person.Template.GivesItem && _rules is not null)
             {
                 string what = $"{player.MapId}:{person.LocalId}";
 
-                if (!player.ItemsTaken.Add(what))
+                if (player.ItemsTaken.Add(what))
                 {
-                    LastTalkOutcome = "an item that has already been picked up";
-                    return [];
+                    int count = Math.Max(1, person.Template.GivesCount);
+
+                    player.Bag.Add(person.Template.GivesItemId, count);
+
+                    gift = $"item {person.Template.GivesItemId} x{count} off the ground";
+
+                    given.Add(new Outgoing(
+                        new ItemFound(person.Template.GivesItemId, count, player.Bag.Entries),
+                        OnlyTo: playerId));
+                }
+                else
+                {
+                    gift = "an item that has already been picked up";
                 }
 
-                int count = Math.Max(1, person.Template.GivesCount);
-
-                player.Bag.Add(person.Template.GivesItemId, count);
-
-                LastTalkOutcome = $"item {person.Template.GivesItemId} x{count} off the ground";
-
-                return
-                [
-                    new Outgoing(
-                        new ItemFound(person.Template.GivesItemId, count, player.Bag.Entries),
-                        OnlyTo: playerId),
-                ];
+                if (!person.Template.Talks)
+                {
+                    LastTalkOutcome = gift;
+                    return given;
+                }
             }
 
-            // A counter that heals, before the one that sells. Both are counters and
-            // nobody is both, but the order says which this project would rather get
-            // wrong: a shop that healed you would be strange and a nurse that charged
-            // you would be worse.
-            if (person.Template.Heals && _battles is not null && player.Party.Count > 0)
+            List<Outgoing> said = Talk();
+
+            LastTalkOutcome = gift is null
+                ? LastTalkOutcome
+                : $"{gift}, and then {LastTalkOutcome ?? "nothing"}";
+
+            return given.Count == 0 ? said : [.. given, .. said];
+
+            // The rest of the conversation, as a step of its own so that handing
+            // something over can happen before it rather than instead of it.
+            List<Outgoing> Talk()
             {
-                bool needed = player.Party.Any(m => !_battles.IsWell(m));
+                // A counter that heals, before the one that sells. Both are counters and
+                // nobody is both, but the order says which this project would rather get
+                // wrong: a shop that healed you would be strange and a nurse that charged
+                // you would be worse.
+                if (person.Template.Heals && _battles is not null && player.Party.Count > 0)
+                {
+                    bool needed = player.Party.Any(m => !_battles.IsWell(m));
 
-                HealParty(player);
+                    HealParty(player);
 
-                // Remembered here rather than on arriving at the map: what makes a
-                // centre yours is having stood at the counter, and a player who walked
-                // through one on the way somewhere has not.
-                player.RestingAt = player.MapId;
-                player.RestingSquare = player.Square;
+                    // Remembered here rather than on arriving at the map: what makes a
+                    // centre yours is having stood at the counter, and a player who walked
+                    // through one on the way somewhere has not.
+                    player.RestingAt = player.MapId;
+                    player.RestingSquare = player.Square;
+
+                    person.HeldBy = playerId;
+
+                    LastTalkOutcome = needed
+                        ? $"a centre: {player.Party.Count} back on their feet"
+                        : "a centre, though nobody needed it";
+
+                    return
+                    [
+                        new Outgoing(
+                            new PartyHealed([.. player.Party], needed),
+                            OnlyTo: playerId),
+                    ];
+                }
+
+                // A shop opens on top of the hold rather than instead of it: the shopkeeper
+                // still has to stand still while somebody is buying from them.
+                List<Outgoing> shop = OpenShop(player, person.Template);
 
                 person.HeldBy = playerId;
 
-                LastTalkOutcome = needed
-                    ? $"a centre: {player.Party.Count} back on their feet"
-                    : "a centre, though nobody needed it";
+                LastTalkOutcome = person.Template.IsShopkeeper && shop.Count == 0
+                    ? $"object {localId} sells {person.Template.Stock.Count} things, none of which this server has an item for"
+                    : shop.Count > 0
+                        ? $"a shop with {person.Template.Stock.Count} things in it"
+                        : $"object {localId} held still; they sell nothing";
 
-                return
-                [
-                    new Outgoing(
-                        new PartyHealed([.. player.Party], needed),
-                        OnlyTo: playerId),
-                ];
-            }
-
-            // A shop opens on top of the hold rather than instead of it: the shopkeeper
-            // still has to stand still while somebody is buying from them.
-            List<Outgoing> shop = OpenShop(player, person.Template);
-
-            person.HeldBy = playerId;
-
-            LastTalkOutcome = person.Template.IsShopkeeper && shop.Count == 0
-                ? $"object {localId} sells {person.Template.Stock.Count} things, none of which this server has an item for"
-                : shop.Count > 0
-                    ? $"a shop with {person.Template.Stock.Count} things in it"
-                    : $"object {localId} held still; they sell nothing";
-
-            if (shop.Count > 0)
-            {
-                Direction facing = Interaction.Opposite(player.Facing);
-
-                if (person.Facing != facing)
+                if (shop.Count > 0)
                 {
-                    person.Facing = facing;
+                    Direction facing = Interaction.Opposite(player.Facing);
 
-                    shop.Add(new Outgoing(
-                        new ObjectMoved(person.LocalId, person.Square.X, person.Square.Y, person.Facing),
-                        OnMap: player.MapId));
+                    if (person.Facing != facing)
+                    {
+                        person.Facing = facing;
+
+                        shop.Add(new Outgoing(
+                            new ObjectMoved(person.LocalId, person.Square.X, person.Square.Y, person.Facing),
+                            OnMap: player.MapId));
+                    }
+
+                    return shop;
                 }
 
-                return shop;
+                Direction turned = Interaction.Opposite(player.Facing);
+                if (person.Facing == turned) return [];
+
+                person.Facing = turned;
+
+                return [new Outgoing(
+                    new ObjectMoved(person.LocalId, person.Square.X, person.Square.Y, person.Facing),
+                    OnMap: player.MapId)];
             }
-
-            Direction turned = Interaction.Opposite(player.Facing);
-            if (person.Facing == turned) return [];
-
-            person.Facing = turned;
-
-            return [new Outgoing(
-                new ObjectMoved(person.LocalId, person.Square.X, person.Square.Y, person.Facing),
-                OnMap: player.MapId)];
         }
     }
 

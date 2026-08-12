@@ -588,11 +588,15 @@ public static class Program
                 case ItemFound found:
                     bag = found.Bag;
 
-                    said = new DialogueBox([
-                        found.Count > 1
-                            ? $"Found {found.Count} {items.Of(found.ItemId)}!"
-                            : $"Found one {items.Of(found.ItemId)}!",
-                    ]);
+                    string line = found.Count > 1
+                        ? $"Found {found.Count} {items.Of(found.ItemId)}!"
+                        : $"Found one {items.Of(found.ItemId)}!";
+
+                    // Added to whatever is already open rather than put in place of it.
+                    // A ball on the ground has nothing open and gets a box of its own;
+                    // somebody who hands this over mid-sentence is still mid-sentence.
+                    if (said is { IsFinished: false }) said.Add(line);
+                    else said = new DialogueBox([line]);
 
                     break;
 

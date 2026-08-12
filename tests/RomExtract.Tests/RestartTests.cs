@@ -37,7 +37,12 @@ public class RestartTests : IDisposable
         using var store = new SqlitePlayerStore(_databasePath);
 
         var server = new GameServer(World(), store);
-        _ = server.RunAsync(0, shutdown.Token);
+
+        // Held rather than dropped. These tests run two servers over one database file,
+        // one after the other, and "one after the other" was only ever true of the
+        // starting — nothing waited for the first to stop, so its clock and its
+        // connections were still writing while the second opened the same file.
+        Task running = server.RunAsync(0, shutdown.Token);
 
         int port = await server.Listening;
 
@@ -48,6 +53,7 @@ public class RestartTests : IDisposable
         finally
         {
             await shutdown.CancelAsync();
+            await running;
         }
     }
 

@@ -102,6 +102,21 @@ public sealed record MapObject(
     public bool GivesItem => GivesItemId != 0;
 
     /// <summary>
+    /// True when this one has something to say.
+    /// <para>
+    /// Carried because the server cannot know it. A ball on the ground and a person who
+    /// hands you something while thanking you are the same record with the same item on
+    /// it, and they need opposite treatment: one is picked up and that is the whole
+    /// interaction, the other has to be held still while their lines are read.
+    /// </para>
+    /// <para>
+    /// Sixteen people in FireRed are the second kind, and every one of them would have
+    /// had their line replaced by "Found one POTION!" — the Silph president included.
+    /// </para>
+    /// </summary>
+    public bool Talks { get; init; }
+
+    /// <summary>
     /// Compares stock by its contents.
     /// <para>
     /// A record compares its members with <c>Equals</c>, and for a list that is
@@ -126,6 +141,7 @@ public sealed record MapObject(
         Heals == other.Heals &&
         GivesItemId == other.GivesItemId &&
         GivesCount == other.GivesCount &&
+        Talks == other.Talks &&
         Stock.SequenceEqual(other.Stock);
 
     public override int GetHashCode()

@@ -84,9 +84,11 @@ public static class WorldExporter
 
                         Scripts.ScriptRun run = Scripts.ScriptRunner.Run(rom, o.ScriptAddress);
 
+                        MapObject read = o with { Talks = run.Pages.Count > 0 };
+
                         return run.GivesItem is { } item
-                            ? o with { GivesItemId = item, GivesCount = Math.Max(1, run.GivesCount) }
-                            : o;
+                            ? read with { GivesItemId = item, GivesCount = Math.Max(1, run.GivesCount) }
+                            : read;
                     }),
                 ],
             };
@@ -129,6 +131,11 @@ public static class WorldExporter
             lying == 0
                 ? "  nothing is lying around to be picked up"
                 : $"  {lying} items lying on the ground across {maps.Count(m => m.Objects.Any(o => o.GivesItem))} maps");
+
+        int chatty = maps.Sum(m => m.Objects.Count(o => o.GivesItem && o.Talks));
+
+        if (chatty > 0)
+            log?.Invoke($"  {chatty} of those are people who say something as they hand it over");
 
         int healers = maps.Sum(m => m.Objects.Count(o => o.Heals));
 

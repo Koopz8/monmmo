@@ -372,6 +372,12 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                 _ = HandleAsync(connection, cancellationToken);
             }
         }
+        catch (OperationCanceledException)
+        {
+            // Ordinary shutdown, same as the tick loop's. Being asked to stop is not a
+            // fault, and leaving it as one means nobody can await this task to find out
+            // when the server has actually let go of its port and its database.
+        }
         finally
         {
             listener.Stop();
