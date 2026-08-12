@@ -179,6 +179,12 @@ public sealed record Outgoing(NetMessage Message, int? OnlyTo = null, int? Excep
 public sealed class GameWorld
 {
     /// <summary>
+    /// How many a party holds. Six, and it is the cartridge's number rather than this
+    /// project's — with no storage boxes yet, a seventh has nowhere to go at all.
+    /// </summary>
+    public const int MaxPartySize = 6;
+
+    /// <summary>
     /// Shortest interval between a player's steps, defined in <see cref="WalkingCharacter"/>
     /// so the client can obey the same one rather than a second copy of it.
     /// </summary>
@@ -775,6 +781,56 @@ public sealed class GameWorld
                 else
                 {
                     gift = "an item that has already been picked up";
+                }
+
+                if (!person.Template.Talks)
+                {
+                    LastTalkOutcome = gift;
+                    return given;
+                }
+            }
+
+            // And the other kind of handover. The party is the server's — it is one of
+            // the two things it keeps for itself — so a monster arrives the same way an
+            // item does: the world file says who gives what, and this decides whether it
+            // has been given yet.
+            if (person.Template.GivesMon && _rules is not null && _battles is not null)
+            {
+                string what = $"mon:{player.MapId}:{person.LocalId}";
+
+                // A species, or a variable holding one. The three balls on the
+                // professor's table are one script that reads whichever was pressed, and
+                // the value it read is in this server's own copy of the save because the
+                // client sent it along with everything else that script wrote.
+                int species = person.Template.GivesSpecies >= MapObject.FirstVariable
+                    ? player.Script.Read(person.Template.GivesSpecies)
+                    : person.Template.GivesSpecies;
+
+                if (player.Party.Count >= MaxPartySize)
+                {
+                    gift = "a monster, but there is no room in the party for it";
+                }
+                else if (species <= 0)
+                {
+                    gift = $"a monster whose species 0x{person.Template.GivesSpecies:X4} has not been chosen yet";
+                }
+                else if (!player.ItemsTaken.Add(what))
+                {
+                    gift = "a monster that has already been taken";
+                }
+                else if (_battles.Wild(species, Math.Max(1, person.Template.GivesLevel)) is not { } handed)
+                {
+                    gift = $"species {species}, which is not one this server can field";
+                }
+                else
+                {
+                    player.Party.Add(BattleFactory.Save(handed));
+
+                    gift = $"species {species} at level {person.Template.GivesLevel}";
+
+                    given.Add(new Outgoing(
+                        new BagUpdated(player.Bag.Entries, [.. player.Party], "Received a new team member!"),
+                        OnlyTo: playerId));
                 }
 
                 if (!person.Template.Talks)

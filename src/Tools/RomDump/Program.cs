@@ -180,6 +180,8 @@ public static class Program
 
         if (options.PlayerWalks) WritePlayerWalks(rom);
 
+        if (options.Gifts) WriteGiftMons(rom);
+
         if (options.Variable is { } variable) WriteVariable(rom, variable);
 
         if (options.Probe) WriteMapScripts(rom);
@@ -966,14 +968,18 @@ public static class Program
             {
                 foreach (ScriptCommand command in ScriptReader.ReadAll(rom, script))
                 {
-                    string what = command.Code switch
+                    // Every command that can put a number in a variable, not just the
+                    // obvious one. Asking this tool who writes 0x4055 and being told
+                    // "nobody, ever" is only useful if it was looking at all of them.
+                    string what = command.Arguments.Length < 4 || command.Word() != variable ? "" : command.Code switch
                     {
-                        0x16 when command.Arguments.Length >= 4 && command.Word() == variable
-                            => $"sets it to {command.Word(2)}",
-                        0x17 when command.Arguments.Length >= 4 && command.Word() == variable
-                            => $"adds {command.Word(2)} to it",
-                        0x21 when command.Arguments.Length >= 4 && command.Word() == variable
-                            => $"compares it with {command.Word(2)}",
+                        0x16 => $"sets it to {command.Word(2)}",
+                        0x17 => $"adds {command.Word(2)} to it",
+                        0x18 => $"takes {command.Word(2)} off it",
+                        0x19 => $"copies 0x{command.Word(2):X4} into it",
+                        0x1A => $"copies 0x{command.Word(2):X4} into it if that is not zero",
+                        0x26 => $"puts the answer to routine 0x{command.Word(2):X4} in it",
+                        0x21 => $"compares it with {command.Word(2)}",
                         _ => "",
                     };
 
@@ -996,6 +1002,78 @@ public static class Program
         Console.WriteLine($"  waited on by {waits.Count}");
 
         foreach (string line in waits.Take(30)) Console.WriteLine(line);
+    }
+
+    /// <summary>
+    /// Everybody in the world who hands over a monster, and what.
+    /// <para>
+    /// The check on a width. 0x79 was adopted on four sites whose next byte was a real
+    /// command at fifteen and at no other length; this is the other half — whether the
+    /// arguments read as anything. A species out of range, a level of nought or a
+    /// hundred and one, or a count that is not roughly the number of gift monsters a
+    /// Pokémon game has, and the width is wrong however well it parses.
+    /// </para>
+    /// </summary>
+    private static void WriteGiftMons(Rom rom)
+    {
+        MapLibrary library = MapLibrary.Open(rom);
+
+        // Names, so the check is legible rather than a list of numbers. LAPRAS at 25 is
+        // a fact anybody can weigh; species 131 at 25 is not.
+        var names = new Dictionary<int, string>();
+
+        if (TableLocator.Locate(rom).SpeciesNames is { } table)
+        {
+            for (int i = 1; i <= 411; i++)
+            {
+                int at = table.Offset + i * GameText.SpeciesNameLength;
+                if (at + GameText.SpeciesNameLength > rom.Length) break;
+
+                names[i] = GameText.Decode(rom.Slice(at, GameText.SpeciesNameLength));
+            }
+        }
+
+        var found = new List<string>();
+        int outOfRange = 0;
+
+        foreach (LoadedMap map in library.All())
+        {
+            string mapId = WorldExporter.MapId(map.Bank, map.Number);
+
+            List<(string Who, uint Script)> scripts =
+            [
+                .. map.Objects.Where(o => o.HasScript).Select(o => ($"person {o.LocalId} at {o.Square}", o.ScriptAddress)),
+                .. map.Triggers.Where(t => t.HasScript).Select(t => ($"square {t.Square}", t.ScriptAddress)),
+                .. map.OnEntry.Where(e => e.HasScript).Select(e => ("arriving here", e.ScriptAddress)),
+            ];
+
+            foreach ((string who, uint script) in scripts.DistinctBy(e => e.Script))
+            {
+                foreach (ScriptCommand command in ScriptReader.ReadAll(rom, script))
+                {
+                    if (command.Code != 0x79 || command.Arguments.Length < 4) continue;
+
+                    int named = command.Word();
+                    int level = command.Word(2);
+
+                    string species = named >= 0x4000
+                        ? $"whatever 0x{named:X4} holds"
+                        : names.GetValueOrDefault(named, $"#{named}");
+
+                    if (named < 0x4000 && (named is <= 0 or > 411 || level is <= 0 or > 100)) outOfRange++;
+
+                    found.Add($"    {mapId} {map.Name}: {who} gives {species} at level {level}");
+                }
+            }
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("Who hands over a monster");
+        Console.WriteLine();
+        Console.WriteLine($"  {found.Count} places, {outOfRange} of them naming a species or level out of range");
+        Console.WriteLine();
+
+        foreach (string line in found.Take(40)) Console.WriteLine(line);
     }
 
     /// <summary>
@@ -3126,6 +3204,9 @@ public static class Program
         /// <summary>What the cartridge uses scripted player movement for.</summary>
         public bool PlayerWalks { get; private init; }
 
+        /// <summary>Everybody who hands over a monster, and what.</summary>
+        public bool Gifts { get; private init; }
+
         /// <summary>A script variable to trace: who writes it, and who is waiting on it.</summary>
         public int? Variable { get; private init; }
 
@@ -3224,6 +3305,7 @@ public static class Program
             byte? step = null;
             bool doors = false;
             bool playerWalks = false;
+            bool gifts = false;
             int? variable = null;
             bool probe = false;
             uint scriptAt = 0;
@@ -3363,6 +3445,9 @@ public static class Program
                     case "--player-walks":
                         playerWalks = true;
                         break;
+                    case "--gifts":
+                        gifts = true;
+                        break;
                     case "--map-scripts":
                         probe = true;
                         break;
@@ -3432,6 +3517,7 @@ public static class Program
                 Step = step,
                 Doors = doors,
                 PlayerWalks = playerWalks,
+                Gifts = gifts,
                 Variable = variable,
                 Probe = probe,
                 ScriptRun = scriptRun,

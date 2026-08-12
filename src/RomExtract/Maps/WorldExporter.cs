@@ -95,11 +95,22 @@ public static class WorldExporter
                         // fresh save jumps straight past the command that says what it
                         // is. What a thing *is* does not depend on whether you can get
                         // at it yet.
+                        Scripts.ScriptCommand? handover = Scripts.ScriptReader
+                            .ReadAll(rom, o.ScriptAddress)
+                            .FirstOrDefault(c => c.Code == 0x79 && c.Arguments.Length >= 4);
+
                         MapObject read = o with
                         {
                             Talks = run.Pages.Count > 0,
                             ShiftedBy = Scripts.ScriptReader.ReadAll(rom, o.ScriptAddress)
                                 .FirstOrDefault(c => c.Code == 0x7C)?.Word() ?? 0,
+
+                            // Named rather than resolved. The species is sometimes a
+                            // variable — the three starters are one script reading
+                            // whichever ball was pressed — and which ball that was is a
+                            // fact about a save, not about a cartridge.
+                            GivesSpecies = handover?.Word() ?? 0,
+                            GivesLevel = handover?.Word(2) ?? 0,
                         };
 
                         return run.GivesItem is { } item
@@ -161,6 +172,15 @@ public static class WorldExporter
                 $"  {triggers.Count} squares run a script when you walk onto them, across " +
                 $"{maps.Count(m => m.Triggers.Count > 0)} maps, " +
                 $"{triggers.Count(t => t.CanBeFought)} of them a fight");
+        }
+
+        var handing = maps.SelectMany(m => m.Objects).Where(o => o.GivesMon).ToList();
+
+        if (handing.Count > 0)
+        {
+            log?.Invoke(
+                $"  {handing.Count} people hand over a monster, " +
+                $"{handing.Count(o => o.GivesSpecies >= MapObject.FirstVariable)} of them whichever one you pick");
         }
 
         var arrivals = maps.SelectMany(m => m.OnEntry).ToList();

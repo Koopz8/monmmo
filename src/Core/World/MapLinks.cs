@@ -220,6 +220,25 @@ public sealed record MapObject(
     public bool GivesItem => GivesItemId != 0;
 
     /// <summary>
+    /// The monster this one hands over, or zero. May be a variable id rather than a
+    /// species, which is how the three balls on the professor's table are one script.
+    /// <para>
+    /// Read from the script rather than run out of it, for the same reason an obstacle's
+    /// move is: what a thing <em>is</em> does not depend on whether today's save can get
+    /// at it yet.
+    /// </para>
+    /// </summary>
+    public int GivesSpecies { get; init; }
+
+    /// <summary>The level it is handed over at. Five for a starter, twenty-five for the rest.</summary>
+    public int GivesLevel { get; init; }
+
+    public bool GivesMon => GivesSpecies != 0;
+
+    /// <summary>Where a variable id stops being a species and starts being a lookup.</summary>
+    public const int FirstVariable = 0x4000;
+
+    /// <summary>
     /// True when this one has something to say.
     /// <para>
     /// Carried because the server cannot know it. A ball on the ground and a person who

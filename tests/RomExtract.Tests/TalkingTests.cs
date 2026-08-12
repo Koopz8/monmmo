@@ -1277,6 +1277,83 @@ public class TriggerTests
     }
 
     [Fact]
+    public void SomebodyWhoHandsOverAMonsterDoesItOnce()
+    {
+        // How a starter arrives. The party is one of the two things the server keeps for
+        // itself, so this cannot come from the client saying it happened: the world file
+        // says who gives what, and the server decides whether it has been given yet.
+        MapData map = new(Town, "PALLET TOWN", 8, 8, new byte[64])
+        {
+            Objects =
+            [
+                new MapObject(1, 5, 3, 3, Direction.Down, 0, false, ScriptAddress: 0x08123456)
+                {
+                    GivesSpecies = 4,
+                    GivesLevel = 5,
+                },
+            ],
+        };
+
+        var world = new GameWorld(new WorldData([map]), Town, TestRules.All);
+
+        (ServerPlayer player, _) = world.Join(1, "Koop", SavedCharacter.Fresh(Town, 3, 4));
+
+        player.Facing = Direction.Up;
+
+        world.StartTalking(player.Id, 1);
+
+        Assert.Single(player.Party);
+        Assert.Equal(4, player.Party[0].Species);
+        Assert.Equal(5, player.Party[0].Level);
+
+        world.StopTalking(player.Id);
+        world.StartTalking(player.Id, 1);
+
+        Assert.Single(player.Party);
+        Assert.Contains("already been taken", world.LastTalkOutcome);
+    }
+
+    [Fact]
+    public void AStarterIsWhicheverBallWasPressed()
+    {
+        // The three balls on the professor's table are one script that reads whichever
+        // was pressed into a variable, so the world file carries the variable rather
+        // than a species. The value is in the server's own copy of the save, because the
+        // client sent it along with everything else that script wrote.
+        MapData map = new(Town, "PALLET TOWN", 8, 8, new byte[64])
+        {
+            Objects =
+            [
+                new MapObject(1, 5, 3, 3, Direction.Down, 0, false, ScriptAddress: 0x08123456)
+                {
+                    GivesSpecies = 0x4002,
+                    GivesLevel = 5,
+                },
+            ],
+        };
+
+        var world = new GameWorld(new WorldData([map]), Town, TestRules.All);
+
+        (ServerPlayer player, _) = world.Join(1, "Koop", SavedCharacter.Fresh(Town, 3, 4));
+
+        player.Facing = Direction.Up;
+
+        // Nothing chosen yet: nothing handed over, and said out loud rather than
+        // silently handing over species zero.
+        world.StartTalking(player.Id, 1);
+
+        Assert.Empty(player.Party);
+        Assert.Contains("has not been chosen yet", world.LastTalkOutcome);
+
+        world.StopTalking(player.Id);
+
+        player.Script.Write(0x4002, 7);
+        world.StartTalking(player.Id, 1);
+
+        Assert.Equal(7, Assert.Single(player.Party).Species);
+    }
+
+    [Fact]
     public void ArrivalScriptsSurviveTheWorldFileToo()
     {
         MapData map = new(Town, "PALLET TOWN", 8, 8, new byte[64])

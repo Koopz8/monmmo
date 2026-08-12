@@ -83,6 +83,18 @@ public sealed record ScriptRun
     public int GivesCount { get; init; }
 
     /// <summary>
+    /// The monster this script hands over, if it hands one over.
+    /// <para>
+    /// Twenty-five of them in the game, and the first is the whole opening: the ball on
+    /// the professor's table. The species is sometimes written down and sometimes comes
+    /// out of a variable the script set a few commands earlier — the three starters are
+    /// one script that reads whichever ball was chosen — so it is resolved here rather
+    /// than left as a number that might be a species or might be 0x4002.
+    /// </para>
+    /// </summary>
+    public (int Species, int Level)? GivesMon { get; init; }
+
+    /// <summary>
     /// The move that shifts this one out of the way, if it is something in the way.
     /// <para>
     /// Two hundred objects across forty-seven maps, and they announce themselves: the
@@ -176,6 +188,7 @@ public static class ScriptRunner
         int? trainerId = null;
         int? gives = null;
         int givesCount = 0;
+        (int Species, int Level)? givesMon = null;
         int? shifts = null;
         byte? stoppedAt = null;
         int? stoppedAtOffset = null;
@@ -381,6 +394,20 @@ public static class ScriptRunner
                     save.Write(0x800D, 1);
                     break;
 
+                case 0x79:                              // gives a monster
+                    // The species is a number or a variable holding one. Both turn up:
+                    // Lapras and Eevee are written into the script, and the starter is
+                    // whichever of the three balls was pressed, which the same script
+                    // read into 0x4002 four commands earlier.
+                    {
+                        int named = command.Word();
+                        int species = named >= 0x4000 ? save.Read(named) : named;
+
+                        if (species > 0) givesMon ??= (species, Math.Max(1, command.Word(2)));
+                    }
+
+                    break;
+
                 case 0x7C:                              // findmove
                     // The command every cut tree, boulder and heap of rubble opens with.
                     // It names a move and answers with the party slot that knows it, or
@@ -445,6 +472,7 @@ public static class ScriptRunner
             TrainerId = trainerId,
             GivesItem = gives,
             GivesCount = givesCount,
+            GivesMon = givesMon,
             ShiftedBy = shifts,
             FlagsSet = set,
             FlagsCleared = cleared,

@@ -210,6 +210,20 @@ public static class ScriptCommands
         // value and a script, whose shape was derived from the other end entirely. A
         // width that reads one record as another is wrong however cleanly it parses.
         [0x5B] = 3,
+        // Fifteen. Four sites, no two of them on the same map, and at fifteen every one
+        // resumes on a real command where thirteen, fourteen and sixteen resume on none:
+        //
+        //   79 | 02 40 05 00 00 ... | 19 31 40 01 40      4.3   person 5
+        //   79 | 01 40 19 00 00 ... | 21 0D 80 00 00      14.2  person 6
+        //   79 | 83 00 19 00 00 ... | 21 0D 80 00 00      1.53  person 2
+        //   79 | 85 00 19 00 00 ... | 21 0D 80 00 00      10.11 person 2
+        //
+        // And the arguments say what it is without being asked. The first word is a
+        // species or a variable holding one, the second is a level: 131 at level 25 and
+        // 133 at level 25 are LAPRAS and EEVEE, at the levels this game gives them, on
+        // Silph's top floor and in Celadon. The starter is the one whose species comes
+        // out of a variable, at level 5.
+        [0x79] = 15,     // gives a monster
         [0x39] = 1,
         [0x3A] = 0,
         // Eight bytes — four words — and the cleanest column this project has seen. The
@@ -666,6 +680,7 @@ public static class ScriptCommands
         0x2B => "checkflag",
         // Named for what the bytes show it doing rather than for what it might be
         // called: it is handed a move id and answers a party slot, or six for nobody.
+        0x79 => "givemon",
         0x7C => "findmove",
 
         // Named from the words on the two arms after it, at seven sites on six maps.
