@@ -1396,6 +1396,45 @@ public class TriggerTests
     }
 
     [Fact]
+    public void SomebodyBehindAFlagIsNotThereUntilItSays()
+    {
+        // Six hundred of this game's sixteen hundred objects carry one, and it is how a
+        // Pokémon game has anybody appear and disappear. Which flags are set is a fact
+        // about a save rather than about a world, so the population is shared and the
+        // view of it is not — the arrangement a felled tree already has.
+        MapData map = new(Town, "PALLET TOWN", 8, 8, new byte[64])
+        {
+            Objects =
+            [
+                new MapObject(1, 5, 3, 3, Direction.Down, 0, false) { HiddenBy = 0x2C },
+                new MapObject(2, 5, 5, 5, Direction.Down, 0, false),
+            ],
+        };
+
+        var world = new GameWorld(new WorldData([map]), Town, TestRules.All);
+
+        (ServerPlayer player, List<Outgoing> welcome) = world.Join(1, "Koop", SavedCharacter.Fresh(Town, 3, 4));
+
+        // Nothing set, so nothing is hidden: a flag that has never been touched is a
+        // person standing where the cartridge put them.
+        Assert.Equal([1, 2], Placed(welcome).Select(o => o.LocalId));
+
+        // And the professor's own flag, set by the script that walks him indoors.
+        List<Outgoing> after = world.RunScript(player.Id, new ScriptRan([0x2C], [], []));
+
+        Assert.Equal(1, after.Select(o => o.Message).OfType<WentInside>().Single().LocalId);
+
+        // The square he was on is walkable now, which is the half of this that matters
+        // for anybody trying to get past him.
+        world.Move(player.Id, Direction.Up, 10);
+
+        Assert.Equal(new GridPosition(3, 3), player.Square);
+    }
+
+    private static IReadOnlyList<ObjectView> Placed(IEnumerable<Outgoing> send) =>
+        send.Select(o => o.Message).OfType<ObjectsPlaced>().SelectMany(p => p.Objects).ToList();
+
+    [Fact]
     public void ArrivalScriptsSurviveTheWorldFileToo()
     {
         MapData map = new(Town, "PALLET TOWN", 8, 8, new byte[64])

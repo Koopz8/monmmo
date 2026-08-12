@@ -110,6 +110,9 @@ public sealed record ServerPlayer(int Id, long AccountId, string Name)
     /// </summary>
     public HashSet<int> SceneCast { get; } = [];
 
+    /// <summary>Who this player has been told is on their map, so a change can be sent.</summary>
+    public HashSet<int> Seeing { get; } = [];
+
     /// <summary>
     /// Things this player has moved out of the way on the map they are standing on.
     /// <para>
@@ -395,7 +398,7 @@ public sealed class GameWorld
                 send.Add(new Outgoing(existing.ToAppeared(), OnlyTo: player.Id));
 
             if (Populate(mapId, 0) is { } people)
-                send.Add(new Outgoing(new ObjectsPlaced([.. people.Views]), OnlyTo: player.Id));
+                send.Add(new Outgoing(new ObjectsPlaced([.. VisibleTo(player, people)]), OnlyTo: player.Id));
 
             _players[player.Id] = player;
             send.Add(new Outgoing(player.ToAppeared(), Except: player.Id, OnMap: mapId));
@@ -590,7 +593,14 @@ public sealed class GameWorld
     /// </summary>
     private bool IsOccupiedFor(ServerPlayer player, string mapId, GridPosition square) =>
         Standing(mapId, square) is { } who &&
-        !(mapId == player.MapId && player.Shifted.Contains(who));
+        !(mapId == player.MapId && player.Shifted.Contains(who)) &&
+        !(mapId == player.MapId && !player.Seeing.Contains(who) && HiddenOn(mapId, who));
+
+    /// <summary>Whether an object on a map is one of the six hundred that can be hidden.</summary>
+    private bool HiddenOn(string mapId, int localId) =>
+        (_populated.TryGetValue(mapId, out MapPopulation? people)
+            ? people.ById(localId)?.Template
+            : _world.Find(mapId)?.Objects.FirstOrDefault(o => o.LocalId == localId))?.HiddenBy != 0;
 
     /// <summary>Who is on a square, by local id, or nothing.</summary>
     private int? Standing(string mapId, GridPosition square) =>
@@ -605,6 +615,67 @@ public sealed class GameWorld
     /// stepping the ones nobody can see would be the largest thing this server does.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Who is on a map, as far as one player is concerned.
+    /// <para>
+    /// Six hundred objects in this game carry a flag that takes them off the map, and
+    /// which flags are set is a fact about a save rather than about a world — so the
+    /// population is shared and the view of it is not. Same arrangement a felled tree
+    /// already has.
+    /// </para>
+    /// </summary>
+    private static IEnumerable<ObjectView> VisibleTo(ServerPlayer player, MapPopulation people)
+    {
+        player.Seeing.Clear();
+
+        foreach (ServerObject entry in people.Objects)
+        {
+            if (!entry.Template.IsHereFor(player.Script.Has)) continue;
+
+            player.Seeing.Add(entry.LocalId);
+
+            yield return entry.ToView();
+        }
+    }
+
+    /// <summary>
+    /// Everybody on this player's map whose visibility disagrees with what they were
+    /// last told, and the messages that put it right.
+    /// <para>
+    /// Called after a script has written its flags, which is the only thing that changes
+    /// the answer. A script that hides the professor and one that reveals a rival are the
+    /// same event from here — a flag moved and somebody is now on the wrong side of it.
+    /// </para>
+    /// </summary>
+    private List<Outgoing> Reconcile(ServerPlayer player)
+    {
+        if (!_populated.TryGetValue(player.MapId, out MapPopulation? people)) return [];
+
+        var send = new List<Outgoing>();
+
+        foreach (ServerObject entry in people.Objects)
+        {
+            if (entry.Template.HiddenBy == 0) continue;
+
+            bool here = entry.Template.IsHereFor(player.Script.Has);
+
+            if (here == player.Seeing.Contains(entry.LocalId)) continue;
+
+            if (here)
+            {
+                player.Seeing.Add(entry.LocalId);
+                send.Add(new Outgoing(new ObjectsPlaced([entry.ToView()]), OnlyTo: player.Id));
+            }
+            else
+            {
+                player.Seeing.Remove(entry.LocalId);
+                send.Add(new Outgoing(new WentInside(entry.LocalId), OnlyTo: player.Id));
+            }
+        }
+
+        return send;
+    }
+
     private MapPopulation? Populate(string mapId, double now)
     {
         if (_populated.TryGetValue(mapId, out MapPopulation? existing)) return existing;
@@ -1299,7 +1370,7 @@ public sealed class GameWorld
             foreach (int flag in ran.Cleared) player.Script.Clear(flag);
             foreach (SavedVariable variable in ran.Written) player.Script.Write(variable.Id, variable.Value);
 
-            return HandOverMonster(player);
+            return [.. Reconcile(player), .. HandOverMonster(player)];
         }
     }
 
@@ -2017,7 +2088,7 @@ public sealed class GameWorld
             OnlyTo: player.Id));
 
         if (Populate(mapId, 0) is { } arrived)
-            send.Add(new Outgoing(new ObjectsPlaced([.. arrived.Views]), OnlyTo: player.Id));
+            send.Add(new Outgoing(new ObjectsPlaced([.. VisibleTo(player, arrived)]), OnlyTo: player.Id));
 
         foreach (ServerPlayer existing in _players.Values.Where(p => p.MapId == mapId && p.Id != player.Id))
             send.Add(new Outgoing(existing.ToAppeared(), OnlyTo: player.Id));

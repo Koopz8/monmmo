@@ -183,6 +183,15 @@ public static class WorldExporter
                 $"{handing.Count(o => o.GivesSpecies >= MapObject.FirstVariable)} of them whichever one you pick");
         }
 
+        var behindFlags = maps.SelectMany(m => m.Objects).Where(o => o.HiddenBy != 0).ToList();
+
+        if (behindFlags.Count > 0)
+        {
+            log?.Invoke(
+                $"  {behindFlags.Count} of {maps.Sum(m => m.Objects.Count)} people are only there while a flag " +
+                $"says so, across {behindFlags.Select(o => o.HiddenBy).Distinct().Count()} flags");
+        }
+
         var arrivals = maps.SelectMany(m => m.OnEntry).ToList();
 
         if (arrivals.Count > 0)

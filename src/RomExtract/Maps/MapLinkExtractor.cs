@@ -125,6 +125,18 @@ public static class MapLinkExtractor
 
             uint script = rom.ReadU32(at + 16);
 
+            // The word at +20, and it is a flag id. Six hundred and five of the
+            // cartridge's sixteen hundred objects have a non-zero one and every single
+            // one of those is in the range flags live in; the other two fields this
+            // record has spare are zero on all sixteen hundred.
+            //
+            // Which flag it is settles what it does. Pallet Town has three people and
+            // only one of them carries a number: object 3, the professor, and his is
+            // 0x2C — which is the exact flag the opening script sets as its last act,
+            // at the moment he has finished walking you to his lab and gone inside. Set
+            // means hidden.
+            int hiddenBy = rom.ReadU16(at + 20);
+
             if (x < 0 || x >= width || y < 0 || y >= height)
             {
                 log?.Invoke($"    object {i} at ({x}, {y}) is outside a {width}x{height} map — dropped");
@@ -159,7 +171,10 @@ public static class MapLinkExtractor
                 hasScript ? script : 0,
                 trainerId,
                 sight,
-                stock));
+                stock)
+            {
+                HiddenBy = hiddenBy,
+            });
         }
 
         return objects;

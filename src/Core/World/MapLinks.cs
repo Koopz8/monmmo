@@ -239,6 +239,26 @@ public sealed record MapObject(
     public const int FirstVariable = 0x4000;
 
     /// <summary>
+    /// The flag that takes this one off the map, or zero.
+    /// <para>
+    /// Six hundred and five of the cartridge's sixteen hundred objects carry one, and it
+    /// is how a Pokémon game has anybody appear and disappear: a rival who is only in the
+    /// lab on the day you choose, a guard who moves once you have his tea, a professor
+    /// who is standing in the street until the moment he takes you indoors.
+    /// </para>
+    /// <para>
+    /// Set means hidden, and Pallet Town says so on its own. It has three people and
+    /// exactly one of them carries a number — object 3, the professor, whose flag is
+    /// 0x2C — and the opening script's last act, once he has walked you to his lab and
+    /// gone in, is <c>setflag 0x2C</c>.
+    /// </para>
+    /// </summary>
+    public int HiddenBy { get; init; }
+
+    /// <summary>Whether this one is on the map, for somebody whose flags read like this.</summary>
+    public bool IsHereFor(Func<int, bool> flagIsSet) => HiddenBy == 0 || !flagIsSet(HiddenBy);
+
+    /// <summary>
     /// True when this one has something to say.
     /// <para>
     /// Carried because the server cannot know it. A ball on the ground and a person who
