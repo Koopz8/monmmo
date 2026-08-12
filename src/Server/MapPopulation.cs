@@ -44,6 +44,18 @@ public sealed class ServerObject(MapObject template)
     /// <summary>When they may take the next step of that walk, in server seconds.</summary>
     public double NextApproachAt { get; set; }
 
+    /// <summary>
+    /// True once they are standing in front of the player and the fight has not started.
+    /// <para>
+    /// A beat, and the reason for it is that without one the whole thing is over in
+    /// under a second: noticed, walked, fighting, with nothing in between long enough to
+    /// see. The games hold on the mark before anybody moves and hold again on arrival,
+    /// and those two pauses are most of what makes it read as somebody deciding to
+    /// challenge you rather than as a battle screen appearing.
+    /// </para>
+    /// </summary>
+    public bool Arrived { get; set; }
+
     public ObjectView ToView() => new(LocalId, Template.GraphicsId, Square.X, Square.Y, Facing);
 }
 

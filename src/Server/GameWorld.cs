@@ -407,7 +407,7 @@ public sealed class GameWorld
                 new(new PlayerMoved(playerId, wanted.X, wanted.Y, player.Facing), OnMap: player.MapId),
             };
 
-            AfterArrival(player, send);
+            AfterArrival(player, send, nowSeconds);
             return send;
         }
     }
@@ -453,7 +453,7 @@ public sealed class GameWorld
 
         // An edge crossing is ordinary walking: grass on the far side counts, and so
         // does a door on the far side.
-        AfterArrival(player, send);
+        AfterArrival(player, send, nowSeconds);
 
         return send;
     }
@@ -741,14 +741,20 @@ public sealed class GameWorld
     /// decide never to have been seen.
     /// </para>
     /// </summary>
-    private List<Outgoing> BeginApproach(ServerPlayer player, MapObject watcher)
+    private List<Outgoing> BeginApproach(ServerPlayer player, MapObject watcher, double nowSeconds)
     {
         if (!_populated.TryGetValue(player.MapId, out MapPopulation? people)) return [];
         if (people.ById(watcher.LocalId) is not { } person) return [];
         if (person.Approaching is not null) return [];
 
         person.Approaching = player.Id;
+        person.Arrived = false;
         person.Approach.Clear();
+
+        // They stand there a moment first. The mark over their head is up for about this
+        // long on the client, and a walk that begins underneath it looks like somebody
+        // who was already moving.
+        person.NextApproachAt = nowSeconds + NoticePause;
 
         foreach (GridPosition square in watcher.ApproachTo(player.Square)) person.Approach.Enqueue(square);
 
@@ -792,7 +798,7 @@ public sealed class GameWorld
 
             if (nowSeconds < person.NextApproachAt) continue;
 
-            person.NextApproachAt = nowSeconds + WalkingCharacter.StepSeconds;
+            person.NextApproachAt = nowSeconds + ApproachStepSeconds;
 
             if (person.Approach.Count > 0)
             {
@@ -808,7 +814,28 @@ public sealed class GameWorld
                 continue;
             }
 
-            // Arrived. Look at them, then start the fight the walk was for.
+            // Arrived, but not yet fighting. Turning to face somebody and then pausing
+            // is the difference between being challenged and having a battle screen
+            // appear at you.
+            if (!person.Arrived)
+            {
+                person.Arrived = true;
+                person.NextApproachAt = nowSeconds + ArrivalPause;
+
+                Direction turn = Toward(person.Square, player.Square);
+
+                if (person.Facing != turn)
+                {
+                    person.Facing = turn;
+
+                    send.Add(new Outgoing(
+                        new ObjectMoved(person.LocalId, person.Square.X, person.Square.Y, person.Facing),
+                        OnMap: mapId));
+                }
+
+                continue;
+            }
+
             Direction looking = Toward(person.Square, player.Square);
 
             person.Approaching = null;
@@ -843,6 +870,23 @@ public sealed class GameWorld
 
         return send;
     }
+
+    /// <summary>
+    /// How long somebody stands there having noticed you before they set off.
+    /// <para>
+    /// The three timings below are this project's, not the cartridge's, and they are
+    /// stated rather than tuned into the code. Without them the whole encounter — the
+    /// notice, the walk, the fight — lands inside a second, which is too fast to read as
+    /// anything at all.
+    /// </para>
+    /// </summary>
+    private const double NoticePause = 0.9;
+
+    /// <summary>Seconds a square of the walk takes. Slower than a player's own step.</summary>
+    private const double ApproachStepSeconds = 0.28;
+
+    /// <summary>How long they stand in front of you before the fight begins.</summary>
+    private const double ArrivalPause = 0.5;
 
     /// <summary>Which way one square is from another, for a step of exactly one.</summary>
     private static Direction Toward(GridPosition from, GridPosition to) =>
@@ -1190,7 +1234,7 @@ public sealed class GameWorld
     /// on.
     /// </para>
     /// </summary>
-    private void AfterArrival(ServerPlayer player, List<Outgoing> send)
+    private void AfterArrival(ServerPlayer player, List<Outgoing> send, double nowSeconds)
     {
         if (_world.Find(player.MapId)?.WarpAt(player.Square) is { } warp)
         {
@@ -1198,7 +1242,8 @@ public sealed class GameWorld
             return;
         }
 
-        if (WhoSpotted(player) is { } watcher && BeginApproach(player, watcher) is { Count: > 0 } noticed)
+        if (WhoSpotted(player) is { } watcher &&
+            BeginApproach(player, watcher, nowSeconds) is { Count: > 0 } noticed)
         {
             send.AddRange(noticed);
 

@@ -565,6 +565,51 @@ public class ApproachTests
         Assert.Equal(before, player.Square);
     }
 
+    /// <summary>Runs the clock and remembers when each thing was said.</summary>
+    private static List<(double At, NetMessage Message)> Timed(GameWorld world, double seconds, double from = 1000)
+    {
+        var said = new List<(double, NetMessage)>();
+
+        for (double now = from; now < from + seconds; now += 0.05)
+        {
+            foreach (Outgoing outgoing in world.Tick(now)) said.Add((now - from, outgoing.Message));
+        }
+
+        return said;
+    }
+
+    [Fact]
+    public void NobodyMovesUntilTheMarkHasBeenSeen()
+    {
+        // Without a beat here the notice, the walk and the fight all land inside a
+        // second, and a player sees a battle screen appear rather than somebody
+        // deciding to challenge them. Asserted rather than tuned and forgotten: a pause
+        // nothing tests is a pause somebody deletes.
+        GameWorld world = World(Watcher(1, 4, 1));
+
+        Spotted(world);
+
+        Assert.Empty(Timed(world, 0.6).Where(m => m.Message is ObjectMoved));
+        Assert.NotEmpty(Timed(world, 3, 1000.6).Where(m => m.Message is ObjectMoved));
+    }
+
+    [Fact]
+    public void TheFightDoesNotStartTheInstantTheyArrive()
+    {
+        GameWorld world = World(Watcher(1, 4, 1));
+
+        Spotted(world);
+
+        List<(double At, NetMessage Message)> said = Timed(world, 10);
+
+        double lastStep = said.Where(m => m.Message is ObjectMoved).Max(m => m.At);
+        double fight = said.First(m => m.Message is BattleStarted).At;
+
+        // They stand in front of you first. Arriving and attacking on the same tick is
+        // the thing that made the whole encounter unreadable.
+        Assert.True(fight > lastStep + 0.2, $"arrived at {lastStep:0.00}s and fought at {fight:0.00}s");
+    }
+
     [Fact]
     public void WalkingThroughADoorMidApproachIsNotFollowed()
     {
