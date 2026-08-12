@@ -314,6 +314,29 @@ public static class ScriptCommands
         // that answers into the result variable and is asked about on the next line
         // takes no arguments; anything swallowed here would eat the compare.
         [0xA0] = 0,
+
+        // Seven, on the same argument the fifth byte of 0x30 made. Five of six sites:
+        //
+        //   00 0A 00 80 01 57 01 | 03 ...    return
+        //   00 14 00 80 01 C3 00 | 03 ...    return
+        //   00 1E 00 80 01 05 01 | 03 ...    return
+        //
+        // Byte seven is `return` at every one of them, and bytes zero, two, three and
+        // four never change. Read as six, byte six would be a separate instruction — and
+        // it is 0x00 or 0x01 at every site, both of which do nothing. A no-op standing
+        // in front of five consecutive returns is not something anything emits.
+        //
+        // The sixth site does not fit this shape and is not claimed by it.
+        [0x83] = 7,
+
+        // Four: two variables. One site only, and it needs no more than one:
+        //
+        //   42 | 04 80 05 80 | 21 04 80 09 00 | 06 04 ...
+        //
+        // Those are var 0x8004 and var 0x8005, and the very next command compares
+        // 0x8004 against nine. A command taking two variables and then being asked
+        // about one of them is not a coincidence that four bytes could produce twice.
+        [0x42] = 4,
     };
 
     /// <summary>
