@@ -1508,7 +1508,14 @@ public sealed class GameWorld
 
             if (person.HeldBy != playerId)
             {
-                LastScenePlacement = $"object {localId} is not being held by them";
+                // Who does hold them, because "not by you" and "by nobody" are different
+                // problems and the message could not tell them apart. The first is two
+                // players in one scene; the second is something letting go mid-scene, and
+                // guessing which one it was is how an afternoon goes missing.
+                LastScenePlacement = person.HeldBy is { } holder
+                    ? $"object {localId} is held by #{holder}, not by them"
+                    : $"object {localId} is being held by nobody — something let go mid-scene";
+
                 return [];
             }
 

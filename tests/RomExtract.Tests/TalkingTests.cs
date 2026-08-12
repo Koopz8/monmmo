@@ -1281,7 +1281,7 @@ public class ScenePlacementTests
         (GameWorld world, ServerPlayer player) = Standing(Somebody(1, 3, 3));
 
         Assert.Empty(world.PlaceAfterScene(player.Id, 1, new GridPosition(5, 5), Direction.Left));
-        Assert.Contains("not being held", world.LastScenePlacement);
+        Assert.Contains("held by nobody", world.LastScenePlacement);
     }
 
     [Fact]

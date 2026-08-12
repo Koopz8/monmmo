@@ -13,6 +13,20 @@ out/
 extracted/
 assets/extracted/
 
+# The two files the exporter writes, wherever anybody happens to run it from. These
+# are cartridge-derived and the rule at the top of this file covers them; they were
+# only ever kept out of the repository by nobody having put one in the root, which is
+# not the same as a rule. One got committed the moment somebody did.
+world.dat
+rules.dat
+*/world.dat
+*/rules.dat
+**/world.dat
+**/rules.dat
+
+# The account database, which is nobody else's business either.
+players.db
+
 # --- .NET --------------------------------------------------------------------
 bin/
 obj/

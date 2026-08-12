@@ -1,5 +1,6 @@
 using PokeMmo.Core.World;
 using PokeMmo.RomExtract.Maps;
+using PokeMmo.Server;
 
 namespace PokeMmo.RomExtract.Tests;
 
@@ -164,5 +165,107 @@ public class ExportedWorldLinkTests
 
         Assert.Equal(expected, map.WarpAt(new GridPosition(expected.X, expected.Y)));
         Assert.Null(map.WarpAt(new GridPosition(9, 7)));
+    }
+}
+
+/// <summary>
+/// Walking the world to find out how much of it a character can actually reach.
+/// <para>
+/// "The story stops somewhere" is not a fact anybody can act on. This turns it into a
+/// number and a list of squares, off the world file alone.
+/// </para>
+/// </summary>
+public class WorldWalkerTests
+{
+    private const string Town = "3.0";
+    private const string Inside = "3.1";
+
+    /// <summary>
+    /// Two maps and a door, with one square of corridor that something can sit in.
+    /// <para>
+    /// Column 2 is solid except at row 2, so the only way east is through (2, 2) — which
+    /// is where the tree goes. A test whose obstacle can be walked around proves nothing.
+    /// </para>
+    /// </summary>
+    private static WorldData World(params MapObject[] people)
+    {
+        var collision = new byte[25];
+
+        for (int y = 0; y < 5; y++) collision[y * 5 + 2] = 1;
+
+        collision[2 * 5 + 2] = 0;
+
+        MapData town = new(Town, "PALLET TOWN", 5, 5, collision)
+        {
+            Objects = people,
+            Warps = [new Warp(4, 2, 0, Inside)],
+        };
+
+        MapData inside = new(Inside, "A HOUSE", 4, 4, new byte[16])
+        {
+            Warps = [new Warp(1, 1, 0, Town)],
+        };
+
+        return new WorldData([town, inside]);
+    }
+
+    [Fact]
+    public void WhatIsWalkableIsWalkedAndWhatIsBehindADoorIsFollowed()
+    {
+        Reach reach = WorldWalker.Walk(World(), Town);
+
+        Assert.Equal(2, reach.Maps.Count);
+        Assert.Empty(reach.Blocked);
+    }
+
+    [Fact]
+    public void ATreeInTheOnlyGapClosesTheWorldAndSaysSo()
+    {
+        // The frontier is the point of the whole instrument: not "you cannot get there"
+        // but "here is the square, and here is the move it wants".
+        MapObject tree = new(1, 5, 2, 2, Direction.Down, 0, false) { ShiftedBy = 15 };
+
+        Reach reach = WorldWalker.Walk(World(tree), Town);
+
+        Assert.Equal([Town], reach.Maps);
+
+        Frontier stopped = Assert.Single(reach.Blocked);
+
+        Assert.Equal(new GridPosition(2, 2), stopped.Square);
+        Assert.Equal(15, stopped.ShiftedBy);
+    }
+
+    [Fact]
+    public void TheSameTreeWithTheMoveInHandIsNotAWall()
+    {
+        MapObject tree = new(1, 5, 2, 2, Direction.Down, 0, false) { ShiftedBy = 15 };
+
+        Reach reach = WorldWalker.Walk(World(tree), Town, [15]);
+
+        Assert.Equal(2, reach.Maps.Count);
+        Assert.Empty(reach.Blocked);
+    }
+
+    [Fact]
+    public void SomebodyStandingInTheGapIsAWallUntilAskedToBeWalkedThrough()
+    {
+        // A person in a doorway is a wall to a walker and a wall a script opens in the
+        // game. The difference between these two answers is the share of the world gated
+        // on scripts rather than on geometry, which is the number worth planning from.
+        MapObject guard = new(1, 5, 2, 2, Direction.Down, 0, false);
+
+        Assert.Equal([Town], WorldWalker.Walk(World(guard), Town).Maps);
+        Assert.Equal(2, WorldWalker.Walk(World(guard), Town, null, throughPeople: true).Maps.Count);
+    }
+
+    [Fact]
+    public void ADoorToAMapThisWorldDoesNotHaveIsReported()
+    {
+        MapData town = new(Town, "PALLET TOWN", 4, 4, new byte[16])
+        {
+            Warps = [new Warp(1, 1, 0, "9.9")],
+        };
+
+        Assert.Equal(["9.9"], WorldWalker.Walk(new WorldData([town]), Town).Beyond);
     }
 }

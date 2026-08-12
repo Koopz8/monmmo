@@ -76,12 +76,71 @@ public static class Program
         ReportStartingMapLinks(game);
         ReportEncounterReadiness(game.StartingMap);
         ReportTrainerReadiness(world, rules, game.StartingMap.Id);
+        ReportReach(world, game.StartingMap.Id);
 
         using var store = new SqlitePlayerStore(databasePath);
         Console.WriteLine($"Accounts in {Path.GetFullPath(databasePath)}");
 
         await new GameServer(game, store, verbose).RunAsync(port);
         return 0;
+    }
+
+    /// <summary>
+    /// How much of the world a new character can actually walk to.
+    /// <para>
+    /// Printed at startup beside everything else that would otherwise be an impression.
+    /// "The story stops somewhere" is not a fact anybody can act on; "sixty maps of four
+    /// hundred and twenty-five, and here is the first tree" is.
+    /// </para>
+    /// <para>
+    /// It counts only what walking can open. A guard who steps aside when a flag is set is
+    /// a wall to this, so the frontier it reports is the *earliest* place the world closes
+    /// and the real one is never nearer.
+    /// </para>
+    /// </summary>
+    private static void ReportReach(WorldData world, string startingMapId)
+    {
+        Reach reach = WorldWalker.Walk(world, startingMapId);
+
+        Console.WriteLine(
+            $"  {reach.Maps.Count} of {world.Count} maps are walkable from {startingMapId} " +
+            $"with no move, no flag and nobody stepping aside");
+
+        // And with the three the game can already teach. The difference is what the
+        // obstacle work is worth in maps rather than in objects, which is the unit
+        // anybody planning the rest of this actually cares about.
+        int[] field = [.. world.Maps.SelectMany(m => m.Objects).Where(o => o.IsObstacle).Select(o => o.ShiftedBy).Distinct()];
+
+        if (field.Length > 0)
+        {
+            Reach shifted = WorldWalker.Walk(world, startingMapId, field);
+
+            Console.WriteLine(
+                $"  {shifted.Maps.Count} with moves {string.Join(", ", field.Order())} — " +
+                $"{shifted.Maps.Count - reach.Maps.Count} more maps, and {shifted.Blocked.Count} still in the way");
+        }
+
+        var byMove = reach.Blocked
+            .GroupBy(b => b.ShiftedBy)
+            .OrderByDescending(g => g.Count())
+            .ToList();
+
+        foreach (var move in byMove)
+            Console.WriteLine($"    {move.Count(),3} things in the way need move {move.Key}, e.g. {move.First()}");
+
+        // And as though nobody were standing in a doorway. The difference between this
+        // and the line above is the share of the world gated on scripts rather than on
+        // geometry — a person in a doorway is a wall to a walker and a wall a script
+        // opens in the game.
+        Reach past = WorldWalker.Walk(world, startingMapId, field, throughPeople: true);
+
+        Console.WriteLine(
+            $"  {past.Maps.Count} if nobody stood in a doorway — so {past.Maps.Count - reach.Maps.Count} " +
+            $"maps are behind a person, and {world.Count - past.Maps.Count} are behind something else " +
+            $"(water, or a door nobody can stand on)");
+
+        if (reach.Beyond.Count > 0)
+            Console.WriteLine($"    {reach.Beyond.Count} doors lead to maps this world file does not have");
     }
 
     /// <summary>
