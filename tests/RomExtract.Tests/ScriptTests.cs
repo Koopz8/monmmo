@@ -1091,3 +1091,57 @@ public class PlayerGenderTests
         Assert.True(state.WithParty([]).IsGirl);
     }
 }
+
+/// <summary>
+/// The pair that was stopping the opening of the game.
+/// <para>
+/// The professor's scene runs, walks you to his lab, and then hits 0xAC. Past it is
+/// 0xAD, which has the same shape, and past that the bookkeeping that spends the trigger.
+/// </para>
+/// <para>
+/// Two sites each, which is thin by this project's standard. What makes them worth
+/// adopting is that the width and the command after it are confirmed by the same bytes,
+/// that the two commands are identical in shape to each other, and that the wrongness
+/// detector did not move — while twenty-six pages of dialogue appeared.
+/// </para>
+/// </summary>
+public class TheOpeningsPairTests
+{
+    [Fact]
+    public void BothTakeTwoWordsAndTheOneBetweenThemTakesNothing()
+    {
+        Assert.Equal(4, ScriptCommands.ArgumentLength(0xAC));
+        Assert.Equal(4, ScriptCommands.ArgumentLength(0xAD));
+        Assert.Equal(0, ScriptCommands.ArgumentLength(0xAE));
+    }
+
+    [Fact]
+    public void ReadThatWayTheSceneCarriesOnIntoItsOwnBookkeeping()
+    {
+        // Byte for byte from 0x08165694 on a real image: the tail of the scene, where it
+        // writes the variable that stops it happening a second time. Read one byte
+        // narrower and that write is never reached.
+        var image = new byte[0x400];
+
+        byte[] script =
+        [
+            0xAD, 0x10, 0x00, 0x0D, 0x00,
+            0xAE,
+            0x16, 0x55, 0x40, 0x01, 0x00,   // setvar 0x4055, 1
+            0x2A, 0x2B, 0x00,               // clearflag 0x002B
+            ScriptCommands.End,
+        ];
+
+        script.CopyTo(image, 0);
+
+        List<ScriptCommand> commands = ScriptReader.Read(new Rom(image), Rom.BaseAddress);
+
+        Assert.Equal(
+            new byte[] { 0xAD, 0xAE, 0x16, 0x2A, ScriptCommands.End },
+            commands.Select(c => c.Code));
+
+        // The write itself, which is the whole point of reading this far.
+        Assert.Equal(0x4055, commands[2].Word());
+        Assert.Equal(1, commands[2].Word(2));
+    }
+}

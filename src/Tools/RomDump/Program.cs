@@ -2378,9 +2378,15 @@ public static class Program
                     if (command.Code == code) found.Add(command.Offset);
                 }
 
-                if (ScriptReader.StoppedAt(rom, address) == code &&
-                    ScriptReader.StoppedAtOffset(rom, address) is { } stopped)
+                // Every script reachable from here, not just this one. A linear read
+                // stops at the first goto, so a command behind one was invisible to the
+                // instrument built to find exactly that — and the command blocking the
+                // opening of the game was behind two.
+                foreach (uint reachable in ScriptReader.Reachable(rom, address))
                 {
+                    if (ScriptReader.StoppedAt(rom, reachable) != code) continue;
+                    if (ScriptReader.StoppedAtOffset(rom, reachable) is not { } stopped) continue;
+
                     found.Add(stopped);
                 }
 

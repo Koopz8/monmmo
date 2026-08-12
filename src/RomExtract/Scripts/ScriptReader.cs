@@ -424,6 +424,41 @@ public static class ScriptCommands
         // arguments; anything swallowed here eats the release.
         [0x76] = 0,
 
+        // Four, two words, and the one that was stopping the opening of the game. The
+        // professor's scene runs, walks you to his lab, and then hits this.
+        //
+        //   AC | 10 00 0D 00 | AE | 4F 03 00 2E 57 16 08
+        //   AC | 0A 00 03 00 | AE | 4F 02 00 DB 06 17 08
+        //
+        // Two sites, on two maps, with the same shape: two small words, then a command
+        // taking nothing, then an applymovement carrying a pointer that lands on a real
+        // movement list. Read any narrower and the first site puts a killscript in the
+        // middle of a cutscene with the rest of the scene unreachable behind it.
+        //
+        // Two sites is thin by this project's own standard and it is worth saying so.
+        // What makes it worth adopting anyway is that both the width *and* the command
+        // after it are confirmed by the same bytes, and the wrongness detector — scripts
+        // that finish saying nothing — did not move when they were adopted.
+        [0xAC] = 4,
+
+        // Four, and 0xAC's twin — same two words, same 0xAE after it, at the same two
+        // sites on the same two maps:
+        //
+        //   AD | 10 00 0D 00 | AE | 16 55 40 01 00   setvar 0x4055, 1
+        //   AD | 0A 00 03 00 | AE | 29 02 00 6C 02   setflag 0x0002, release, end
+        //
+        // Read this way both sites land on ordinary bookkeeping — a variable written, a
+        // flag set, a release, an end — which is exactly what the tail of a cutscene
+        // looks like. The pair being identical in shape is worth more than either alone:
+        // whatever 0xAC and 0xAD are, they are two of the same kind of thing.
+        [0xAD] = 4,
+
+        // Nothing, and it is the other half of that pair. At every site it sits between
+        // one of the two and something whose first bytes are plainly a command — an
+        // applymovement with a good pointer, a setvar, a setflag — so anything it
+        // swallowed would eat the front of that.
+        [0xAE] = 0,
+
         // Two, a word, and the largest single unknown this project had: it stopped two
         // hundred reads. Only three sites, and they sit within three hundred bytes of
         // each other, so they are much closer to one piece of evidence than to three —
@@ -637,6 +672,48 @@ public static class ScriptReader
     /// was in the way is to count them.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Every script start reachable from one address, following calls and jumps.
+    /// <para>
+    /// Written because the tool that finds unknown widths could not see them. It asked
+    /// where a script's *linear* read stopped, and a linear read stops at the first
+    /// <c>goto</c> — so a command sitting behind one was invisible to the very instrument
+    /// built to find it. The command blocking the opening of the game was behind two.
+    /// </para>
+    /// </summary>
+    public static List<uint> Reachable(Rom rom, uint address, int maxScripts = 64)
+    {
+        var found = new List<uint>();
+        var seen = new HashSet<uint>();
+        var queue = new Queue<uint>();
+
+        queue.Enqueue(address);
+
+        while (queue.Count > 0 && found.Count < maxScripts)
+        {
+            uint at = queue.Dequeue();
+
+            if (!seen.Add(at)) continue;
+            if (rom.ToOffsetOrNull(at) is null) continue;
+
+            found.Add(at);
+
+            foreach (ScriptCommand command in Read(rom, at))
+            {
+                uint target = command.Code switch
+                {
+                    ScriptCommands.Call or ScriptCommands.Goto => command.Pointer(),
+                    ScriptCommands.GotoIf or ScriptCommands.CallIf => command.Pointer(1),
+                    _ => 0,
+                };
+
+                if (target != 0 && rom.IsRomAddress(target)) queue.Enqueue(target);
+            }
+        }
+
+        return found;
+    }
+
     public static byte? StoppedAt(Rom rom, uint address, int maxCommands = MaxCommands)
     {
         if (rom.ToOffsetOrNull(address) is not { } offset) return null;
