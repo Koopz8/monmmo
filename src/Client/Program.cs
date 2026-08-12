@@ -255,7 +255,13 @@ public static class Program
         // are. Held rather than applied on the spot: a correction almost always arrives
         // mid-step, and snapping a character sideways through a stride looks worse than
         // the half-square of error it fixes.
-        GridPosition? correction = null;
+        // Tagged with the map it was about, which is the whole of the fix for walking out
+        // of a town and arriving at the far end of the route. A correction is held until
+        // the character is between steps, and somebody walking in a straight line is
+        // never between steps — so the confirmation of the last step in Pallet Town was
+        // still pending when the edge was crossed, and landed on Route 1 as an instruction
+        // to stand on (12, 0). Which is where it had meant, on a map 40 squares away.
+        (string MapId, GridPosition Square)? correction = null;
 
         // Time until the client may next ask the server about an edge it cannot
         // predict. Without it, holding a direction into an edge would send a request
@@ -305,9 +311,20 @@ public static class Program
             // Applied between steps, which is the only moment it can be applied without
             // tearing the animation. Dropping it instead — which is what happened before
             // — leaves the client a square ahead of the server for good.
-            if (!player.IsStepping && correction is { } square)
+            if (!player.IsStepping && correction is { } pending)
             {
-                if (square != player.Square) player.Place(view.Collision, square);
+                if (pending.MapId != view.MapId)
+                {
+                    // Not this map's business. Dropped rather than applied: where the
+                    // server said somebody was standing somewhere else is not a fact
+                    // about here, and the arrival has already placed them.
+                    correction = null;
+                }
+                else if (pending.Square != player.Square)
+                {
+                    player.Place(view.Collision, pending.Square);
+                }
+
                 correction = null;
             }
 
@@ -761,7 +778,7 @@ public static class Program
         ref IReadOnlyList<BagEntry> bag,
         ref IReadOnlyList<SavedMon> party,
         ref int money,
-        ref GridPosition? correction,
+        ref (string MapId, GridPosition Square)? correction,
         ref int? watching,
         ref float exclaimFor,
         ref Cutscene? scene,
@@ -926,11 +943,11 @@ public static class Program
                 case PlayerMoved mine when mine.PlayerId == network.PlayerId:
                     // The server's answer about us. Where it agrees this costs nothing;
                     // where it does not, this is the only thing that puts us back.
-                    correction = new GridPosition(mine.X, mine.Y);
+                    correction = (view.MapId, new GridPosition(mine.X, mine.Y));
                     break;
 
                 case MoveRejected rejected:
-                    correction = new GridPosition(rejected.X, rejected.Y);
+                    correction = (view.MapId, new GridPosition(rejected.X, rejected.Y));
                     break;
 
                 case PlayerLeft left:
