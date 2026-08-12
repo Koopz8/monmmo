@@ -27,6 +27,7 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(BagUpdated), "bagupdate")]
 [JsonDerivedType(typeof(PartyHealed), "healed")]
 [JsonDerivedType(typeof(BlackedOut), "blackedout")]
+[JsonDerivedType(typeof(TrainerSpotted), "spotted")]
 [JsonDerivedType(typeof(BuyRequest), "buy")]
 [JsonDerivedType(typeof(SellRequest), "sell")]
 [JsonDerivedType(typeof(ShopOpened), "shop")]
@@ -219,6 +220,18 @@ public sealed record PartyHealed(IReadOnlyList<SavedMon> Party, bool Needed) : N
 /// that missed one showing a healthy party in the wrong town.
 /// </para>
 /// </summary>
+/// <summary>
+/// Somebody has noticed the player and is on their way over.
+/// <para>
+/// Sent when the sight line is crossed rather than when the fight begins, because
+/// between those two things is a walk, and the walk is the part everybody remembers —
+/// it is why you learn to hug the far wall of a route rather than stroll down the
+/// middle of it. The player stands still for it, which the server enforces and this
+/// message is what lets the client stop asking.
+/// </para>
+/// </summary>
+public sealed record TrainerSpotted(int LocalId) : NetMessage;
+
 public sealed record BlackedOut(
     string MapId,
     int X,

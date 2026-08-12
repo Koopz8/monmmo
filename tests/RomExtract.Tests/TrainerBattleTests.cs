@@ -79,7 +79,16 @@ public class TrainerBattleTests
         player.Square = square.Step(Opposite(facing));
         player.LastStepAt = double.NegativeInfinity;
 
-        return world.Move(player.Id, facing, 1000).Select(o => o.Message).ToList();
+        List<NetMessage> said = [.. world.Move(player.Id, facing, 1000).Select(o => o.Message)];
+
+        // Being seen is not the fight; it is the start of a walk, and the fight is at
+        // the end of it. The clock has to run for that walk to happen, and every test
+        // below that used to get a battle out of one step now gets one out of a step
+        // and a few seconds.
+        for (double now = 1000; now < 1010 && !player.InBattle; now += 0.1)
+            said.AddRange(world.Tick(now).Select(o => o.Message));
+
+        return said;
     }
 
     private static Direction Opposite(Direction direction) => Interaction.Opposite(direction);
@@ -454,5 +463,119 @@ public class TrainerBattleTests
         ServerPlayer player = Join(world);
 
         Assert.Empty(StepTo(world, player, new GridPosition(4, 3), Direction.Down).OfType<BattleStarted>());
+    }
+}
+
+/// <summary>
+/// The walk between being seen and being fought.
+/// <para>
+/// A trainer who spots you across a route does not fight you from there. They walk over,
+/// and that walk is the part everybody remembers — it is why you learn to hug the far
+/// wall of a route rather than stroll down the middle of it. Until this, being seen and
+/// being fought were the same instant.
+/// </para>
+/// </summary>
+public class ApproachTests
+{
+    private const string Route = "3.19";
+
+    private static GameWorld World(params MapObject[] people)
+    {
+        MapData map = new(Route, "ROUTE 1", 8, 8, new byte[64]) { Objects = people };
+
+        return new GameWorld(new WorldData([map]), Route, TestRules.All);
+    }
+
+    /// <summary>Somebody looking down a long line, four squares of it.</summary>
+    private static MapObject Watcher(int localId, int x, int y) =>
+        new(localId, 5, x, y, Direction.Down, 0, true, 0, 0, 0, TestRules.OneAlone, 4);
+
+    private static ServerPlayer Join(GameWorld world) =>
+        world.Join(1, "Koop", world.FreshCharacter() with
+        {
+            MapId = Route,
+            Party = [new SavedMon(3, 30, null, 100, StatusCondition.None, Nature.Hardy, [TestRules.FirstMove])],
+        }).Player;
+
+    /// <summary>Walks into the line of sight and returns everything the server then said.</summary>
+    private static (List<NetMessage> Said, ServerPlayer Player) Spotted(GameWorld world)
+    {
+        ServerPlayer player = Join(world);
+
+        player.Square = new GridPosition(3, 5);
+        player.LastStepAt = double.NegativeInfinity;
+
+        return ([.. world.Move(player.Id, Direction.Right, 1000).Select(o => o.Message)], player);
+    }
+
+    private static List<NetMessage> Run(GameWorld world, double seconds, double from = 1000)
+    {
+        var said = new List<NetMessage>();
+
+        for (double now = from; now < from + seconds; now += 0.1)
+            said.AddRange(world.Tick(now).Select(o => o.Message));
+
+        return said;
+    }
+
+    [Fact]
+    public void BeingSeenIsNotYetBeingFought()
+    {
+        GameWorld world = World(Watcher(1, 4, 1));
+
+        (List<NetMessage> said, ServerPlayer player) = Spotted(world);
+
+        Assert.Equal(1, said.OfType<TrainerSpotted>().Single().LocalId);
+        Assert.Empty(said.OfType<BattleStarted>());
+        Assert.False(player.InBattle);
+    }
+
+    [Fact]
+    public void TheyWalkOverAndThenTheFightStarts()
+    {
+        GameWorld world = World(Watcher(1, 4, 1));
+
+        (_, ServerPlayer player) = Spotted(world);
+
+        List<NetMessage> walked = Run(world, 10);
+
+        // Three squares between (4, 1) and (4, 5), stopping one short of standing on
+        // the player. Every one of them is sent, because the walk is the point.
+        Assert.Equal(3, walked.OfType<ObjectMoved>().Count(m => m.LocalId == 1 && (m.X, m.Y) != (4, 1)));
+
+        Assert.Single(walked.OfType<BattleStarted>());
+        Assert.True(player.InBattle);
+    }
+
+    [Fact]
+    public void ThePlayerStandsStillForIt()
+    {
+        // Enforced rather than asked for. A client that decided when it was allowed to
+        // move again could decide it had never been seen.
+        GameWorld world = World(Watcher(1, 4, 1));
+
+        (_, ServerPlayer player) = Spotted(world);
+
+        GridPosition before = player.Square;
+
+        Assert.Contains(
+            world.Move(player.Id, Direction.Down, 1001).Select(o => o.Message).OfType<MoveRejected>(),
+            r => r.Reason.Contains("word"));
+
+        Assert.Equal(before, player.Square);
+    }
+
+    [Fact]
+    public void WalkingThroughADoorMidApproachIsNotFollowed()
+    {
+        // The walk is towards a square, and the player is no longer standing on it.
+        // Somebody left mid-stride would otherwise hold that player still forever.
+        GameWorld world = World(Watcher(1, 4, 1));
+
+        (_, ServerPlayer player) = Spotted(world);
+
+        world.Leave(player.Id);
+
+        Assert.Empty(Run(world, 10).OfType<BattleStarted>());
     }
 }

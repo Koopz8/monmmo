@@ -33,6 +33,16 @@ public sealed record ServerPlayer(int Id, long AccountId, string Name)
     public bool InBattle => Battle is not null;
 
     /// <summary>
+    /// The person walking over to fight this player, if somebody has spotted them.
+    /// <para>
+    /// Held on the player rather than only on the person, because what it decides is
+    /// whether this player may move — and a rule about a player belongs where the moving
+    /// is checked rather than at the far end of a search through everybody on the map.
+    /// </para>
+    /// </summary>
+    public int? WatchedBy { get; set; }
+
+    /// <summary>
     /// Trainers this player has already beaten, so they do not start again the moment
     /// you walk back past them.
     /// </summary>
@@ -323,6 +333,8 @@ public sealed class GameWorld
             string mapId = player.MapId;
             _players.Remove(playerId);
 
+            AbandonApproaches(playerId);
+
             return [new Outgoing(new PlayerLeft(playerId), OnMap: mapId)];
         }
     }
@@ -341,6 +353,16 @@ public sealed class GameWorld
 
             if (!_players.TryGetValue(playerId, out ServerPlayer? player))
                 return [new Outgoing(new Rejected("Not in the world."), OnlyTo: playerId)];
+
+            // Somebody is walking over to fight. Standing still for it is the rule, and
+            // it is enforced here rather than asked for politely, because a client that
+            // decided when it had been seen could decide it never had.
+            if (player.WatchedBy is not null)
+            {
+                return [new Outgoing(
+                    new MoveRejected(player.Square.X, player.Square.Y, player.Facing, "Somebody wants a word."),
+                    OnlyTo: playerId)];
+            }
 
             // Facing changes even when the step does not, so turning on the spot works.
             Direction before = player.Facing;
@@ -510,6 +532,8 @@ public sealed class GameWorld
 
                 foreach (ObjectView moved in people.Step(_objectRng, nowSeconds, square => IsFree(mapId, square)))
                     send.Add(new Outgoing(new ObjectMoved(moved.LocalId, moved.X, moved.Y, moved.Facing), OnMap: mapId));
+
+                send.AddRange(StepApproaches(mapId, people, nowSeconds));
             }
 
             // Maps nobody can see any more stop being simulated, and forget where their
@@ -693,6 +717,111 @@ public sealed class GameWorld
                 OnlyTo: player.Id),
         ];
     }
+
+    /// <summary>
+    /// Starts somebody walking up to the player who wandered into their line of sight.
+    /// <para>
+    /// The fight does not begin here. What begins is a walk, and until it finishes the
+    /// player stands still — which is the server's business rather than the client's,
+    /// because a client that decided when it was allowed to move again could simply
+    /// decide never to have been seen.
+    /// </para>
+    /// </summary>
+    private List<Outgoing> BeginApproach(ServerPlayer player, MapObject watcher)
+    {
+        if (!_populated.TryGetValue(player.MapId, out MapPopulation? people)) return [];
+        if (people.ById(watcher.LocalId) is not { } person) return [];
+        if (person.Approaching is not null) return [];
+
+        person.Approaching = player.Id;
+        person.Approach.Clear();
+
+        foreach (GridPosition square in watcher.ApproachTo(player.Square)) person.Approach.Enqueue(square);
+
+        player.WatchedBy = watcher.LocalId;
+
+        return [new Outgoing(new TrainerSpotted(watcher.LocalId), OnlyTo: player.Id)];
+    }
+
+    /// <summary>
+    /// One step of every walk in progress, and the fight at the end of it.
+    /// <para>
+    /// Stepped on the clock rather than all at once, because the whole point is that it
+    /// takes time. A walk whose player has gone — through a door, or off the end of a
+    /// connection — is abandoned rather than followed.
+    /// </para>
+    /// </summary>
+    private List<Outgoing> StepApproaches(string mapId, MapPopulation people, double nowSeconds)
+    {
+        var send = new List<Outgoing>();
+
+        foreach (ServerObject person in people.Objects)
+        {
+            if (person.Approaching is not { } playerId) continue;
+
+            if (!_players.TryGetValue(playerId, out ServerPlayer? player) || player.MapId != mapId)
+            {
+                person.Approaching = null;
+                person.Approach.Clear();
+                continue;
+            }
+
+            if (nowSeconds < person.NextApproachAt) continue;
+
+            person.NextApproachAt = nowSeconds + WalkingCharacter.StepSeconds;
+
+            if (person.Approach.Count > 0)
+            {
+                GridPosition next = person.Approach.Dequeue();
+
+                person.Facing = Toward(person.Square, next);
+                person.Square = next;
+
+                send.Add(new Outgoing(
+                    new ObjectMoved(person.LocalId, next.X, next.Y, person.Facing),
+                    OnMap: mapId));
+
+                continue;
+            }
+
+            // Arrived. Look at them, then start the fight the walk was for.
+            Direction looking = Toward(person.Square, player.Square);
+
+            person.Approaching = null;
+            player.WatchedBy = null;
+
+            // Only if it is news. Somebody who walked straight down a route is already
+            // facing the player they walked at, and the same rule that keeps a repeated
+            // turn off the wire for a player keeps it off for them.
+            if (person.Facing != looking)
+            {
+                person.Facing = looking;
+
+                send.Add(new Outgoing(
+                    new ObjectMoved(person.LocalId, person.Square.X, person.Square.Y, person.Facing),
+                    OnMap: mapId));
+            }
+
+            // A fight that cannot start — no rules file, no healthy lead, a party
+            // already wiped — must still end the walk. Otherwise the player is held
+            // still by somebody standing next to them with nothing to say.
+            send.AddRange(StartTrainerBattle(player, person.Template with
+            {
+                X = person.Square.X,
+                Y = person.Square.Y,
+                Facing = person.Facing,
+            }));
+        }
+
+        return send;
+    }
+
+    /// <summary>Which way one square is from another, for a step of exactly one.</summary>
+    private static Direction Toward(GridPosition from, GridPosition to) =>
+        to.Y < from.Y ? Direction.Up
+        : to.Y > from.Y ? Direction.Down
+        : to.X < from.X ? Direction.Left
+        : Direction.Right;
 
     /// <summary>
     /// Whoever on this map has just spotted the player, if anybody has.
@@ -941,6 +1070,24 @@ public sealed class GameWorld
         }
     }
 
+    /// <summary>
+    /// Lets go of anybody walking towards a player who is no longer there to be walked
+    /// towards. Called wherever a player leaves a map, for the same reason a hold is.
+    /// </summary>
+    private void AbandonApproaches(int playerId)
+    {
+        foreach (MapPopulation people in _populated.Values)
+        {
+            foreach (ServerObject person in people.Objects)
+            {
+                if (person.Approaching != playerId) continue;
+
+                person.Approaching = null;
+                person.Approach.Clear();
+            }
+        }
+    }
+
     /// <summary>The text box is closed. Whoever this player was holding carries on.</summary>
     public void StopTalking(int playerId)
     {
@@ -1023,13 +1170,13 @@ public sealed class GameWorld
             return;
         }
 
-        if (WhoSpotted(player) is { } watcher)
+        if (WhoSpotted(player) is { } watcher && BeginApproach(player, watcher) is { Count: > 0 } noticed)
         {
-            send.AddRange(StartTrainerBattle(player, watcher));
+            send.AddRange(noticed);
 
-            // A fight and something in the grass on the same square would be two
-            // battles at once. The person who saw you gets to go first.
-            if (player.InBattle) return;
+            // A fight and something in the grass on the same square would be two battles
+            // at once. The person who saw you gets to go first, and they get to walk.
+            return;
         }
 
         AddEncounterIfAny(player, send);
@@ -1070,6 +1217,10 @@ public sealed class GameWorld
         {
             new(new PlayerLeft(player.Id), Except: player.Id, OnMap: previous),
         };
+
+        // Whoever was walking over is walking over to an empty square now.
+        AbandonApproaches(player.Id);
+        player.WatchedBy = null;
 
         player.MapId = mapId;
         player.Square = arrival;

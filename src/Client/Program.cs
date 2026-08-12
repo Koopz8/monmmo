@@ -506,6 +506,17 @@ public static class Program
 
                     break;
 
+                case TrainerSpotted:
+                    // Nothing to draw yet, and deliberately nothing rather than a text
+                    // box: a box has to be dismissed, and dismissing it would mean
+                    // pressing a button through the walk it exists to announce. The
+                    // exclamation mark over their head is a sprite, and sprites are the
+                    // milestone this one stopped short of.
+                    //
+                    // What the player does see is the walk, which arrives as ordinary
+                    // ObjectMoved messages, and the fight at the end of it.
+                    break;
+
                 case PartyHealed healed:
                     party = healed.Party;
 

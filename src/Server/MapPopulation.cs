@@ -28,6 +28,22 @@ public sealed class ServerObject(MapObject template)
     /// </summary>
     public int? HeldBy { get; set; }
 
+    /// <summary>
+    /// The player this one has spotted and is walking up to, if any.
+    /// <para>
+    /// A trainer who sees you across a route does not fight you from there. They walk
+    /// over, and the walk is the part everybody remembers — it is why you learn to hug
+    /// the far wall of a route rather than stroll down the middle of it.
+    /// </para>
+    /// </summary>
+    public int? Approaching { get; set; }
+
+    /// <summary>The squares left between them and whoever they spotted, nearest first.</summary>
+    public Queue<GridPosition> Approach { get; } = new();
+
+    /// <summary>When they may take the next step of that walk, in server seconds.</summary>
+    public double NextApproachAt { get; set; }
+
     public ObjectView ToView() => new(LocalId, Template.GraphicsId, Square.X, Square.Y, Facing);
 }
 
@@ -101,8 +117,10 @@ public sealed class MapPopulation
             entry.NextMoveAt = now + MoveInterval + rng.Next(100) / 100.0 * Jitter;
 
             // Somebody being spoken to stays where they are and keeps looking at whoever
-            // is speaking. Their turn comes round again as normal once released.
-            if (entry.HeldBy is not null) continue;
+            // is speaking. Their turn comes round again as normal once released. The
+            // same goes for somebody in the middle of walking up to a player: their
+            // route is not a suggestion to be overridden by a wander.
+            if (entry.HeldBy is not null || entry.Approaching is not null) continue;
 
             if (entry.Template.LooksAround)
             {
