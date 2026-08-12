@@ -1805,33 +1805,51 @@ public static class Program
     private static void WriteBytesAfter(Rom rom, byte code, int width = 12)
     {
         Console.WriteLine();
-        Console.WriteLine($"Every place 0x{code:X2} stops a run, and what follows it");
+        Console.WriteLine($"Every place 0x{code:X2} stops a read, and what follows it");
 
         MapLibrary library = MapLibrary.Open(rom);
 
-        var seen = new HashSet<int>();
+        var sites = new Dictionary<int, List<string>>();
 
         foreach (LoadedMap map in library.All())
         {
             foreach (MapObject person in map.Objects.Where(o => o.HasScript))
             {
-                ScriptRun run = ScriptRunner.Run(rom, person.ScriptAddress);
+                // The reader, not the runner. A runner walks one path — the one today's
+                // flags choose — so a command sitting behind any condition it does not
+                // satisfy is invisible to it. 0x7C stops two hundred reads and stopped
+                // exactly zero runs, and this view reported no sites for the largest
+                // unknown in the project.
+                if (ScriptReader.StoppedAt(rom, person.ScriptAddress) != code) continue;
+                if (ScriptReader.StoppedAtOffset(rom, person.ScriptAddress) is not { } at) continue;
 
-                if (run.StoppedAt != code || run.StoppedAtOffset is not { } at) continue;
-                if (!seen.Add(at)) continue;
+                if (!sites.TryGetValue(at, out List<string>? who))
+                    sites[at] = who = [];
 
-                string hex = string.Join(
-                    " ",
-                    Enumerable.Range(1, width)
-                        .Where(i => at + i < rom.Length)
-                        .Select(i => $"{rom.ReadU8(at + i):X2}"));
-
-                Console.WriteLine($"  {Rom.BaseAddress + (uint)at:X8}  {hex}");
+                who.Add($"{WorldExporter.MapId(map.Bank, map.Number)} person {person.LocalId}");
             }
         }
 
+        foreach ((int at, List<string> who) in sites.OrderByDescending(s => s.Value.Count))
+        {
+            string hex = string.Join(
+                " ",
+                Enumerable.Range(1, width)
+                    .Where(i => at + i < rom.Length)
+                    .Select(i => $"{rom.ReadU8(at + i):X2}"));
+
+            Console.WriteLine($"  {Rom.BaseAddress + (uint)at:X8}  {hex}   {who.Count,4} x  e.g. {who[0]}");
+        }
+
         Console.WriteLine();
-        Console.WriteLine($"  {seen.Count} sites. A column that never changes is an argument, not a coincidence.");
+        Console.WriteLine($"  {sites.Count} sites. A column that never changes is an argument, not a coincidence.");
+
+        // Sites, not stops. Twenty people reading one shared script is one piece of
+        // evidence written by one person on one afternoon, and three sites a few hundred
+        // bytes apart are probably one script file. Counting stops flatters both.
+        Console.WriteLine(
+            $"  {sites.Values.Sum(w => w.Count)} people stop here, across " +
+            $"{sites.Values.SelectMany(w => w).Select(w => w.Split(' ')[0]).Distinct().Count()} maps");
     }
 
     private static void WriteItems(Rom rom)

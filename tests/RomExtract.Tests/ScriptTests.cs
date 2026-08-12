@@ -310,6 +310,57 @@ public class ScriptReaderTests
     }
 
     [Fact]
+    public void TheObstacleFamilyReadsAsOneScript()
+    {
+        // Two hundred reads, three scripts, five widths — the trees, the boulders and
+        // the rubble. This is the cut script from a real image, byte for byte from
+        // 0x081BDF2B, with its pointers moved to fit a fixture.
+        //
+        // The value in the first command is 15, and 15 in the move table read off that
+        // same image is CUT. 70 is STRENGTH and 249 is ROCK SMASH, and those are the
+        // only three values this command is ever given.
+        Assert.Equal(2, ScriptCommands.ArgumentLength(0x7C));
+        Assert.Equal(3, ScriptCommands.ArgumentLength(0x9D));
+        Assert.Equal(3, ScriptCommands.ArgumentLength(0x7F));
+        Assert.Equal(3, ScriptCommands.ArgumentLength(0x82));
+        Assert.Equal(2, ScriptCommands.ArgumentLength(0x9C));
+
+        uint target = Rom.BaseAddress + 0x100;
+
+        byte[] script =
+        [
+            0x7C, 0x0F, 0x00,               // findmove CUT
+            0x21, 0x0D, 0x80, 0x06, 0x00,   // compare 0x800D, 6
+            ScriptCommands.GotoIf, 0x01,
+            (byte)target, (byte)(target >> 8), (byte)(target >> 16), (byte)(target >> 24),
+            0x9D, 0x00, 0x0D, 0x80,
+            0x7F, 0x00, 0x0D, 0x80,
+            0x82, 0x01, 0x0F, 0x00,
+            0x68,                           // closemessage
+            0x9C, 0x02, 0x00,
+            0x27,
+            ScriptCommands.End,
+        ];
+
+        List<ScriptCommand> commands = ScriptReader.Read(TwoScripts(script, []), Rom.BaseAddress);
+
+        Assert.Equal(
+            new byte[] { 0x7C, 0x21, ScriptCommands.GotoIf, 0x9D, 0x7F, 0x82, 0x68, 0x9C, 0x27, ScriptCommands.End },
+            commands.Select(c => c.Code));
+
+        // The move id, twice: once to ask who can use it and once to say so.
+        Assert.Equal(0x000F, commands[0].Word());
+        Assert.Equal(0x000F, commands[5].Word(1));
+
+        // Six, because a party has six slots and the sixth answer is "none of them".
+        Assert.Equal(0x0006, commands[1].Word(2));
+
+        // The jump lands on a command boundary, which is the check that actually catches
+        // a width wrong by one: a desynchronised stream's own jumps land mid-argument.
+        Assert.Equal(target, commands[2].Pointer(1));
+    }
+
+    [Fact]
     public void AnUnknownCommandStopsTheRead()
     {
         // Guessing a length would resume at some byte inside an argument, and from

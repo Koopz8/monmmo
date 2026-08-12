@@ -407,6 +407,81 @@ public static class ScriptCommands
         // arguments; anything swallowed here eats the release.
         [0x76] = 0,
 
+        // Two, a word, and the largest single unknown this project had: it stopped two
+        // hundred reads. Only three sites, and they sit within three hundred bytes of
+        // each other, so they are much closer to one piece of evidence than to three —
+        // but the three of them carry the whole answer:
+        //
+        //   7C | 0F 00 | 21 0D 80 06 00 | 06 01 87 DF 1B 08
+        //   7C | 46 00 | 21 0D 80 06 00 | 06 01 85 E1 1B 08
+        //   7C | F9 00 | 21 0D 80 06 00 | 06 01 91 E0 1B 08
+        //        ^^^^^   compare 0x800D, 6   goto if equal
+        //
+        // Read as one, the second byte is a nop standing between this and a compare, at
+        // every site — the same thing that settled loadpointer, and nothing emits it.
+        // Read as two, it answers into the result variable and the script immediately
+        // asks whether the answer is six.
+        //
+        // Six is the tell. A party has six slots, so an answer of six is "none of them"
+        // — this hands back a slot number. And the three arguments, looked up in the
+        // move table read off this same image rather than recalled, are CUT (15),
+        // STRENGTH (70) and ROCK SMASH (249). Ninety-seven people share the rock-smash
+        // script, fifty-four the strength one, forty-nine the cut one, across forty-seven
+        // maps: the trees, the boulders and the rubble, asking who in the party can
+        // shift them.
+        [0x7C] = 2,
+
+        // Three, and it is the command 0x7C was hiding. Same three sites, same two
+        // hundred people, and the first three bytes are the same at all of them:
+        //
+        //   9D | 00 0D 80 | 7F 00 0D 80 82 01 F9 00 0F ...
+        //   9D | 00 0D 80 | 0F 00 9A E1 1B 08 09 05 21 ...    loadpointer 0x081BE19A
+        //   9D | 00 0D 80 | 7F 00 0D 80 82 01 0F 00 0F ...
+        //
+        // A byte and then 0x800D — the slot 0x7C has just answered with, handed
+        // straight on to this. Three is the only width that leaves every site pointing
+        // at something: the middle one lands exactly on a loadpointer carrying a good
+        // script pointer, and every shorter width makes the read walk into a killscript
+        // (0x0D) that is plainly the low half of 0x800D.
+        //
+        // Not named. What it does with the slot is not written down here.
+        [0x9D] = 3,
+
+        // Three, and the same shape as the one before it — a byte and 0x800D again,
+        // the slot handed along a second time:
+        //
+        //   7F | 00 0D 80 | 82 01 F9 00 | 0F 00 9D E0 1B 08
+        //   7F | 00 0D 80 | 82 01 0F 00 | 0F 00 94 DF 1B 08
+        //
+        [0x7F] = 3,
+
+        // Three: a constant byte and then a move id — and it is the *same* move id the
+        // script asked about six commands earlier. The cut script says CUT twice, the
+        // rock-smash script says ROCK SMASH twice, and both land exactly on a
+        // loadpointer carrying a good script pointer.
+        //
+        //   82 | 01 0F 00 | 0F 00 94 DF 1B 08     CUT
+        //   82 | 01 F9 00 | 0F 00 9D E0 1B 08     ROCK SMASH
+        //
+        [0x82] = 3,
+
+        // Two. Three sites, three different words, and the byte above them never
+        // changes:
+        //
+        //   9C | 02 00 | 27 05 76 DF 1B 08 02     cut
+        //   9C | 25 00 | 27 05 6F E0 1B 08 02     rock smash
+        //   9C | 28 00 | 27 05 79 E1 1B 08 02     strength
+        //
+        // Each appears twice inside its own script, byte for byte, once after a
+        // closemessage and once after a lockall.
+        //
+        // The confirmation is the jumps rather than the column: read this way, every
+        // goto target in all three scripts lands exactly on a command boundary — the
+        // 0x081BDF76 that 0x081BDF65 jumps to is a 0x4F, the 0x081BDF87 the top of the
+        // script jumps to is a loadpointer. A width that is wrong by one desynchronises
+        // the stream, and a desynchronised stream's own jumps land mid-argument.
+        [0x9C] = 2,
+
         // Nothing, and the three sites make a chain of known commands the moment it is
         // read that way:
         //
@@ -476,6 +551,10 @@ public static class ScriptCommands
         0x29 => "setflag",
         0x2A => "clearflag",
         0x2B => "checkflag",
+        // Named for what the bytes show it doing rather than for what it might be
+        // called: it is handed a move id and answers a party slot, or six for nobody.
+        0x7C => "findmove",
+
         0x68 => "closemessage",
         0x69 => "lockall",
         0x6D => "waitstate",
