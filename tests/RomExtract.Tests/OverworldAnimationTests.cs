@@ -124,6 +124,11 @@ public class OverworldAnimationTests
     {
         // Fourteen of the real cartridge's records have a single frame. Asking one of
         // those for frame eight would read somebody else's sprite.
+        //
+        // Not a walker is not the same as not a sprite, and reading this as though it
+        // were is what drew every ball on the ground as a tan rectangle. A ball has one
+        // frame, and so does a cuttable tree and a boulder: they are drawn from frame
+        // zero and never asked which way they are facing.
         Assert.False(OverworldAnimation.CanWalk(1));
         Assert.True(OverworldAnimation.CanWalk(OverworldAnimation.WalkingFrameCount));
         Assert.True(OverworldAnimation.CanWalk(20));

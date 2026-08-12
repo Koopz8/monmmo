@@ -1485,7 +1485,7 @@ public static class Program
                     {
                         found.Add(
                             $"{WorldExporter.MapId(map.Bank, map.Number)} person {person.LocalId}: " +
-                            $"item {given} x{run.GivesCount}");
+                            $"item {given} x{run.GivesCount}, drawn with graphics {person.GraphicsId}");
                     }
 
                     continue;

@@ -22,12 +22,25 @@ public sealed class CharacterSprite : IDisposable
 
     private readonly List<Texture2D> _frames = [];
 
-    private CharacterSprite(List<Texture2D> frames, int width, int height)
+    private CharacterSprite(List<Texture2D> frames, int width, int height, bool walks)
     {
         _frames = frames;
         Width = width;
         Height = height;
+        Walks = walks;
     }
+
+    /// <summary>
+    /// True when this one has enough frames to be animated as somebody walking.
+    /// <para>
+    /// Plenty of things standing on a map are not people. A ball on the ground has one
+    /// frame; so does a cuttable tree and a boulder. Refusing to load those because they
+    /// cannot walk is what left a Poké Ball in Viridian Forest drawn as the same tan
+    /// rectangle this client falls back to when it has nothing at all — a placeholder
+    /// standing in for a sprite that was on the cartridge the whole time.
+    /// </para>
+    /// </summary>
+    public bool Walks { get; }
 
     public int Width { get; }
 
@@ -46,7 +59,11 @@ public sealed class CharacterSprite : IDisposable
 
         List<IndexedImage> images = OverworldSprites.ReadFrames(rom, info, tables.Boundaries);
 
-        if (!OverworldAnimation.CanWalk(images.Count)) return null;
+        // One frame is enough to draw. Only walking needs nine, and most of what stands
+        // on a map does not walk.
+        if (images.Count == 0) return null;
+
+        bool walks = OverworldAnimation.CanWalk(images.Count);
 
         var frames = new List<Texture2D>();
 
@@ -62,7 +79,7 @@ public sealed class CharacterSprite : IDisposable
             frames.Add(texture);
         }
 
-        return new CharacterSprite(frames, info.Width, info.Height);
+        return new CharacterSprite(frames, info.Width, info.Height, walks);
     }
 
     /// <summary>
@@ -74,7 +91,13 @@ public sealed class CharacterSprite : IDisposable
     {
         if (_frames.Count == 0) return;
 
-        (int index, bool mirror) = OverworldAnimation.FrameFor(facing, walking, stride);
+        // Something that does not walk has one picture and no facing. Asking the
+        // animation which frame a ball uses when looking left is a question with no
+        // answer, and the old one was to draw a rectangle instead.
+        (int index, bool mirror) = Walks
+            ? OverworldAnimation.FrameFor(facing, walking, stride)
+            : (0, false);
+
         if (index >= _frames.Count) index = 0;
 
         Texture2D frame = _frames[index];
