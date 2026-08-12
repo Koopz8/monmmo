@@ -143,6 +143,8 @@ public static class Program
 
         if (options.Specials) WriteSpecials(rom);
 
+        if (options.Special is { } routine) WriteSpecial(rom, routine);
+
         if (options.Shared) WriteSharedScripts(rom);
 
         if (options.Silent) WriteSilentPeople(rom);
@@ -1123,6 +1125,73 @@ public static class Program
     /// cartridge's own authority rather than anybody's memory.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// One routine, and what the script says on each side of the answer.
+    /// <para>
+    /// What a special does cannot be read. What the script does about each answer can be,
+    /// and the words on the two arms are the cartridge's own — which is evidence, in a way
+    /// that recalling another game is not. This project named <c>giveitem</c> from the
+    /// shape of what surrounded it and the obstacle family from move ids looked up in the
+    /// game's own move table. This is the same move, applied to the one thing left.
+    /// </para>
+    /// </summary>
+    private static void WriteSpecial(Rom rom, int routine, int sites = 12)
+    {
+        Console.WriteLine();
+        Console.WriteLine($"special 0x{routine:X4} — what the script says on each side of the answer");
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        List<SpecialCall> calls = [.. SpecialCalls.All(rom, library).Where(c => c.Routine == routine)];
+
+        if (calls.Count == 0)
+        {
+            Console.WriteLine("  nothing on any map calls it");
+            return;
+        }
+
+        // What the arm says if it says anything, and what it does if it does not. Plenty
+        // of these forks are between two silences, and a report that only quotes speech
+        // reports nothing about them at all.
+        string First(uint address)
+        {
+            if (address == 0 || rom.ToOffsetOrNull(address) is null) return "(nowhere)";
+
+            ScriptRun run = ScriptRunner.Run(rom, address);
+
+            if (run.Pages.Count > 0)
+                return $"\"{GameText.ToAscii(run.Pages[0]).Replace('\n', ' ')}\"";
+
+            List<ScriptCommand> commands = ScriptReader.Read(rom, address);
+
+            return commands.Count == 0
+                ? "(nothing readable)"
+                : string.Join(", ", commands.Take(4).Select(c => ScriptCommands.NameOf(c.Code)));
+        }
+
+        int shown = 0;
+
+        foreach (SpecialCall call in calls.Where(c => c.Branches.Count > 0))
+        {
+            foreach (Branch fork in call.Branches)
+            {
+                Console.WriteLine();
+                Console.WriteLine(
+                    $"  {call.MapId} {call.What}" +
+                    (call.Arguments.Count == 0
+                        ? ""
+                        : "  given " + string.Join(", ", call.Arguments.Select(a => $"0x{a.Variable:X4}={a.Value}"))));
+
+                Console.WriteLine($"    answer is {fork.Value}  -> {First(fork.Taken)}");
+                Console.WriteLine($"    otherwise      -> {First(fork.NotTaken)}");
+
+                if (++shown >= sites) return;
+            }
+        }
+
+        if (shown == 0) Console.WriteLine("  called, but never branched on — it does something rather than answering");
+    }
+
     /// <summary>
     /// The calls into the game's own code, and the shape of what is asked of each.
     /// <para>
@@ -2450,6 +2519,8 @@ public static class Program
         /// <summary>Count which special routines get called, and on which maps.</summary>
         public bool Specials { get; private init; }
 
+        public int? Special { get; private init; }
+
         /// <summary>Count the scripts map objects hand their work to.</summary>
         public bool Shared { get; private init; }
 
@@ -2507,6 +2578,7 @@ public static class Program
             string scriptRun = "";
             bool scriptRuns = false;
             bool specials = false;
+            int? special = null;
             bool shared = false;
             bool silent = false;
             bool derive = false;
@@ -2590,6 +2662,12 @@ public static class Program
                         break;
                     case "--script-runs":
                         scriptRuns = true;
+                        break;
+                    case "--special":
+                        string routineId = Next(args, ref i, "--special");
+                        special = routineId.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+                            ? Convert.ToInt32(routineId[2..], 16)
+                            : int.Parse(routineId);
                         break;
                     case "--specials":
                         specials = true;
@@ -2687,6 +2765,7 @@ public static class Program
                 ScriptRun = scriptRun,
                 ScriptRuns = scriptRuns,
                 Specials = specials,
+                Special = special,
                 Shared = shared,
                 Silent = silent,
                 Derive = derive,

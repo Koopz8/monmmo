@@ -13,7 +13,21 @@ public sealed record SpecialCall(
     int Routine,
     int? AnswersInto,
     IReadOnlyList<(int Variable, int Value)> Arguments,
-    IReadOnlyList<(int Value, byte Condition)> Compared);
+    IReadOnlyList<(int Value, byte Condition)> Compared,
+    IReadOnlyList<Branch> Branches);
+
+/// <summary>
+/// One fork in the road after a special, and where each arm goes.
+/// <para>
+/// The two addresses are the whole point. What a routine does cannot be read, but what
+/// the script does about each answer can be — and a script's own words are evidence in a
+/// way that a recollection of another game is not. This project named <c>giveitem</c>
+/// from the shape of what surrounded it and the obstacle family from move ids looked up
+/// in the cartridge's own table; reading a routine from what its two arms say is the same
+/// move.
+/// </para>
+/// </summary>
+public sealed record Branch(int Value, byte Condition, uint Taken, uint NotTaken);
 
 /// <summary>
 /// The <c>special</c> calls, and the shape of what is asked of each routine.
@@ -98,7 +112,8 @@ public static class SpecialCalls
                         routine,
                         command.Code == SpecialVar ? command.Word() : null,
                         Before(commands, i),
-                        After(commands, i, command.Code == SpecialVar ? command.Word() : 0x800D)));
+                        After(commands, i, command.Code == SpecialVar ? command.Word() : 0x800D),
+                        Forks(commands, i, command.Code == SpecialVar ? command.Word() : 0x800D)));
                 }
             }
         }
@@ -155,6 +170,34 @@ public static class SpecialCalls
         }
 
         return compared;
+    }
+
+    /// <summary>Where each arm of the branch after a call actually goes.</summary>
+    private static List<Branch> Forks(List<ScriptCommand> commands, int at, int answer)
+    {
+        var forks = new List<Branch>();
+
+        for (int i = at + 1; i < commands.Count - 1 && i <= at + Window; i++)
+        {
+            if (!Adjacent(commands[i - 1], commands[i])) break;
+            if (commands[i].Code != Compare) continue;
+            if (commands[i].Word() != answer) continue;
+            if (!Adjacent(commands[i], commands[i + 1])) continue;
+            if (commands[i + 1].Code is not (GotoIf or CallIf)) continue;
+
+            ScriptCommand jump = commands[i + 1];
+
+            forks.Add(new Branch(
+                commands[i].Word(2),
+                jump.Arguments[0],
+                jump.Pointer(1),
+
+                // The address the read would carry on from, which is the arm taken when
+                // the condition does not hold.
+                (uint)(Rom.BaseAddress + jump.Offset + 1 + jump.Arguments.Length)));
+        }
+
+        return forks;
     }
 
     /// <summary>

@@ -894,3 +894,52 @@ public class SpecialCallTests
         Assert.Equal(0x00AB, Assert.Single(run.SpecialsCalled));
     }
 }
+
+/// <summary>
+/// Reading a routine from what the script does about each answer.
+/// <para>
+/// What a special does cannot be read. What the two arms after it say can be, and those
+/// are the cartridge's own words — which is evidence in a way that recalling another game
+/// is not. On a real image the arms after 0x0174 differ by exactly one word, "bud" and
+/// "lady", which says what the routine distinguishes without anybody having to remember.
+/// </para>
+/// </summary>
+public class SpecialBranchTests
+{
+    private const uint Start = Rom.BaseAddress;
+    private const uint Yes = Rom.BaseAddress + 0x100;
+
+    private static byte[] At(uint address) =>
+        [(byte)address, (byte)(address >> 8), (byte)(address >> 16), (byte)(address >> 24)];
+
+    [Fact]
+    public void BothArmsOfTheAnswerAreFound()
+    {
+        var image = new byte[0x400];
+
+        byte[] script =
+        [
+            0x25, 0x74, 0x01,                               // special 0x0174
+            0x21, 0x0D, 0x80, 0x01, 0x00,                   // compare 0x800D, 1
+            ScriptCommands.GotoIf, 0x01, .. At(Yes),        // if equal, the other arm
+            ScriptCommands.End,
+        ];
+
+        script.CopyTo(image, 0);
+        new byte[] { ScriptCommands.End }.CopyTo(image, (int)(Yes - Rom.BaseAddress));
+
+        // Not through a map: this is about the shape of the fork, and a fixture map would
+        // only be a longer way to write the same four commands.
+        List<ScriptCommand> commands = ScriptReader.Read(new Rom(image), Start);
+
+        Assert.Equal(
+            new byte[] { 0x25, 0x21, ScriptCommands.GotoIf, ScriptCommands.End },
+            commands.Select(c => c.Code));
+
+        // The arm taken when the answer matches, and the one taken when it does not —
+        // the second being simply where the read carries on.
+        Assert.Equal(Yes, commands[2].Pointer(1));
+        // 3 + 5 + 6 bytes of command in front of it, counted rather than eyeballed.
+        Assert.Equal(Start + 14, Rom.BaseAddress + (uint)commands[3].Offset);
+    }
+}
