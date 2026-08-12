@@ -575,6 +575,22 @@ public static class Program
     /// </summary>
     private static string LastTalk = "nothing yet";
 
+    /// <summary>
+    /// Says something on the client's own terminal, as well as on the status bar.
+    /// <para>
+    /// The server has printed a line for everything it decides since the day it had
+    /// anything to decide, and this side has printed nothing since it was written. A
+    /// screenshot shows the last thing that happened; a terminal shows the order things
+    /// happened in, which is the difference between "the box did not open" and "the box
+    /// did not open and here is what ran instead".
+    /// </para>
+    /// </summary>
+    private static void Note(string what)
+    {
+        LastTalk = what;
+        Console.WriteLine($"  {what}");
+    }
+
     private static DialogueBox? Talk(
         GameData data, MapView view, WalkingCharacter player, NetworkClient network, ScriptState script,
         IReadOnlyList<SavedMon> party)
@@ -583,10 +599,21 @@ public static class Program
         // nowhere near where the cartridge put them.
         Dictionary<int, GridPosition> live = view.People.ToDictionary(p => p.Key, p => p.Value.Square);
 
+        // Only the people the server has said are here. Six hundred objects in this game
+        // are behind a flag, and the drawing already leaves those out — but the list the
+        // cartridge holds does not, so until now the button could be pressed at somebody
+        // who is not on the map, and they would answer.
+        //
+        // The cartridge's list is still the fallback, for the moment between arriving
+        // somewhere and being told who is on it.
+        IReadOnlyList<MapObject> here = view.People.Count > 0
+            ? [.. view.Map.Objects.Where(o => view.People.ContainsKey(o.LocalId))]
+            : view.Map.Objects;
+
         // The map's own walkability, not the grid the client predicts against — that one
         // has people in it, and a person is not a counter.
         if (Interaction.InFrontOf(
-                player.Square, player.Facing, view.Map.Objects, live,
+                player.Square, player.Facing, here, live,
                 square => !view.Map.Collision.IsWalkable(square)) is not { } person)
         {
             // Nobody there, but there may still be something written there. A sign is
@@ -594,7 +621,7 @@ public static class Program
             // on, and there is nothing for the server to arbitrate — nobody stands still
             // to be read, nothing changes hands, and the words are on an image the
             // server has never seen. So this one never leaves the machine.
-            LastTalk = $"nobody in front of {player.Square} facing {player.Facing}";
+            Note($"nobody in front of {player.Square} facing {player.Facing}");
 
             return Read(data, view, player, network, script, party);
         }
@@ -628,10 +655,12 @@ public static class Program
 
         DialogueBox? box = person.HasScript ? new DialogueBox(run.Pages) : null;
 
-        LastTalk =
-            !person.HasScript ? $"person {person.LocalId} has no script"
-            : run.StoppedAt is { } stopper ? $"person {person.LocalId}: stopped at 0x{stopper:X2}, {run.Pages.Count} pages"
-            : $"person {person.LocalId}: {run.Pages.Count} pages";
+        Note(
+            !person.HasScript
+                ? $"person {person.LocalId} at {person.Square} has no script"
+                : $"person {person.LocalId} script 0x{person.ScriptAddress:X8}: {run.Pages.Count} pages" +
+                  (run.StoppedAt is { } stopper ? $", stopped at 0x{stopper:X2}" : "") +
+                  $", box {(new DialogueBox(run.Pages).IsEmpty ? "empty" : "opens")}");
 
         // Plenty of scripts say nothing at all — they set a flag, or hand something
         // over. An empty box would still have to be dismissed, so there isn't one.
@@ -698,7 +727,12 @@ public static class Program
     {
         List<uint> armed = MapEntryScript.ArmedIn(view.Map.OnEntry, script.Read);
 
-        return armed.Count == 0 ? (talking, null) : Play(data, view, network, script, party, talking, armed);
+        if (armed.Count == 0) return (talking, null);
+
+        Note($"arriving on {view.MapId} runs {armed.Count}: " +
+             string.Join(", ", armed.Select(a => $"0x{a:X8}")));
+
+        return Play(data, view, network, script, party, talking, armed);
     }
 
     /// <summary>
@@ -735,6 +769,8 @@ public static class Program
             if (run.IsScene) beats.AddRange(run.Beats);
             else pages.AddRange(run.Pages);
         }
+
+        Note($"ran {addresses.Count}: {beats.Count} beats, {pages.Count} pages");
 
         if (beats.Count > 0)
         {
