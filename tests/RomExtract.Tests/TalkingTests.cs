@@ -1276,9 +1276,17 @@ public class ScenePlacementTests
     private static MapObject Somebody(int localId, int x, int y) =>
         new(localId, 5, x, y, Direction.Down, 0, false);
 
+    /// <summary>
+    /// A map with somebody on it and a trigger under the player's feet, because what
+    /// makes a scene placement acceptable is a scene, and a trigger is how one starts.
+    /// </summary>
     private static (GameWorld World, ServerPlayer Player) Standing(params MapObject[] people)
     {
-        MapData map = new(Town, "PALLET TOWN", 8, 8, new byte[64]) { Objects = people };
+        MapData map = new(Town, "PALLET TOWN", 8, 8, new byte[64])
+        {
+            Objects = people,
+            Triggers = [new MapTrigger(3, 4, 0x4001, 0)],
+        };
 
         var world = new GameWorld(new WorldData([map]), Town, TestRules.All);
 
@@ -1294,9 +1302,9 @@ public class ScenePlacementTests
     {
         (GameWorld world, ServerPlayer player) = Standing(Somebody(1, 3, 3));
 
-        world.StartTalking(player.Id, 1);
+        world.FireTrigger(player.Id, 3, 4, 10);
 
-        ObjectMoved moved = world.PlaceAfterScene(player.Id, 1, new GridPosition(5, 5), Direction.Left)
+        ObjectMoved moved = world.PlaceAfterScene(player.Id, 1, new GridPosition(5, 5), Direction.Left, 11)
             .Select(o => o.Message).OfType<ObjectMoved>().Single();
 
         Assert.Equal((5, 5), (moved.X, moved.Y));
@@ -1310,8 +1318,8 @@ public class ScenePlacementTests
         // rearrange anybody on any map they happened to be standing on.
         (GameWorld world, ServerPlayer player) = Standing(Somebody(1, 3, 3));
 
-        Assert.Empty(world.PlaceAfterScene(player.Id, 1, new GridPosition(5, 5), Direction.Left));
-        Assert.Contains("held by nobody", world.LastScenePlacement);
+        Assert.Empty(world.PlaceAfterScene(player.Id, 1, new GridPosition(5, 5), Direction.Left, 11));
+        Assert.Contains("no scene is running", world.LastScenePlacement);
     }
 
     [Fact]
@@ -1320,16 +1328,20 @@ public class ScenePlacementTests
         var collision = new byte[64];
         collision[5 * 8 + 5] = 1;
 
-        MapData map = new(Town, "PALLET TOWN", 8, 8, collision) { Objects = [Somebody(1, 3, 3)] };
+        MapData map = new(Town, "PALLET TOWN", 8, 8, collision)
+        {
+            Objects = [Somebody(1, 3, 3)],
+            Triggers = [new MapTrigger(3, 4, 0x4001, 0)],
+        };
 
         var world = new GameWorld(new WorldData([map]), Town, TestRules.All);
 
         (ServerPlayer player, _) = world.Join(1, "Koop", SavedCharacter.Fresh(Town, 3, 4));
         player.Facing = Direction.Up;
 
-        world.StartTalking(player.Id, 1);
+        world.FireTrigger(player.Id, 3, 4, 10);
 
-        Assert.Empty(world.PlaceAfterScene(player.Id, 1, new GridPosition(5, 5), Direction.Left));
+        Assert.Empty(world.PlaceAfterScene(player.Id, 1, new GridPosition(5, 5), Direction.Left, 11));
         Assert.Contains("not somewhere anybody can stand", world.LastScenePlacement);
     }
 
@@ -1338,9 +1350,9 @@ public class ScenePlacementTests
     {
         (GameWorld world, ServerPlayer player) = Standing(Somebody(1, 3, 3), Somebody(2, 5, 5));
 
-        world.StartTalking(player.Id, 1);
+        world.FireTrigger(player.Id, 3, 4, 10);
 
-        Assert.Empty(world.PlaceAfterScene(player.Id, 1, new GridPosition(5, 5), Direction.Left));
+        Assert.Empty(world.PlaceAfterScene(player.Id, 1, new GridPosition(5, 5), Direction.Left, 11));
         Assert.Contains("already has object 2", world.LastScenePlacement);
     }
 
@@ -1352,9 +1364,9 @@ public class ScenePlacementTests
         // whole map, once per person, once per scene, is noise nobody needs.
         (GameWorld world, ServerPlayer player) = Standing(Somebody(1, 3, 3));
 
-        world.StartTalking(player.Id, 1);
+        world.FireTrigger(player.Id, 3, 4, 10);
 
-        Assert.Empty(world.PlaceAfterScene(player.Id, 1, new GridPosition(3, 3), Direction.Down));
+        Assert.Empty(world.PlaceAfterScene(player.Id, 1, new GridPosition(3, 3), Direction.Down, 11));
         Assert.Contains("already at", world.LastScenePlacement);
     }
 }

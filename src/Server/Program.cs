@@ -625,7 +625,7 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
 
                         case ScenePlaced placed when playerId != 0:
                             List<Outgoing> after = world.PlaceAfterScene(
-                                playerId, placed.LocalId, new GridPosition(placed.X, placed.Y), placed.Facing);
+                                playerId, placed.LocalId, new GridPosition(placed.X, placed.Y), placed.Facing, Now);
 
                             if (world.LastScenePlacement is { } placement)
                                 Console.WriteLine($"* #{playerId} scene: {placement}");

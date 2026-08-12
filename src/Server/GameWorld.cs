@@ -1533,7 +1533,8 @@ public sealed class GameWorld
     /// cost of every cutscene in the game.
     /// </para>
     /// </summary>
-    public List<Outgoing> PlaceAfterScene(int playerId, int localId, GridPosition square, Direction facing)
+    public List<Outgoing> PlaceAfterScene(
+        int playerId, int localId, GridPosition square, Direction facing, double nowSeconds = 0)
     {
         lock (_gate)
         {
@@ -1548,16 +1549,26 @@ public sealed class GameWorld
                 return [];
             }
 
-            if (person.HeldBy != playerId)
+            // The scene window, not the hold. The hold was only ever a proxy for "there
+            // is a scene going on", and it is a bad one: it depends on two messages
+            // arriving in the order they were sent, and in play they did not — a text box
+            // closing let go of the cast between the walk and the placement, and the
+            // placement was refused for a reason that had nothing to do with it.
+            //
+            // The window is the real thing, it is already what bounds a scene walk and a
+            // scene cast, and it does not care what order anything arrives in.
+            if (nowSeconds > player.SceneUntil)
             {
-                // Who does hold them, because "not by you" and "by nobody" are different
-                // problems and the message could not tell them apart. The first is two
-                // players in one scene; the second is something letting go mid-scene, and
-                // guessing which one it was is how an afternoon goes missing.
-                LastScenePlacement = person.HeldBy is { } holder
-                    ? $"object {localId} is held by #{holder}, not by them"
-                    : $"object {localId} is being held by nobody — something let go mid-scene";
+                LastScenePlacement = $"object {localId}: no scene is running for them";
+                return [];
+            }
 
+            // Still worth saying when somebody else is holding them, because that is a
+            // different situation entirely — two players inside one scene — and it is
+            // worth not being silent about it.
+            if (person.HeldBy is { } holder && holder != playerId)
+            {
+                LastScenePlacement = $"object {localId} is held by #{holder}, not by them";
                 return [];
             }
 
