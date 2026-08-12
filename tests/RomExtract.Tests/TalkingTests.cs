@@ -1467,6 +1467,61 @@ public class ScenePlacementTests
     }
 
     [Fact]
+    public void SomebodyWalkedOntoADoorHasGoneThroughIt()
+    {
+        // The mirror of the rule below it. The professor walks to his lab at the end of
+        // the opening and the cartridge takes him inside; left on the doormat he blocks
+        // the only way in, because a doorway has one walkable neighbour and he is
+        // standing on the other end of it.
+        var collision = new byte[64];
+        collision[3 * 8 + 6] = 1;
+
+        MapData map = new(Town, "PALLET TOWN", 8, 8, collision)
+        {
+            Objects = [Somebody(1, 3, 3)],
+            Triggers = [new MapTrigger(3, 4, 0x4001, 0)],
+            Warps = [new Warp(6, 3, 0, "4.3")],
+        };
+
+        var world = new GameWorld(new WorldData([map]), Town, TestRules.All);
+
+        (ServerPlayer player, _) = world.Join(1, "Koop", SavedCharacter.Fresh(Town, 3, 4));
+
+        world.FireTrigger(player.Id, 3, 4, 10);
+
+        WentInside inside = world.PlaceAfterScene(player.Id, 1, new GridPosition(6, 3), Direction.Up, 11)
+            .Select(o => o.Message).OfType<WentInside>().Single();
+
+        Assert.Equal(1, inside.LocalId);
+        Assert.Contains("went in through the door", world.LastScenePlacement);
+    }
+
+    [Fact]
+    public void AWarpOnOrdinaryFloorIsNotADoor()
+    {
+        // Stairs, cave mouths and doormats are warps on squares people stand on, and a
+        // thousand of this game's twelve hundred warps are one of those. Only the ones
+        // the map data itself calls solid are doors.
+        MapData map = new(Town, "PALLET TOWN", 8, 8, new byte[64])
+        {
+            Objects = [Somebody(1, 3, 3)],
+            Triggers = [new MapTrigger(3, 4, 0x4001, 0)],
+            Warps = [new Warp(6, 3, 0, "4.3")],
+        };
+
+        var world = new GameWorld(new WorldData([map]), Town, TestRules.All);
+
+        (ServerPlayer player, _) = world.Join(1, "Koop", SavedCharacter.Fresh(Town, 3, 4));
+
+        world.FireTrigger(player.Id, 3, 4, 10);
+
+        ObjectMoved moved = world.PlaceAfterScene(player.Id, 1, new GridPosition(6, 3), Direction.Up, 11)
+            .Select(o => o.Message).OfType<ObjectMoved>().Single();
+
+        Assert.Equal((6, 3), (moved.X, moved.Y));
+    }
+
+    [Fact]
     public void NobodyIsLeftStandingOnAPlayer()
     {
         // The square was checked against the other people on the map and not against the

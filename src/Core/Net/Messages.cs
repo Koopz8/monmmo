@@ -31,6 +31,7 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(ApproachEnded), "approachover")]
 [JsonDerivedType(typeof(ItemFound), "itemfound")]
 [JsonDerivedType(typeof(ObstacleShifted), "shifted")]
+[JsonDerivedType(typeof(WentInside), "wentinside")]
 [JsonDerivedType(typeof(TriggerFired), "triggered")]
 [JsonDerivedType(typeof(ScenePlaced), "sceneplaced")]
 [JsonDerivedType(typeof(SceneCast), "scenecast")]
@@ -306,6 +307,21 @@ public sealed record ApproachEnded : NetMessage;
 /// </para>
 /// </summary>
 public sealed record ItemFound(int ItemId, int Count, IReadOnlyList<BagEntry> Bag) : NetMessage;
+
+/// <summary>
+/// Somebody a scene was walking has gone in through a door.
+/// <para>
+/// The professor does not stand in his own doorway at the end of the opening; he goes
+/// inside, and so does everybody else a scene walks onto a door. The cartridge says as
+/// much in the block data — a door's square is solid, and this game opens it so people
+/// can walk through rather than so they can stand there.
+/// </para>
+/// <para>
+/// Sent to one player, like a felled tree and for the same reason: it is that player's
+/// scene that put them there, and it lasts until they leave the map.
+/// </para>
+/// </summary>
+public sealed record WentInside(int LocalId) : NetMessage;
 
 /// <summary>
 /// Something in the way has been moved out of it — a tree cut, a boulder pushed, rubble

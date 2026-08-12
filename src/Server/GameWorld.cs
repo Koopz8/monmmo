@@ -1556,6 +1556,30 @@ public sealed class GameWorld
                 return [];
             }
 
+            // Onto a door, which means through it. Nobody is left standing in a doorway:
+            // a door's square is solid in the block data and this game opens it so people
+            // can walk through, not so they can stand there. The professor walks to his
+            // lab at the end of the opening and the cartridge takes him inside; leaving
+            // him on the doormat blocks the only way in, because a doorway has exactly
+            // one walkable neighbour and he is standing on the other end of it.
+            //
+            // Mirror of the rule one milestone back. That one was "a scene may not leave
+            // somebody standing on a player"; this is "a scene may not leave somebody
+            // standing on a door", and both are the same sentence about squares nobody
+            // should be left on.
+            if (_world.Find(player.MapId)?.IsDoor(square) == true)
+            {
+                // Off the map the way a felled tree is: for this player, until they
+                // leave. That mechanism already exists and already means exactly this —
+                // something the map has that this player can walk through.
+                person.HeldBy = null;
+                player.Shifted.Add(localId);
+
+                LastScenePlacement = $"object {localId} went in through the door at {square}";
+
+                return [new Outgoing(new WentInside(localId), OnlyTo: playerId)];
+            }
+
             if (!GridFor(player.MapId).IsWalkable(square))
             {
                 LastScenePlacement = $"{square} is not somewhere anybody can stand";

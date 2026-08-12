@@ -82,6 +82,7 @@ public class MessageChannelTests
             new TrainerSpotted(3),
             new ApproachEnded(),
             new ItemFound(13, 2, [new BagEntry(13, 2)]),
+            new WentInside(3),
             new ObstacleShifted(4, 15, 1),
             new TriggerFired(9, 12),
             new ScenePlaced(2, 5, 6, Direction.Left),

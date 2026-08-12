@@ -83,6 +83,21 @@ public sealed record MapData(string Id, string Name, int Width, int Height, byte
         return Warps.Count(w => !raw.IsWalkable(w.Square));
     }
 
+    /// <summary>
+    /// Whether a square is a door: a warp on a square the map data itself calls solid.
+    /// <para>
+    /// The distinction matters and the cartridge draws it. Of this game's 1294 warps, 279
+    /// sit on squares that are solid in the block data — those are doors, and they are
+    /// opened for walking through rather than for standing on. The other thousand are
+    /// stairs, cave mouths and mats, which are ordinary floor and which people do stand
+    /// on.
+    /// </para>
+    /// </summary>
+    public bool IsDoor(GridPosition square) =>
+        square.X >= 0 && square.Y >= 0 && square.X < Width && square.Y < Height &&
+        Collision[square.Y * Width + square.X] != 0 &&
+        Warps.Any(w => w.X == square.X && w.Y == square.Y);
+
     /// <summary>The warp on a square, if there is one.</summary>
     public Warp? WarpAt(GridPosition square) =>
         Warps.FirstOrDefault(w => w.X == square.X && w.Y == square.Y);

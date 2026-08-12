@@ -819,6 +819,14 @@ public static class Program
 
                     break;
 
+                case WentInside inside:
+                    // Same removal a felled tree gets, and for the same reason it is the
+                    // server's to say: a client that takes people off its own map is a
+                    // client that can clear a doorway by claiming a scene did it.
+                    view.Remove(inside.LocalId);
+
+                    break;
+
                 case ObstacleShifted shifted:
                     // The tree comes down here rather than when the button was pressed.
                     // The client knows perfectly well who in the party knows CUT — it ran
