@@ -136,6 +136,9 @@ public static class Program
         if (!string.IsNullOrEmpty(options.ScriptMap))
             WriteMapScripts(rom, options.ScriptMap);
 
+        if (!string.IsNullOrEmpty(options.At))
+            WriteSquare(rom, options.At);
+
         if (!string.IsNullOrEmpty(options.ScriptRun))
             WriteScriptRuns(rom, options.ScriptRun);
 
@@ -170,6 +173,10 @@ public static class Program
         if (options.Events) WriteEventShapes(rom);
 
         if (options.Movements) WriteMovements(rom);
+
+        if (options.Step is { } stepByte) WriteStep(rom, stepByte);
+
+        if (options.Doors) WriteDoorCommands(rom);
 
         if (options.ScriptAt != 0) WriteScriptAt(rom, options.ScriptAt);
 
@@ -856,6 +863,214 @@ public static class Program
 
                 Console.WriteLine($"      {new string(' ', 8)}  {new string(' ', (example.Stop - from) * 3)}^^");
             }
+        }
+    }
+
+    /// <summary>
+    /// Whether the two commands bracketing a scripted walk are naming doors.
+    /// <para>
+    /// 0xAC and 0xAD were adopted as four-byte commands because the column said four, and
+    /// four bytes is where the reading stopped. The opening of this game reads them as
+    /// (16, 13) — which is exactly where the professor's lab door is, on the map whose
+    /// script it is. That is either the answer or a coincidence, and the difference is
+    /// four hundred maps wide.
+    /// </para>
+    /// </summary>
+    private static void WriteDoorCommands(Rom rom)
+    {
+        MapLibrary library = MapLibrary.Open(rom);
+
+        var counts = new Dictionary<byte, (int Total, int OnDoor)>();
+        var examples = new List<string>();
+
+        foreach (LoadedMap map in library.All())
+        {
+            string mapId = WorldExporter.MapId(map.Bank, map.Number);
+
+            IEnumerable<uint> scripts =
+            [
+                .. map.Objects.Where(o => o.HasScript).Select(o => o.ScriptAddress),
+                .. map.Triggers.Where(t => t.HasScript).Select(t => t.ScriptAddress),
+                .. map.Signs.Where(s => s.HasScript).Select(s => s.ScriptAddress),
+            ];
+
+            foreach (uint script in scripts.Distinct())
+            {
+                foreach (ScriptCommand command in ScriptReader.ReadAll(rom, script))
+                {
+                    if (command.Code is not (0xAC or 0xAD)) continue;
+                    if (command.Arguments.Length < 4) continue;
+
+                    var named = new GridPosition(command.Word(), command.Word(2));
+                    bool onDoor = map.Warps.Any(w => w.Square == named);
+
+                    (int total, int hit) = counts.GetValueOrDefault(command.Code);
+                    counts[command.Code] = (total + 1, hit + (onDoor ? 1 : 0));
+
+                    if (!onDoor && examples.Count < 12)
+                        examples.Add($"    0x{command.Code:X2} on {mapId} names {named}, which is no door there");
+                }
+            }
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("The commands that bracket a scripted walk");
+
+        foreach ((byte code, (int total, int onDoor)) in counts.OrderBy(c => c.Key))
+        {
+            Console.WriteLine(
+                $"  0x{code:X2}  {total,4} uses, {onDoor,4} naming a door on their own map " +
+                $"({(total == 0 ? 0 : (double)onDoor / total):P0})");
+        }
+
+        foreach (string example in examples) Console.WriteLine(example);
+    }
+
+    /// <summary>
+    /// Where one step byte turns up, and what is under the walker when it does.
+    /// <para>
+    /// For the steps outside the three walking families, which this project treats as
+    /// standing still. Standing still is the honest reading of a byte nobody has
+    /// evidence about, but it is not an answer, and one of these bytes is sitting at the
+    /// end of the opening scene keeping the player outside the professor's lab.
+    /// </para>
+    /// </summary>
+    private static void WriteStep(Rom rom, byte step)
+    {
+        MapLibrary library = MapLibrary.Open(rom);
+
+        List<MovementLists.Appearance> found =
+            MovementLists.Where(rom, library, step, MovementLists.DirectionOf);
+
+        Console.WriteLine();
+        Console.WriteLine($"Step 0x{step:X2}");
+        Console.WriteLine($"  {found.Count} appearances in {found.Select(f => f.Address).Distinct().Count()} lists");
+
+        int last = found.Count(f => f.IsLast);
+
+        Console.WriteLine($"  {last} of them the last step of their list, {found.Count - last} not");
+
+        List<MovementLists.Appearance> placed = [.. found.Where(f => f.Square is not null)];
+
+        Console.WriteLine();
+        Console.WriteLine($"  {placed.Count} on a walker whose square is known");
+        Console.WriteLine($"  {placed.Count(p => p.OnWarp)} of those standing on a door");
+
+        foreach (MovementLists.Appearance one in placed.Take(20))
+        {
+            Console.WriteLine(
+                $"    {one.MapId} person {one.PersonId} at {one.Square}: step {one.Position + 1} of {one.Length}" +
+                (one.OnWarp ? " — on a door" : ""));
+        }
+    }
+
+    /// <summary>
+    /// Everything a map says about one square and the ground around it.
+    /// <para>
+    /// The instrument for "I got stuck here". Being stuck is a fact about a square, and
+    /// every previous answer to one of these reports was reached by reasoning about what
+    /// the square probably contained. It contains four lists and a collision grid, all of
+    /// which this project already reads, and none of which it could previously print for
+    /// a place a player was standing.
+    /// </para>
+    /// </summary>
+    private static void WriteSquare(Rom rom, string where)
+    {
+        string[] parts = where.Split(',', StringSplitOptions.TrimEntries);
+
+        if (parts.Length != 3 || !int.TryParse(parts[1], out int atX) || !int.TryParse(parts[2], out int atY))
+        {
+            Console.WriteLine("  --at wants map,x,y — for example --at 3.0,16,13");
+            return;
+        }
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        if (library.TryLoad(parts[0]) is not { } map)
+        {
+            Console.WriteLine($"  no map {parts[0]} on this cartridge");
+            return;
+        }
+
+        Console.WriteLine();
+        Console.WriteLine($"({atX}, {atY}) on {parts[0]} {map.Name}, {map.Collision.Width}x{map.Collision.Height}");
+        Console.WriteLine();
+
+        const int Radius = 4;
+
+        // The picture first. A square is stuck or not stuck because of its neighbours,
+        // and a list of coordinates makes the reader rebuild the neighbourhood in their
+        // head — which is where the reasoning went wrong last time.
+        Console.WriteLine("  . walkable   # blocked   D door   P person   T trigger   S sign   @ here");
+        Console.WriteLine();
+
+        for (int y = atY - Radius; y <= atY + Radius; y++)
+        {
+            var row = new System.Text.StringBuilder($"  {y,3}  ");
+
+            for (int x = atX - Radius; x <= atX + Radius; x++)
+            {
+                var square = new GridPosition(x, y);
+
+                char cell =
+                    x == atX && y == atY ? '@'
+                    : map.Warps.Any(w => w.Square == square) ? 'D'
+                    : map.Objects.Any(o => o.Square == square) ? 'P'
+                    : map.Triggers.Any(t => t.Square == square) ? 'T'
+                    : map.Signs.Any(s => s.Square == square) ? 'S'
+                    : map.Collision.IsWalkable(square) ? '.'
+                    : '#';
+
+                row.Append(cell).Append(' ');
+            }
+
+            Console.WriteLine(row.ToString());
+        }
+
+        Console.WriteLine();
+        Console.WriteLine($"  here: {(map.Collision.IsWalkable(new GridPosition(atX, atY)) ? "walkable" : "blocked")}");
+
+        foreach (Direction direction in new[] { Direction.Up, Direction.Down, Direction.Left, Direction.Right })
+        {
+            GridPosition next = new GridPosition(atX, atY).Step(direction);
+
+            string what = map.Warps.FirstOrDefault(w => w.Square == next) is { } door
+                ? $"a door to {door.TargetMapId} warp {door.TargetWarpId}"
+                : map.Objects.FirstOrDefault(o => o.Square == next) is { } who
+                    ? $"person {who.LocalId}" + (who.HasScript ? $", script 0x{who.ScriptAddress:X8}" : ", no script")
+                    : map.Collision.IsWalkable(next) ? "open ground" : "blocked";
+
+            Console.WriteLine($"  {direction,-6} ({next.X}, {next.Y}): {what}");
+        }
+
+        Console.WriteLine();
+
+        foreach (Warp warp in map.Warps.OrderBy(w => Math.Abs(w.X - atX) + Math.Abs(w.Y - atY)).Take(6))
+        {
+            int away = Math.Abs(warp.X - atX) + Math.Abs(warp.Y - atY);
+
+            Console.WriteLine(
+                $"  door at ({warp.X}, {warp.Y}), {away} away: to {warp.TargetMapId} warp {warp.TargetWarpId}, " +
+                (map.Collision.IsWalkable(warp.Square) ? "standable" : "SOLID"));
+        }
+
+        foreach (MapObject person in map.Objects.OrderBy(o => Math.Abs(o.X - atX) + Math.Abs(o.Y - atY)).Take(6))
+        {
+            int away = Math.Abs(person.X - atX) + Math.Abs(person.Y - atY);
+
+            Console.WriteLine(
+                $"  person {person.LocalId} at ({person.X}, {person.Y}), {away} away" +
+                (person.HasScript ? $", script 0x{person.ScriptAddress:X8}" : ", no script") +
+                (person.Talks ? ", talks" : ""));
+        }
+
+        foreach (MapTrigger trigger in map.Triggers.OrderBy(t => Math.Abs(t.X - atX) + Math.Abs(t.Y - atY)).Take(6))
+        {
+            int away = Math.Abs(trigger.X - atX) + Math.Abs(trigger.Y - atY);
+
+            Console.WriteLine(
+                $"  trigger at ({trigger.X}, {trigger.Y}), {away} away: armed while 0x{trigger.Variable:X4} " +
+                $"holds {trigger.Value}, script 0x{trigger.ScriptAddress:X8}");
         }
     }
 
@@ -2681,6 +2896,15 @@ public static class Program
         public bool DumpScripts { get; private init; }
         public string ScriptMap { get; private init; } = "";
 
+        /// <summary>Where a player got stuck, as <c>map,x,y</c>.</summary>
+        public string At { get; private init; } = "";
+
+        /// <summary>A step byte to place on the map, to find out what it does.</summary>
+        public byte? Step { get; private init; }
+
+        /// <summary>Check the two commands that bracket a scripted walk against the warps.</summary>
+        public bool Doors { get; private init; }
+
         /// <summary>The map whose scripts to run, rather than read.</summary>
         public string ScriptRun { get; private init; } = "";
 
@@ -2752,6 +2976,7 @@ public static class Program
             bool items = false;
             bool scripts = false;
             string scriptMap = "";
+            string at = "";
             string scriptRun = "";
             bool scriptRuns = false;
             bool specials = false;
@@ -2769,6 +2994,8 @@ public static class Program
             int? whoGives = null;
             bool events = false;
             bool movements = false;
+            byte? step = null;
+            bool doors = false;
             uint scriptAt = 0;
             bool dumpMoves = false, dumpEncounters = false;
             string? behaviourMap = null;
@@ -2837,6 +3064,9 @@ public static class Program
                     case "--script-map":
                         scriptMap = Next(args, ref i, "--script-map");
                         break;
+                    case "--at":
+                        at = Next(args, ref i, "--at");
+                        break;
                     case "--script-run":
                         scriptRun = Next(args, ref i, "--script-run");
                         break;
@@ -2893,6 +3123,12 @@ public static class Program
                         break;
                     case "--movements":
                         movements = true;
+                        break;
+                    case "--step":
+                        step = (byte)Convert.ToInt32(Next(args, ref i, "--step"), 16);
+                        break;
+                    case "--doors":
+                        doors = true;
                         break;
                     case "--who-gives":
                         string item = Next(args, ref i, "--who-gives");
@@ -2953,6 +3189,9 @@ public static class Program
                 DumpItems = items,
                 DumpScripts = scripts,
                 ScriptMap = scriptMap,
+                At = at,
+                Step = step,
+                Doors = doors,
                 ScriptRun = scriptRun,
                 ScriptRuns = scriptRuns,
                 Specials = specials,

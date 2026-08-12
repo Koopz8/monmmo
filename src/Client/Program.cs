@@ -244,7 +244,7 @@ public static class Program
             ApplyServerMessages(
                 network, others, player, view, data, trainers, items, script, carrying,
                 ref talking, ref battle, ref shop, ref bag, ref party, ref money,
-                ref correction, ref watching, ref exclaimFor);
+                ref correction, ref watching, ref exclaimFor, ref scene);
 
             // A battle suspends the overworld entirely: the server is running it, and
             // walking on meanwhile would put the two sides out of step.
@@ -673,7 +673,8 @@ public static class Program
         ref int money,
         ref GridPosition? correction,
         ref int? watching,
-        ref float exclaimFor)
+        ref float exclaimFor,
+        ref Cutscene? scene)
     {
         foreach (NetMessage message in network.Drain())
         {
@@ -803,6 +804,12 @@ public static class Program
                 case MapChanged changed:
                     // Everyone who was visible was visible on the old map.
                     others.Clear();
+
+                    // And so was everything a scene was about. A scene can now end by
+                    // walking the player through a door, and the beats left over on the
+                    // far side of it are about people who are not here — the same reason
+                    // the others are cleared, one line up.
+                    scene = null;
 
                     if (view.SwitchTo(changed.MapId))
                     {

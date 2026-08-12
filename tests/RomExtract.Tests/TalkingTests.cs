@@ -1202,6 +1202,93 @@ public class TriggerTests
     }
 
     [Fact]
+    public void AWalkOntoADoorGoesThroughIt()
+    {
+        // How anybody gets into the professor's lab. His script opens the door at (16,
+        // 13), walks him and the player onto it, waits, and closes the door again — and
+        // warps nobody. Delivering a player to a doorway and stopping is what left them
+        // outside the building the whole scene was about.
+        MapData town = new(Town, "PALLET TOWN", 8, 8, new byte[64])
+        {
+            Triggers = [new MapTrigger(3, 4, Variable, 0)],
+            Warps = [new Warp(3, 2, 0, "4.3")],
+        };
+
+        MapData lab = new("4.3", "RESEARCH LAB", 8, 8, new byte[64])
+        {
+            Warps = [new Warp(6, 6, 0, Town)],
+        };
+
+        var world = new GameWorld(new WorldData([town, lab]), Town, TestRules.All);
+
+        (ServerPlayer player, _) = world.Join(1, "Koop", SavedCharacter.Fresh(Town, 3, 4));
+
+        world.FireTrigger(player.Id, 3, 4, 10);
+        world.WalkThroughScene(player.Id, [Direction.Up, Direction.Up], 11);
+
+        Assert.Equal("4.3", player.MapId);
+        Assert.Equal(new GridPosition(6, 6), player.Square);
+    }
+
+    [Fact]
+    public void AWalkThatOnlyPassesADoorKeepsGoing()
+    {
+        // Only the square it stops on. A scene walking somebody past their own front
+        // door on the way somewhere else is a scene, and warping them into the house
+        // halfway through it is not a thing any cartridge does.
+        MapData town = new(Town, "PALLET TOWN", 8, 8, new byte[64])
+        {
+            Triggers = [new MapTrigger(3, 4, Variable, 0)],
+            Warps = [new Warp(3, 3, 0, "4.3")],
+        };
+
+        MapData lab = new("4.3", "RESEARCH LAB", 8, 8, new byte[64])
+        {
+            Warps = [new Warp(6, 6, 0, Town)],
+        };
+
+        var world = new GameWorld(new WorldData([town, lab]), Town, TestRules.All);
+
+        (ServerPlayer player, _) = world.Join(1, "Koop", SavedCharacter.Fresh(Town, 3, 4));
+
+        world.FireTrigger(player.Id, 3, 4, 10);
+        world.WalkThroughScene(player.Id, [Direction.Up, Direction.Up], 11);
+
+        Assert.Equal(Town, player.MapId);
+        Assert.Equal(new GridPosition(3, 2), player.Square);
+    }
+
+    [Fact]
+    public void WhatIsLeftOfASceneDoesNotFollowThePlayerThroughTheDoor()
+    {
+        // A scene now ends on a different map from the one it started on, and the rest
+        // of its messages are still in flight when it does. Object 3 in the town and
+        // object 3 in the lab are different people; the window alone would have let the
+        // tail of one scene rearrange the other one.
+        MapData town = new(Town, "PALLET TOWN", 8, 8, new byte[64])
+        {
+            Triggers = [new MapTrigger(3, 4, Variable, 0)],
+            Warps = [new Warp(3, 2, 0, "4.3")],
+        };
+
+        MapData lab = new("4.3", "RESEARCH LAB", 8, 8, new byte[64])
+        {
+            Objects = [new MapObject(3, 5, 1, 1, Direction.Down, 0, false)],
+            Warps = [new Warp(6, 6, 0, Town)],
+        };
+
+        var world = new GameWorld(new WorldData([town, lab]), Town, TestRules.All);
+
+        (ServerPlayer player, _) = world.Join(1, "Koop", SavedCharacter.Fresh(Town, 3, 4));
+
+        world.FireTrigger(player.Id, 3, 4, 10);
+        world.WalkThroughScene(player.Id, [Direction.Up, Direction.Up], 11);
+
+        Assert.Empty(world.PlaceAfterScene(player.Id, 3, new GridPosition(2, 2), Direction.Left, 12));
+        Assert.Contains("no scene is running for them here", world.LastScenePlacement);
+    }
+
+    [Fact]
     public void AWalkWithNoSceneBehindItIsRefused()
     {
         // What replaces the rate limit. A scripted walk cannot be rate limited — the
@@ -1368,5 +1455,37 @@ public class ScenePlacementTests
 
         Assert.Empty(world.PlaceAfterScene(player.Id, 1, new GridPosition(3, 3), Direction.Down, 11));
         Assert.Contains("already at", world.LastScenePlacement);
+    }
+
+    [Fact]
+    public void OnlyASceneSCastCountsAsASceneComingApart()
+    {
+        // The window is two minutes wide, so every conversation a player has shortly
+        // after a trigger ends with somebody being released inside it. Reporting those
+        // as interruptions is how the one release that mattered got buried.
+        (GameWorld world, ServerPlayer player) = Standing(Somebody(1, 3, 3));
+
+        world.FireTrigger(player.Id, 3, 4, 10);
+
+        world.StartTalking(player.Id, 1);
+        world.StopTalking(player.Id);
+
+        Assert.Null(world.LastRelease);
+    }
+
+    [Fact]
+    public void NobodyIsLeftStandingOnAPlayer()
+    {
+        // The square was checked against the other people on the map and not against the
+        // people playing on it. The opening of this game ends with the professor and the
+        // player on the same square — his doorway — and putting him there meant the
+        // doorway was occupied from then on. It only has one walkable neighbour, so a
+        // player who stepped off it could never step back on.
+        (GameWorld world, ServerPlayer player) = Standing(Somebody(1, 3, 3));
+
+        world.FireTrigger(player.Id, 3, 4, 10);
+
+        Assert.Empty(world.PlaceAfterScene(player.Id, 1, player.Square, Direction.Left, 11));
+        Assert.Contains($"has #{player.Id} standing on it", world.LastScenePlacement);
     }
 }

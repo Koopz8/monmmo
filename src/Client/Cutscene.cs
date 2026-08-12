@@ -25,35 +25,11 @@ public sealed class Cutscene
     private const float StepSeconds = 0.22f;
 
     /// <summary>
-    /// What each step byte does, derived rather than known.
-    /// <para>
-    /// Three families — 0x08, 0x10 and 0x1C — read as one ordering at three speeds, and
-    /// the ordering came from walking every list across every map and counting who ended
-    /// up inside a wall. Two samples that share no scripts, no maps and no starting
-    /// squares put the same ordering first: 84% of people's own paths and 95% of the
-    /// player's, against 24 orderings.
-    /// </para>
-    /// <para>
-    /// Anything outside these families is a step this project does not model — a jump, a
-    /// pause, a change of face — and is treated as standing still. That is the honest
-    /// reading: doing nothing is wrong in a way you can see, and guessing is wrong in a
-    /// way that walks somebody through a wall.
-    /// </para>
+    /// What each step byte does. Derived once, beside the lists it was derived from —
+    /// a client with its own copy of this table is a client that can disagree with the
+    /// tool that worked it out.
     /// </summary>
-    public static Direction? DirectionOf(byte step)
-    {
-        foreach (byte family in Families)
-        {
-            if (step >= family && step <= family + 3) return Compass[step - family];
-        }
-
-        return null;
-    }
-
-    private static readonly byte[] Families = [0x08, 0x10, 0x1C];
-
-    private static readonly Direction[] Compass =
-        [Direction.Down, Direction.Up, Direction.Left, Direction.Right];
+    public static Direction? DirectionOf(byte step) => MovementLists.DirectionOf(step);
 
     private readonly List<SceneBeat> _beats;
     private readonly MapView _view;

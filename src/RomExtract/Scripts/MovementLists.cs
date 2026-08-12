@@ -160,7 +160,8 @@ public static class MovementLists
             $"   {Walked,4}/{Paths,-4} {Share,6:P0}  ({Blocked} walked into a wall)";
     }
 
-    private static readonly Direction[] Compass =
+    /// <summary>The four directions, as something to permute — not an ordering.</summary>
+    private static readonly Direction[] AllFour =
         [Direction.Down, Direction.Up, Direction.Left, Direction.Right];
 
     /// <summary>
@@ -355,11 +356,11 @@ public static class MovementLists
     /// <summary>Every ordering of the four directions. Twenty-four of them.</summary>
     private static IEnumerable<Direction[]> Orderings()
     {
-        foreach (Direction a in Compass)
-        foreach (Direction b in Compass.Where(d => d != a))
-        foreach (Direction c in Compass.Where(d => d != a && d != b))
+        foreach (Direction a in AllFour)
+        foreach (Direction b in AllFour.Where(d => d != a))
+        foreach (Direction c in AllFour.Where(d => d != a && d != b))
         {
-            Direction d = Compass.Single(x => x != a && x != b && x != c);
+            Direction d = AllFour.Single(x => x != a && x != b && x != c);
 
             yield return [a, b, c, d];
         }
@@ -399,5 +400,102 @@ public static class MovementLists
                 .Select(value => ((byte)value, within[value]))
                 .OrderByDescending(e => e.Item2),
         ];
+    }
+
+    /// <summary>
+    /// What each step byte does, derived rather than known.
+    /// <para>
+    /// Three families — 0x08, 0x10 and 0x1C — read as one ordering at three speeds, and
+    /// the ordering came from walking every list across every map and counting who ended
+    /// up inside a wall. Two samples that share no scripts, no maps and no starting
+    /// squares put the same ordering first: 84% of people's own paths and 95% of the
+    /// player's, against 24 orderings.
+    /// </para>
+    /// <para>
+    /// Anything outside these families is a step this project does not model — a jump, a
+    /// pause, a change of face — and is treated as standing still. That is the honest
+    /// reading: doing nothing is wrong in a way you can see, and guessing is wrong in a
+    /// way that walks somebody through a wall.
+    /// </para>
+    /// <para>
+    /// Lives here rather than in the client because the client is not the only thing that
+    /// walks a list. The tool that asks what an unmodelled step means has to walk one too,
+    /// and two copies of this table would let the answer be derived against an ordering
+    /// the game does not use.
+    /// </para>
+    /// </summary>
+    public static Direction? DirectionOf(byte step)
+    {
+        foreach (byte family in Families)
+        {
+            if (step >= family && step <= family + 3) return Compass[step - family];
+        }
+
+        return null;
+    }
+
+    private static readonly byte[] Families = [0x08, 0x10, 0x1C];
+
+    private static readonly Direction[] Compass =
+        [Direction.Down, Direction.Up, Direction.Left, Direction.Right];
+
+    /// <summary>One appearance of a step byte, with what the map says about where it happens.</summary>
+    public sealed record Appearance(
+        string MapId, int PersonId, uint Address, int Position, int Length, GridPosition? Square, bool OnWarp)
+    {
+        public bool IsLast => Position == Length - 1;
+    }
+
+    /// <summary>
+    /// Every place one step byte turns up, and whether the walker is standing on a door
+    /// when it does.
+    /// <para>
+    /// The question this exists to answer is what an unmodelled step does, and the map is
+    /// the oracle again. A step whose meaning is "go through this door" can only ever be
+    /// written where there is a door: walk the list up to it with the four directions
+    /// already derived, and read what the square underneath turns out to be. One list
+    /// doing that is a coincidence; every list doing it is what the byte means.
+    /// </para>
+    /// <para>
+    /// Only lists whose starting square is trustworthy are walked — a person's own square
+    /// from the map, and only when nothing in the same script has moved them yet. The
+    /// rest are counted but not placed, because a path from a wrong start lands wherever
+    /// it likes and would answer the question with noise.
+    /// </para>
+    /// </summary>
+    public static List<Appearance> Where(
+        Rom rom, MapLibrary library, byte step, Func<byte, Direction?> directionOf)
+    {
+        var found = new List<Appearance>();
+
+        foreach (MovementList list in All(rom, library))
+        {
+            if (!list.Steps.Contains(step)) continue;
+
+            LoadedMap? map = library.TryLoad(list.MapId);
+
+            // Where this walker starts. A person's square is on the map; the player's is
+            // only knowable when a trigger square started the script.
+            GridPosition? at = list.IsPlayer
+                ? list.Origin
+                : map?.Objects.FirstOrDefault(o => o.LocalId == list.PersonId)?.Square;
+
+            if (!list.IsFirst) at = null;
+
+            for (int i = 0; i < list.Steps.Length; i++)
+            {
+                if (list.Steps[i] == step)
+                {
+                    found.Add(new Appearance(
+                        list.MapId, list.PersonId, list.Address, i, list.Steps.Length, at,
+                        at is { } here && map is not null && map.Warps.Any(w => w.Square == here)));
+                }
+
+                if (at is { } square && directionOf(list.Steps[i]) is { } direction)
+                    at = square.Step(direction);
+            }
+        }
+
+        return found;
     }
 }

@@ -88,6 +88,29 @@ public sealed record ServerPlayer(int Id, long AccountId, string Name)
     public double SceneUntil { get; set; }
 
     /// <summary>
+    /// The map the running scene belongs to.
+    /// <para>
+    /// A scene can now put the player through a door — that is how the professor gets
+    /// anybody into his lab — which means the messages behind a scene can arrive after
+    /// the player has left the map the scene was about. Object 3 in Pallet Town and
+    /// object 3 in the lab are different people, and a placement that only checked the
+    /// window would move the second one to where the first one was told to stand.
+    /// </para>
+    /// </summary>
+    public string SceneOn { get; set; } = "";
+
+    /// <summary>
+    /// Who the running scene asked to be held.
+    /// <para>
+    /// Kept so that a release can be reported when it is one worth reporting. Any release
+    /// inside the window used to be called mid-scene, which meant every ordinary
+    /// conversation within two minutes of a trigger was announced as a scene falling
+    /// apart. A diagnostic that fires when nothing is wrong is one nobody reads.
+    /// </para>
+    /// </summary>
+    public HashSet<int> SceneCast { get; } = [];
+
+    /// <summary>
     /// Things this player has moved out of the way on the map they are standing on.
     /// <para>
     /// Per player, because a felled tree that everybody could walk through would let one
@@ -1397,9 +1420,9 @@ public sealed class GameWorld
 
             if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
 
-            if (nowSeconds > player.SceneUntil)
+            if (!InScene(player, nowSeconds))
             {
-                LastSceneWalk = "refused: no scene is running for them";
+                LastSceneWalk = "refused: no scene is running for them here";
                 return [];
             }
 
@@ -1433,11 +1456,49 @@ public sealed class GameWorld
                 ? $"walked {walked} to {player.Square}"
                 : $"walked {walked} of {steps.Count} to {player.Square}, then something was in the way";
 
-            return [new Outgoing(
-                new PlayerMoved(playerId, player.Square.X, player.Square.Y, player.Facing),
-                OnMap: player.MapId)];
+            var send = new List<Outgoing>
+            {
+                new(new PlayerMoved(playerId, player.Square.X, player.Square.Y, player.Facing),
+                    OnMap: player.MapId),
+            };
+
+            // A scene that walks somebody onto a door means them to go through it, and
+            // the opening of this game is written that way. Its script names the square
+            // (16, 13) twice — once before the two movements and once after them — and
+            // (16, 13) is the warp to the professor's lab. It warps nobody itself. The
+            // player's own movement list ends by stepping right and then up, which lands
+            // exactly there, and (16, 13) has one walkable neighbour: the square they
+            // came from. Delivered to the doorway and stopped, with nothing that fires on
+            // standing still, they stay outside the building the whole scene was about.
+            //
+            // What those two bracketing commands are is a smaller question than it looks.
+            // There are four of them in the game and one of those is a misread; of the
+            // three real ones, two name a warp square on their own map and the third
+            // names a doorway alcove on Route 25. Enough to believe they are about doors,
+            // not enough to build on — so this is built on the warp instead, which is
+            // read from the map rather than guessed from a script.
+            //
+            // Only the door. Grass and a trainer's line of sight are also things that
+            // happen on arrival, and neither belongs in the middle of a cutscene — being
+            // ambushed by a wild encounter while the professor is talking is exactly the
+            // kind of thing the ordinary arrival rules would do here.
+            if (_world.Find(player.MapId)?.WarpAt(player.Square) is { } door)
+                send.AddRange(TakeWarp(player, door));
+
+            return send;
         }
     }
+
+    /// <summary>
+    /// Whether a scene is running for this player, on the map it started on.
+    /// <para>
+    /// Both halves matter. The window is what makes a scripted walk something other than
+    /// a client asking to teleport; the map is what stops the tail of one scene landing
+    /// on the map the same scene just walked the player into.
+    /// </para>
+    /// </summary>
+    private static bool InScene(ServerPlayer player, double nowSeconds) =>
+        nowSeconds <= player.SceneUntil && player.MapId == player.SceneOn;
 
     /// <summary>
     /// Who let go of somebody a scene was holding, and where from.
@@ -1458,6 +1519,12 @@ public sealed class GameWorld
         {
             if (!_players.TryGetValue(holder, out ServerPlayer? player)) continue;
             if (nowSeconds > player.SceneUntil) continue;
+
+            // Only somebody the scene actually asked for. Everyone this player talks to
+            // for the next two minutes is released the same way, and reporting those as
+            // interruptions buried the one release that mattered in a page of ordinary
+            // conversations ending normally.
+            if (!player.SceneCast.Contains(localId)) continue;
 
             LastRelease = $"object {localId} let go of #{holder} by {where}, mid-scene";
         }
@@ -1490,9 +1557,9 @@ public sealed class GameWorld
 
             if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
 
-            if (nowSeconds > player.SceneUntil)
+            if (!InScene(player, nowSeconds))
             {
-                LastSceneCast = "refused: no scene is running for them";
+                LastSceneCast = "refused: no scene is running for them here";
                 return [];
             }
 
@@ -1505,6 +1572,7 @@ public sealed class GameWorld
                 if (people.ById(localId) is not { } person) continue;
 
                 person.HeldBy = playerId;
+                player.SceneCast.Add(localId);
                 held++;
             }
 
@@ -1557,9 +1625,9 @@ public sealed class GameWorld
             //
             // The window is the real thing, it is already what bounds a scene walk and a
             // scene cast, and it does not care what order anything arrives in.
-            if (nowSeconds > player.SceneUntil)
+            if (!InScene(player, nowSeconds))
             {
-                LastScenePlacement = $"object {localId}: no scene is running for them";
+                LastScenePlacement = $"object {localId}: no scene is running for them here";
                 return [];
             }
 
@@ -1581,6 +1649,17 @@ public sealed class GameWorld
             if (people.At(square) is { } standing && standing.LocalId != localId)
             {
                 LastScenePlacement = $"{square} already has object {standing.LocalId} on it";
+                return [];
+            }
+
+            // And nobody playing, either. This was checked for objects and not for
+            // players, and the difference was not academic: the professor's scene ends
+            // with both of them at his door, the professor was placed on top of whoever
+            // he had just walked there, and a person standing in a doorway that only has
+            // one walkable neighbour is a person who can never get back onto the door.
+            if (_players.Values.FirstOrDefault(p => p.MapId == player.MapId && p.Square == square) is { } who)
+            {
+                LastScenePlacement = $"{square} has #{who.Id} standing on it";
                 return [];
             }
 
@@ -1681,6 +1760,8 @@ public sealed class GameWorld
             // the player is exactly the kind with nothing to arbitrate, and it is the one
             // that needs it.
             player.SceneUntil = nowSeconds + SceneSeconds;
+            player.SceneOn = player.MapId;
+            player.SceneCast.Clear();
 
             if (!trigger.CanBeFought)
             {
