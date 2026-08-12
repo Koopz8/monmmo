@@ -1488,6 +1488,24 @@ public static class Program
 
                 ScriptRun run = ScriptRunner.Run(rom, person.ScriptAddress);
 
+                if (run.GivesItem is { } spoken && run.Pages.Count > 0)
+                {
+                    string talks = "hands over an item AND says something";
+
+                    causes[talks] = causes.GetValueOrDefault(talks) + 1;
+
+                    if (!examples.TryGetValue(talks, out List<string>? chatty)) examples[talks] = chatty = [];
+
+                    if (chatty.Count < 4)
+                    {
+                        chatty.Add(
+                            $"{WorldExporter.MapId(map.Bank, map.Number)} person {person.LocalId}: item {spoken} — " +
+                            $"\"{GameText.ToAscii(run.Pages[0]).Replace("\n", " ")}\"");
+                    }
+
+                    continue;
+                }
+
                 if (run.GivesItem is { } given)
                 {
                     string handed = $"hands over an item — {given} of them so far";

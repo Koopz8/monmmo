@@ -236,8 +236,8 @@ public static class ScriptRunner
                     pending = 0;
                     break;
 
-                case ScriptCommands.CallStandard when save.Read(0x8000) != 0 && pending == 0:
-                case 0x08 when save.Read(0x8000) != 0 && pending == 0:
+                case ScriptCommands.CallStandard when save.Read(0x8000) is not 0 && pending == 0:
+                case 0x08 when save.Read(0x8000) is not 0 && pending == 0:
                     // Something is being handed over. Which routine does the handing is
                     // a number this project cannot resolve, and does not need to: the
                     // item and the count were written down immediately before the call.
@@ -246,6 +246,11 @@ public static class ScriptRunner
 
                     save.Write(0x8000, 0);
                     save.Write(0x8001, 0);
+
+                    // Same reason giveitem does it. A routine that hands something over
+                    // answers into the result variable, and a script that then asks and
+                    // is told nothing reads its own failure line.
+                    save.Write(0x800D, 1);
 
                     break;
 
@@ -261,6 +266,29 @@ public static class ScriptRunner
                         pending = 0;
                     }
 
+                    break;
+
+                case 0x46:                              // giveitem
+                    // The command itself, now that its width is known. What follows it
+                    // is always `compare 0x800D, 0` and a branch, and the arm that
+                    // branch takes when the variable is zero says "Too bad! The BAG is
+                    // full..." — so zero is the failure and this has to say otherwise.
+                    //
+                    // Leaving it unwritten is not neutral. Every script that asks
+                    // whether something worked was hearing no, and four people in this
+                    // game were reported as saying the bag-full line as though it were
+                    // their only one.
+                    // Item zero is not an item. A script that reaches this with nothing
+                    // loaded is doing something else with the command, and reporting a
+                    // handover of nothing would put a person who says "Mew!" on the list
+                    // of people who give you things.
+                    if (command.Word() != 0)
+                    {
+                        gives ??= command.Word();
+                        givesCount = Math.Max(1, command.Word(2));
+                    }
+
+                    save.Write(0x800D, 1);
                     break;
 
                 case ScriptCommands.PokeMart:
