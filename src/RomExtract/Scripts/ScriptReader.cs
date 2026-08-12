@@ -160,7 +160,24 @@ public static class ScriptCommands
         // and the 0x80 that looked like a command every time is the top half of 0x800D.
         [0x26] = 4,     // specialvar
         [0x27] = 0,
-        [0x28] = 0,
+        // Two, a word, and it was zero here since the beginning with nothing to say
+        // for itself. The column is unanswerable — the byte above is different at every
+        // site and the one below it is 00 at all of them:
+        //
+        //   28 | 0F 00 | 05 E7 BB 1B 08     goto 0x081BBBE7
+        //   28 | 2D 00 | 21 01 40 00 00     compare 0x4001, 0
+        //   28 | 12 00 | 4F 03 00 ED 75 1A 08   applymovement
+        //   28 | 14 00 | 25 87 01           special 0x0187
+        //
+        // Read as nothing, that first site makes a loadpointer whose pointer is
+        // 0x1BBBE705, which is not an address. Read as a word, every site lands on a
+        // known command carrying sensible arguments.
+        //
+        // This is the one that was stopping the story. Pallet Town's north exit reads
+        // `C7 00 | 28 1E 00 | 33 2E 01 00 | 67 2C D7 17 08` — and that last command is
+        // the message the professor stops you with. One byte out and the read walked
+        // into the middle of it, so the script ran, set its variables, and said nothing.
+        [0x28] = 2,
         // Two bytes, not one. Proved by the bytes: `29 A5 02 53 04 00 1A 00 80 ...`
         // reads as setflag(0x02A5) and then keeps parsing cleanly for another twenty
         // commands. Taking one byte makes the 0x02 an `end`, which is worse than a

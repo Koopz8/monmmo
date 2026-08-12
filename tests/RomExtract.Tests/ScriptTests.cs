@@ -361,6 +361,42 @@ public class ScriptReaderTests
     }
 
     [Fact]
+    public void TheOneThatWasStoppingTheStory()
+    {
+        // Pallet Town's north exit, byte for byte from 0x08165612 on a real image, with
+        // the message pointer moved to fit a fixture.
+        //
+        // 0x28 was zero-width here since the beginning, with nothing written down for it.
+        // Read that way the stream walks one byte into the message command and stops on
+        // the middle of its pointer — so the trigger ran, set its variables, and said
+        // nothing. Standing at the edge of town, the professor let you leave.
+        Assert.Equal(2, ScriptCommands.ArgumentLength(0x28));
+
+        uint text = Rom.BaseAddress + 0x100;
+
+        byte[] script =
+        [
+            0x25, 0x74, 0x01,               // special 0x0174
+            0xC7, 0x00,
+            0x28, 0x1E, 0x00,
+            0x33, 0x2E, 0x01, 0x00,
+            ScriptCommands.Message, (byte)text, (byte)(text >> 8), (byte)(text >> 16), (byte)(text >> 24),
+            ScriptCommands.WaitButton,
+            ScriptCommands.End,
+        ];
+
+        List<ScriptCommand> commands = ScriptReader.Read(TwoScripts(script, []), Rom.BaseAddress);
+
+        Assert.Equal(
+            new byte[] { 0x25, 0xC7, 0x28, 0x33, ScriptCommands.Message, ScriptCommands.WaitButton, ScriptCommands.End },
+            commands.Select(c => c.Code));
+
+        // The message, landing exactly where it should. One byte out and this is a
+        // pointer read from the middle of itself.
+        Assert.Equal(text, commands[4].Pointer());
+    }
+
+    [Fact]
     public void AnUnknownCommandStopsTheRead()
     {
         // Guessing a length would resume at some byte inside an argument, and from

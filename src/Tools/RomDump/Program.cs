@@ -896,6 +896,41 @@ public static class Program
                 Console.WriteLine($"      {Rom.BaseAddress + (uint)from:X8}  {hex}");
             }
         }
+
+        // The other two lists. A map's people are only a third of what runs on it, and
+        // a dump that shows one third makes the other two invisible.
+        foreach (MapTrigger trigger in map.Triggers.Where(t => t.HasScript))
+        {
+            Console.WriteLine();
+            Console.WriteLine(
+                $"  trigger at ({trigger.X}, {trigger.Y}), script 0x{trigger.ScriptAddress:X8}, " +
+                $"armed while variable 0x{trigger.Variable:X4} holds {trigger.Value}" +
+                (trigger.CanBeFought ? $", fights trainer {trigger.TrainerId}" : ""));
+
+            foreach (ScriptCommand command in ScriptReader.Read(rom, trigger.ScriptAddress))
+                Console.WriteLine($"    {command}");
+
+            if (ScriptReader.StoppedAt(rom, trigger.ScriptAddress) is { } stopper)
+                Console.WriteLine($"    stopped at 0x{stopper:X2}");
+
+            ScriptRun run = ScriptRunner.Run(rom, trigger.ScriptAddress);
+
+            Console.WriteLine(
+                run.Pages.Count == 0
+                    ? "    says nothing on a fresh save"
+                    : $"    says: \"{GameText.ToAscii(run.Pages[0]).Replace('\n', ' ')}\"");
+        }
+
+        foreach (MapSign sign in map.Signs.Where(s => s.HasScript))
+        {
+            ScriptRun run = ScriptRunner.Run(rom, sign.ScriptAddress);
+
+            Console.WriteLine(
+                $"  sign at ({sign.X}, {sign.Y}): " +
+                (run.Pages.Count == 0
+                    ? "says nothing"
+                    : $"\"{GameText.ToAscii(run.Pages[0]).Replace('\n', ' ')}\""));
+        }
     }
 
     /// <summary>
@@ -1961,7 +1996,7 @@ public static class Program
     private static void WriteBytesAfter(Rom rom, byte code, int width = 12)
     {
         Console.WriteLine();
-        Console.WriteLine($"Every place 0x{code:X2} stops a read, and what follows it");
+        Console.WriteLine($"Every place 0x{code:X2} turns up in a read, and what follows it");
 
         MapLibrary library = MapLibrary.Open(rom);
 
@@ -1969,20 +2004,48 @@ public static class Program
 
         foreach (LoadedMap map in library.All())
         {
-            foreach (MapObject person in map.Objects.Where(o => o.HasScript))
+            string mapId = WorldExporter.MapId(map.Bank, map.Number);
+
+            // Every script on the map, not just the people. A trigger's script is where
+            // the story is, and a view that could not see one would go on answering
+            // questions about the third of the cartridge it happened to look at.
+            List<(string What, uint Address)> scripts =
+            [
+                .. map.Objects.Where(o => o.HasScript).Select(o => ($"person {o.LocalId}", o.ScriptAddress)),
+                .. map.Triggers.Where(t => t.HasScript).Select(t => ($"trigger ({t.X},{t.Y})", t.ScriptAddress)),
+                .. map.Signs.Where(s => s.HasScript).Select(s => ($"sign ({s.X},{s.Y})", s.ScriptAddress)),
+            ];
+
+            foreach ((string what, uint address) in scripts)
             {
-                // The reader, not the runner. A runner walks one path — the one today's
-                // flags choose — so a command sitting behind any condition it does not
-                // satisfy is invisible to it. 0x7C stops two hundred reads and stopped
-                // exactly zero runs, and this view reported no sites for the largest
-                // unknown in the project.
-                if (ScriptReader.StoppedAt(rom, person.ScriptAddress) != code) continue;
-                if (ScriptReader.StoppedAtOffset(rom, person.ScriptAddress) is not { } at) continue;
+                // Occurrences as well as stops. A stop is only an occurrence the reader
+                // could not get past, so asking about stops alone makes every width
+                // already in the table invisible — including the wrong ones, which are
+                // exactly the ones worth looking at.
+                //
+                // The reader rather than the runner, for the reason 0x7C proved: a run
+                // walks the one path today's flags choose, and a command behind a
+                // condition it does not satisfy is one it never sees.
+                var found = new List<int>();
 
-                if (!sites.TryGetValue(at, out List<string>? who))
-                    sites[at] = who = [];
+                foreach (ScriptCommand command in ScriptReader.ReadAll(rom, address))
+                {
+                    if (command.Code == code) found.Add(command.Offset);
+                }
 
-                who.Add($"{WorldExporter.MapId(map.Bank, map.Number)} person {person.LocalId}");
+                if (ScriptReader.StoppedAt(rom, address) == code &&
+                    ScriptReader.StoppedAtOffset(rom, address) is { } stopped)
+                {
+                    found.Add(stopped);
+                }
+
+                foreach (int at in found)
+                {
+                    if (!sites.TryGetValue(at, out List<string>? who))
+                        sites[at] = who = [];
+
+                    if (!who.Contains($"{mapId} {what}")) who.Add($"{mapId} {what}");
+                }
             }
         }
 
