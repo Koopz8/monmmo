@@ -137,6 +137,20 @@ public sealed record SavedCharacter(
 
     public int Money { get; init; } = StartingMoney;
 
+    /// <summary>
+    /// The centre this character last rested at, and where they stood to do it.
+    /// <para>
+    /// Persisted rather than kept for the session, because the walk back is the whole
+    /// cost of losing and a character who forgets it over a disconnect has been given
+    /// their money's worth back.
+    /// </para>
+    /// </summary>
+    public string? RestingAt { get; init; }
+
+    public int RestingX { get; init; }
+
+    public int RestingY { get; init; }
+
     public static SavedCharacter Fresh(string mapId, int x, int y) =>
         new(mapId, x, y, Direction.Down, []);
 

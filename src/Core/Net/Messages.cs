@@ -26,6 +26,7 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(UseItemRequest), "useitem")]
 [JsonDerivedType(typeof(BagUpdated), "bagupdate")]
 [JsonDerivedType(typeof(PartyHealed), "healed")]
+[JsonDerivedType(typeof(BlackedOut), "blackedout")]
 [JsonDerivedType(typeof(BuyRequest), "buy")]
 [JsonDerivedType(typeof(SellRequest), "sell")]
 [JsonDerivedType(typeof(ShopOpened), "shop")]
@@ -209,6 +210,21 @@ public sealed record BagUpdated(
 /// </para>
 /// </summary>
 public sealed record PartyHealed(IReadOnlyList<SavedMon> Party, bool Needed) : NetMessage;
+
+/// <summary>
+/// Woken up at the last centre, lighter, after a party was wiped out.
+/// <para>
+/// Sent alongside the map change rather than instead of it, because the client needs
+/// both: the world moved, and so did the money. Separating them would leave a client
+/// that missed one showing a healthy party in the wrong town.
+/// </para>
+/// </summary>
+public sealed record BlackedOut(
+    string MapId,
+    int X,
+    int Y,
+    int Money,
+    IReadOnlyList<SavedMon> Party) : NetMessage;
 
 /// <summary>
 /// The credentials were not accepted. Deliberately vague about which half was wrong,

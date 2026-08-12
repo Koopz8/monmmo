@@ -492,6 +492,20 @@ public static class Program
 
                     break;
 
+                case BlackedOut fainted:
+                    // The map change arrives with this and does the moving. What is left
+                    // is what the player has to be told, because a party that healed and
+                    // a purse that halved are both things they did not ask for.
+                    party = fainted.Party;
+                    money = fainted.Money;
+
+                    said = new DialogueBox([
+                        "You blacked out!",
+                        "You scurried back, feeling weaker for it.",
+                    ]);
+
+                    break;
+
                 case PartyHealed healed:
                     party = healed.Party;
 

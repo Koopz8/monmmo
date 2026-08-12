@@ -409,7 +409,7 @@ public class TrainerBattleTests
     }
 
     [Fact]
-    public void LosingPaysNothing()
+    public void LosingPaysNothingAndCostsHalf()
     {
         GameWorld world = World(Trainer(1, 4, 1, Direction.Down, TestRules.ThreeStrong));
 
@@ -426,7 +426,11 @@ public class TrainerBattleTests
 
         Assert.Equal(Side.Opponent, finished.Winner);
         Assert.Equal(0, finished.Prize);
-        Assert.Equal(before, player.Money);
+
+        // Losing used to cost nothing at all, which made a centre a place with no
+        // reason to exist. It costs half now, and the walk back from wherever you last
+        // rested.
+        Assert.Equal(before / GameWorld.LossShare, player.Money);
     }
 
     [Fact]

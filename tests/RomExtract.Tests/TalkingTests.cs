@@ -580,3 +580,157 @@ public class HealingTests
         Assert.Equal(1, player.Party[0].CurrentHp);
     }
 }
+
+/// <summary>
+/// Losing, which until now cost nothing at all.
+/// <para>
+/// Healing on the spot was a stand-in from before there was anywhere to wake up, and it
+/// outlived its usefulness the moment there was: a loss that costs nothing makes a
+/// centre a place with no reason to exist and every potion in the bag a souvenir.
+/// </para>
+/// </summary>
+public class BlackingOutTests
+{
+    private const string Town = "3.0";
+    private const string Route = "3.19";
+
+    private static GameWorld World()
+    {
+        MapData town = new(Town, "PALLET TOWN", 8, 8, new byte[64])
+        {
+            Objects = [new MapObject(1, 5, 3, 3, Direction.Down, 0, false) { Heals = true }],
+        };
+
+        // Grass everywhere and something waiting in all of it, so a fight can be picked
+        // on demand rather than walked into and hoped for.
+        var behaviours = new byte[64];
+        Array.Fill(behaviours, MetatileBehaviour.TallGrass);
+
+        MapData route = new(Route, "ROUTE 1", 8, 8, new byte[64])
+        {
+            Behaviours = behaviours,
+            Encounters = new MapEncounters(Route, Land: new EncounterTable(
+                EncounterKind.Land, 100,
+                [.. Enumerable.Range(0, 12).Select(_ => new WildSlot(16, 40, 40))])),
+        };
+
+        return new GameWorld(new WorldData([town, route]), Town, TestRules.All);
+    }
+
+    private static SavedMon Wounded =>
+        new(3, 30, null, 1, StatusCondition.None, Nature.Hardy, [TestRules.FirstMove]);
+
+    private static (GameWorld World, ServerPlayer Player) Playing()
+    {
+        GameWorld world = World();
+
+        (ServerPlayer player, _) = world.Join(
+            1, "Koop", SavedCharacter.Fresh(Town, 3, 4) with { Party = [Wounded], Money = 3000 });
+
+        player.Facing = Direction.Up;
+
+        return (world, player);
+    }
+
+    /// <summary>
+    /// Walks into a fight on the route and loses it, by going in on one health against
+    /// something forty levels above.
+    /// </summary>
+    private static List<Outgoing> LoseAFight(GameWorld world, ServerPlayer player)
+    {
+        player.MapId = Route;
+        player.Party[0] = player.Party[0] with { CurrentHp = 1 };
+
+        double now = 0;
+
+        for (int step = 0; step < 200; step++)
+        {
+            player.Square = new GridPosition(step % 4, 1);
+            player.LastStepAt = double.NegativeInfinity;
+            now += 1;
+
+            if (world.Move(player.Id, Direction.Down, now).Any(o => o.Message is BattleStarted)) break;
+        }
+
+        Assert.True(player.InBattle, "never met anything");
+
+        List<Outgoing> last = [];
+
+        for (int turn = 0; turn < 40 && player.InBattle; turn++)
+            last = world.TakeBattleTurn(player.Id, new BattleAction.UseMove(0));
+
+        return last;
+    }
+
+    [Fact]
+    public void RestingAtACounterIsWhatMakesItYours()
+    {
+        // Walking through a centre on the way somewhere does not count. What makes one
+        // yours is having stood at the counter.
+        (GameWorld world, ServerPlayer player) = Playing();
+
+        Assert.Null(player.RestingAt);
+
+        world.StartTalking(player.Id, 1);
+
+        Assert.Equal(Town, player.RestingAt);
+        Assert.Equal(new GridPosition(3, 4), player.RestingSquare);
+    }
+
+    [Fact]
+    public void SomebodyWhoHasNeverRestedWakesWhereEverybodyStarts()
+    {
+        // Not a fallback for an error. It is where they started, and it is the only
+        // place the server knows is safe.
+        (GameWorld world, ServerPlayer player) = Playing();
+
+        LoseAFight(world, player);
+
+        Assert.Null(player.RestingAt);
+        Assert.Equal(Town, player.MapId);
+    }
+
+    [Fact]
+    public void LosingCostsHalfTheMoney()
+    {
+        (GameWorld world, ServerPlayer player) = Playing();
+
+        world.StartTalking(player.Id, 1);
+        world.StopTalking(player.Id);
+
+        List<Outgoing> end = LoseAFight(world, player);
+
+        BlackedOut fainted = end.Select(o => o.Message).OfType<BlackedOut>().Single();
+
+        Assert.Equal(1500, fainted.Money);
+        Assert.Equal(1500, player.Money);
+    }
+
+    [Fact]
+    public void LosingPutsYouBackAtTheCounterYouRestedAt()
+    {
+        (GameWorld world, ServerPlayer player) = Playing();
+
+        world.StartTalking(player.Id, 1);
+        world.StopTalking(player.Id);
+
+        LoseAFight(world, player);
+
+        Assert.Equal(Town, player.MapId);
+        Assert.Equal(new GridPosition(3, 4), player.Square);
+        Assert.All(player.Party, m => Assert.True(m.CurrentHp > 1));
+    }
+
+    [Fact]
+    public void WhereYouRestedOutlivesTheConnection()
+    {
+        (GameWorld world, ServerPlayer player) = Playing();
+
+        world.StartTalking(player.Id, 1);
+
+        SavedCharacter saved = world.Snapshot(player.Id)!;
+
+        Assert.Equal(Town, saved.RestingAt);
+        Assert.Equal((3, 4), (saved.RestingX, saved.RestingY));
+    }
+}

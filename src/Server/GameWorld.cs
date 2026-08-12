@@ -39,6 +39,18 @@ public sealed record ServerPlayer(int Id, long AccountId, string Name)
     public HashSet<int> DefeatedTrainers { get; } = [];
 
     /// <summary>
+    /// The centre this player last rested at, and the square they stood on to do it.
+    /// <para>
+    /// Where they wake up after blacking out. Nothing until they have visited one, which
+    /// is the correct answer rather than a missing one — a character who has never been
+    /// to a centre wakes where every character starts.
+    /// </para>
+    /// </summary>
+    public string? RestingAt { get; set; }
+
+    public GridPosition RestingSquare { get; set; }
+
+    /// <summary>
     /// The cartridge's own bookkeeping for this player: which script flags are set and
     /// what the script variables hold.
     /// <para>
@@ -263,6 +275,8 @@ public sealed class GameWorld
                 Script = new ScriptState(
                     saved.Flags,
                     saved.Variables.Select(v => new KeyValuePair<int, int>(v.Id, v.Value))),
+                RestingAt = saved.RestingAt,
+                RestingSquare = new GridPosition(saved.RestingX, saved.RestingY),
             };
 
             foreach (int beaten in saved.DefeatedTrainers) player.DefeatedTrainers.Add(beaten);
@@ -584,6 +598,12 @@ public sealed class GameWorld
                 bool needed = player.Party.Any(m => !_battles.IsWell(m));
 
                 HealParty(player);
+
+                // Remembered here rather than on arriving at the map: what makes a
+                // centre yours is having stood at the counter, and a player who walked
+                // through one on the way somewhere has not.
+                player.RestingAt = player.MapId;
+                player.RestingSquare = player.Square;
 
                 person.HeldBy = playerId;
 
@@ -1142,6 +1162,54 @@ public sealed class GameWorld
             player.Party[i] = _battles.Healed(player.Party[i]);
     }
 
+    /// <summary>
+    /// What a share of the money is worth on the way down.
+    /// <para>
+    /// <b>This project's rule, not the cartridge's.</b> The games work it out from the
+    /// level of the strongest thing in the party against a small table, which this does
+    /// not read. Half is stated plainly instead, rather than inventing a formula and
+    /// implying it came off an image.
+    /// </para>
+    /// </summary>
+    public const int LossShare = 2;
+
+    /// <summary>
+    /// Waking up after losing: back at the last centre, lighter.
+    /// <para>
+    /// This replaces healing on the spot, which was a stand-in from before there was
+    /// anywhere to wake up. It mattered more than it looked: a loss that costs nothing
+    /// makes a centre a place with no reason to exist, and every potion in the bag a
+    /// souvenir.
+    /// </para>
+    /// <para>
+    /// A character who has never rested anywhere goes to the starting map. That is not a
+    /// fallback for an error — it is where they started, and it is the only place the
+    /// server knows is safe.
+    /// </para>
+    /// </summary>
+    private List<Outgoing> BlackOut(ServerPlayer player)
+    {
+        player.Money /= LossShare;
+
+        string mapId = player.RestingAt is { } rested && _world.Find(rested) is not null
+            ? rested
+            : StartingMap.Id;
+
+        GridPosition square = player.RestingAt is null
+            ? GridFor(mapId).FirstWalkable()
+            : player.RestingSquare;
+
+        // A centre that has been re-exported may have moved a counter, and a square that
+        // is solid now would wake somebody inside a wall with no way out.
+        if (!GridFor(mapId).IsWalkable(square)) square = GridFor(mapId).FirstWalkable();
+
+        List<Outgoing> send = Transfer(player, mapId, square, player.Facing);
+
+        send.Add(new Outgoing(new BlackedOut(mapId, square.X, square.Y, player.Money, [.. player.Party]), OnlyTo: player.Id));
+
+        return send;
+    }
+
     /// <summary>The most money an account can hold, which is the games' own ceiling.</summary>
     public const int MaxMoney = 999_999;
 
@@ -1267,6 +1335,11 @@ public sealed class GameWorld
             {
                 send.Add(new Outgoing(FinishBattle(player, encounter, winner), OnlyTo: playerId));
 
+                // Losing costs the walk back, and now the walk back is somewhere. The
+                // transfer comes after the result so the client has finished the battle
+                // before the world moves underneath it.
+                if (winner == Side.Opponent) send.AddRange(BlackOut(player));
+
                 // Beating somebody is decided here and nowhere else. Which line they
                 // read next is decided by running their script, and the thing that
                 // script asks is whether this fight has already happened — so a win the
@@ -1389,9 +1462,8 @@ public sealed class GameWorld
 
         player.Battle = null;
 
-        // Losing costs nothing but the walk back, for now. What it must not cost is
-        // the account: a wiped party can never start another battle, so it would have
-        // no way to recover on its own.
+        // A wiped party can never start another battle, so waking up healthy is the one
+        // state that is always recoverable. Where that happens is BlackOut's business.
         if (winner == Side.Opponent) HealParty(player);
 
         int prize = winner == Side.Player && encounter.IsTrainerBattle ? PrizeFor(encounter) : 0;
@@ -1436,6 +1508,9 @@ public sealed class GameWorld
                 Money = player.Money,
                 Flags = [.. player.Script.Flags],
                 Variables = [.. player.Script.Variables.Select(v => new SavedVariable(v.Key, v.Value))],
+                RestingAt = player.RestingAt,
+                RestingX = player.RestingSquare.X,
+                RestingY = player.RestingSquare.Y,
             };
         }
     }

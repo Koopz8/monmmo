@@ -118,6 +118,13 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
                 PRIMARY KEY (account_id, trainer_id)
             );
 
+            CREATE TABLE IF NOT EXISTS resting_places (
+                account_id INTEGER PRIMARY KEY REFERENCES characters(account_id) ON DELETE CASCADE,
+                map_id     TEXT    NOT NULL,
+                x          INTEGER NOT NULL,
+                y          INTEGER NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS script_flags (
                 account_id INTEGER NOT NULL REFERENCES characters(account_id) ON DELETE CASCADE,
                 flag       INTEGER NOT NULL,
@@ -349,6 +356,22 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
             await beaten.ExecuteNonQueryAsync(cancellationToken);
         }
 
+        // A row rather than a column on characters, so a database made before centres
+        // existed gains it without a migration. Absent means "has never rested
+        // anywhere", which is a real answer and not a missing one.
+        if (character.RestingAt is { } resting)
+        {
+            await using SqliteCommand rest = connection.CreateCommand();
+            rest.Transaction = transaction;
+            rest.CommandText =
+                "INSERT OR REPLACE INTO resting_places (account_id, map_id, x, y) VALUES ($id, $map, $x, $y);";
+            rest.Parameters.AddWithValue("$id", accountId);
+            rest.Parameters.AddWithValue("$map", resting);
+            rest.Parameters.AddWithValue("$x", character.RestingX);
+            rest.Parameters.AddWithValue("$y", character.RestingY);
+            await rest.ExecuteNonQueryAsync(cancellationToken);
+        }
+
         // Rewritten wholesale, unlike the beaten trainers. A script can clear a flag as
         // readily as set one — that is what makes a door lock behind you — so an
         // insert-only table would be one nothing could ever come back out of.
@@ -566,8 +589,30 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
                 variables.Add(new SavedVariable(reader.GetInt32(0), reader.GetInt32(1)));
         }
 
+        string? restingAt = null;
+        int restingX = 0;
+        int restingY = 0;
+
+        await using (SqliteCommand command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT map_id, x, y FROM resting_places WHERE account_id = $id;";
+            command.Parameters.AddWithValue("$id", accountId);
+
+            await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+
+            if (await reader.ReadAsync(cancellationToken))
+            {
+                restingAt = reader.GetString(0);
+                restingX = reader.GetInt32(1);
+                restingY = reader.GetInt32(2);
+            }
+        }
+
         return new SavedCharacter(mapId, x, y, facing, party)
         {
+            RestingAt = restingAt,
+            RestingX = restingX,
+            RestingY = restingY,
             DefeatedTrainers = defeated,
             Items = carried,
             Money = money,
