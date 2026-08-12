@@ -145,6 +145,8 @@ public static class Program
 
         if (options.Special is { } routine) WriteSpecial(rom, routine);
 
+        if (options.Answers is { } answering) WriteAnswers(rom, answering);
+
         if (options.Shared) WriteSharedScripts(rom);
 
         if (options.Silent) WriteSilentPeople(rom);
@@ -1137,12 +1139,39 @@ public static class Program
     /// </summary>
     private static void WriteSpecial(Rom rom, int routine, int sites = 12)
     {
-        Console.WriteLine();
-        Console.WriteLine($"special 0x{routine:X4} — what the script says on each side of the answer");
-
         MapLibrary library = MapLibrary.Open(rom);
 
-        List<SpecialCall> calls = [.. SpecialCalls.All(rom, library).Where(c => c.Routine == routine)];
+        WriteForks(
+            rom,
+            $"special 0x{routine:X4} — what the script says on each side of the answer",
+            [.. SpecialCalls.All(rom, library).Where(c => c.Routine == routine)],
+            sites);
+    }
+
+    /// <summary>
+    /// The same reading for an ordinary command that answers into the result variable.
+    /// <para>
+    /// Written because one of them, 0xA0, is why a special was misidentified this
+    /// milestone: it answers between the call and the compare, so the compare is about
+    /// it. Being able to ask a command the same question as a routine is what turns that
+    /// from an embarrassment into an instrument.
+    /// </para>
+    /// </summary>
+    private static void WriteAnswers(Rom rom, byte code, int sites = 16)
+    {
+        MapLibrary library = MapLibrary.Open(rom);
+
+        WriteForks(
+            rom,
+            $"command 0x{code:X2} ({ScriptCommands.NameOf(code)}) — what the script says on each side of its answer",
+            SpecialCalls.AllOf(rom, library, code),
+            sites);
+    }
+
+    private static void WriteForks(Rom rom, string title, List<SpecialCall> calls, int sites)
+    {
+        Console.WriteLine();
+        Console.WriteLine(title);
 
         if (calls.Count == 0)
         {
@@ -2521,6 +2550,8 @@ public static class Program
 
         public int? Special { get; private init; }
 
+        public byte? Answers { get; private init; }
+
         /// <summary>Count the scripts map objects hand their work to.</summary>
         public bool Shared { get; private init; }
 
@@ -2579,6 +2610,7 @@ public static class Program
             bool scriptRuns = false;
             bool specials = false;
             int? special = null;
+            byte? answers = null;
             bool shared = false;
             bool silent = false;
             bool derive = false;
@@ -2662,6 +2694,11 @@ public static class Program
                         break;
                     case "--script-runs":
                         scriptRuns = true;
+                        break;
+                    case "--answers":
+                        string answerer = Next(args, ref i, "--answers");
+                        answers = Convert.ToByte(
+                            answerer.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? answerer[2..] : answerer, 16);
                         break;
                     case "--special":
                         string routineId = Next(args, ref i, "--special");
@@ -2766,6 +2803,7 @@ public static class Program
                 ScriptRuns = scriptRuns,
                 Specials = specials,
                 Special = special,
+                Answers = answers,
                 Shared = shared,
                 Silent = silent,
                 Derive = derive,

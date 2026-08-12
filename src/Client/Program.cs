@@ -204,7 +204,9 @@ public static class Program
         // The cartridge's bookkeeping, as the server has it. Kept here because running
         // a script needs it and only this machine can run one — the server stores these
         // and has no idea what any of them mean.
-        var script = new ScriptState();
+        // Which set of words this character reads. Client-side because it decides which
+        // arm of a fork gets read, and the server has never seen either arm.
+        var script = new ScriptState { IsGirl = settings.Girl };
 
         // The party, out of a fight. Held because the bag has to say who a potion would
         // go on, and until now nothing outside a battle had any reason to know.

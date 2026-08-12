@@ -300,6 +300,15 @@ public static class ScriptRunner
                     pending = 0;
                     break;
 
+                case 0xA0:
+                    // Which of the two sets of words this character reads. Named from the
+                    // cartridge rather than recalled: the fork after this command is
+                    // "Waiter"/"Waitress", "little brother"/"little sister", "All boys
+                    // leave home someday"/"All girls dream of traveling" — seven scripts
+                    // on six maps, and the zero arm says "boy" at every one of them.
+                    save.Write(0x800D, save.IsGirl ? 1 : 0);
+                    break;
+
                 case SpecialCalls.Special:
                 case SpecialCalls.SpecialVar:
                     // Stepped over, because it is a call into code on the cartridge that

@@ -44,6 +44,22 @@ public sealed class ScriptState
     /// </summary>
     public const int NoSlot = 6;
 
+    /// <summary>
+    /// Which of the two sets of words this character reads.
+    /// <para>
+    /// Derived, not remembered. Command 0xA0 takes nothing and answers into the result
+    /// variable, and the two arms of the fork after it are the cartridge's own words at
+    /// every site — "Waiter" and "Waitress", "little brother" and "little sister", "All
+    /// boys leave home someday" and "All girls dream of traveling", "dear boy" and "dear
+    /// girl". Seven scripts on six maps, agreeing.
+    /// </para>
+    /// <para>
+    /// Zero and one, in that order, because that is the order the branches take: the arm
+    /// reached when the answer is zero is the one that says "boy" every time.
+    /// </para>
+    /// </summary>
+    public bool IsGirl { get; init; }
+
     private readonly HashSet<int> _flags;
     private readonly Dictionary<int, int> _variables;
     private readonly HashSet<int> _beaten;
@@ -150,7 +166,7 @@ public sealed class ScriptState
         else _variables[variable] = value;
     }
 
-    public ScriptState Copy() => new(_flags, _variables, _beaten, _partyMoves);
+    public ScriptState Copy() => new(_flags, _variables, _beaten, _partyMoves) { IsGirl = IsGirl };
 
     /// <summary>
     /// The same state with a party attached, for the one run that needs one.
@@ -161,7 +177,7 @@ public sealed class ScriptState
     /// </para>
     /// </summary>
     public ScriptState WithParty(IEnumerable<IReadOnlyList<int>> partyMoves) =>
-        new(_flags, _variables, _beaten, partyMoves);
+        new(_flags, _variables, _beaten, partyMoves) { IsGirl = IsGirl };
 
     /// <summary>How two numbers compare, in the only three answers a script has.</summary>
     public static Comparison Compare(int left, int right) =>

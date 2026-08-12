@@ -975,3 +975,89 @@ public class SpecialBranchTests
         Assert.Equal(Start + 14, Rom.BaseAddress + (uint)commands[3].Offset);
     }
 }
+
+/// <summary>
+/// Which of the two sets of words a character reads.
+/// <para>
+/// Command 0xA0 takes nothing and answers into the result variable, and the arms after
+/// it are the cartridge's own words at every site: "Waiter"/"Waitress", "little
+/// brother"/"little sister", "All boys leave home someday"/"All girls dream of
+/// traveling", "dear boy"/"dear girl". Seven scripts on six maps, agreeing.
+/// </para>
+/// <para>
+/// The first identification in this project of a command by what the script says about
+/// its answer, and it took two retracted attempts to get the instrument honest enough to
+/// make it: one that counted branches without judging them, and one that credited a
+/// special with this command's reply.
+/// </para>
+/// </summary>
+public class PlayerGenderTests
+{
+    private const uint Start = Rom.BaseAddress;
+    private const uint Girl = Rom.BaseAddress + 0x100;
+    private const uint BoyText = Rom.BaseAddress + 0x200;
+    private const uint GirlText = Rom.BaseAddress + 0x220;
+
+    private static byte[] At(uint address) =>
+        [(byte)address, (byte)(address >> 8), (byte)(address >> 16), (byte)(address >> 24)];
+
+    private static byte[] Speech(char letter) =>
+    [
+        .. Enumerable.Repeat((byte)(0xBB + (letter - 'A')), 6),
+        GameText.Terminator,
+    ];
+
+    /// <summary>The shape every one of these forks has on a real image.</summary>
+    private static Rom Fork()
+    {
+        var image = new byte[0x400];
+
+        byte[] script =
+        [
+            0xA0,                                           // playergender
+            0x21, 0x0D, 0x80, 0x01, 0x00,                   // compare 0x800D, 1
+            ScriptCommands.GotoIf, 0x01, .. At(Girl),
+            ScriptCommands.Message, .. At(BoyText),
+            ScriptCommands.End,
+        ];
+
+        script.CopyTo(image, 0);
+
+        byte[] otherArm = [ScriptCommands.Message, .. At(GirlText), ScriptCommands.End];
+
+        otherArm.CopyTo(image, (int)(Girl - Rom.BaseAddress));
+
+        Speech('A').CopyTo(image, (int)(BoyText - Rom.BaseAddress));
+        Speech('B').CopyTo(image, (int)(GirlText - Rom.BaseAddress));
+
+        return new Rom(image);
+    }
+
+    [Fact]
+    public void TheZeroArmIsTheOneThatSaysBoy()
+    {
+        // Unwritten reads as zero, which is why this has been the boy's line since
+        // before anybody knew the command existed.
+        Assert.Equal("AAAAAA", Assert.Single(ScriptRunner.Run(Fork(), Start).Pages));
+    }
+
+    [Fact]
+    public void ACharacterWhoSaysSoGetsTheOtherArm()
+    {
+        Assert.Equal(
+            "BBBBBB",
+            Assert.Single(ScriptRunner.Run(Fork(), Start, new ScriptState { IsGirl = true }).Pages));
+    }
+
+    [Fact]
+    public void ItSurvivesBeingCopiedAndGivenAParty()
+    {
+        // Both of those make a new state, and a run copies before it walks. A field that
+        // did not survive either would read as a boy on every script in the game while
+        // testing green on the one above.
+        var state = new ScriptState { IsGirl = true };
+
+        Assert.True(state.Copy().IsGirl);
+        Assert.True(state.WithParty([]).IsGirl);
+    }
+}

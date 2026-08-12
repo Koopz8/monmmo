@@ -572,6 +572,9 @@ public static class ScriptCommands
         // called: it is handed a move id and answers a party slot, or six for nobody.
         0x7C => "findmove",
 
+        // Named from the words on the two arms after it, at seven sites on six maps.
+        0xA0 => "playergender",
+
         0x68 => "closemessage",
         0x69 => "lockall",
         0x6D => "waitstate",

@@ -46,6 +46,23 @@ public sealed class ClientSettings
 
     public int StarterLevel { get; set; } = 5;
 
+    /// <summary>
+    /// Which of the two sets of words this character reads.
+    /// <para>
+    /// Here rather than in the save, and that is the interesting part. The server has
+    /// never seen a line of this game's text and has no opinion about any of it; the
+    /// choice only ever affects which arm of a fork the client reads, so it lives beside
+    /// the cartridge path along with everything else that is about text.
+    /// </para>
+    /// <para>
+    /// One command asks: 0xA0, which takes nothing and answers into the result variable.
+    /// The arms after it are "Waiter"/"Waitress", "little brother"/"little sister", "All
+    /// boys leave home someday"/"All girls dream of traveling" — seven scripts on six
+    /// maps, and the zero arm is the first of each pair at every one of them.
+    /// </para>
+    /// </summary>
+    public bool Girl { get; set; }
+
     /// <summary>Balls carried. A placeholder for a bag, which does not exist yet.</summary>
     public int Balls { get; set; } = 20;
 
@@ -77,6 +94,9 @@ public sealed class ClientSettings
                     break;
                 case "--name":
                     settings.PlayerName = commandLineArgs[i + 1];
+                    break;
+                case "--girl":
+                    settings.Girl = commandLineArgs[i + 1] is not ("false" or "0" or "no");
                     break;
                 case "--starter":
                     if (int.TryParse(commandLineArgs[i + 1], out int starter))
