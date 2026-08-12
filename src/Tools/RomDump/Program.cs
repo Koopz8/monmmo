@@ -186,7 +186,12 @@ public static class Program
 
         if (options.Probe) WriteMapScripts(rom);
 
-        if (options.ScriptAt != 0) WriteScriptAt(rom, options.ScriptAt);
+        if (options.ScriptAt != 0)
+        {
+            WriteScriptAt(rom, options.ScriptAt);
+            RunAsTheClientWould(rom, options.ScriptAt);
+        }
+
 
         Console.WriteLine();
         Console.WriteLine($"Done. Output in {Path.GetFullPath(options.OutputDirectory)}");
@@ -1014,6 +1019,37 @@ public static class Program
     /// Pokémon game has, and the width is wrong however well it parses.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Runs one script exactly as the client would, and says what came out.
+    /// <para>
+    /// Not the same as running it with a default save, which is what every other report
+    /// here does. The client runs with a save that has a gender on it and a party
+    /// attached, and "the tool prints three pages and the game shows none" is a
+    /// difference this had no way to see.
+    /// </para>
+    /// </summary>
+    private static void RunAsTheClientWould(Rom rom, uint address)
+    {
+        foreach (bool girl in new[] { false, true })
+        foreach (int inParty in new[] { 0, 1 })
+        {
+            var save = new ScriptState { IsGirl = girl };
+
+            ScriptRun run = ScriptRunner.Run(
+                rom, address, save.WithParty(Enumerable.Repeat<IReadOnlyList<int>>([1], inParty)));
+
+            Console.WriteLine();
+            Console.WriteLine($"  as a {(girl ? "girl" : "boy")} with {inParty} in the party:");
+
+            if (run.StoppedAt is { } code) Console.WriteLine($"    stopped at 0x{code:X2}");
+
+            if (run.Pages.Count == 0) Console.WriteLine("    says nothing");
+
+            foreach (string page in run.Pages)
+                Console.WriteLine($"    \"{GameText.ToAscii(page).Replace('\n', ' ')}\"");
+        }
+    }
+
     private static void WriteGiftMons(Rom rom)
     {
         MapLibrary library = MapLibrary.Open(rom);

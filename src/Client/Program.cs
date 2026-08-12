@@ -563,6 +563,18 @@ public static class Program
     /// person still, and that is the whole of its involvement.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// What the last press of the button came to.
+    /// <para>
+    /// There is a server line for every conversation — "talked to 3, held still" — and
+    /// nothing at all for what this side did with it. Pressing the button at somebody
+    /// and getting silence has four completely different causes and they are
+    /// indistinguishable from the outside: nobody in front, nobody with a script, a
+    /// script that ran and said nothing, and a box that opened and was not drawn.
+    /// </para>
+    /// </summary>
+    private static string LastTalk = "nothing yet";
+
     private static DialogueBox? Talk(
         GameData data, MapView view, WalkingCharacter player, NetworkClient network, ScriptState script,
         IReadOnlyList<SavedMon> party)
@@ -582,6 +594,8 @@ public static class Program
             // on, and there is nothing for the server to arbitrate — nobody stands still
             // to be read, nothing changes hands, and the words are on an image the
             // server has never seen. So this one never leaves the machine.
+            LastTalk = $"nobody in front of {player.Square} facing {player.Facing}";
+
             return Read(data, view, player, network, script, party);
         }
 
@@ -613,6 +627,11 @@ public static class Program
             network.SendScriptRan(run);
 
         DialogueBox? box = person.HasScript ? new DialogueBox(run.Pages) : null;
+
+        LastTalk =
+            !person.HasScript ? $"person {person.LocalId} has no script"
+            : run.StoppedAt is { } stopper ? $"person {person.LocalId}: stopped at 0x{stopper:X2}, {run.Pages.Count} pages"
+            : $"person {person.LocalId}: {run.Pages.Count} pages";
 
         // Plenty of scripts say nothing at all — they set a flag, or hand something
         // over. An empty box would still have to be dismissed, so there isn't one.
@@ -1126,10 +1145,15 @@ public static class Program
             $"you {px:F0},{py:F0}   map {map.PixelWidth}x{map.PixelHeight}   " +
             $"camera {camera.X:F0},{camera.Y:F0}   " +
             $"{Raylib.GetFPS()} fps, worst {worstFrame * 1000f:F0} ms   " +
-            (sprite is null ? "SPRITE MISSING — drawing the placeholder box" : "sprite loaded");
+            (sprite is null ? "NO SPRITE" : "sprite ok");
+
+        string third = $"last talk: {LastTalk}";
 
         Raylib.DrawText(second, 13, 37, 20, Color.Black);
         Raylib.DrawText(second, 12, 36, 20, Color.White);
+
+        Raylib.DrawText(third, 13, 61, 20, Color.Black);
+        Raylib.DrawText(third, 12, 60, 20, Color.White);
     }
 
     /// <summary>Opens a window that just explains what went wrong, rather than exiting silently.</summary>
