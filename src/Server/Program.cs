@@ -592,11 +592,18 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                             if (world.LastTalkOutcome is { } talkOutcome)
                                 Console.WriteLine($"* #{playerId} talked to {talk.LocalId}: {talkOutcome}");
 
+                            if (world.LastRelease is { } interrupted)
+                                Console.WriteLine($"! {interrupted}");
+
                             await DispatchAsync(talked, playerId, cancellationToken).ConfigureAwait(false);
                             break;
 
                         case TalkFinished when playerId != 0:
                             world.StopTalking(playerId);
+
+                            if (world.LastRelease is { } letGo)
+                                Console.WriteLine($"! {letGo}");
+
                             break;
 
                         case SceneCast cast when playerId != 0:

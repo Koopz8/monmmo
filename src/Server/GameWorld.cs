@@ -562,6 +562,8 @@ public sealed class GameWorld
         {
             var send = new List<Outgoing>();
 
+            LastTickAt = nowSeconds;
+
             foreach (string mapId in _players.Values.Select(p => p.MapId).Distinct().ToList())
             {
                 if (Populate(mapId, nowSeconds) is not { } people) continue;
@@ -569,8 +571,11 @@ public sealed class GameWorld
                 // A conversation ends when the client says so, and also when it cannot:
                 // a player who disconnected or walked through a door is not talking to
                 // anybody, whatever the last thing they sent was.
-                people.Release(holder =>
-                    !_players.TryGetValue(holder, out ServerPlayer? talker) || talker.MapId != mapId);
+                NoteRelease(
+                    people.Release(holder =>
+                        !_players.TryGetValue(holder, out ServerPlayer? talker) || talker.MapId != mapId),
+                    "the clock, because they are no longer on this map",
+                    nowSeconds);
 
                 foreach (ObjectView moved in people.Step(_objectRng, nowSeconds, square => IsFree(mapId, square)))
                     send.Add(new Outgoing(new ObjectMoved(moved.LocalId, moved.X, moved.Y, moved.Facing), OnMap: mapId));
@@ -641,7 +646,10 @@ public sealed class GameWorld
 
             // Anyone this player was already holding is let go first, so a client that
             // loses a "finished" message cannot accumulate frozen people behind it.
-            people.Release(holder => holder == playerId);
+            NoteRelease(
+                people.Release(holder => holder == playerId),
+                "starting a conversation, which lets go of everyone first",
+                LastTickAt);
 
             // The square in front, or the one past it when a counter is in the way.
             CollisionGrid grid = GridFor(player.MapId);
@@ -1357,6 +1365,16 @@ public sealed class GameWorld
     /// <summary>How many squares one scripted walk may cover. The longest list is 63.</summary>
     private const int LongestSceneWalk = 64;
 
+    /// <summary>
+    /// The clock as of the last tick, for the places that are told nothing about time.
+    /// <para>
+    /// Talking and finishing talking arrive from a socket with no timestamp on them, and
+    /// they need one only to answer "was this during a scene". The last tick is close
+    /// enough for that and does not mean threading a clock through a protocol.
+    /// </para>
+    /// </summary>
+    private double LastTickAt { get; set; }
+
     /// <summary>What the last scene walk came to.</summary>
     public string? LastSceneWalk { get; private set; }
 
@@ -1418,6 +1436,30 @@ public sealed class GameWorld
             return [new Outgoing(
                 new PlayerMoved(playerId, player.Square.X, player.Square.Y, player.Facing),
                 OnMap: player.MapId)];
+        }
+    }
+
+    /// <summary>
+    /// Who let go of somebody a scene was holding, and where from.
+    /// <para>
+    /// Written because a scene lost its cast in play and three rounds of reading the code
+    /// did not say which of the three release sites did it — and the server side
+    /// reproduced perfectly under test, which means the answer was never going to come
+    /// from reasoning about it. A hold that ends unexpectedly should say so at the moment
+    /// it ends rather than be inferred from a refusal much later.
+    /// </para>
+    /// </summary>
+    public string? LastRelease { get; private set; }
+
+    /// <summary>Notes a release, but only for somebody who is in the middle of a scene.</summary>
+    private void NoteRelease(IEnumerable<(int LocalId, int Holder)> let, string where, double nowSeconds)
+    {
+        foreach ((int localId, int holder) in let)
+        {
+            if (!_players.TryGetValue(holder, out ServerPlayer? player)) continue;
+            if (nowSeconds > player.SceneUntil) continue;
+
+            LastRelease = $"object {localId} let go of #{holder} by {where}, mid-scene";
         }
     }
 
@@ -1556,7 +1598,10 @@ public sealed class GameWorld
             if (_players.TryGetValue(playerId, out ServerPlayer? shopper)) shopper.Shopping = [];
 
             foreach (MapPopulation people in _populated.Values)
-                people.Release(holder => holder == playerId);
+                NoteRelease(
+                    people.Release(holder => holder == playerId),
+                    "the text box closing",
+                    LastTickAt);
         }
     }
 

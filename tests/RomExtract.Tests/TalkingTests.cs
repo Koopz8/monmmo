@@ -1156,6 +1156,36 @@ public class TriggerTests
     }
 
     [Fact]
+    public void AHoldSurvivesTheClockAndTheWalk()
+    {
+        // The sequence from a real session, with the server's clock in it — which the
+        // other tests do not have, and which is the only thing running between the hold
+        // and the placement in play.
+        MapData map = new(Town, "PALLET TOWN", 16, 16, new byte[256])
+        {
+            Objects = [new MapObject(3, 5, 10, 8, Direction.Down, 2, false, 3, 3)],
+            Triggers = [new MapTrigger(3, 4, Variable, 0)],
+        };
+
+        var world = new GameWorld(new WorldData([map]), Town, TestRules.All);
+
+        (ServerPlayer player, _) = world.Join(1, "Koop", SavedCharacter.Fresh(Town, 3, 4));
+
+        world.FireTrigger(player.Id, 3, 4, 10);
+        world.HoldSceneCast(player.Id, [3], 10.1);
+
+        for (double now = 10.2; now < 14; now += 0.2) world.Tick(now);
+
+        world.WalkThroughScene(player.Id, [Direction.Down, Direction.Down], 14);
+
+        for (double now = 14.2; now < 18; now += 0.2) world.Tick(now);
+
+        world.PlaceAfterScene(player.Id, 3, new GridPosition(11, 8), Direction.Left);
+
+        Assert.Contains("left at", world.LastScenePlacement);
+    }
+
+    [Fact]
     public void ASceneCanWalkThePlayer()
     {
         // The half a scene could not do until now. Where the player stands is the

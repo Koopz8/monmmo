@@ -102,12 +102,19 @@ public sealed class MapPopulation
     /// forever.
     /// </para>
     /// </summary>
-    public void Release(Func<int, bool> stale)
+    public List<(int LocalId, int Holder)> Release(Func<int, bool> stale)
     {
+        var let = new List<(int, int)>();
+
         foreach (ServerObject entry in _objects)
         {
-            if (entry.HeldBy is { } holder && stale(holder)) entry.HeldBy = null;
+            if (entry.HeldBy is not { } holder || !stale(holder)) continue;
+
+            entry.HeldBy = null;
+            let.Add((entry.LocalId, holder));
         }
+
+        return let;
     }
 
     /// <summary>
