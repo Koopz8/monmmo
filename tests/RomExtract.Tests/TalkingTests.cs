@@ -1202,6 +1202,27 @@ public class TriggerTests
     }
 
     [Fact]
+    public void ASpentStorySquareSaysSo()
+    {
+        // The one part of a trigger the server never hears about. The client reads the
+        // variable itself and sends nothing when it is disarmed, so a square whose scene
+        // has already happened is indistinguishable from open ground in every log this
+        // server writes — which is what "nothing happened" turned out to mean.
+        (GameWorld world, ServerPlayer player) = Standing(new MapTrigger(3, 3, Variable, 0));
+
+        Assert.Null(world.WhySilent(player.Id));
+
+        world.Move(player.Id, Direction.Up, 10);
+
+        Assert.Null(world.WhySilent(player.Id));
+
+        player.Script.Write(Variable, 1);
+
+        Assert.Contains("spent", world.WhySilent(player.Id));
+        Assert.Contains("holds 1", world.WhySilent(player.Id));
+    }
+
+    [Fact]
     public void AWalkOntoADoorGoesThroughIt()
     {
         // How anybody gets into the professor's lab. His script opens the door at (16,

@@ -81,6 +81,18 @@ public static class Program
         using var store = new SqlitePlayerStore(databasePath);
         Console.WriteLine($"Accounts in {Path.GetFullPath(databasePath)}");
 
+        // Before anybody connects, because the state being thrown away is state a
+        // connected character is holding in memory and would write straight back.
+        if (ArgumentValue(args, "--forget") is { } forgetting)
+        {
+            int forgotten = await store.ForgetStoryAsync(forgetting);
+
+            Console.WriteLine(
+                forgotten < 0
+                    ? $"  no character called {forgetting} — nothing forgotten"
+                    : $"  {forgetting} has forgotten {forgotten} flags and variables; the story starts over");
+        }
+
         await new GameServer(game, store, verbose).RunAsync(port);
         return 0;
     }
@@ -713,6 +725,11 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                             if (world.LastEdgeRefusal is { } refusal)
                             {
                                 Console.WriteLine($"| #{playerId} could not cross: {refusal}");
+                            }
+
+                            if (world.WhySilent(playerId) is { } silent)
+                            {
+                                Console.WriteLine($"| #{playerId} stood on {silent}");
                             }
 
                             if (world.LastSightRefusal is { } unseen)

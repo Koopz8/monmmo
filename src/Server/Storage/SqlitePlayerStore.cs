@@ -285,6 +285,25 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
             : new AuthOutcome.Success(new Account(accountId, storedName), character);
     }
 
+    public async Task<int> ForgetStoryAsync(string username, CancellationToken cancellationToken = default)
+    {
+        await using SqliteConnection connection = Open();
+
+        await using SqliteCommand find = connection.CreateCommand();
+        find.CommandText = "SELECT id FROM accounts WHERE username_folded = $folded;";
+        find.Parameters.AddWithValue("$folded", UsernameRules.Fold(username));
+
+        if (await find.ExecuteScalarAsync(cancellationToken) is not long accountId) return -1;
+
+        await using SqliteCommand forget = connection.CreateCommand();
+        forget.CommandText =
+            "DELETE FROM script_flags WHERE account_id = $id; " +
+            "DELETE FROM script_variables WHERE account_id = $id;";
+        forget.Parameters.AddWithValue("$id", accountId);
+
+        return await forget.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     public async Task SaveAsync(long accountId, SavedCharacter character, CancellationToken cancellationToken = default)
     {
         await using SqliteConnection connection = Open();

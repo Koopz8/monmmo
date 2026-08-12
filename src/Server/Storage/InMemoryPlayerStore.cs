@@ -78,4 +78,19 @@ public sealed class InMemoryPlayerStore : IPlayerStore
 
         return Task.CompletedTask;
     }
+
+    public Task<int> ForgetStoryAsync(string username, CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            if (!_byFoldedName.TryGetValue(UsernameRules.Fold(username), out Row? row))
+                return Task.FromResult(-1);
+
+            int forgotten = row.Character.Flags.Count + row.Character.Variables.Count;
+
+            row.Character = row.Character with { Flags = [], Variables = [] };
+
+            return Task.FromResult(forgotten);
+        }
+    }
 }

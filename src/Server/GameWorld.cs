@@ -1787,6 +1787,33 @@ public sealed class GameWorld
         }
     }
 
+    /// <summary>
+    /// Why the square a player is standing on ran nothing, when it is a square that
+    /// could have.
+    /// <para>
+    /// The one part of a trigger the server never hears about. A disarmed trigger is
+    /// refused by the client, which reads the variable itself and sends nothing — so a
+    /// story square that has already been used looks exactly like open ground in every
+    /// log this server writes. It cost an evening: the professor's scene had run once,
+    /// written down that it happened, and the report was "nothing happened", which was
+    /// true and which nothing on either side would say out loud.
+    /// </para>
+    /// </summary>
+    public string? WhySilent(int playerId)
+    {
+        lock (_gate)
+        {
+            if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return null;
+            if (_world.Find(player.MapId)?.TriggerAt(player.Square) is not { } trigger) return null;
+
+            int held = player.Script.Read(trigger.Variable);
+
+            return trigger.Armed(held)
+                ? null
+                : $"a story square, spent: variable 0x{trigger.Variable:X4} holds {held} and this wants {trigger.Value}";
+        }
+    }
+
     /// <summary>Who this player is currently holding still, for tests and for reporting.</summary>
     public int? TalkingTo(int playerId)
     {

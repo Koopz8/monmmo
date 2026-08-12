@@ -31,6 +31,23 @@ public interface IPlayerStore
 
     /// <summary>Writes a character back. Called on disconnect and after anything worth keeping.</summary>
     Task SaveAsync(long accountId, SavedCharacter character, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Throws away everything a character's scripts have remembered, and nothing else.
+    /// <para>
+    /// The story is one-way by design: the professor stops you leaving town, and when
+    /// the scene is over it writes down that it happened so it never happens again. That
+    /// is exactly right for playing and useless for building — a scene can only be
+    /// watched once per character, and the whole of the next stretch of this project is
+    /// scenes that have to be watched until they are right.
+    /// </para>
+    /// <para>
+    /// Flags and variables only. The party, the bag, the badges and where they are
+    /// standing are all kept, because none of those are the thing being tested and
+    /// losing a party to re-watch a cutscene would make this the wrong tool.
+    /// </para>
+    /// </summary>
+    Task<int> ForgetStoryAsync(string username, CancellationToken cancellationToken = default);
 }
 
 /// <summary>What a username is allowed to be, shared by every store.</summary>
