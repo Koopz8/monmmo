@@ -273,6 +273,28 @@ public static class ScriptCommands
         // a real command: release-end at most of them, loadpointer at several, a call at
         // one. Taking an argument here would swallow the first byte of all of those.
         [0xC5] = 0,
+
+        // Two. Three sites, and the second argument byte is 0x01 at all three:
+        //
+        //   31 | 00 01 | 32 ...
+        //   31 | 3E 01 | 67 82 BD 17 08     message 0x0817BD82
+        //   31 | 01 01 | 67 F6 51 1A 08     message 0x081A51F6
+        //
+        // Two of the three continue straight into a message carrying a real cartridge
+        // address, which is the sharpest test this project has. The third runs into
+        // 0x32, still unknown, which is where the next round starts.
+        [0x31] = 2,
+
+        // Nothing, exposed by fixing 0x31 — the same three scripts moved from one to
+        // the other. Two of the three continue straight into a command carrying a real
+        // address:
+        //
+        //   32 | 04 75 66 1A 08 ...     call 0x081A6675
+        //   32 | 66 84 02 18 00 0F 00 18 52 1A 08 09
+        //                                waitbutton, 0x84, loadpointer 0x081A5218, callstd
+        //
+        // The third runs into 0x63, which is the next unknown along and the next round.
+        [0x32] = 0,
     };
 
     /// <summary>
