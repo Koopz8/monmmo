@@ -1231,6 +1231,18 @@ public static class Program
 
         Console.WriteLine($"  longest is {lists.Max(l => l.Steps.Length)} steps");
 
+        // Is 0xFE really what ends these? Asked without assuming it: how many of the
+        // pointers have a given byte anywhere within reach. A byte that ends every list
+        // is near every pointer, and nothing else has any reason to be.
+        List<(byte Byte, int Within)> terminators =
+            MovementLists.Terminators(rom, lists.Select(l => l.Address));
+
+        Console.WriteLine();
+        Console.WriteLine("  Bytes found within reach of a movement pointer, commonest first:");
+
+        foreach ((byte value, int count) in terminators.Take(4))
+            Console.WriteLine($"    0x{value:X2}  {count,4} of {lists.Select(l => l.Address).Distinct().Count()} pointers");
+
         Console.WriteLine();
         Console.WriteLine("  Step bytes, commonest first:");
 

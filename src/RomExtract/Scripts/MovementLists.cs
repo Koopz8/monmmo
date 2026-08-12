@@ -53,7 +53,7 @@ public sealed record MovementList(string MapId, int PersonId, uint Address, byte
 /// </summary>
 public static class MovementLists
 {
-    /// <summary>Ends a list. Not assumed — see <see cref="Terminator"/>'s evidence.</summary>
+    /// <summary>Ends a list. Not assumed — see <see cref="Terminators"/> for the check.</summary>
     public const byte End = 0xFE;
 
     /// <summary>The command that applies one, and how its arguments are laid out.</summary>
@@ -366,60 +366,38 @@ public static class MovementLists
     }
 
     /// <summary>
-    /// Whether 0xFE really is the terminator, asked of the bytes rather than assumed.
+    /// Whether 0xFE really ends these lists, asked of the bytes rather than assumed.
     /// <para>
-    /// A list's last byte is the one thing every list has in common, so the check is
-    /// simply: read a fixed window from each pointer and see which byte value appears
-    /// exactly once in nearly all of them. Anything that ends every list and appears
-    /// nowhere inside one is a terminator, whatever it is called.
+    /// Not circular, because it does not ask where a terminator is — it asks how many
+    /// <c>applymovement</c> pointers have a given byte anywhere within reach. A byte that
+    /// ends every list turns up near every one of these pointers; a byte that does not,
+    /// does not. Run over all 256 values, either one stands out or there is no answer.
     /// </para>
     /// </summary>
-    public static (byte Byte, int Ends, int Total) Terminator(Rom rom, IEnumerable<uint> pointers)
+    public static List<(byte Byte, int Within)> Terminators(Rom rom, IEnumerable<uint> pointers)
     {
-        var ends = new Dictionary<byte, int>();
-        int total = 0;
+        var within = new int[256];
+        var seen = new HashSet<uint>();
 
         foreach (uint pointer in pointers)
         {
+            if (!seen.Add(pointer)) continue;
             if (rom.ToOffsetOrNull(pointer) is not { } at) continue;
 
-            total++;
-
-            // The first byte that never appears again in the window is the candidate.
-            for (int i = 0; i < LongestList && at + i < rom.Length; i++)
-            {
-                byte candidate = rom.ReadU8(at + i);
-
-                ends[candidate] = ends.GetValueOrDefault(candidate) + 1;
-                break;
-            }
-        }
-
-        // Counted the other way round: which byte ends the run of a list that is all one
-        // repeated step. Kept simple deliberately — the histogram below it is what
-        // actually decides, and a terminator that has to be argued for is not one.
-        var last = new Dictionary<byte, int>();
-
-        foreach (uint pointer in pointers)
-        {
-            if (rom.ToOffsetOrNull(pointer) is not { } at) continue;
+            var found = new bool[256];
 
             for (int i = 0; i < LongestList && at + i < rom.Length; i++)
-            {
-                byte step = rom.ReadU8(at + i);
+                found[rom.ReadU8(at + i)] = true;
 
-                if (step != rom.ReadU8(at))
-                {
-                    last[step] = last.GetValueOrDefault(step) + 1;
-                    break;
-                }
-            }
+            for (int value = 0; value < 256; value++)
+                if (found[value]) within[value]++;
         }
 
-        (byte best, int count) = last.Count == 0
-            ? ((byte)0, 0)
-            : last.OrderByDescending(e => e.Value).Select(e => (e.Key, e.Value)).First();
-
-        return (best, count, total);
+        return
+        [
+            .. Enumerable.Range(0, 256)
+                .Select(value => ((byte)value, within[value]))
+                .OrderByDescending(e => e.Item2),
+        ];
     }
 }
