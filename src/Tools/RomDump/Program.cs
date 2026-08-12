@@ -149,6 +149,8 @@ public static class Program
 
         if (options.AnswerSweep) WriteAnswerSweep(rom);
 
+        if (!string.IsNullOrEmpty(options.SpecialsOn)) WriteSpecialsOn(rom, options.SpecialsOn);
+
         if (options.Shared) WriteSharedScripts(rom);
 
         if (options.Silent) WriteSilentPeople(rom);
@@ -1310,6 +1312,49 @@ public static class Program
         }
 
         if (shown == 0) Console.WriteLine("  called, but never branched on — it does something rather than answering");
+    }
+
+    /// <summary>
+    /// Which routines the scripts on a few named maps call.
+    /// <para>
+    /// Written to size a stretch of the story rather than the whole game. "How much work
+    /// is the opening" is answerable — it is the set of routines the opening's scripts
+    /// call, and that is a list rather than an impression.
+    /// </para>
+    /// </summary>
+    private static void WriteSpecialsOn(Rom rom, string maps)
+    {
+        string[] wanted = maps.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        Console.WriteLine();
+        Console.WriteLine($"Routines called by scripts on {string.Join(", ", wanted)}");
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        List<SpecialCall> here =
+            [.. SpecialCalls.All(rom, library).Where(c => wanted.Contains(c.MapId))];
+
+        if (here.Count == 0)
+        {
+            Console.WriteLine("  nothing on those maps calls anything");
+            return;
+        }
+
+        List<SpecialCall> everywhere = SpecialCalls.All(rom, library);
+
+        Console.WriteLine(
+            $"  {here.Count} calls to {here.Select(c => c.Routine).Distinct().Count()} routines");
+
+        foreach (var routine in here
+                     .GroupBy(c => c.Routine)
+                     .OrderByDescending(g => g.Count()))
+        {
+            int elsewhere = everywhere.Count(c => c.Routine == routine.Key);
+
+            Console.WriteLine(
+                $"    0x{routine.Key:X4}  {routine.Count(),3} here, {elsewhere,4} in the whole game  " +
+                $"{(elsewhere == routine.Count() ? "— only ever called here" : "")}");
+        }
     }
 
     /// <summary>
@@ -2645,6 +2690,8 @@ public static class Program
 
         public bool AnswerSweep { get; private init; }
 
+        public string SpecialsOn { get; private init; } = "";
+
         /// <summary>Count the scripts map objects hand their work to.</summary>
         public bool Shared { get; private init; }
 
@@ -2705,6 +2752,7 @@ public static class Program
             int? special = null;
             byte? answers = null;
             bool answerSweep = false;
+            string specialsOn = "";
             bool shared = false;
             bool silent = false;
             bool derive = false;
@@ -2788,6 +2836,9 @@ public static class Program
                         break;
                     case "--script-runs":
                         scriptRuns = true;
+                        break;
+                    case "--specials-on":
+                        specialsOn = Next(args, ref i, "--specials-on");
                         break;
                     case "--answered":
                         answerSweep = true;
@@ -2902,6 +2953,7 @@ public static class Program
                 Special = special,
                 Answers = answers,
                 AnswerSweep = answerSweep,
+                SpecialsOn = specialsOn,
                 Shared = shared,
                 Silent = silent,
                 Derive = derive,
