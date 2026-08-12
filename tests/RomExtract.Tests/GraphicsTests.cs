@@ -236,3 +236,117 @@ internal static class PngProbe
         return c ^ 0xFFFFFFFFu;
     }
 }
+
+/// <summary>
+/// Finding the cartridge's lettering by what it looks like.
+/// <para>
+/// The interface is the one part of this client that does not come off the player's own
+/// image, and it is the part they noticed. There is no table pointing at a font, so it
+/// is found the way milestone 0 found the sprite tables — by shape, with the evidence
+/// handed over to be looked at.
+/// </para>
+/// </summary>
+public class GlyphScannerTests
+{
+    private const int Tile = TileDecoder.BytesPerTile;
+
+    /// <summary>
+    /// An image of empty space with something planted in it.
+    /// <para>
+    /// Everything outside the plant is zero, which is the commonest thing on a
+    /// cartridge and the first thing a careless scan reports: padding is uniform, uses
+    /// one colour, and would sail through every test but the one about repetition.
+    /// </para>
+    /// </summary>
+    private static Rom With(int at, byte[] planted)
+    {
+        var image = new byte[0x8000];
+        planted.CopyTo(image, at);
+        return new Rom(image);
+    }
+
+    /// <summary>Tiles that read as letters: two colours over a background, all different.</summary>
+    private static byte[] Lettering(int tiles)
+    {
+        var bytes = new byte[tiles * Tile];
+
+        for (int tile = 0; tile < tiles; tile++)
+        {
+            // A different pattern per tile, in colours one and two over a background.
+            // Every glyph in a real alphabet differs from every other, and a fixture
+            // that repeats itself is padding wearing a font's colours — which is the
+            // one thing this scan is built to tell apart.
+            uint noise = (uint)(tile * 2654435761 + 1);
+
+            for (int i = 0; i < Tile; i++)
+            {
+                noise = noise * 1664525 + 1013904223;
+
+                bytes[tile * Tile + i] = (noise >> 28) switch
+                {
+                    < 6 => 0x00,
+                    < 11 => 0x21,
+                    _ => 0x12,
+                };
+            }
+        }
+
+        return bytes;
+    }
+
+    /// <summary>Tiles that read as a picture: every colour, everywhere.</summary>
+    private static byte[] Photograph(int tiles)
+    {
+        var bytes = new byte[tiles * Tile];
+
+        for (int i = 0; i < bytes.Length; i++) bytes[i] = (byte)((i * 37 + i / 13) & 0xFF);
+
+        return bytes;
+    }
+
+    [Fact]
+    public void LetteringIsFoundAndEmptySpaceIsNot()
+    {
+        Rom rom = With(0x1000, Lettering(512));
+
+        GlyphRun found = Assert.Single(GlyphScanner.Scan(rom));
+
+        Assert.Equal(Rom.BaseAddress + 0x1000, found.Address);
+        Assert.True(found.Tiles >= 256, $"found only {found.Tiles} tiles of it");
+    }
+
+    [Fact]
+    public void APictureIsNotLettering()
+    {
+        // Sixteen colours in every tile. This is the test that stops the scan reporting
+        // every sprite in the game, which is most of what a cartridge holds.
+        Assert.Empty(GlyphScanner.Scan(With(0x1000, Photograph(512))));
+    }
+
+    [Fact]
+    public void PaddingIsNotLettering()
+    {
+        // One tile repeated is the shape of empty space, and it passes every test here
+        // except the one about repeating. Worth its own case: an image is mostly this.
+        var repeated = new byte[512 * Tile];
+
+        for (int tile = 0; tile < 512; tile++) Lettering(1).CopyTo(repeated, tile * Tile);
+
+        Assert.Empty(GlyphScanner.Scan(With(0x1000, repeated)));
+    }
+
+    [Fact]
+    public void ASheetIsSixteenTilesAcrossAndAsTallAsItNeeds()
+    {
+        Rom rom = With(0x1000, Lettering(64));
+
+        var run = new GlyphRun(0x1000, 64, 1, 3, 0.3);
+
+        byte[] png = GlyphScanner.Sheet(rom, run);
+
+        // Four rows of sixteen. Read back off the PNG header rather than computed here,
+        // so a change to the writer cannot quietly agree with a change to the caller.
+        Assert.Equal(128, (png[16] << 24) | (png[17] << 16) | (png[18] << 8) | png[19]);
+        Assert.Equal(32, (png[20] << 24) | (png[21] << 16) | (png[22] << 8) | png[23]);
+    }
+}

@@ -145,6 +145,8 @@ public static class Program
 
         if (options.Shared) WriteSharedScripts(rom);
 
+        if (options.Glyphs) WriteGlyphCandidates(rom, options.OutputDirectory);
+
         if (!string.IsNullOrEmpty(options.WhoSays)) WriteWhoSays(rom, options.WhoSays);
 
         if (options.ScriptAt != 0) WriteScriptAt(rom, options.ScriptAt);
@@ -1340,6 +1342,53 @@ public static class Program
         }
     }
 
+    /// <summary>
+    /// Looks for the cartridge's lettering and writes what it finds as PNGs to look at.
+    /// <para>
+    /// The one part of this client that does not come off the player's own image is the
+    /// part they noticed. Every menu draws with the graphics library's own font on
+    /// rectangles this project picked the colours of, and it shows next to a map and a
+    /// walking figure that are the real thing.
+    /// </para>
+    /// <para>
+    /// A font has no header and no table pointing at it, so this finds candidates by
+    /// shape and hands them over as pictures. Whether something is an alphabet is a
+    /// question a person answers instantly and a heuristic answers badly, so it is not
+    /// asked here.
+    /// </para>
+    /// </summary>
+    private static void WriteGlyphCandidates(Rom rom, string directory)
+    {
+        Console.WriteLine();
+        Console.WriteLine("Looking for lettering");
+
+        List<GlyphRun> runs = GlyphScanner.Scan(rom);
+
+        if (runs.Count == 0)
+        {
+            Console.WriteLine("  nothing on this image reads as lettering");
+            return;
+        }
+
+        string into = Path.Combine(directory, "glyphs");
+        Directory.CreateDirectory(into);
+
+        foreach (GlyphRun run in runs)
+        {
+            string name = $"{run.Address:X8}-{run.Tiles}.png";
+
+            File.WriteAllBytes(Path.Combine(into, name), GlyphScanner.Sheet(rom, run));
+
+            Console.WriteLine(
+                $"  0x{run.Address:X8}  {run.Tiles,5} tiles  {run.Colours} colours  " +
+                $"{run.Ink:P0} ink   glyphs/{name}");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("  Open those. One of them is the alphabet; the rest are a lesson in what");
+        Console.WriteLine("  else on a cartridge looks like writing.");
+    }
+
     private static void WriteItems(Rom rom)
     {
         Console.WriteLine();
@@ -1587,6 +1636,9 @@ public static class Program
         /// <summary>Count the scripts map objects hand their work to.</summary>
         public bool Shared { get; private init; }
 
+        /// <summary>Hunt for the cartridge's lettering and write the candidates out.</summary>
+        public bool Glyphs { get; private init; }
+
         /// <summary>Find everybody who says this, and report what their script calls.</summary>
         public string WhoSays { get; private init; } = "";
 
@@ -1621,6 +1673,7 @@ public static class Program
             bool scriptRuns = false;
             bool specials = false;
             bool shared = false;
+            bool glyphs = false;
             string whoSays = "";
             uint scriptAt = 0;
             bool dumpMoves = false, dumpEncounters = false;
@@ -1702,6 +1755,9 @@ public static class Program
                     case "--shared":
                         shared = true;
                         break;
+                    case "--glyphs":
+                        glyphs = true;
+                        break;
                     case "--who-says":
                         whoSays = Next(args, ref i, "--who-says");
                         break;
@@ -1762,6 +1818,7 @@ public static class Program
                 ScriptRuns = scriptRuns,
                 Specials = specials,
                 Shared = shared,
+                Glyphs = glyphs,
                 WhoSays = whoSays,
                 ScriptAt = scriptAt,
                 DumpMoves = dumpMoves,
