@@ -84,7 +84,18 @@ public static class WorldExporter
 
                         Scripts.ScriptRun run = Scripts.ScriptRunner.Run(rom, o.ScriptAddress);
 
-                        MapObject read = o with { Talks = run.Pages.Count > 0 };
+                        // Read rather than run, and only for this one question. A run
+                        // walks the path today's save chooses, and every rock-smash rock
+                        // in the game sits behind a badge check — so running one with a
+                        // fresh save jumps straight past the command that says what it
+                        // is. What a thing *is* does not depend on whether you can get
+                        // at it yet.
+                        MapObject read = o with
+                        {
+                            Talks = run.Pages.Count > 0,
+                            ShiftedBy = Scripts.ScriptReader.ReadAll(rom, o.ScriptAddress)
+                                .FirstOrDefault(c => c.Code == 0x7C)?.Word() ?? 0,
+                        };
 
                         return run.GivesItem is { } item
                             ? read with { GivesItemId = item, GivesCount = Math.Max(1, run.GivesCount) }
@@ -136,6 +147,22 @@ public static class WorldExporter
 
         if (chatty > 0)
             log?.Invoke($"  {chatty} of those are people who say something as they hand it over");
+
+        var obstacles = maps
+            .SelectMany(m => m.Objects)
+            .Where(o => o.ShiftedBy != 0)
+            .GroupBy(o => o.ShiftedBy)
+            .OrderByDescending(g => g.Count())
+            .ToList();
+
+        if (obstacles.Count > 0)
+        {
+            log?.Invoke(
+                $"  {obstacles.Sum(g => g.Count())} things in the way across " +
+                $"{maps.Count(m => m.Objects.Any(o => o.ShiftedBy != 0))} maps, " +
+                $"needing {obstacles.Count} different moves: " +
+                string.Join(", ", obstacles.Select(g => $"{g.Count()} x move {g.Key}")));
+        }
 
         int healers = maps.Sum(m => m.Objects.Count(o => o.Heals));
 

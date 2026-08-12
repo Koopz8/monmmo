@@ -32,6 +32,17 @@ public sealed record ScriptRun
 
     public int GivesCount { get; init; }
 
+    /// <summary>
+    /// The move that shifts this one out of the way, if it is something in the way.
+    /// <para>
+    /// Two hundred objects across forty-seven maps, and they announce themselves: the
+    /// script's first act is to name a move and ask who in the party knows it. CUT for
+    /// the trees, STRENGTH for the boulders, ROCK SMASH for the rubble — three ids, and
+    /// nothing else in the game asks this question.
+    /// </para>
+    /// </summary>
+    public int? ShiftedBy { get; init; }
+
     /// <summary>Flags this run set, in order, and the ones it cleared.</summary>
     public IReadOnlyList<int> FlagsSet { get; init; } = [];
 
@@ -113,6 +124,7 @@ public static class ScriptRunner
         int? trainerId = null;
         int? gives = null;
         int givesCount = 0;
+        int? shifts = null;
         byte? stoppedAt = null;
         int? stoppedAtOffset = null;
 
@@ -291,6 +303,20 @@ public static class ScriptRunner
                     save.Write(0x800D, 1);
                     break;
 
+                case 0x7C:                              // findmove
+                    // The command every cut tree, boulder and heap of rubble opens with.
+                    // It names a move and answers with the party slot that knows it, or
+                    // six for nobody, and the next two commands are always `compare
+                    // 0x800D, 6` and a branch.
+                    //
+                    // Left unwritten this reads as slot zero — "the first one in your
+                    // party can do it" — for every party, including an empty one. Every
+                    // obstacle in the game would offer to move itself.
+                    shifts ??= command.Word();
+
+                    save.Write(0x800D, save.SlotKnowing(command.Word()));
+                    break;
+
                 case ScriptCommands.PokeMart:
                     stock.AddRange(Mart(rom, command.Pointer()));
                     break;
@@ -339,6 +365,7 @@ public static class ScriptRunner
             TrainerId = trainerId,
             GivesItem = gives,
             GivesCount = givesCount,
+            ShiftedBy = shifts,
             FlagsSet = set,
             FlagsCleared = cleared,
             VariablesWritten = written,

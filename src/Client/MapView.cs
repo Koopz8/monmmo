@@ -62,6 +62,21 @@ public sealed class MapView : IDisposable
     }
 
     /// <summary>
+    /// Takes one of them off the map, for this player and this visit.
+    /// <para>
+    /// A tree that has been cut. The map file still has it — everybody else can still
+    /// see it, and walking out and back in puts it up again — so this removes it from
+    /// the living population rather than from anything on disk.
+    /// </para>
+    /// </summary>
+    public void Remove(int localId)
+    {
+        if (!People.Remove(localId)) return;
+
+        Rebuild();
+    }
+
+    /// <summary>
     /// Moves one of them.
     /// <para>
     /// A step and a turn on the spot arrive as the same message, and they must not look

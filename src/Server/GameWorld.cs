@@ -77,6 +77,17 @@ public sealed record ServerPlayer(int Id, long AccountId, string Name)
     public HashSet<string> ItemsTaken { get; } = [];
 
     /// <summary>
+    /// Things this player has moved out of the way on the map they are standing on.
+    /// <para>
+    /// Per player, because a felled tree that everybody could walk through would let one
+    /// person open every route in the world for strangers. Cleared on leaving the map,
+    /// because that is what the games do and because the alternative — remembering it
+    /// forever — is a save file that grows by one entry per tree.
+    /// </para>
+    /// </summary>
+    public HashSet<int> Shifted { get; } = [];
+
+    /// <summary>
     /// Everything this player is carrying.
     /// <para>
     /// A bag rather than a count of balls, which is what this used to be. The count was
@@ -375,7 +386,7 @@ public sealed class GameWorld
             CollisionGrid grid = GridFor(player.MapId);
             GridPosition wanted = player.Square.Step(direction);
 
-            if (grid.Contains(wanted) && (!grid.IsWalkable(wanted) || IsOccupied(player.MapId, wanted)))
+            if (grid.Contains(wanted) && (!grid.IsWalkable(wanted) || IsOccupiedFor(player, player.MapId, wanted)))
             {
                 // Blocked is not an error: the client predicted the same thing and is
                 // already standing still, facing the wall. Everyone else still needs
@@ -440,7 +451,7 @@ public sealed class GameWorld
         GridPosition arrival = AcrossEdge(player.Square, side, map, target, connection.Offset);
         CollisionGrid targetGrid = GridFor(target.Id);
 
-        if (!targetGrid.IsWalkable(arrival) || IsOccupied(target.Id, arrival))
+        if (!targetGrid.IsWalkable(arrival) || IsOccupiedFor(player, target.Id, arrival))
         {
             // The neighbour exists but that particular square is solid. Treat it as the
             // wall it is rather than dropping the player into it.
@@ -488,10 +499,26 @@ public sealed class GameWorld
     /// cartridge put them — which is also where they will be when somebody arrives.
     /// </para>
     /// </summary>
-    private bool IsOccupied(string mapId, GridPosition square) =>
+    private bool IsOccupied(string mapId, GridPosition square) => Standing(mapId, square) is not null;
+
+    /// <summary>
+    /// The same question asked on behalf of somebody, which is not the same question.
+    /// <para>
+    /// A tree one player has cut is still standing for everybody else, so whether a
+    /// square is blocked depends on who is asking. This is the only place in the server
+    /// where that is true, and it is why the plain <see cref="IsOccupied"/> above is
+    /// kept for the callers who genuinely have no player in hand.
+    /// </para>
+    /// </summary>
+    private bool IsOccupiedFor(ServerPlayer player, string mapId, GridPosition square) =>
+        Standing(mapId, square) is { } who &&
+        !(mapId == player.MapId && player.Shifted.Contains(who));
+
+    /// <summary>Who is on a square, by local id, or nothing.</summary>
+    private int? Standing(string mapId, GridPosition square) =>
         _populated.TryGetValue(mapId, out MapPopulation? people)
-            ? people.At(square) is not null
-            : _world.Find(mapId)?.ObjectAt(square) is not null;
+            ? people.At(square)?.LocalId
+            : _world.Find(mapId)?.ObjectAt(square)?.LocalId;
 
     /// <summary>
     /// The people on a map, brought to life if this is the first player to see it.
@@ -629,6 +656,42 @@ public sealed class GameWorld
             {
                 LastTalkOutcome = $"a fight with trainer {person.Template.TrainerId}";
                 return challenge;
+            }
+
+            // Something in the way, and somebody in the party who can move it. Before
+            // the item branch because an obstacle is not a person: there is nothing to
+            // hold still and nothing to hand over.
+            if (person.Template.IsObstacle)
+            {
+                // Asked of the party rather than of the script state: what a party knows
+                // changes every time one of them learns a move, and a copy kept anywhere
+                // else is a copy that goes stale between here and the next level-up.
+                int slot = ScriptState.SlotKnowing(
+                    player.Party.Select(m => m.Moves), person.Template.ShiftedBy);
+
+                if (slot == ScriptState.NoSlot)
+                {
+                    // Not a refusal to report. The client ran the same script against the
+                    // same party and is already showing the cartridge's own line about
+                    // needing somebody who can do this.
+                    LastTalkOutcome =
+                        $"something needing move {person.Template.ShiftedBy}, which nobody in the party knows";
+
+                    return [];
+                }
+
+                player.Shifted.Add(person.LocalId);
+
+                LastTalkOutcome =
+                    $"something moved out of the way with move {person.Template.ShiftedBy}, " +
+                    $"by party member {slot + 1}";
+
+                return
+                [
+                    new Outgoing(
+                        new ObstacleShifted(person.LocalId, person.Template.ShiftedBy, slot),
+                        OnlyTo: playerId),
+                ];
             }
 
             // Something handed over, before anything else. For a ball on the ground that
@@ -1353,6 +1416,11 @@ public sealed class GameWorld
             player.WatchedBy = null;
             send.Add(new Outgoing(new ApproachEnded(), OnlyTo: player.Id));
         }
+
+        // The trees grow back. Held per map rather than per world, so walking out of a
+        // cave and back in puts the boulders where the cartridge left them — which is
+        // both what the games do and what stops this set growing without limit.
+        player.Shifted.Clear();
 
         player.MapId = mapId;
         player.Square = arrival;

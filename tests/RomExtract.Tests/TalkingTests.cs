@@ -869,3 +869,153 @@ public class PickingThingsUpTests
         Assert.IsType<ObjectMoved>(messages[1]);
     }
 }
+
+/// <summary>
+/// Moving what is in the way: the cut trees, the strength boulders and the rock-smash
+/// rubble — two hundred objects across forty-seven maps of FireRed.
+/// <para>
+/// The rule they are all instances of is the one this project keeps rediscovering: a
+/// rule enforced on one side of the client/server split needs its counterpart on the
+/// other. The client runs the script and knows perfectly well who in the party knows
+/// CUT; the server is the only one entitled to decide that a square stopped being
+/// solid.
+/// </para>
+/// </summary>
+public class ShiftingWhatIsInTheWayTests
+{
+    private const string Town = "3.0";
+    private const string Elsewhere = "3.1";
+    private const int Cut = 15;
+
+    private static MapObject Tree(int localId, int x, int y) =>
+        new(localId, 5, x, y, Direction.Down, 0, false) { ShiftedBy = Cut };
+
+    private static SavedMon Knowing(params int[] moves) =>
+        new(3, 10, null, 20, StatusCondition.None, Nature.Hardy, moves);
+
+    /// <summary>Two maps joined by a door, so leaving and coming back is possible.</summary>
+    private static (GameWorld World, ServerPlayer Player) Standing(
+        IReadOnlyList<SavedMon> party, params MapObject[] people)
+    {
+        MapData town = new(Town, "PALLET TOWN", 8, 8, new byte[64])
+        {
+            Objects = people,
+            Warps = [new Warp(0, 0, 0, Elsewhere)],
+        };
+
+        MapData away = new(Elsewhere, "SOMEWHERE ELSE", 8, 8, new byte[64])
+        {
+            Warps = [new Warp(4, 4, 0, Town)],
+        };
+
+        var world = new GameWorld(new WorldData([town, away]), Town, TestRules.All);
+
+        (ServerPlayer player, _) = world.Join(1, "Koop", SavedCharacter.Fresh(Town, 3, 4));
+
+        player.Facing = Direction.Up;
+        player.Party = [.. party];
+
+        return (world, player);
+    }
+
+    [Fact]
+    public void SomebodyWhoKnowsTheMoveMovesIt()
+    {
+        (GameWorld world, ServerPlayer player) = Standing([Knowing(1), Knowing(2, Cut)], Tree(1, 3, 3));
+
+        ObstacleShifted shifted = world.StartTalking(player.Id, 1)
+            .Select(o => o.Message).OfType<ObstacleShifted>().Single();
+
+        Assert.Equal(1, shifted.LocalId);
+        Assert.Equal(Cut, shifted.MoveId);
+
+        // Which one of them did it, because the games have that one step forward.
+        Assert.Equal(1, shifted.Slot);
+    }
+
+    [Fact]
+    public void APartyThatCannotDoItIsToldNothing()
+    {
+        // Not silence for the sake of it. The client ran the same script against the
+        // same party and is already showing the cartridge's own line about needing
+        // somebody who can — a message from here would be a second, worse one on top.
+        (GameWorld world, ServerPlayer player) = Standing([Knowing(1, 2)], Tree(1, 3, 3));
+
+        Assert.Empty(world.StartTalking(player.Id, 1));
+        Assert.Contains("nobody in the party knows", world.LastTalkOutcome);
+    }
+
+    [Fact]
+    public void ATreeThatIsStillStandingIsStillSolid()
+    {
+        (GameWorld world, ServerPlayer player) = Standing([Knowing(1)], Tree(1, 3, 3));
+
+        world.Move(player.Id, Direction.Up, 10);
+
+        Assert.Equal(new GridPosition(3, 4), player.Square);
+    }
+
+    [Fact]
+    public void OneThatHasBeenMovedCanBeWalkedThrough()
+    {
+        // The other half of the rule. Shifting it and leaving the square solid is a
+        // client drawing an open path into a wall the server still believes in.
+        (GameWorld world, ServerPlayer player) = Standing([Knowing(Cut)], Tree(1, 3, 3));
+
+        world.StartTalking(player.Id, 1);
+        world.Move(player.Id, Direction.Up, 10);
+
+        Assert.Equal(new GridPosition(3, 3), player.Square);
+    }
+
+    [Fact]
+    public void ItIsOnlyMovedForThePlayerWhoMovedIt()
+    {
+        // A felled tree everybody could walk through would let one player quietly open
+        // every route in the world for strangers.
+        (GameWorld world, ServerPlayer cutter) = Standing([Knowing(Cut)], Tree(1, 3, 3));
+
+        (ServerPlayer other, _) = world.Join(2, "Someone", SavedCharacter.Fresh(Town, 3, 4));
+        other.Facing = Direction.Up;
+
+        world.StartTalking(cutter.Id, 1);
+        world.Move(other.Id, Direction.Up, 10);
+
+        Assert.Equal(new GridPosition(3, 4), other.Square);
+    }
+
+    [Fact]
+    public void TheTreesGrowBackWhenYouLeave()
+    {
+        // What the games do, and the reason this is not persisted: a save that
+        // remembered every tree would grow by one entry per tree, forever.
+        (GameWorld world, ServerPlayer player) = Standing([Knowing(Cut)], Tree(1, 3, 3));
+
+        world.StartTalking(player.Id, 1);
+        Assert.Single(player.Shifted);
+
+        world.Move(player.Id, Direction.Up, 10);
+        world.Move(player.Id, Direction.Left, 20);
+        world.Move(player.Id, Direction.Left, 30);
+        world.Move(player.Id, Direction.Left, 40);
+        world.Move(player.Id, Direction.Up, 50);
+        world.Move(player.Id, Direction.Up, 60);
+        world.Move(player.Id, Direction.Up, 70);
+
+        Assert.Equal(Elsewhere, player.MapId);
+        Assert.Empty(player.Shifted);
+    }
+
+    [Fact]
+    public void WhatShiftsSomethingSurvivesTheWorldFile()
+    {
+        MapData map = new(Town, "PALLET TOWN", 8, 8, new byte[64]) { Objects = [Tree(1, 3, 3)] };
+
+        using var buffer = new MemoryStream();
+        new WorldData([map]).Save(buffer);
+
+        buffer.Position = 0;
+
+        Assert.Equal(Cut, WorldData.Load(buffer).Find(Town)!.Objects.Single().ShiftedBy);
+    }
+}

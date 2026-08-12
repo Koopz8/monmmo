@@ -30,6 +30,7 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(TrainerSpotted), "spotted")]
 [JsonDerivedType(typeof(ApproachEnded), "approachover")]
 [JsonDerivedType(typeof(ItemFound), "itemfound")]
+[JsonDerivedType(typeof(ObstacleShifted), "shifted")]
 [JsonDerivedType(typeof(BuyRequest), "buy")]
 [JsonDerivedType(typeof(SellRequest), "sell")]
 [JsonDerivedType(typeof(ShopOpened), "shop")]
@@ -255,6 +256,19 @@ public sealed record ApproachEnded : NetMessage;
 /// </para>
 /// </summary>
 public sealed record ItemFound(int ItemId, int Count, IReadOnlyList<BagEntry> Bag) : NetMessage;
+
+/// <summary>
+/// Something in the way has been moved out of it — a tree cut, a boulder pushed, rubble
+/// broken.
+/// <para>
+/// Sent to one player and to nobody else, which is the whole design decision here. A
+/// tree is scenery in a single-player game and a shared object in this one, and felling
+/// it for everybody on the map would let one person quietly open every route in the
+/// world for strangers. It stays down until they leave the map, which is also what the
+/// games do.
+/// </para>
+/// </summary>
+public sealed record ObstacleShifted(int LocalId, int MoveId, int Slot) : NetMessage;
 
 public sealed record BlackedOut(
     string MapId,

@@ -117,6 +117,22 @@ public sealed record MapObject(
     public bool Talks { get; init; }
 
     /// <summary>
+    /// The move that shifts this one out of the way, or zero for anything that is not
+    /// in the way.
+    /// <para>
+    /// Two hundred objects across forty-seven maps: the cut trees, the strength boulders
+    /// and the rock-smash rubble. Each one's script opens by naming a move and asking
+    /// which party slot knows it, and the answer decides between two entirely different
+    /// conversations. The move id is carried here because deciding needs the script, and
+    /// the server has never seen one.
+    /// </para>
+    /// </summary>
+    public int ShiftedBy { get; init; }
+
+    /// <summary>True when this one is in the way rather than in the world.</summary>
+    public bool IsObstacle => ShiftedBy != 0;
+
+    /// <summary>
     /// Compares stock by its contents.
     /// <para>
     /// A record compares its members with <c>Equals</c>, and for a list that is
@@ -142,6 +158,7 @@ public sealed record MapObject(
         GivesItemId == other.GivesItemId &&
         GivesCount == other.GivesCount &&
         Talks == other.Talks &&
+        ShiftedBy == other.ShiftedBy &&
         Stock.SequenceEqual(other.Stock);
 
     public override int GetHashCode()

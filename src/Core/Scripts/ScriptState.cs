@@ -33,18 +33,77 @@ public enum Comparison
 /// </summary>
 public sealed class ScriptState
 {
+    /// <summary>
+    /// The answer a script gets when nobody in the party knows the move it asked about.
+    /// <para>
+    /// Six because a party has six slots, so the sixth index is the first one that
+    /// cannot be a member. The cartridge's own scripts compare against exactly this and
+    /// branch to "nobody here can do that" — which is how the number was read rather
+    /// than chosen.
+    /// </para>
+    /// </summary>
+    public const int NoSlot = 6;
+
     private readonly HashSet<int> _flags;
     private readonly Dictionary<int, int> _variables;
     private readonly HashSet<int> _beaten;
+    private readonly List<IReadOnlyList<int>> _partyMoves;
 
     public ScriptState(
         IEnumerable<int>? flags = null,
         IEnumerable<KeyValuePair<int, int>>? variables = null,
-        IEnumerable<int>? beaten = null)
+        IEnumerable<int>? beaten = null,
+        IEnumerable<IReadOnlyList<int>>? partyMoves = null)
     {
         _flags = flags is null ? [] : [.. flags];
         _variables = variables is null ? [] : new Dictionary<int, int>(variables);
         _beaten = beaten is null ? [] : [.. beaten];
+        _partyMoves = partyMoves is null ? [] : [.. partyMoves];
+    }
+
+    /// <summary>
+    /// What each party member knows, in party order.
+    /// <para>
+    /// Here rather than in the party itself because a script is the only thing that asks.
+    /// Two hundred objects in this game — every cut tree, every boulder, every heap of
+    /// rubble — open by naming a move and asking who has it, and the answer decides
+    /// which of two completely different conversations happens.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<IReadOnlyList<int>> PartyMoves => _partyMoves;
+
+    /// <summary>
+    /// Which party slot knows a move, or <see cref="NoSlot"/> for none.
+    /// <para>
+    /// The first one, because the games use the answer to decide who steps forward and
+    /// there is only room for one to.
+    /// </para>
+    /// </summary>
+    public int SlotKnowing(int moveId) => SlotKnowing(_partyMoves, moveId);
+
+    /// <summary>
+    /// The same question asked of a party directly.
+    /// <para>
+    /// The server has a party and no script state worth building one from; the client
+    /// has script state and runs the script with it. Both need this answer and it is the
+    /// same answer, so it lives here once rather than twice.
+    /// </para>
+    /// </summary>
+    public static int SlotKnowing(IEnumerable<IReadOnlyList<int>> partyMoves, int moveId)
+    {
+        if (moveId == 0) return NoSlot;
+
+        int slot = 0;
+
+        foreach (IReadOnlyList<int> moves in partyMoves)
+        {
+            if (slot >= NoSlot) break;
+            if (moves.Contains(moveId)) return slot;
+
+            slot++;
+        }
+
+        return NoSlot;
     }
 
     /// <summary>
@@ -91,7 +150,18 @@ public sealed class ScriptState
         else _variables[variable] = value;
     }
 
-    public ScriptState Copy() => new(_flags, _variables, _beaten);
+    public ScriptState Copy() => new(_flags, _variables, _beaten, _partyMoves);
+
+    /// <summary>
+    /// The same state with a party attached, for the one run that needs one.
+    /// <para>
+    /// Attached at the point of asking rather than kept, because what a party knows
+    /// changes every time one of them learns a move — and a copy held anywhere goes
+    /// stale between the level-up and the next tree.
+    /// </para>
+    /// </summary>
+    public ScriptState WithParty(IEnumerable<IReadOnlyList<int>> partyMoves) =>
+        new(_flags, _variables, _beaten, partyMoves);
 
     /// <summary>How two numbers compare, in the only three answers a script has.</summary>
     public static Comparison Compare(int left, int right) =>

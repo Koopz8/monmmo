@@ -340,7 +340,7 @@ public static class Program
             }
             else if (DialogueBox.Pressed() && !player.IsStepping)
             {
-                talking = Talk(data, view, player, network, script);
+                talking = Talk(data, view, player, network, script, party);
             }
 
             exclaimFor = Math.Max(0f, exclaimFor - delta);
@@ -438,7 +438,8 @@ public static class Program
     /// </para>
     /// </summary>
     private static DialogueBox? Talk(
-        GameData data, MapView view, WalkingCharacter player, NetworkClient network, ScriptState script)
+        GameData data, MapView view, WalkingCharacter player, NetworkClient network, ScriptState script,
+        IReadOnlyList<SavedMon> party)
     {
         // Where the server says people are, which after a few seconds of wandering is
         // nowhere near where the cartridge put them.
@@ -463,8 +464,11 @@ public static class Program
         // because it has to — choosing needs a save's flags — which is why a trainer
         // used to greet you, gloat about losing and thank you for the rematch in one
         // breath. Given the flags, this walks the one path that actually happens.
+        // With the party attached, because two hundred objects in this game open by
+        // asking who in it knows a particular move. Run without one, every cut tree in
+        // the world reads as though the lead could fell it.
         ScriptRun run = person.HasScript
-            ? ScriptRunner.Run(data.Rom, person.ScriptAddress, script)
+            ? ScriptRunner.Run(data.Rom, person.ScriptAddress, script.WithParty(party.Select(m => m.Moves)))
             : new ScriptRun();
 
         // Applied on both sides rather than waiting to be told. The server is where
@@ -597,6 +601,15 @@ public static class Program
                     // somebody who hands this over mid-sentence is still mid-sentence.
                     if (said is { IsFinished: false }) said.Add(line);
                     else said = new DialogueBox([line]);
+
+                    break;
+
+                case ObstacleShifted shifted:
+                    // The tree comes down here rather than when the button was pressed.
+                    // The client knows perfectly well who in the party knows CUT — it ran
+                    // the script — but a client that removes its own obstacles is a
+                    // client that can walk through walls by lying about its party.
+                    view.Remove(shifted.LocalId);
 
                     break;
 

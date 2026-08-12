@@ -642,3 +642,109 @@ public class ScriptRunnerTests
         Assert.Equal(Rom.BaseAddress + 5, Rom.BaseAddress + (uint)run.StoppedAtOffset!.Value);
     }
 }
+
+/// <summary>
+/// The two hundred things standing in the way, and the one question they all ask.
+/// <para>
+/// A cut tree, a strength boulder and a heap of rock-smash rubble are the same script
+/// written three times with a different move id in it. Each opens by asking which party
+/// slot knows that move, and the answer — a slot, or six for nobody — decides between
+/// two conversations that have nothing in common.
+/// </para>
+/// </summary>
+public class ObstacleTests
+{
+    private const int Cut = 15;
+    private const int Strength = 70;
+
+    private const uint Start = Rom.BaseAddress;
+    private const uint CanShift = Rom.BaseAddress + 0x200;
+    private const uint Cannot = Rom.BaseAddress + 0x220;
+
+    private static byte[] At(uint address) =>
+        [(byte)address, (byte)(address >> 8), (byte)(address >> 16), (byte)(address >> 24)];
+
+    private static byte[] Speech(char letter) =>
+    [
+        .. Enumerable.Repeat((byte)(0xBB + (letter - 'A')), 6),
+        GameText.Terminator,
+    ];
+
+    /// <summary>
+    /// The cut script's shape: ask, and go somewhere else if the answer is six.
+    /// </summary>
+    private static Rom Tree(int moveId)
+    {
+        var image = new byte[0x400];
+
+        byte[] script =
+        [
+            0x7C, (byte)moveId, (byte)(moveId >> 8),        // findmove
+            0x21, 0x0D, 0x80, 0x06, 0x00,                   // compare 0x800D, 6
+            ScriptCommands.GotoIf, 0x01, .. At(Cannot),     // if equal, nobody can
+            ScriptCommands.Message, .. At(CanShift),
+            ScriptCommands.End,
+        ];
+
+        byte[] refusal = [ScriptCommands.Message, .. At(Cannot + 0x10), ScriptCommands.End];
+
+        script.CopyTo(image, 0);
+        refusal.CopyTo(image, (int)(Cannot - Rom.BaseAddress));
+
+        Speech('A').CopyTo(image, (int)(CanShift - Rom.BaseAddress));
+        Speech('B').CopyTo(image, (int)(Cannot + 0x10 - Rom.BaseAddress));
+
+        return new Rom(image);
+    }
+
+    private static ScriptState Party(params int[][] moves) =>
+        new(partyMoves: moves.Select(m => (IReadOnlyList<int>)m));
+
+    [Fact]
+    public void TheFirstSlotThatKnowsItIsTheAnswer()
+    {
+        // The first, because the games use the answer to decide who steps forward and
+        // there is only room for one to.
+        Assert.Equal(1, Party([1, 2], [3, Cut]).SlotKnowing(Cut));
+        Assert.Equal(0, Party([Cut], [Cut]).SlotKnowing(Cut));
+    }
+
+    [Fact]
+    public void SixMeansNobody()
+    {
+        // Six because a party has six slots, so the sixth index is the first that cannot
+        // be a member. Read off the cartridge rather than chosen: every one of these
+        // scripts compares against exactly this and branches to "nobody can do that".
+        Assert.Equal(ScriptState.NoSlot, Party([1, 2], [3, 4]).SlotKnowing(Cut));
+        Assert.Equal(ScriptState.NoSlot, Party().SlotKnowing(Cut));
+
+        // And an empty party does not accidentally know move zero, which is what a bare
+        // "is this in the list" would say about six empty move slots.
+        Assert.Equal(ScriptState.NoSlot, Party([0, 0, 0, 0]).SlotKnowing(0));
+    }
+
+    [Fact]
+    public void ARunWithoutAPartyIsNotARunWithAWillingParty()
+    {
+        // The whole reason the party has to reach the runner. Left unanswered, the
+        // variable reads zero — "the first one in your party can do it" — and every
+        // obstacle in the game offers to move itself for a player with nothing.
+        Rom rom = Tree(Cut);
+
+        Assert.Equal("BBBBBB", Assert.Single(ScriptRunner.Run(rom, Start).Pages));
+        Assert.Equal("BBBBBB", Assert.Single(ScriptRunner.Run(rom, Start, Party([1, 2])).Pages));
+        Assert.Equal("AAAAAA", Assert.Single(ScriptRunner.Run(rom, Start, Party([1, Cut])).Pages));
+    }
+
+    [Fact]
+    public void WhatShiftsItIsReportedWhicheverWayTheScriptGoes()
+    {
+        // Both arms, because what a thing *is* does not depend on whether this player
+        // can get at it. Every rock-smash rock in the game sits behind a badge check,
+        // and an exporter that only believed the arm a fresh save takes would have found
+        // none of them.
+        Assert.Equal(Cut, ScriptRunner.Run(Tree(Cut), Start).ShiftedBy);
+        Assert.Equal(Cut, ScriptRunner.Run(Tree(Cut), Start, Party([Cut])).ShiftedBy);
+        Assert.Equal(Strength, ScriptRunner.Run(Tree(Strength), Start).ShiftedBy);
+    }
+}

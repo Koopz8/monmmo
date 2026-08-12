@@ -82,6 +82,7 @@ public class MessageChannelTests
             new TrainerSpotted(3),
             new ApproachEnded(),
             new ItemFound(13, 2, [new BagEntry(13, 2)]),
+            new ObstacleShifted(4, 15, 1),
             new BuyRequest(4, 5),
             new SellRequest(13, 2),
             new ShopOpened([new ShopEntry(4, 200)], 5000, [new BagEntry(4, 3)]),
