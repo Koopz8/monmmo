@@ -477,7 +477,7 @@ public static class Program
                 DrawPlayer(playerX, playerY, player.Facing);
             Raylib.EndMode2D();
 
-            DrawStatus(view.Map, player, network, others.Count, money, bag.Count);
+            DrawStatus(view.Map, player, network, others.Count, money, bag.Count, camera.Target, sprite);
             // A scene's line goes in the same box a conversation's does. There is only
             // one box on screen and only one thing being said at a time.
             (scene?.Saying ?? talking)?.Draw(WindowWidth, WindowHeight);
@@ -1007,7 +1007,8 @@ public static class Program
     }
 
     private static void DrawStatus(
-        LoadedMap map, WalkingCharacter player, NetworkClient network, int others, int money, int carrying)
+        LoadedMap map, WalkingCharacter player, NetworkClient network, int others, int money, int carrying,
+        System.Numerics.Vector2 camera, CharacterSprite? sprite)
     {
         string connection = network.Failure is { } failure
             ? $"   offline: {failure}"
@@ -1019,6 +1020,22 @@ public static class Program
 
         Raylib.DrawText(line, 13, 13, 20, Color.Black);
         Raylib.DrawText(line, 12, 12, 20, Color.White);
+
+        // The second line exists because "my character turned invisible" has three
+        // completely different causes and no way to tell them apart by looking. Either
+        // the figure is somewhere the camera is not, or the camera is somewhere the map
+        // is not, or the cartridge's own sprite never loaded and what is being drawn is
+        // the white placeholder box — which is invisible on the professor's white floor
+        // and perfectly visible on grass, which is exactly the shape of the report.
+        (float px, float py) = player.PixelPosition;
+
+        string second =
+            $"you {px:F0},{py:F0}   map {map.PixelWidth}x{map.PixelHeight}   " +
+            $"camera {camera.X:F0},{camera.Y:F0}   " +
+            (sprite is null ? "SPRITE MISSING — drawing the placeholder box" : "sprite loaded");
+
+        Raylib.DrawText(second, 13, 37, 20, Color.Black);
+        Raylib.DrawText(second, 12, 36, 20, Color.White);
     }
 
     /// <summary>Opens a window that just explains what went wrong, rather than exiting silently.</summary>
