@@ -1123,93 +1123,72 @@ public static class Program
     /// cartridge's own authority rather than anybody's memory.
     /// </para>
     /// </summary>
-    private static void WriteSpecials(Rom rom, int top = 20)
+    /// <summary>
+    /// The calls into the game's own code, and the shape of what is asked of each.
+    /// <para>
+    /// This is the boundary. What a special routine does is ARM code, not data, and no
+    /// amount of reading an image will say — everything else in this project was
+    /// somewhere in the file waiting to be found, and this is not.
+    /// </para>
+    /// <para>
+    /// The shape of the expectation is readable, though, and it is the useful thing: how
+    /// many arguments a routine is given and in which slots, whether its answer is ever
+    /// looked at, and which answers the scripts actually distinguish. That is the
+    /// specification a hand-written stand-in has to meet. It is not what the routine
+    /// does, but unlike a guess it can be checked.
+    /// </para>
+    /// <para>
+    /// An earlier version of this report quoted "the first caller who says anything"
+    /// beside each routine and put the same wireless-club attendant next to six of them.
+    /// A degenerate answer given confidently is worse than no answer.
+    /// </para>
+    /// </summary>
+    private static void WriteSpecials(Rom rom, int top = 24)
     {
         Console.WriteLine();
-        Console.WriteLine("special routines, by where they are called");
+        Console.WriteLine("special routines, by what the scripts around them expect");
 
         MapLibrary library = MapLibrary.Open(rom);
 
-        var maps = new Dictionary<int, HashSet<string>>();
-        var callers = new Dictionary<int, int>();
-        var says = new Dictionary<int, Dictionary<string, int>>();
+        List<SpecialCall> calls = SpecialCalls.All(rom, library);
+        List<SpecialCalls.Profile> profiles = SpecialCalls.Profiles(calls);
 
-        foreach (LoadedMap map in library.All())
+        Console.WriteLine(
+            $"  {calls.Count} calls to {profiles.Count} different routines; " +
+            $"{profiles.Count(p => p.Answers)} of them are asked a question, " +
+            $"{profiles.Count(p => p.ArgumentSlots.Count > 0)} are given arguments");
+
+        // The number that matters. Nothing calls these routines, so the answer variable
+        // keeps its zero — and a zero is an answer, not an absence. Every site where the
+        // script says "if the answer is zero, skip this" is a piece of the game being
+        // skipped right now, quietly, on a technicality.
+        Console.WriteLine(
+            $"  {profiles.Count(p => p.ZeroIsMisleading)} routines branch away on the zero they " +
+            $"are getting by default, at " +
+            $"{profiles.Sum(p => p.BranchesTakenByZero)} of {profiles.Sum(p => p.Branches)} branching sites");
+
+        Console.WriteLine();
+
+        foreach (SpecialCalls.Profile profile in profiles.Take(top))
+            Console.WriteLine($"    {profile}");
+
+        // The ones that gate the beginning of the game, named rather than left to be
+        // found: whatever stops a player leaving the first town is the first routine
+        // worth standing in for.
+        Console.WriteLine();
+        Console.WriteLine("  Called from a square you walk onto, which is where the story is:");
+
+        foreach (SpecialCalls.Profile profile in profiles
+                     .Where(p => calls.Any(c => c.Routine == p.Routine && c.What.StartsWith("trigger")))
+                     .Take(10))
         {
-            foreach (MapObject person in map.Objects.Where(o => o.HasScript))
-            {
-                foreach (ScriptCommand command in ScriptReader.ReadAll(rom, person.ScriptAddress))
-                {
-                    // 0x25 takes a routine number; 0x26 takes a variable to answer into
-                    // and then the routine. Both are calls into code this cannot see.
-                    int routine = command.Code switch
-                    {
-                        0x25 => command.Word(),
-                        0x26 => command.Word(2),
-                        _ => -1,
-                    };
+            SpecialCall example = calls.First(c => c.Routine == profile.Routine && c.What.StartsWith("trigger"));
 
-                    if (routine < 0) continue;
-
-                    callers[routine] = callers.GetValueOrDefault(routine) + 1;
-
-                    if (!maps.TryGetValue(routine, out HashSet<string>? on)) maps[routine] = on = [];
-
-                    on.Add(map.Name);
-
-                    // The commonest opening line among the callers, not the first one
-                    // found. One chatty script calls half a dozen routines, so "the
-                    // first caller who says anything" quoted the same wireless-club
-                    // attendant beside six different routines and discriminated nothing.
-                    if (ScriptRunner.Run(rom, person.ScriptAddress).Pages.FirstOrDefault() is not { } opening) continue;
-                    if (opening.Trim().Length == 0) continue;
-
-                    if (!says.TryGetValue(routine, out Dictionary<string, int>? lines))
-                        says[routine] = lines = [];
-
-                    lines[opening] = lines.GetValueOrDefault(opening) + 1;
-                }
-            }
-        }
-
-        Console.WriteLine($"  {callers.Count} distinct routines across {library.Count} maps");
-        Console.WriteLine($"  showing the {Math.Min(top, callers.Count)} called from the most maps");
-
-        foreach ((int routine, HashSet<string> on) in maps.OrderByDescending(e => e.Value.Count).Take(top))
-        {
-            string[] names = [.. on.OrderBy(n => n).Take(3)];
-
-            Console.WriteLine(
-                $"    0x{routine:X4}  {on.Count} maps, {callers[routine]} callers  e.g. {string.Join(", ", names)}");
-
-            if (!says.TryGetValue(routine, out Dictionary<string, int>? lines)) continue;
-
-            foreach ((string opening, int said) in lines.OrderByDescending(e => e.Value).Take(2))
-            {
-                string line = GameText.ToAscii(opening).Replace("\n", " ");
-
-                Console.WriteLine($"            {said}x  \"{(line.Length > 88 ? line[..88] + "..." : line)}\"");
-            }
+            Console.WriteLine($"    {profile}");
+            Console.WriteLine($"      e.g. {example.MapId} {example.What}");
         }
     }
 
-    /// <summary>
-    /// Everybody on the cartridge who says a given thing, and what their script calls.
-    /// <para>
-    /// The inverse of every question this tool has asked so far. Counting where a
-    /// routine is called from narrows a search and cannot finish it — six routines land
-    /// on the same nineteen maps and no count can tell them apart. Somebody who names
-    /// the place they are standing in can, and the text has been readable since
-    /// milestone 14.
-    /// </para>
-    /// </summary>
-    /// <summary>
-    /// The movement lists, and the evidence for what their bytes mean.
-    /// <para>
-    /// The histogram first and any hypothesis second. Twice this session a scan has been
-    /// wrong in a way only a control could catch, and both times the control was cheap.
-    /// </para>
-    /// </summary>
     private static void WriteMovements(Rom rom)
     {
         Console.WriteLine();
@@ -1859,8 +1838,15 @@ public static class Program
                 // located and so has never followed.
                 bool standard = commands.Any(c => c.Code is ScriptCommands.CallStandard or 0x08 or 0x0A or 0x0B);
 
+                // Asked the game something. Ahead of the other causes because it is the
+                // one that is not this project's fault and cannot be fixed by reading
+                // harder: a special is a call into code, and stepping over it leaves a
+                // zero the script then reads as an answer.
                 string cause =
-                    loaded ? "carried text this project decided was not text"
+                    run.SpecialsCalled.Count > 0
+                        ? $"asked the game {run.SpecialsCalled.Count} thing(s) it cannot be asked " +
+                          $"(routine 0x{run.SpecialsCalled[0]:X4})"
+                    : loaded ? "carried text this project decided was not text"
                     : standard ? "handed off to a standard script, which is never followed"
                     : commands.Count <= 2 ? "genuinely empty — a sign post with nothing on it"
                     : "ran several commands, none of which this models";

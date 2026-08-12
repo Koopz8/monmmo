@@ -39,6 +39,22 @@ public sealed record ScriptRun
     /// </summary>
     public IReadOnlyList<SceneBeat> Beats { get; init; } = [];
 
+    /// <summary>
+    /// The routines this run asked the game for and did not get an answer from.
+    /// <para>
+    /// A special is a call into the game's own code by number, and this project cannot
+    /// follow one. Stepping over it is the only option; recording that it happened is
+    /// what stops the difference between "this person has nothing to say" and "this
+    /// person asked something we cannot ask" from being invisible.
+    /// </para>
+    /// <para>
+    /// It is not a harmless silence. The answer variable keeps its zero, and zero is an
+    /// answer — at 174 branching sites in this cartridge the script reads that zero and
+    /// skips what it was about to do.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<int> SpecialsCalled { get; init; } = [];
+
     /// <summary>True when this run is a scene rather than a conversation.</summary>
     public bool IsScene => Beats.OfType<SceneBeat.Walk>().Any();
 
@@ -150,6 +166,7 @@ public static class ScriptRunner
 
         var pages = new List<string>();
         var beats = new List<SceneBeat>();
+        var specials = new List<int>();
         var stock = new List<int>();
         var set = new List<int>();
         var cleared = new List<int>();
@@ -283,6 +300,14 @@ public static class ScriptRunner
                     pending = 0;
                     break;
 
+                case SpecialCalls.Special:
+                case SpecialCalls.SpecialVar:
+                    // Stepped over, because it is a call into code on the cartridge that
+                    // this cannot execute. Recorded, because the alternative is a script
+                    // that quietly does less and looks like a script that does less.
+                    specials.Add(code == SpecialCalls.Special ? command.Word() : command.Word(2));
+                    break;
+
                 case MovementLists.ApplyMovement:
                     // Whose movement and which list. Both are written down in front of
                     // the command; what the individual step bytes mean was derived by
@@ -406,6 +431,7 @@ public static class ScriptRunner
         {
             Pages = pages,
             Beats = beats,
+            SpecialsCalled = specials,
             Stock = stock,
             TrainerId = trainerId,
             GivesItem = gives,

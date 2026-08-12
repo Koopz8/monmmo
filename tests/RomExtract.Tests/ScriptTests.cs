@@ -834,3 +834,63 @@ public class MovementListTests
         Assert.Empty(MovementLists.Read(Image((Rom.BaseAddress, [MovementLists.End])), Rom.BaseAddress));
     }
 }
+
+/// <summary>
+/// The calls into the game's own code — the one boundary in this project that reading
+/// harder does not cross.
+/// </summary>
+public class SpecialCallTests
+{
+    private const uint Start = Rom.BaseAddress;
+    private const uint Elsewhere = Rom.BaseAddress + 0x100;
+
+    private static byte[] At(uint address) =>
+        [(byte)address, (byte)(address >> 8), (byte)(address >> 16), (byte)(address >> 24)];
+
+    private static Rom Image(byte[] script)
+    {
+        var image = new byte[0x400];
+
+        script.CopyTo(image, 0);
+        new byte[] { ScriptCommands.End }.CopyTo(image, (int)(Elsewhere - Rom.BaseAddress));
+
+        return new Rom(image);
+    }
+
+    [Fact]
+    public void ARunRecordsWhatItCouldNotAsk()
+    {
+        // The difference between "this person has nothing to say" and "this person asked
+        // something we cannot ask". Both look identical from outside, and one of them is
+        // this project's fault while the other is a boundary.
+        Rom rom = Image([0x25, 0x87, 0x01, 0x26, 0x0D, 0x80, 0xAB, 0x00, ScriptCommands.End]);
+
+        ScriptRun run = ScriptRunner.Run(rom, Start);
+
+        Assert.Equal([0x0187, 0x00AB], run.SpecialsCalled);
+    }
+
+    [Fact]
+    public void SteppingOverOneStillLeavesAZeroBehind()
+    {
+        // The part that is not harmless. Nothing answers, so the answer variable keeps
+        // its zero — and at 174 sites on a real cartridge the script reads that zero and
+        // branches away from whatever it was about to do.
+        //
+        // This fixture is that shape: ask, compare the answer against zero, and jump if
+        // equal. The run takes the jump, and takes it for a reason that is not an answer.
+        Rom rom = Image(
+        [
+            0x26, 0x0D, 0x80, 0xAB, 0x00,               // specialvar 0x800D, 0x00AB
+            0x21, 0x0D, 0x80, 0x00, 0x00,               // compare 0x800D, 0
+            ScriptCommands.GotoIf, 0x01, .. At(Elsewhere),
+            ScriptCommands.Message, .. At(Rom.BaseAddress + 0x200),
+            ScriptCommands.End,
+        ]);
+
+        ScriptRun run = ScriptRunner.Run(rom, Start);
+
+        Assert.Empty(run.Pages);
+        Assert.Equal(0x00AB, Assert.Single(run.SpecialsCalled));
+    }
+}
