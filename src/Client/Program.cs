@@ -242,6 +242,15 @@ public static class Program
         // anywhere, and a fade that plays for a refused door is worse than none.
         float fadingIn = 0f;
 
+        // How long before this side may ask to step again. The client's half of the
+        // server's rate limit, and until now it did not exist because it did not have to:
+        // a step cannot begin before the last one's animation ends, and that animation is
+        // longer than the limit. Arriving somewhere is what breaks it — the character is
+        // placed outright, so a step half performed ends immediately and the next one can
+        // be asked for at once. The server refuses it, says where they really are, and
+        // the player is snapped back onto the doormat.
+        float holdInput = 0f;
+
         // Where the server last said we are, when that disagreed with where we think we
         // are. Held rather than applied on the spot: a correction almost always arrives
         // mid-step, and snapping a character sideways through a stride looks worse than
@@ -260,7 +269,7 @@ public static class Program
             ApplyServerMessages(
                 network, others, player, view, data, trainers, items, script, carrying,
                 ref talking, ref battle, ref shop, ref bag, ref party, ref money,
-                ref correction, ref watching, ref exclaimFor, ref scene, ref arrived, ref fadingIn);
+                ref correction, ref watching, ref exclaimFor, ref scene, ref arrived, ref fadingIn, ref holdInput);
 
             // A battle suspends the overworld entirely: the server is running it, and
             // walking on meanwhile would put the two sides out of step.
@@ -394,7 +403,9 @@ public static class Program
             // A scene reads exactly like a conversation here: it stops the world and it
             // does not move anybody. What plays out is other people's, and when it is
             // over the player is standing where they were and free to walk to it.
-            Direction? input = scene is null && talking is null && watching is null
+            holdInput = Math.Max(0f, holdInput - delta);
+
+            Direction? input = scene is null && talking is null && watching is null && holdInput <= 0f
                 ? ReadDirection()
                 : null;
 
@@ -755,7 +766,8 @@ public static class Program
         ref float exclaimFor,
         ref Cutscene? scene,
         ref bool arrived,
-        ref float fadingIn)
+        ref float fadingIn,
+        ref float holdInput)
     {
         foreach (NetMessage message in network.Drain())
         {
@@ -901,6 +913,7 @@ public static class Program
                     scene = null;
                     arrived = true;
                     fadingIn = FadeSeconds;
+                    holdInput = (float)WalkingCharacter.MinimumStepSeconds;
 
                     if (view.SwitchTo(changed.MapId))
                     {

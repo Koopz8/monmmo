@@ -713,6 +713,11 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                                 }
                             }
 
+                            if (world.LastStepRefusal is { } tooFast)
+                            {
+                                Console.WriteLine($"| #{playerId} step refused, {tooFast}");
+                            }
+
                             if (world.LastEdgeRefusal is { } refusal)
                             {
                                 Console.WriteLine($"| #{playerId} could not cross: {refusal}");

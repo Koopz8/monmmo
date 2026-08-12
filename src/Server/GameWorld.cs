@@ -179,10 +179,10 @@ public sealed record Outgoing(NetMessage Message, int? OnlyTo = null, int? Excep
 public sealed class GameWorld
 {
     /// <summary>
-    /// Shortest interval between a player's steps. A client walking at the normal pace
-    /// stays comfortably under this; one sending moves in a loop does not.
+    /// Shortest interval between a player's steps, defined in <see cref="WalkingCharacter"/>
+    /// so the client can obey the same one rather than a second copy of it.
     /// </summary>
-    public static readonly double MinimumStepInterval = WalkingCharacter.StepSeconds * 0.75;
+    public static double MinimumStepInterval => WalkingCharacter.MinimumStepSeconds;
 
     private readonly BattleRng _rng;
     private readonly WorldData _world;
@@ -399,6 +399,7 @@ public sealed class GameWorld
             // Cleared per step, not per refusal: sticky state would have the server
             // reporting the same reason over and over long after it stopped applying.
             LastEdgeRefusal = null;
+            LastStepRefusal = null;
 
             // Cleared here rather than only where it is set, or it is reported on every
             // step for as long as the player stays on the map — which is exactly what it
@@ -444,6 +445,13 @@ public sealed class GameWorld
 
             if (nowSeconds - player.LastStepAt < MinimumStepInterval)
             {
+                // Said out loud, because a refused step is the one thing a player can see
+                // and the server could not previously name. It reads as being dragged
+                // backwards, and every explanation for that looks the same from outside.
+                LastStepRefusal =
+                    $"too fast: {nowSeconds - player.LastStepAt:F2}s since the last step, " +
+                    $"and the limit is {MinimumStepInterval:F2}s";
+
                 return [new Outgoing(
                     new MoveRejected(player.Square.X, player.Square.Y, player.Facing, "Too fast."),
                     OnlyTo: playerId)];
@@ -1786,6 +1794,9 @@ public sealed class GameWorld
     /// </para>
     /// </summary>
     public string? LastEdgeRefusal { get; private set; }
+
+    /// <summary>Why the last step was refused outright, when it was.</summary>
+    public string? LastStepRefusal { get; private set; }
 
     private static ConnectionSide SideFor(Direction direction) => direction switch
     {

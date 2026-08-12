@@ -36,6 +36,24 @@ public sealed class WalkingCharacter
     public const float StepSeconds = StepFrames / 60f;
 
     /// <summary>
+    /// The shortest gap the server will accept between two of a player's steps.
+    /// <para>
+    /// It lives here, in the one place both sides can see, because it is a rule with two
+    /// halves and the client's half was missing. Walking normally, a client cannot break
+    /// this: its own step animation is the limit, and a step cannot begin until the last
+    /// one has finished.
+    /// </para>
+    /// <para>
+    /// Going through a door breaks that, which is what the rubber-banding was. Arriving
+    /// somewhere places the character outright, so the step they were half-way through
+    /// ends the instant the server answers — and the client, with nothing else stopping
+    /// it, asks for the next step immediately. The server refuses it as too fast and
+    /// says where they really are, and the player is pulled back onto the doormat.
+    /// </para>
+    /// </summary>
+    public static readonly double MinimumStepSeconds = StepSeconds * 0.75;
+
+    /// <summary>
     /// Where something is drawn, part-way between two squares, on a whole pixel.
     /// <para>
     /// Rounded rather than interpolated freely, and shared so that everything walking —

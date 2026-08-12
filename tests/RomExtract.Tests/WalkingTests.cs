@@ -98,6 +98,17 @@ public class WalkingCharacterTests
     }
 
     [Fact]
+    public void AStepAnimationOutlastsTheServerSLimit()
+    {
+        // Why the client normally cannot break the rate limit without trying: its own
+        // step takes longer than the shortest gap the server accepts, so walking
+        // normally never comes close. This is the relationship the client's post-arrival
+        // hold exists to preserve, and the moment it stops being true a player walking
+        // in a straight line starts being dragged backwards.
+        Assert.True(WalkingCharacter.MinimumStepSeconds < WalkingCharacter.StepSeconds);
+    }
+
+    [Fact]
     public void IgnoresInputUntilTheCurrentStepFinishes()
     {
         // Grid-locked movement: a step that has started cannot be diverted, or a
