@@ -1529,8 +1529,12 @@ public sealed class GameWorld
             // for the next two minutes is released the same way, and reporting those as
             // interruptions buried the one release that mattered in a page of ordinary
             // conversations ending normally.
-            if (!player.SceneCast.Contains(localId)) continue;
+            if (!player.SceneCast.Remove(localId)) continue;
 
+            // Removed as it is reported, not merely tested for. The scene lets its own
+            // cast go when it ends, and after that every conversation the player has for
+            // the rest of the two-minute window releases the same person again — which
+            // is how one real interruption came back as nine identical lines.
             LastRelease = $"object {localId} let go of #{holder} by {where}, mid-scene";
         }
     }

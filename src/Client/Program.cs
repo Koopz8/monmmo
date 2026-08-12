@@ -286,7 +286,16 @@ public static class Program
             // Applied between steps, which is the only moment it can be applied without
             // tearing the animation. Dropping it instead — which is what happened before
             // — leaves the client a square ahead of the server for good.
-            if (!player.IsStepping && correction is { } square)
+            //
+            // And never during a scene. A scripted walk is sent as a whole list, so the
+            // server walks all eighteen squares of it and answers with the far end while
+            // this side is still on the first — and applying that answer is not a
+            // correction, it is a teleport to the end of a walk that has not happened
+            // yet. It was the whole reason the opening looked like the character was
+            // being flung about. The answer is not thrown away, only held: whatever the
+            // server last said is applied the moment the scene finishes, which is when
+            // the two sides are supposed to agree again.
+            if (!player.IsStepping && scene is null && correction is { } square)
             {
                 if (square != player.Square) player.Place(view.Collision, square);
                 correction = null;
