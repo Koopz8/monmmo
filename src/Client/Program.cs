@@ -594,10 +594,11 @@ public static class Program
         {
             var playing = new Cutscene(run.Beats, view);
 
-            // Held before a foot is moved. The server is the only thing that can stop
-            // these people wandering off mid-scene, and it holds one person per message
-            // — the same message talking to them sends.
-            foreach (int localId in playing.Cast) network.SendTalk(localId);
+            // Held before a foot is moved, and not by talking to them. Talking checks
+            // that somebody is within reach — rightly, since a conversation across a town
+            // is not one — and a scene's cast is across the town by definition. The
+            // professor starts his walk from outside his own lab.
+            if (playing.Cast.ToList() is { Count: > 0 } cast) network.SendSceneCast(cast);
 
             return (talking, playing);
         }

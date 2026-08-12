@@ -34,6 +34,7 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(TriggerFired), "triggered")]
 [JsonDerivedType(typeof(ScenePlaced), "sceneplaced")]
 [JsonDerivedType(typeof(SceneWalk), "scenewalk")]
+[JsonDerivedType(typeof(SceneCast), "scenecast")]
 [JsonDerivedType(typeof(BuyRequest), "buy")]
 [JsonDerivedType(typeof(SellRequest), "sell")]
 [JsonDerivedType(typeof(ShopOpened), "shop")]
@@ -132,6 +133,23 @@ public sealed record ScenePlaced(int LocalId, int X, int Y, Direction Facing) : 
 /// </para>
 /// </summary>
 public sealed record SceneWalk(IReadOnlyList<Direction> Steps) : NetMessage;
+
+/// <summary>
+/// Who a scene is about, so they stand still for the duration.
+/// <para>
+/// Not <see cref="TalkRequest"/>, which is what this used to be and was wrong for the
+/// reason talking is right: talking checks that the person is within reach, because a
+/// conversation with somebody across the map is not a conversation. A scene is exactly
+/// that — the professor is at the other end of the town when he starts walking over — so
+/// every cast member out of arm's reach was refused, wandered off mid-scene, and had the
+/// scene's final placement refused too because nobody was holding them.
+/// </para>
+/// <para>
+/// Bounded the same way a scene walk is: only inside the window a trigger the server
+/// agreed to fire opened, and only for people on the map the player is standing on.
+/// </para>
+/// </summary>
+public sealed record SceneCast(IReadOnlyList<int> LocalIds) : NetMessage;
 
 /// <summary>
 /// What a script the player just ran did to their save.

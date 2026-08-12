@@ -540,6 +540,14 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                             world.StopTalking(playerId);
                             break;
 
+                        case SceneCast cast when playerId != 0:
+                            world.HoldSceneCast(playerId, cast.LocalIds, Now);
+
+                            if (world.LastSceneCast is { } held)
+                                Console.WriteLine($"* #{playerId} scene cast: {held}");
+
+                            break;
+
                         case SceneWalk walk when playerId != 0:
                             List<Outgoing> walked = world.WalkThroughScene(playerId, walk.Steps, Now);
 

@@ -1111,6 +1111,51 @@ public class TriggerTests
     }
 
     [Fact]
+    public void ASceneHoldsItsCastWhereverTheyAre()
+    {
+        // The bug that made the whole feature look broken in play. Holding by *talking*
+        // checks that somebody is within reach — rightly, since a conversation across a
+        // town is not one — and a scene's cast is across the town by definition. The
+        // professor starts his walk from outside his own lab, so he was never held, and
+        // the scene's final placement of him was refused too.
+        MapData map = new(Town, "PALLET TOWN", 16, 16, new byte[256])
+        {
+            Objects = [new MapObject(3, 5, 10, 8, Direction.Down, 2, false, 3, 3)],
+            Triggers = [new MapTrigger(3, 4, Variable, 0)],
+        };
+
+        var world = new GameWorld(new WorldData([map]), Town, TestRules.All);
+
+        (ServerPlayer player, _) = world.Join(1, "Koop", SavedCharacter.Fresh(Town, 3, 4));
+
+        world.FireTrigger(player.Id, 3, 4, 10);
+        world.HoldSceneCast(player.Id, [3], 11);
+
+        Assert.Equal(3, world.TalkingTo(player.Id));
+        Assert.Contains("holding 1 of 1", world.LastSceneCast);
+    }
+
+    [Fact]
+    public void HoldingACastWithNoSceneBehindItIsRefused()
+    {
+        // Without the window this is a way to freeze anybody on a map from anywhere on
+        // it, which is the exact thing the reachability check was protecting against.
+        MapData map = new(Town, "PALLET TOWN", 16, 16, new byte[256])
+        {
+            Objects = [new MapObject(3, 5, 10, 8, Direction.Down, 2, false, 3, 3)],
+        };
+
+        var world = new GameWorld(new WorldData([map]), Town, TestRules.All);
+
+        (ServerPlayer player, _) = world.Join(1, "Koop", SavedCharacter.Fresh(Town, 3, 4));
+
+        world.HoldSceneCast(player.Id, [3], 11);
+
+        Assert.Null(world.TalkingTo(player.Id));
+        Assert.Contains("no scene is running", world.LastSceneCast);
+    }
+
+    [Fact]
     public void ASceneCanWalkThePlayer()
     {
         // The half a scene could not do until now. Where the player stands is the

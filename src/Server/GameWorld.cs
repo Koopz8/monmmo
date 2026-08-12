@@ -1421,6 +1421,57 @@ public sealed class GameWorld
         }
     }
 
+    /// <summary>What the last attempt to hold a scene's cast came to.</summary>
+    public string? LastSceneCast { get; private set; }
+
+    /// <summary>
+    /// Holds everybody a scene is about, wherever they are standing.
+    /// <para>
+    /// Deliberately without the reachability check that talking has. Talking has it
+    /// because a conversation with somebody across the map is not a conversation; a scene
+    /// is precisely that, and using the talking message for this refused every cast member
+    /// out of arm's reach. They then wandered through the scene and had its final
+    /// placement refused as well, since nothing was holding them.
+    /// </para>
+    /// <para>
+    /// The bound is the scene window instead, which is the same one a scene walk uses: a
+    /// trigger this server agreed to fire, recently. Without one, holding is refused —
+    /// otherwise this is a way to freeze anybody on a map from anywhere on it, which is
+    /// the exact thing the reachability check was protecting against.
+    /// </para>
+    /// </summary>
+    public List<Outgoing> HoldSceneCast(int playerId, IReadOnlyList<int> localIds, double nowSeconds)
+    {
+        lock (_gate)
+        {
+            LastSceneCast = null;
+
+            if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
+
+            if (nowSeconds > player.SceneUntil)
+            {
+                LastSceneCast = "refused: no scene is running for them";
+                return [];
+            }
+
+            if (!_populated.TryGetValue(player.MapId, out MapPopulation? people)) return [];
+
+            int held = 0;
+
+            foreach (int localId in localIds.Distinct())
+            {
+                if (people.ById(localId) is not { } person) continue;
+
+                person.HeldBy = playerId;
+                held++;
+            }
+
+            LastSceneCast = $"holding {held} of {localIds.Count} still for the scene";
+
+            return [];
+        }
+    }
+
     /// <summary>What the last scene placement came to. Same arrangement as the rest.</summary>
     public string? LastScenePlacement { get; private set; }
 
