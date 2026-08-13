@@ -85,8 +85,56 @@ public sealed record MapData(string Id, string Name, int Width, int Height, byte
     /// has now learned three times.
     /// </para>
     /// </summary>
-    public CollisionGrid ToGrid() =>
-        new CollisionGrid(Width, Height, Collision).WithOpen(Warps.Select(w => w.Square));
+    public CollisionGrid ToGrid() => ToGrid(surfing: false);
+
+    /// <summary>
+    /// Walkability for somebody who is, or is not, on the water.
+    /// <para>
+    /// Water is not a wall in the block data. Two thirds of it is passable — the
+    /// cartridge keeps people out of the sea with a rule about the behaviour byte, not
+    /// with collision — so on 47 maps of this game a player could simply walk out onto
+    /// it. The S.S. ANNE's harbour is 1446 walkable squares of open water.
+    /// </para>
+    /// <para>
+    /// Which makes this one grid rather than two rules. Off the water, water is solid.
+    /// On it, water is walkable and the land is left exactly as it was, which is what
+    /// makes stepping ashore the way off.
+    /// </para>
+    /// </summary>
+    public CollisionGrid ToGrid(bool surfing)
+    {
+        CollisionGrid grid = new CollisionGrid(Width, Height, Collision)
+            .WithOpen(Warps.Select(w => w.Square));
+
+        if (Behaviours.Length == 0) return grid;
+
+        return surfing ? grid.WithOpen(WaterSquares()) : grid.With(WaterSquares());
+    }
+
+    /// <summary>Every square of this map that is water.</summary>
+    public IEnumerable<GridPosition> WaterSquares()
+    {
+        for (int y = 0; y < Height; y++)
+        {
+            for (int x = 0; x < Width; x++)
+            {
+                int at = y * Width + x;
+
+                if (at < Behaviours.Length && MetatileBehaviour.IsWater(Behaviours[at]))
+                    yield return new GridPosition(x, y);
+            }
+        }
+    }
+
+    /// <summary>True when this square is water.</summary>
+    public bool IsWater(GridPosition square)
+    {
+        if (square.X < 0 || square.X >= Width || square.Y < 0 || square.Y >= Height) return false;
+
+        int at = square.Y * Width + square.X;
+
+        return at < Behaviours.Length && MetatileBehaviour.IsWater(Behaviours[at]);
+    }
 
     /// <summary>
     /// How many warps sit on squares the block data calls solid.

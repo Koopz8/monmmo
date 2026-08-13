@@ -23,7 +23,7 @@ public sealed class GameRules
 {
     private static readonly byte[] Magic = "MONRULES"u8.ToArray();
 
-    private const int Version = 5;
+    private const int Version = 6;
 
     private readonly Dictionary<int, SpeciesData> _species;
     private readonly Dictionary<int, MoveData> _moves;
@@ -43,7 +43,23 @@ public sealed class GameRules
         _learnsets = learnsets.ToDictionary(l => l.Species);
         _trainers = (trainers ?? []).ToDictionary(t => t.Id);
         _items = (items ?? []).ToDictionary(i => i.Id);
+
+        // Worked out here, while the names are still in memory, and written to the file
+        // as a number. The same arrangement the ball kinds already use, and for the same
+        // reason: this file carries no text, so anything that has to be read off the
+        // cartridge's own words has to be read on the machine that has the cartridge.
+        SurfMove = MoveNamed("SURF")?.Id ?? 0;
     }
+
+    /// <summary>
+    /// The move that gets somebody onto the water, as an id.
+    /// <para>
+    /// Zero when this cartridge has no move by that name, and zero means no surfing —
+    /// not a guess at which move it might have been. A number written here from memory
+    /// of another game is the mistake this project keeps a standing rule against.
+    /// </para>
+    /// </summary>
+    public int SurfMove { get; init; }
 
     public int SpeciesCount => _species.Count;
 
@@ -58,6 +74,19 @@ public sealed class GameRules
     public SpeciesData? SpeciesAt(int index) => _species.GetValueOrDefault(index);
 
     public MoveData? MoveAt(int id) => _moves.GetValueOrDefault(id);
+
+    /// <summary>
+    /// A move looked up by the name the cartridge gives it.
+    /// <para>
+    /// Used for the field moves, and it is a derivation rather than a memory: the id is
+    /// read off this image's own move table by matching this image's own text. Writing
+    /// 0x39 here because SURF is move 57 in some other game would be exactly the mistake
+    /// this project keeps a rule against — and a name that is not found returns nothing,
+    /// so the feature is simply unavailable rather than pointed at the wrong move.
+    /// </para>
+    /// </summary>
+    public MoveData? MoveNamed(string name) =>
+        _moves.Values.FirstOrDefault(m => string.Equals(m.Name, name, StringComparison.OrdinalIgnoreCase));
 
     public Learnset? LearnsetOf(int species) => _learnsets.GetValueOrDefault(species);
 
@@ -176,6 +205,10 @@ public sealed class GameRules
             // position. Zero for everything that teaches nothing, which is most of it.
             writer.Write(item.Teaches);
         }
+
+        // Derived from this cartridge's own move names at export, for the same reason
+        // the ball kinds are: the server never sees a name.
+        writer.Write(SurfMove);
     }
 
     public void Save(string path)
@@ -306,7 +339,9 @@ public sealed class GameRules
             });
         }
 
-        return new GameRules(species, moves, learnsets, trainers, items);
+        int surf = reader.ReadInt32();
+
+        return new GameRules(species, moves, learnsets, trainers, items) { SurfMove = surf };
     }
 
     /// <summary>

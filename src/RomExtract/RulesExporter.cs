@@ -51,7 +51,20 @@ public static class RulesExporter
 
         List<ItemData> items = ExtractItems(rom, moves.Count, log);
 
-        var rules = new GameRules(anonymousSpecies, anonymousMoves, learnsets.Values, trainers, items);
+        // Read off the names while they are still here, and written to the file as a
+        // number. This is the last moment anything knows what the moves are called: the
+        // list above has already been stripped, on purpose, and the server never sees a
+        // name at all.
+        int surf = moves.FirstOrDefault(m => string.Equals(m.Name, "SURF", StringComparison.OrdinalIgnoreCase))?.Id ?? 0;
+
+        var rules = new GameRules(anonymousSpecies, anonymousMoves, learnsets.Values, trainers, items)
+        {
+            SurfMove = surf,
+        };
+
+        log?.Invoke(surf > 0
+            ? $"  rules: the move called SURF is {surf}"
+            : "  rules: no move on this cartridge is called SURF, so this server has no surfing");
 
         log?.Invoke(
             $"  rules: {rules.SpeciesCount} species, {rules.MoveCount} moves, " +

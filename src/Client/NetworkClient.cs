@@ -129,6 +129,9 @@ public sealed class NetworkClient : IDisposable
 
     public void SendTalkFinished() => Send(new TalkFinished());
 
+    /// <summary>Asks to get onto the water ahead. Whether that is allowed is not this side's call.</summary>
+    public void SendSurf() => Send(new SurfRequest());
+
     /// <summary>Says a square was stepped onto, so the server can decide what that means.</summary>
     public void SendTriggerFired(int x, int y, int? trainerId = null) =>
         Send(new TriggerFired(x, y, trainerId));

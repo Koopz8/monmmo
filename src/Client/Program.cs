@@ -841,6 +841,35 @@ public static class Program
             // server has never seen. So this one never leaves the machine.
             Note($"nobody in front of {player.Square} facing {player.Facing}");
 
+            // Water ahead and somebody in the party who can cross it. Asked rather than
+            // done: this side knows the party and can see the square, but a client that
+            // put itself out to sea would be a client that could put itself anywhere.
+            //
+            // Before the sign, because a sign is something written on a wall and the sea
+            // is not a wall anybody writes on.
+            GridPosition ahead = player.Square.Step(player.Facing);
+
+            if (view.Map.IsWater(ahead))
+            {
+                if (data.MoveNamed("SURF") is not { } surf)
+                {
+                    Note("water ahead, but this cartridge has no move called SURF");
+                }
+                else if (ScriptState.SlotKnowing(party.Select(m => m.Moves), surf.Id) == ScriptState.NoSlot)
+                {
+                    Note($"water at {ahead}, and nobody in the party knows move {surf.Id}");
+                }
+                else
+                {
+                    network.SendSurf();
+                    return null;
+                }
+            }
+            else
+            {
+                Note($"{ahead} is not water");
+            }
+
             return Read(data, view, player, network, script, party);
         }
 
@@ -1437,6 +1466,16 @@ public static class Program
 
                 case ApproachEnded:
                     watching = null;
+
+                    break;
+
+                case SurfingChanged afloat:
+                    // The grid changes before the player is placed, because placing them
+                    // on a square this side still thinks is a wall would put them back
+                    // on the shore a frame later.
+                    view.Surfing = afloat.Surfing;
+
+                    player.Place(view.Collision, new GridPosition(afloat.X, afloat.Y));
 
                     break;
 

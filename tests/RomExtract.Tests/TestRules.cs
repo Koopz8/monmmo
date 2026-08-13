@@ -67,6 +67,9 @@ internal static class TestRules
 
     public const int FieldMove = 15;
 
+    /// <summary>The move that gets somebody onto the water, and the only one here with a name.</summary>
+    public const int SurfMove = 6;
+
     /// <summary>The one that always works, so a kind can be told from a count.</summary>
     public const int MasterBallItem = 1;
 
@@ -119,6 +122,12 @@ internal static class TestRules
             new(3, string.Empty, 0, 40, PokemonType.Normal, 100, 30, 0, 0, 0),
             new(4, string.Empty, 0, 40, PokemonType.Normal, 100, 30, 0, 0, 0),
             new(5, string.Empty, 0, 40, PokemonType.Normal, 100, 30, 0, 0, 0),
+
+            // Named, unlike every other move here, because the field moves are found by
+            // the name the cartridge gives them rather than by an id remembered from
+            // another game. A rules file with no move called SURF has no surfing in it,
+            // which is a state worth being able to test as well.
+            new(SurfMove, "SURF", 0, 95, PokemonType.Water, 100, 15, 0, 0, 0),
         };
 
         var learnsets = new List<Learnset>();

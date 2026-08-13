@@ -51,7 +51,8 @@ public static class WorldWalker
         WorldData world,
         string startMapId,
         IReadOnlyCollection<int>? moves = null,
-        bool throughPeople = false)
+        bool throughPeople = false,
+        bool surfing = false)
     {
         IReadOnlyCollection<int> known = moves ?? [];
 
@@ -71,7 +72,10 @@ public static class WorldWalker
         {
             if (grids.TryGetValue(map.Id, out CollisionGrid? cached)) return cached;
 
-            return grids[map.Id] = map.ToGrid();
+            // Surfing is walked as one grid rather than as two states, because the walker
+            // is measuring reach rather than playing: somebody who can surf can be on
+            // the water or off it wherever they like, and the union is what they reach.
+            return grids[map.Id] = map.ToGrid(surfing);
         }
 
         MapObject? ObjectOn(MapData map, GridPosition square)

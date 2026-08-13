@@ -161,6 +161,8 @@ public static class Program
 
         if (options.MoveEffects) WriteMoveEffects(rom);
         if (options.FifthMove) WriteFifthMove(rom);
+        if (options.Water) WriteWater(rom);
+        if (!string.IsNullOrEmpty(options.WaterMap)) WriteWaterMap(rom, options.WaterMap);
 
         if (options.RivalFights) WriteRivalFights(rom);
 
@@ -662,6 +664,340 @@ public static class Program
     /// worth walking into grass with.
     /// </para>
     /// </summary>
+    private static void WriteWater(Rom rom)
+    {
+        Core.World.WorldData world = WorldExporter.Export(rom);
+
+        // The foothold. A map with a water encounter table is a map somebody can fish or
+        // surf on, and that fact is in a completely different structure from the one
+        // being asked about — so the two can be laid against each other without either
+        // one being assumed.
+        var wet = new HashSet<string>();
+        var dry = new HashSet<string>();
+
+        foreach (Core.World.MapData map in world.Maps)
+        {
+            if (map.Encounters?.Water is { IsUsable: true }) wet.Add(map.Id);
+            else dry.Add(map.Id);
+        }
+
+        // For each behaviour byte: how many wet maps carry it, how many dry maps do, and
+        // how many squares it covers on a wet map. Water should be on nearly every wet
+        // map, on very few dry ones, and cover a great deal of ground where it is.
+        var onWet = new Dictionary<byte, int>();
+        var onDry = new Dictionary<byte, int>();
+        var squares = new Dictionary<byte, int>();
+
+        foreach (Core.World.MapData map in world.Maps)
+        {
+            if (map.Behaviours.Length == 0) continue;
+
+            bool isWet = wet.Contains(map.Id);
+
+            foreach (byte behaviour in map.Behaviours.Distinct())
+            {
+                if (isWet) onWet[behaviour] = onWet.GetValueOrDefault(behaviour) + 1;
+                else onDry[behaviour] = onDry.GetValueOrDefault(behaviour) + 1;
+            }
+
+            if (!isWet) continue;
+
+            foreach (byte behaviour in map.Behaviours)
+                squares[behaviour] = squares.GetValueOrDefault(behaviour) + 1;
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("Which behaviour byte is water");
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  {wet.Count} maps have a water encounter table, {dry.Count} do not");
+        Console.WriteLine();
+        Console.WriteLine("  byte   wet maps / dry maps   squares on wet maps   solid");
+        Console.WriteLine();
+        Console.WriteLine("  every byte on five or more wet maps and under a twentieth of the dry ones");
+
+        foreach ((byte behaviour, int seen) in onWet
+                     .Where(e => e.Value >= 5 && onDry.GetValueOrDefault(e.Key) * 20 < dry.Count)
+                     .OrderByDescending(e => e.Value))
+        {
+            int total = 0;
+            int blocked = 0;
+
+            foreach (Core.World.MapData map in world.Maps)
+            {
+                if (map.Behaviours.Length == 0) continue;
+
+                var grid = new Core.World.CollisionGrid(map.Width, map.Height, map.Collision);
+
+                for (int y = 0; y < map.Height; y++)
+                {
+                    for (int x = 0; x < map.Width; x++)
+                    {
+                        int at = y * map.Width + x;
+                        if (at >= map.Behaviours.Length || map.Behaviours[at] != behaviour) continue;
+
+                        total++;
+                        if (!grid.IsWalkable(new Core.World.GridPosition(x, y))) blocked++;
+                    }
+                }
+            }
+
+            Console.WriteLine(
+                $"  0x{behaviour:X2}   {seen,4} of {wet.Count,4} / {onDry.GetValueOrDefault(behaviour),4} of {dry.Count,4}   " +
+                $"{total,7} squares   {(total == 0 ? 0 : 100 * blocked / total),3}% solid");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("  the eight best separators, ranked");
+        Console.WriteLine();
+        Console.WriteLine("  byte   wet maps / dry maps   squares on wet maps");
+
+        // Ranked by how much better it separates the two sets than chance would. A byte
+        // on every map of both kinds says nothing; a byte on most wet maps and almost no
+        // dry ones is the answer.
+        foreach ((byte behaviour, int seen) in onWet
+                     .OrderByDescending(e => e.Value / (double)wet.Count - onDry.GetValueOrDefault(e.Key) / (double)dry.Count)
+                     .Take(8))
+        {
+            Console.WriteLine(
+                $"  0x{behaviour:X2}   {seen,4} of {wet.Count,4} / {onDry.GetValueOrDefault(behaviour),4} of {dry.Count,4}   " +
+                $"{squares.GetValueOrDefault(behaviour),7}");
+        }
+
+        // And the check that matters more than the ranking: a byte that is water should
+        // be walled off from the land. Every square of it on a wet map ought to be one
+        // the collision data already refuses, because until now the only thing standing
+        // between a player and the sea has been the wall around it.
+        Console.WriteLine();
+        Console.WriteLine("  and how much of each is already solid ground the player cannot enter");
+
+        foreach ((byte behaviour, int _) in onWet
+                     .OrderByDescending(e => e.Value / (double)wet.Count - onDry.GetValueOrDefault(e.Key) / (double)dry.Count)
+                     .Take(4))
+        {
+            int total = 0;
+            int blocked = 0;
+
+            foreach (Core.World.MapData map in world.Maps)
+            {
+                if (!wet.Contains(map.Id) || map.Behaviours.Length == 0) continue;
+
+                var grid = new Core.World.CollisionGrid(map.Width, map.Height, map.Collision);
+
+                for (int y = 0; y < map.Height; y++)
+                {
+                    for (int x = 0; x < map.Width; x++)
+                    {
+                        int at = y * map.Width + x;
+                        if (at >= map.Behaviours.Length || map.Behaviours[at] != behaviour) continue;
+
+                        total++;
+                        if (!grid.IsWalkable(new Core.World.GridPosition(x, y))) blocked++;
+                    }
+                }
+            }
+
+            Console.WriteLine(
+                $"    0x{behaviour:X2}  {blocked} of {total} " +
+                $"({(total == 0 ? 0 : 100 * blocked / total)}%)");
+        }
+
+        // And the drawing test, which is what named every other behaviour byte in this
+        // project. A sea route is mostly sea. If a byte is water it will cover most of
+        // one, and the byte that covers most of a route full of grass will not.
+        Console.WriteLine();
+        Console.WriteLine("  how much of a few maps each candidate covers");
+
+        List<byte> candidates =
+        [
+            .. onWet
+                .OrderByDescending(e => e.Value / (double)wet.Count - onDry.GetValueOrDefault(e.Key) / (double)dry.Count)
+                .Take(4)
+                .Select(e => e.Key),
+        ];
+
+        Console.WriteLine("    map                          " + string.Join("  ", candidates.Select(c => $"0x{c:X2}")));
+
+        foreach (Core.World.MapData map in world.Maps
+                     .Where(m => wet.Contains(m.Id) && m.Behaviours.Length > 0)
+                     .OrderByDescending(m => m.Behaviours.Count(b => b == candidates[0]))
+                     .Take(6))
+        {
+            string counts = string.Join(
+                "  ",
+                candidates.Select(c => $"{100 * map.Behaviours.Count(b => b == c) / map.Behaviours.Length,3}%"));
+
+            Console.WriteLine($"    {map.Id,-6} {map.Name,-22} {counts}");
+        }
+
+        // And the same for somewhere with no water at all, as the control.
+        foreach (Core.World.MapData map in world.Maps
+                     .Where(m => dry.Contains(m.Id) && m.Behaviours.Length > 400)
+                     .Take(3))
+        {
+            string counts = string.Join(
+                "  ",
+                candidates.Select(c => $"{100 * map.Behaviours.Count(b => b == c) / map.Behaviours.Length,3}%"));
+
+            Console.WriteLine($"    {map.Id,-6} {map.Name,-22} {counts}   (no water table)");
+        }
+
+        // Where the water is not walled off, which is a different question from how much
+        // of it is. A map whose sea is passable in the block data is a map a player can
+        // already walk out into, and nothing would stop them.
+        Console.WriteLine();
+        Console.WriteLine("  maps where most of the water is not a wall");
+
+        int open = 0;
+
+        foreach (Core.World.MapData map in world.Maps)
+        {
+            if (map.Behaviours.Length == 0) continue;
+
+            var grid = new Core.World.CollisionGrid(map.Width, map.Height, map.Collision);
+
+            int here = 0;
+            int walkable = 0;
+
+            for (int y = 0; y < map.Height; y++)
+            {
+                for (int x = 0; x < map.Width; x++)
+                {
+                    int at = y * map.Width + x;
+                    if (at >= map.Behaviours.Length || map.Behaviours[at] != candidates[0]) continue;
+
+                    here++;
+                    if (grid.IsWalkable(new Core.World.GridPosition(x, y))) walkable++;
+                }
+            }
+
+            if (here < 20 || walkable * 2 <= here) continue;
+
+            open++;
+
+            if (open <= 8)
+                Console.WriteLine($"    {map.Id,-6} {map.Name,-22} {walkable} of {here} squares");
+        }
+
+        Console.WriteLine($"    {open} maps in all");
+
+        // And where the other near-clean separators live, so that naming two bytes and
+        // stopping is a decision rather than an oversight.
+        foreach (byte other in (byte[])[0x21, 0x17, 0x0C])
+        {
+            Core.World.MapData? most = world.Maps
+                .Where(m => m.Behaviours.Length > 0)
+                .OrderByDescending(m => m.Behaviours.Count(b => b == other))
+                .FirstOrDefault();
+
+            if (most is null) continue;
+
+            Console.WriteLine(
+                $"    0x{other:X2} is thickest on {most.Id} {most.Name} " +
+                $"({most.Behaviours.Count(b => b == other)} squares)");
+        }
+
+        // The last question, and the one that decides how much this is worth: how many
+        // maps become reachable if that byte stops being a wall.
+        Console.WriteLine();
+        Console.WriteLine("  wet maps with none of the leading byte on them at all");
+
+        byte best = onWet
+            .OrderByDescending(e => e.Value / (double)wet.Count - onDry.GetValueOrDefault(e.Key) / (double)dry.Count)
+            .First().Key;
+
+        var missing = new List<string>();
+
+        foreach (Core.World.MapData map in world.Maps)
+        {
+            if (!wet.Contains(map.Id) || map.Behaviours.Length == 0) continue;
+            if (map.Behaviours.Contains(best)) continue;
+
+            missing.Add($"{map.Id} {map.Name}");
+        }
+
+        Console.WriteLine($"    {missing.Count} of {wet.Count}");
+
+        foreach (string one in missing.Take(8)) Console.WriteLine($"      {one}");
+
+        // And what those eight have instead. A city with a pond you can only fish in is
+        // still a map with water on it, and declaring one byte the answer while leaving
+        // eight maps of water unaccounted for is the kind of tidy conclusion this
+        // project is supposed to refuse.
+        Console.WriteLine();
+        Console.WriteLine("    what they have instead, counting only bytes that are rare on dry land");
+
+        var instead = new Dictionary<byte, int>();
+
+        foreach (Core.World.MapData map in world.Maps)
+        {
+            if (!wet.Contains(map.Id) || map.Behaviours.Length == 0) continue;
+            if (map.Behaviours.Contains(best)) continue;
+
+            foreach (byte behaviour in map.Behaviours.Distinct())
+            {
+                if (onDry.GetValueOrDefault(behaviour) > dry.Count / 10) continue;
+
+                instead[behaviour] = instead.GetValueOrDefault(behaviour) + 1;
+            }
+        }
+
+        foreach ((byte behaviour, int count) in instead.OrderByDescending(e => e.Value).Take(6))
+        {
+            Console.WriteLine(
+                $"      0x{behaviour:X2}  on {count} of those {missing.Count}, " +
+                $"and on {onDry.GetValueOrDefault(behaviour)} of {dry.Count} dry maps");
+        }
+    }
+
+    /// <summary>
+    /// One map drawn as characters, with the water candidates marked.
+    /// <para>
+    /// Every behaviour byte this project has named was named by drawing it. A count is
+    /// a number that any wrong answer can also produce; a shape is not. Tall grass at
+    /// the wrong stride gave 52 squares scattered down two edges on alternating rows,
+    /// and only the picture said so.
+    /// </para>
+    /// </summary>
+    private static void WriteWaterMap(Rom rom, string mapId)
+    {
+        Core.World.WorldData world = WorldExporter.Export(rom);
+
+        if (world.Find(mapId) is not { } map)
+        {
+            Console.WriteLine($"  no map {mapId} on this cartridge");
+            return;
+        }
+
+        var grid = new Core.World.CollisionGrid(map.Width, map.Height, map.Collision);
+
+        Console.WriteLine();
+        Console.WriteLine($"{map.Id} {map.Name}, {map.Width}x{map.Height}");
+        Console.WriteLine("  W = 0x15, w = 0x10, ~ = 0x21, . = walkable, # = solid");
+        Console.WriteLine();
+
+        for (int y = 0; y < map.Height; y++)
+        {
+            var row = new System.Text.StringBuilder("  ");
+
+            for (int x = 0; x < map.Width; x++)
+            {
+                int at = y * map.Width + x;
+                byte behaviour = at < map.Behaviours.Length ? map.Behaviours[at] : (byte)0;
+
+                row.Append(behaviour switch
+                {
+                    0x15 => 'W',
+                    0x10 => 'w',
+                    0x21 => '~',
+                    _ => grid.IsWalkable(new Core.World.GridPosition(x, y)) ? '.' : '#',
+                });
+            }
+
+            Console.WriteLine(row.ToString());
+        }
+    }
+
     private static void WriteFifthMove(Rom rom)
     {
         Dictionary<int, Learnset> learnsets = LearnsetExtractor.Extract(rom);
@@ -4707,6 +5043,10 @@ public static class Program
 
         public bool Challenges { get; private init; }
 
+        public bool Water { get; private init; }
+
+        public string WaterMap { get; private init; } = "";
+
         /// <summary>Which trainers are fought by a script that names the rival.</summary>
         public bool RivalFights { get; private init; }
 
@@ -4790,6 +5130,8 @@ public static class Program
             bool moveEffects = false;
             bool fifthMove = false;
             bool challenges = false;
+            bool water = false;
+            string waterMap = "";
             bool rivalFights = false;
             bool specials = false;
             int? special = null;
@@ -4914,6 +5256,14 @@ public static class Program
                     case "--door-steps":
                         doorSteps = true;
                         break;
+                    case "--water-map":
+                        waterMap = Next(args, ref i, "--water-map");
+                        break;
+
+                    case "--water":
+                        water = true;
+                        break;
+
                     case "--challenges":
                         challenges = true;
                         break;
@@ -5083,6 +5433,8 @@ public static class Program
                 MoveEffects = moveEffects,
                 FifthMove = fifthMove,
                 Challenges = challenges,
+                Water = water,
+                WaterMap = waterMap,
                 RivalFights = rivalFights,
                 Specials = specials,
                 Special = special,

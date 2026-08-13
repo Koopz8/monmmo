@@ -16,6 +16,51 @@ public sealed record LoadedMap(
     byte[] Rgba,
     CollisionGrid Collision)
 {
+    /// <summary>
+    /// The behaviour byte of every square, so that this side can answer the same
+    /// questions about water and grass that the server answers from the world file.
+    /// </summary>
+    public byte[] Behaviours { get; init; } = [];
+
+    /// <summary>True when this square is water.</summary>
+    public bool IsWater(GridPosition square)
+    {
+        if (!Collision.Contains(square)) return false;
+
+        int at = square.Y * Collision.Width + square.X;
+
+        return at < Behaviours.Length && MetatileBehaviour.IsWater(Behaviours[at]);
+    }
+
+    /// <summary>
+    /// Walkability for somebody who is, or is not, on the water.
+    /// <para>
+    /// The counterpart of <c>MapData.ToGrid(bool)</c>, and it has to be: a rule enforced
+    /// on one side of the split needs its counterpart on the other, and a client that
+    /// predicts a step the server refuses is a client that walks into the sea and
+    /// snaps back out of it.
+    /// </para>
+    /// </summary>
+    public CollisionGrid GridFor(bool surfing)
+    {
+        if (Behaviours.Length == 0) return Collision;
+
+        var water = new List<GridPosition>();
+
+        for (int y = 0; y < Collision.Height; y++)
+        {
+            for (int x = 0; x < Collision.Width; x++)
+            {
+                int at = y * Collision.Width + x;
+
+                if (at < Behaviours.Length && MetatileBehaviour.IsWater(Behaviours[at]))
+                    water.Add(new GridPosition(x, y));
+            }
+        }
+
+        return surfing ? Collision.WithOpen(water) : Collision.With(water);
+    }
+
     /// <summary>People and things standing on this map.</summary>
     public IReadOnlyList<MapObject> Objects { get; init; } = [];
 
@@ -93,7 +138,10 @@ public static class WorldLoader
             picture.Width,
             picture.Height,
             picture.Rgba,
-            chosen.Header.Layout.ReadCollision(rom));
+            chosen.Header.Layout.ReadCollision(rom))
+        {
+            Behaviours = chosen.Header.Layout.ReadBehaviours(rom),
+        };
     }
 
     private static (int Bank, int Map, MapHeaderRecord Header) Choose(

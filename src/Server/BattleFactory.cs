@@ -16,6 +16,9 @@ namespace PokeMmo.Server;
 /// </summary>
 public sealed class BattleFactory(GameRules rules)
 {
+    /// <summary>The rules this was built from, for the few questions that are not about battles.</summary>
+    public GameRules Rules => rules;
+
     /// <summary>Rebuilds a party member exactly as it was saved.</summary>
     public Battler? Restore(SavedMon saved)
     {

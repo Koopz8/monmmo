@@ -43,6 +43,16 @@ public sealed record ServerPlayer(int Id, long AccountId, string Name)
     public int? WatchedBy { get; set; }
 
     /// <summary>
+    /// True when this player is on the water rather than on the land.
+    /// <para>
+    /// Held here rather than worked out from the square they are on, because the two
+    /// are not the same question. Standing on a water square is what surfing looks
+    /// like; being allowed onto one is what it is.
+    /// </para>
+    /// </summary>
+    public bool Surfing { get; set; }
+
+    /// <summary>
     /// Who is waiting to fight this player as soon as they stop reading.
     /// <para>
     /// A trainer who has to be talked to has words first, and often a whole scene of
@@ -288,16 +298,32 @@ public sealed class GameWorld
         lock (_gate) return GridFor(mapId);
     }
 
-    private CollisionGrid GridFor(string mapId)
+    private CollisionGrid GridFor(string mapId) => GridFor(mapId, surfing: false);
+
+    /// <summary>
+    /// A map's walkability, for somebody on the water or off it.
+    /// <para>
+    /// Two grids per map rather than a rule at every call site. There are a dozen places
+    /// in this file that ask whether a square can be stood on — a step, a warp, a scene,
+    /// a spawn — and threading "unless they are surfing" through all of them is how one
+    /// of them ends up not asking.
+    /// </para>
+    /// </summary>
+    private CollisionGrid GridFor(string mapId, bool surfing)
     {
-        if (_grids.TryGetValue(mapId, out CollisionGrid? cached)) return cached;
+        string key = surfing ? $"{mapId}~" : mapId;
+
+        if (_grids.TryGetValue(key, out CollisionGrid? cached)) return cached;
 
         MapData map = _world.Find(mapId) ?? StartingMap;
-        CollisionGrid grid = map.ToGrid();
+        CollisionGrid grid = map.ToGrid(surfing);
 
-        _grids[mapId] = grid;
+        _grids[key] = grid;
         return grid;
     }
+
+    /// <summary>The grid this particular player walks on, which depends on where they are standing.</summary>
+    private CollisionGrid GridFor(ServerPlayer player) => GridFor(player.MapId, player.Surfing);
 
     /// <summary>The starting map's grid, for callers that predate a world of many maps.</summary>
     public CollisionGrid Grid => GridOf(StartingMap.Id);
@@ -470,7 +496,7 @@ public sealed class GameWorld
             Direction before = player.Facing;
             player.Facing = direction;
 
-            CollisionGrid grid = GridFor(player.MapId);
+            CollisionGrid grid = GridFor(player);
             GridPosition wanted = player.Square.Step(direction);
 
             if (grid.Contains(wanted) && (!grid.IsWalkable(wanted) || IsOccupiedFor(player, player.MapId, wanted)))
@@ -515,6 +541,14 @@ public sealed class GameWorld
             {
                 new(new PlayerMoved(playerId, wanted.X, wanted.Y, player.Facing), OnMap: player.MapId),
             };
+
+            // Stepping ashore is how surfing ends. Not announced as a choice, because it
+            // is not one — the step was onto land, and there is nowhere to be but on it.
+            if (player.Surfing && !IsWater(player.MapId, wanted))
+            {
+                player.Surfing = false;
+                send.Add(new Outgoing(new SurfingChanged(false, wanted.X, wanted.Y), OnlyTo: playerId));
+            }
 
             AfterArrival(player, send, nowSeconds);
             return send;
@@ -1884,6 +1918,84 @@ public sealed class GameWorld
         }
     }
 
+    /// <summary>True when this square on this map is water.</summary>
+    private bool IsWater(string mapId, GridPosition square) =>
+        _world.Find(mapId)?.IsWater(square) ?? false;
+
+    /// <summary>
+    /// The move that gets somebody onto the water, by the name this cartridge gives it.
+    /// <para>
+    /// Read off the rules file rather than written down here. A number remembered from
+    /// another game is the one mistake this project has a standing rule against, and a
+    /// rules file with no move of that name simply has no surfing in it.
+    /// </para>
+    /// </summary>
+    public int? SurfMove => _battles?.Rules.SurfMove is > 0 and var id ? id : null;
+
+    /// <summary>
+    /// Getting onto the water in front of you.
+    /// <para>
+    /// Three things have to hold and the server owns all three: the square ahead is
+    /// water, somebody in the party knows how, and the player is not already out there.
+    /// The client asks because the client is where the button is; it does not decide,
+    /// because a client that decided could put itself in the middle of the sea.
+    /// </para>
+    /// </summary>
+    public List<Outgoing> Surf(int playerId)
+    {
+        lock (_gate)
+        {
+            LastSurf = null;
+
+            if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
+            if (player.InBattle || player.Surfing) return [];
+
+            if (SurfMove is not { } surf)
+            {
+                LastSurf = "refused: this server's rules have no move called SURF";
+                return [];
+            }
+
+            if (ScriptState.SlotKnowing(player.Party.Select(m => m.Moves), surf) == ScriptState.NoSlot)
+            {
+                LastSurf = "refused: nobody in the party knows SURF";
+                return [];
+            }
+
+            GridPosition ahead = player.Square.Step(player.Facing);
+
+            if (!IsWater(player.MapId, ahead))
+            {
+                LastSurf = $"refused: {ahead} is not water";
+                return [];
+            }
+
+            if (IsOccupiedFor(player, player.MapId, ahead))
+            {
+                LastSurf = $"refused: somebody is standing on {ahead}";
+                return [];
+            }
+
+            player.Surfing = true;
+            player.Square = ahead;
+
+            LastSurf = $"onto the water at {ahead}";
+
+            var send = new List<Outgoing>
+            {
+                new(new SurfingChanged(true, ahead.X, ahead.Y), OnlyTo: playerId),
+                new(new PlayerMoved(playerId, ahead.X, ahead.Y, player.Facing), OnMap: player.MapId),
+            };
+
+            AfterArrival(player, send, LastTickAt);
+
+            return send;
+        }
+    }
+
+    /// <summary>What the last attempt to get onto the water came to.</summary>
+    public string? LastSurf { get; private set; }
+
     /// <summary>
     /// The text box is closed. Whoever this player was holding carries on — and if what
     /// they were holding was somebody who wanted a fight, the fight starts now.
@@ -2719,11 +2831,19 @@ public sealed class GameWorld
     private void AddEncounterIfAny(ServerPlayer player, List<Outgoing> send)
     {
         if (_world.Find(player.MapId) is not { } map) return;
-        if (!map.IsEncounterSquare(player.Square)) return;
+
+        // Which table depends on what you are standing on rather than on where the map
+        // is. The same route has grass down one side and sea down the other, and a step
+        // in one has nothing to do with what lives in the other.
+        EncounterTable? table = player.Surfing
+            ? map.Encounters?.Water
+            : map.IsEncounterSquare(player.Square) ? map.Encounters?.Land : null;
+
+        if (table is not { IsUsable: true }) return;
 
         GrassSteps++;
 
-        if (WildEncounters.RollStep(_rng, map.Encounters!.Land) is not { } encounter) return;
+        if (WildEncounters.RollStep(_rng, table) is not { } encounter) return;
         if (_battles is null) return;
 
         if (_battles.Wild(encounter.Species, encounter.Level) is not { } wild) return;

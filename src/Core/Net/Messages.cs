@@ -36,6 +36,8 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(ScriptGave), "scriptgave")]
 [JsonDerivedType(typeof(NameMonRequest), "namemon")]
 [JsonDerivedType(typeof(LearnMoveRequest), "learnmove")]
+[JsonDerivedType(typeof(SurfRequest), "surf")]
+[JsonDerivedType(typeof(SurfingChanged), "surfing")]
 [JsonDerivedType(typeof(HealRequest), "healplease")]
 [JsonDerivedType(typeof(ConsoleCommand), "console")]
 [JsonDerivedType(typeof(ConsoleReply), "consolesaid")]
@@ -512,6 +514,26 @@ public sealed record BattleStarted(
 
     /// <summary>Which party slot is out, so a client can offer the other five.</summary>
     int Slot = 0) : NetMessage;
+
+/// <summary>
+/// A player asking to get onto the water in front of them.
+/// <para>
+/// A request, like everything else a client sends. What it does not carry is who in the
+/// party knows how — the server holds the party and can see for itself, and a client
+/// that named the swimmer could name one that cannot swim.
+/// </para>
+/// </summary>
+public sealed record SurfRequest : NetMessage;
+
+/// <summary>
+/// Whether this player is on the water now, and where they are standing.
+/// <para>
+/// The square travels with it because getting on the water is also a step, and a client
+/// that changed its own grid and then waited to be told where it was standing would draw
+/// the player on the shore for as long as the round trip took.
+/// </para>
+/// </summary>
+public sealed record SurfingChanged(bool Surfing, int X, int Y) : NetMessage;
 
 /// <summary>
 /// One side has sent out somebody new.

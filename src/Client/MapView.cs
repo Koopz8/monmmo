@@ -44,7 +44,7 @@ public sealed class MapView : IDisposable
     {
         _library = library;
         Map = first;
-        Collision = first.Collision;
+        Collision = first.GridFor(surfing: false);
         _texture = Upload(first);
 
         Keep($"{first.Bank}.{first.Number}", first, _texture);
@@ -139,8 +139,30 @@ public sealed class MapView : IDisposable
         foreach (WalkingPerson person in People.Values) person.Update(deltaSeconds);
     }
 
+    /// <summary>
+    /// Whether the player is on the water, which changes what they may walk on.
+    /// <para>
+    /// Held on the view because the view is what the grid is rebuilt from, and the grid
+    /// has to change the moment the server says it has: a client still holding the land
+    /// grid would refuse the first step off the shore and never send it.
+    /// </para>
+    /// </summary>
+    public bool Surfing
+    {
+        get => _surfing;
+        set
+        {
+            if (_surfing == value) return;
+
+            _surfing = value;
+            Rebuild();
+        }
+    }
+
+    private bool _surfing;
+
     private void Rebuild() =>
-        Collision = Map.Collision.With(People.Values.Select(p => p.Square));
+        Collision = Map.GridFor(_surfing).With(People.Values.Select(p => p.Square));
 
     public Texture2D Texture => _texture;
 
@@ -176,7 +198,7 @@ public sealed class MapView : IDisposable
         // Emptied rather than carried over: whoever was on the last map is not here,
         // and the server sends this map's people immediately after saying we arrived.
         People.Clear();
-        Collision = map.Collision;
+        Collision = map.GridFor(_surfing);
 
         _texture = texture;
 

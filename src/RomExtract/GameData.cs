@@ -99,7 +99,16 @@ public sealed class GameData
             .ToList();
     }
 
-    /// <summary>Finds a move by name, for building a party without hardcoding indices.</summary>
+    /// <summary>
+    /// Finds a move by name, for building a party without hardcoding indices — and now
+    /// for the field moves as well.
+    /// <para>
+    /// This is the client's half of a derivation the server makes off its rules file.
+    /// Both sides have to arrive at the same id or one will offer a swim the other
+    /// refuses, and the only way to be sure of that is for both to read it off the same
+    /// image rather than either one remembering a number.
+    /// </para>
+    /// </summary>
     public MoveData? MoveNamed(string name) =>
         Moves.FirstOrDefault(m => m.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
 

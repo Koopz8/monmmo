@@ -214,6 +214,20 @@ public static class Program
             $"maps are behind a person, and {world.Count - past.Maps.Count} are behind something else " +
             $"(water, or a door nobody can stand on)");
 
+        // And with SURF, both on its own and alongside the obstacle moves, because the
+        // two are not the same question and the difference between them is the answer
+        // to "what is water actually worth".
+        //
+        // Worth reading twice: until water became a wall, this walk crossed the sea. The
+        // 231 maps an earlier roadmap called walkable were walkable by strolling out
+        // onto the harbour at VERMILION, and the ordering that document argued for was
+        // argued from a number produced by walking on water.
+        Reach afloat = WorldWalker.Walk(world, startingMapId, surfing: true);
+        Reach both = WorldWalker.Walk(world, startingMapId, field, surfing: true);
+
+        Console.WriteLine(
+            $"  {afloat.Maps.Count} with SURF alone, {both.Maps.Count} with SURF and those moves together");
+
         if (reach.Beyond.Count > 0)
             Console.WriteLine($"    {reach.Beyond.Count} doors lead to maps this world file does not have");
     }
@@ -763,6 +777,13 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                             await DispatchAsync(
                                 world.UseItem(playerId, use.ItemId, use.Slot), playerId, cancellationToken)
                                 .ConfigureAwait(false);
+                            break;
+
+                        case SurfRequest when playerId != 0:
+                            await DispatchAsync(world.Surf(playerId), playerId, cancellationToken)
+                                .ConfigureAwait(false);
+
+                            if (world.LastSurf is { } afloat) Console.WriteLine($"~ #{playerId} {afloat}");
                             break;
 
                         case HealRequest when playerId != 0:
