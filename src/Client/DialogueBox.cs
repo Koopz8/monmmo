@@ -23,8 +23,26 @@ public sealed class DialogueBox
 
     private int _page;
 
-    public DialogueBox(IEnumerable<string> pages) =>
+    public DialogueBox(IEnumerable<string> pages, uint? resume = null)
+    {
         _pages = pages.Select(GameText.ToAscii).ToList();
+        Resume = resume;
+    }
+
+    /// <summary>
+    /// Where the script carries on once this has been answered, when it is a question.
+    /// <para>
+    /// Standard routine 5 asks; the run stops there because nothing in a save can answer
+    /// it. This is what the box hands back so the rest of the script can be run with the
+    /// answer in place.
+    /// </para>
+    /// </summary>
+    public uint? Resume { get; }
+
+    public bool IsQuestion => Resume is not null;
+
+    /// <summary>Which way the cursor is pointing. Yes first, as the games have it.</summary>
+    public bool Answer { get; private set; } = true;
 
     /// <summary>True once the last page has been read and dismissed.</summary>
     public bool IsFinished { get; private set; }
@@ -62,6 +80,26 @@ public sealed class DialogueBox
     public void Update()
     {
         if (IsFinished) return;
+
+        // The choice only appears on the last page, because that is the page the
+        // question is written on — everything before it is the run-up.
+        bool choosing = IsQuestion && _page >= _pages.Count - 1;
+
+        if (choosing)
+        {
+            if (Raylib.IsKeyPressed(KeyboardKey.Up) || Raylib.IsKeyPressed(KeyboardKey.Down)) Answer = !Answer;
+
+            // No is also a button, and a player who wants to decline should not have to
+            // find the cursor first.
+            if (Raylib.IsKeyPressed(KeyboardKey.X))
+            {
+                Answer = false;
+                IsFinished = true;
+
+                return;
+            }
+        }
+
         if (!Pressed()) return;
 
         _page++;
@@ -91,6 +129,24 @@ public sealed class DialogueBox
         // A quiet reminder rather than the blinking arrow the games use. The default
         // font is ASCII only, so it is words: without something here a player who has
         // read the page has no idea the box is waiting for them.
+        if (IsQuestion && _page >= _pages.Count - 1)
+        {
+            int box = 120;
+            int left = Margin + width - box - 16;
+            int top2 = top - 76;
+
+            Raylib.DrawRectangle(left, top2, box, 72, new Color(248, 248, 248, 255));
+            Raylib.DrawRectangleLines(left, top2, box, 72, new Color(64, 64, 88, 255));
+
+            Raylib.DrawText("YES", left + 40, top2 + 8, TextSize, new Color(32, 32, 40, 255));
+            Raylib.DrawText("NO", left + 40, top2 + 38, TextSize, new Color(32, 32, 40, 255));
+            Raylib.DrawText(">", left + 16, top2 + (Answer ? 8 : 38), TextSize, new Color(32, 32, 40, 255));
+
+            Raylib.DrawText("Z picks", Margin + width - 90, top + Height - 26, 16, new Color(120, 120, 140, 255));
+
+            return;
+        }
+
         string more = _page + 1 < _pages.Count ? $"more  ({_page + 1}/{_pages.Count})" : "Z to close";
         int hintWidth = Raylib.MeasureText(more, 16);
 

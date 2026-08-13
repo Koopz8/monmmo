@@ -180,7 +180,7 @@ public static class Program
 
         if (options.PlayerWalks) WritePlayerWalks(rom);
 
-        if (options.Gifts) WriteGiftMons(rom);
+        if (options.Gifts) { WriteGiftMons(rom); WriteStandardRoutines(rom); }
 
         if (options.Variable is { } variable) WriteVariable(rom, variable);
 
@@ -1061,6 +1061,72 @@ public static class Program
                     _ => "      ?",
                 });
             }
+        }
+    }
+
+    /// <summary>
+    /// Which standard routine is a question, derived rather than remembered.
+    /// <para>
+    /// The routines are called by number and the table of them is code-referenced, so
+    /// what any of them does has never been readable here. One of them is the yes/no box
+    /// — every "would you like…" in the game — and it announces itself by what comes
+    /// after it: a question is only worth asking if somebody then looks at the answer,
+    /// and the answer lands in 0x800D.
+    /// </para>
+    /// <para>
+    /// So: for each routine number, how often the very next command compares 0x800D.
+    /// Whichever number is the question does it nearly always; the ones that merely put
+    /// a page on the screen do it nearly never.
+    /// </para>
+    /// </summary>
+    private static void WriteStandardRoutines(Rom rom)
+    {
+        MapLibrary library = MapLibrary.Open(rom);
+
+        var calls = new Dictionary<int, int[]>();   // routine -> [total, asked about]
+
+        foreach (LoadedMap map in library.All())
+        {
+            IEnumerable<uint> scripts =
+            [
+                .. map.Objects.Where(o => o.HasScript).Select(o => o.ScriptAddress),
+                .. map.Triggers.Where(t => t.HasScript).Select(t => t.ScriptAddress),
+                .. map.Signs.Where(s => s.HasScript).Select(s => s.ScriptAddress),
+                .. map.OnEntry.Where(e => e.HasScript).Select(e => e.ScriptAddress),
+            ];
+
+            foreach (uint script in scripts.Distinct())
+            {
+                List<ScriptCommand> read = ScriptReader.ReadAll(rom, script);
+
+                for (int i = 0; i < read.Count; i++)
+                {
+                    if (read[i].Code is not (ScriptCommands.CallStandard or 0x08)) continue;
+                    if (read[i].Arguments.Length < 1) continue;
+
+                    int routine = read[i].Arguments[0];
+
+                    if (!calls.TryGetValue(routine, out int[]? tally)) calls[routine] = tally = new int[2];
+
+                    tally[0]++;
+
+                    // The very next command, and only that one. A compare three
+                    // instructions later is about something else.
+                    if (i + 1 < read.Count && read[i + 1].Code == 0x21 && read[i + 1].Word() == 0x800D)
+                        tally[1]++;
+                }
+            }
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("Standard routines, and whether anybody looks at the answer");
+        Console.WriteLine();
+
+        foreach ((int routine, int[] tally) in calls.OrderByDescending(e => e.Value[0]))
+        {
+            Console.WriteLine(
+                $"  routine {routine,3}: {tally[0],5} calls, {tally[1],5} followed at once by a compare on 0x800D " +
+                $"({(tally[0] == 0 ? 0 : (double)tally[1] / tally[0]):P0})");
         }
     }
 

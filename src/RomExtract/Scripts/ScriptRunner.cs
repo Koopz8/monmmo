@@ -95,6 +95,25 @@ public sealed record ScriptRun
     public (int Species, int Level)? GivesMon { get; init; }
 
     /// <summary>
+    /// Where to carry on from once the player has answered, when the run stopped at a
+    /// question.
+    /// <para>
+    /// Standard routine 5 is the yes/no box, derived rather than remembered: of the
+    /// game's 219 calls to it, 213 are followed immediately by a compare on 0x800D, and
+    /// every other routine with any volume is followed by one exactly never. A routine
+    /// whose answer is looked at is a routine that asked something.
+    /// </para>
+    /// <para>
+    /// A run cannot answer it. Everything else here can be decided from the save, but
+    /// this needs a person — so the run stops, hands back where it got to, and whoever
+    /// has the player carries on from there with 0x800D set. Running past it instead is
+    /// what took the "no" arm of every question in the game: 0x800D holds nought, and
+    /// nought is no.
+    /// </para>
+    /// </summary>
+    public uint? Question { get; init; }
+
+    /// <summary>
     /// The move that shifts this one out of the way, if it is something in the way.
     /// <para>
     /// Two hundred objects across forty-seven maps, and they announce themselves: the
@@ -172,6 +191,17 @@ public static class ScriptRunner
     /// </summary>
     private const int MaxCommands = 4096;
 
+    /// <summary>
+    /// The standard routine that asks a yes-or-no question.
+    /// <para>
+    /// Derived, not remembered. Of this game's 219 calls to routine 5, 213 are followed
+    /// immediately by a compare on 0x800D — and of the 1967 calls to routine 4, the 667
+    /// to routine 6 and the 303 to routine 2, exactly none are. A routine whose answer
+    /// somebody looks at is a routine that asked something.
+    /// </para>
+    /// </summary>
+    private const byte Question = 5;
+
     public static ScriptRun Run(Rom rom, uint address, ScriptState? state = null, int maxPages = 32)
     {
         ScriptState save = (state ?? new ScriptState()).Copy();
@@ -190,6 +220,7 @@ public static class ScriptRunner
         int givesCount = 0;
         (int Species, int Level)? givesMon = null;
         int? shifts = null;
+        uint? question = null;
         byte? stoppedAt = null;
         int? stoppedAtOffset = null;
 
@@ -369,6 +400,14 @@ public static class ScriptRunner
                         pending = 0;
                     }
 
+                    // Except for one of them. Routine 5 asks, and a run cannot answer —
+                    // so it stops here and says where to carry on from.
+                    if (command.Arguments.Length > 0 && command.Arguments[0] == Question)
+                    {
+                        question = Rom.BaseAddress + (uint)(command.Offset + 1 + command.Arguments.Length);
+                        stop = true;
+                    }
+
                     break;
 
                 case 0x46:                              // giveitem
@@ -474,6 +513,7 @@ public static class ScriptRunner
             GivesCount = givesCount,
             GivesMon = givesMon,
             ShiftedBy = shifts,
+            Question = question,
             FlagsSet = set,
             FlagsCleared = cleared,
             VariablesWritten = written,

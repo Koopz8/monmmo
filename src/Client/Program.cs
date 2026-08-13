@@ -426,8 +426,13 @@ public static class Program
 
                 if (talking.IsFinished)
                 {
-                    talking = null;
-                    network.SendTalkFinished();
+                    // A question is not the end of a script, it is the middle of one. The
+                    // run stopped where it was asked because nothing in a save can answer
+                    // it; now somebody has, so the rest of it runs with the answer in
+                    // place — which is how a starter gets taken rather than declined.
+                    talking = Answered(data, view, network, script, party, talking);
+
+                    if (talking is null) network.SendTalkFinished();
                 }
             }
             else if (DialogueBox.Pressed() && !player.IsStepping)
@@ -665,7 +670,7 @@ public static class Program
         if (run.FlagsSet.Count + run.FlagsCleared.Count + run.VariablesWritten.Count > 0)
             network.SendScriptRan(run);
 
-        DialogueBox? box = person.HasScript ? new DialogueBox(run.Pages) : null;
+        DialogueBox? box = person.HasScript ? new DialogueBox(run.Pages, run.Question) : null;
 
         Note(
             !person.HasScript
@@ -806,6 +811,35 @@ public static class Program
         var box = new DialogueBox(pages);
 
         return (box.IsEmpty ? talking : box, null);
+    }
+
+    /// <summary>
+    /// Carries a script on past the question it stopped at, with the answer written down.
+    /// <para>
+    /// 0x800D is where the games put it and where the script looks for it: every question
+    /// in this game is a <c>callstd 5</c> followed at once by a compare on that variable.
+    /// Running past it instead of stopping meant reading whatever happened to be there,
+    /// which on a fresh save is nought, and nought is no — so every offer in the game was
+    /// being declined before anybody saw it.
+    /// </para>
+    /// </summary>
+    private static DialogueBox? Answered(
+        GameData data, MapView view, NetworkClient network, ScriptState script,
+        IReadOnlyList<SavedMon> party, DialogueBox asked)
+    {
+        if (asked.Resume is not { } from) return null;
+
+        script.Write(0x800D, asked.Answer ? 1 : 0);
+
+        ScriptRun run = ScriptRunner.Run(data.Rom, from, script.WithParty(party.Select(m => m.Moves)));
+
+        Note($"answered {(asked.Answer ? "yes" : "no")}, carried on from 0x{from:X8}: {run.Pages.Count} pages");
+
+        Remember(run, script, network);
+
+        var box = new DialogueBox(run.Pages, run.Question);
+
+        return box.IsEmpty && !box.IsQuestion ? null : box;
     }
 
     /// <summary>

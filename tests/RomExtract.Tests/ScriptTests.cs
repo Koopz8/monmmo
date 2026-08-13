@@ -567,6 +567,56 @@ public class ScriptRunnerTests
     }
 
     [Fact]
+    public void AQuestionStopsTheRunRatherThanAnsweringItself()
+    {
+        // Standard routine 5 asks. Nothing in a save can answer it, so the run stops and
+        // says where to carry on from — and running past it instead reads whatever 0x800D
+        // happens to hold, which on a fresh save is nought, and nought is no. Every offer
+        // in this game was being declined before anybody saw it.
+        Rom rom = Image(
+            (Start,
+            [
+                ScriptCommands.LoadPointer, 0x00, .. At(SaysA),
+                ScriptCommands.CallStandard, 0x05,
+                0x16, .. Word(0x4055), .. Word(3),
+                ScriptCommands.End,
+            ]),
+            (SaysA, Speech('A')));
+
+        ScriptRun asked = ScriptRunner.Run(rom, Start);
+
+        Assert.NotNull(asked.Question);
+        Assert.Equal("AAAAAA", Assert.Single(asked.Pages));
+        Assert.Empty(asked.VariablesWritten);
+
+        // And carrying on from where it said finds the rest.
+        ScriptRun rest = ScriptRunner.Run(rom, asked.Question!.Value);
+
+        Assert.Equal(3, Assert.Single(rest.VariablesWritten).Value);
+    }
+
+    [Fact]
+    public void AnOrdinaryPageDoesNotStopTheRun()
+    {
+        // The control. Routine 4 is 1967 of this game's calls and not one of them is
+        // followed by a compare on 0x800D; stopping on those would stop most of the
+        // dialogue in the world.
+        Rom rom = Image(
+            (Start,
+            [
+                ScriptCommands.LoadPointer, 0x00, .. At(SaysA),
+                ScriptCommands.CallStandard, 0x04,
+                0x16, .. Word(0x4055), .. Word(3),
+                ScriptCommands.End,
+            ]),
+            (SaysA, Speech('A')));
+
+        ScriptRun run = ScriptRunner.Run(rom, Start);
+
+        Assert.Null(run.Question);
+        Assert.Equal(3, Assert.Single(run.VariablesWritten).Value);
+    }
+    [Fact]
     public void ACallComesBackAndCarriesOn()
     {
         // The difference between call and goto is the whole of a script's structure:
@@ -1144,4 +1194,5 @@ public class TheOpeningsPairTests
         Assert.Equal(0x4055, commands[2].Word());
         Assert.Equal(1, commands[2].Word(2));
     }
+
 }
