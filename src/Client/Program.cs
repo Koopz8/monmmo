@@ -28,6 +28,18 @@ public static class Program
     /// <summary>How long the black over a new map takes to clear.</summary>
     private const float FadeSeconds = 0.22f;
 
+    /// <summary>
+    /// The working variable a script means when it says "this one".
+    /// <para>
+    /// Scripts write it themselves 45 times in this cartridge, so it is an ordinary
+    /// variable and not a fact about the engine — but the ball on the professor's table
+    /// reads it without writing it, to remove itself the moment it is taken. A variable
+    /// read and never written inside the script language has to be filled from outside
+    /// it, and outside a person's own script the only thing to hand is the person.
+    /// </para>
+    /// </summary>
+    private const int TalkingTo = 0x800F;
+
     public static int Main(string[] args)
     {
         // The working directory, not the build output, so the file sits alongside the
@@ -109,6 +121,10 @@ public static class Program
         Raylib.InitWindow(WindowWidth, WindowHeight, $"MonMMO — {map.Name}");
         Raylib.SetTargetFPS(60);
 
+        // Who the cartridge's dialogue means when it leaves a gap for the player. The
+        // signed-in name, because that is the only name this game ever asked anybody for.
+        string signedInAs = settings.PlayerName;
+
         if (online)
         {
             var login = new LoginScreen(settings.Username);
@@ -120,9 +136,10 @@ public static class Program
             }
 
             ClientSettings.RememberUsername(directory, login.Username);
+            signedInAs = login.Username;
         }
 
-        Run(data, library, map, network, settings);
+        Run(data, library, map, network, settings, signedInAs);
 
         Raylib.CloseWindow();
         return 0;
@@ -167,7 +184,8 @@ public static class Program
     }
 
     private static void Run(
-        GameData data, MapLibrary library, LoadedMap first, NetworkClient network, ClientSettings settings)
+        GameData data, MapLibrary library, LoadedMap first, NetworkClient network, ClientSettings settings,
+        string signedInAs)
     {
         using var view = new MapView(library, first);
 
@@ -209,7 +227,16 @@ public static class Program
         // and has no idea what any of them mean.
         // Which set of words this character reads. Client-side because it decides which
         // arm of a fork gets read, and the server has never seen either arm.
-        var script = new ScriptState { IsGirl = settings.Girl };
+        // Who to put where the cartridge's dialogue leaves a gap. 0xFD marks a gap and
+        // the byte after it says what goes there — the player at 109 sites, the rival at
+        // 33, a species at 19. Filled here because the name of a species is on a
+        // cartridge and this is the only half of the project that has one.
+        var script = new ScriptState
+        {
+            IsGirl = settings.Girl,
+            PlayerName = signedInAs,
+            NameOfSpecies = species => data.SpeciesAt(species)?.Name ?? "",
+        };
 
         // The party, out of a fight. Held because the bag has to say who a potion would
         // go on, and until now nothing outside a battle had any reason to know.
@@ -414,7 +441,16 @@ public static class Program
 
                     // And only now what the scripts wrote. A scene's bookkeeping is about
                     // the world after it, and the professor's says he is indoors.
-                    foreach (ScriptRun ran in scene.Aftermath) Remember(ran, script, network);
+                    foreach (ScriptRun ran in scene.Aftermath)
+                    {
+                        Remember(ran, script, network);
+
+                        // After the walking, with the rest of the scene's bookkeeping.
+                        // The rival leaves the lab by walking out of it and then not
+                        // being there, and taking him off the map before he has walked
+                        // is how a scene ends up with nobody in it.
+                        TakeAway(ran, view, script, network);
+                    }
 
                     scene = null;
                     network.SendTalkFinished();
@@ -656,6 +692,14 @@ public static class Program
         // With the party attached, because two hundred objects in this game open by
         // asking who in it knows a particular move. Run without one, every cut tree in
         // the world reads as though the lead could fell it.
+        // Which object this conversation is about. The ball on the professor's table
+        // takes itself off the map with `0x53 0x800F` — the command that removes an
+        // object, reading a variable its own script never writes. Nothing inside the
+        // script language could have put a number there, and the only number a person's
+        // own script could mean is the person. Seeded here because this is the one place
+        // that knows it.
+        script.Write(TalkingTo, person.LocalId);
+
         ScriptRun run = person.HasScript
             ? ScriptRunner.Run(data.Rom, person.ScriptAddress, script.WithParty(party.Select(m => m.Moves)))
             : new ScriptRun();
@@ -806,6 +850,7 @@ public static class Program
             }
 
             Remember(run, script, network);
+            TakeAway(run, view, script, network);
             pages.AddRange(run.Pages);
         }
 
@@ -867,6 +912,7 @@ public static class Program
         }
 
         Remember(run, script, network);
+        TakeAway(run, view, script, network);
 
         var box = new DialogueBox(run.Pages, run.Question);
 
@@ -889,6 +935,43 @@ public static class Program
 
         if (run.FlagsSet.Count + run.FlagsCleared.Count + run.VariablesWritten.Count > 0)
             network.SendScriptRan(run);
+    }
+
+    /// <summary>
+    /// Takes the people a script removed off the map, on both sides.
+    /// <para>
+    /// Through the flag the object already carries rather than through a message of its
+    /// own, because that flag is the one thing about it both halves already agree on:
+    /// the server reads it out of the world file to decide who a player can see, and it
+    /// is saved, so somebody who takes a ball and signs out finds it still gone.
+    /// </para>
+    /// <para>
+    /// An object with no flag is left alone. Six hundred and five in this cartridge have
+    /// one and the rest do not, and inventing a number for those would be writing to a
+    /// flag space this project does not own.
+    /// </para>
+    /// </summary>
+    private static void TakeAway(ScriptRun run, MapView view, ScriptState script, NetworkClient network)
+    {
+        if (run.Hides.Count == 0) return;
+
+        var gone = new List<int>();
+
+        foreach (int localId in run.Hides)
+        {
+            if (view.Map.Objects.FirstOrDefault(o => o.LocalId == localId) is not { HiddenBy: > 0 } person)
+            {
+                Note($"script took object {localId} off the map, but it carries no flag to remember that by");
+                continue;
+            }
+
+            if (!script.Set(person.HiddenBy)) continue;
+
+            gone.Add(person.HiddenBy);
+            view.Remove(localId);
+        }
+
+        if (gone.Count > 0) network.SendFlagsSet(gone);
     }
 
     /// <summary>

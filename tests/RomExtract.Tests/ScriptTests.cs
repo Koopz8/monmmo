@@ -630,6 +630,95 @@ public class ScriptRunnerTests
         Assert.Equal(["AAAAAA", "BBBBBB"], ScriptRunner.Run(rom, Start).Pages);
     }
 
+    /// <summary>
+    /// Enough letters in front of the gap for the run to read as dialogue at all, then
+    /// the codes. Say refuses anything that does not look like words, rightly — a
+    /// pointer that is not text would otherwise be read to the end of the cartridge.
+    /// </summary>
+    private static byte[] Gap(params byte[] codes) =>
+    [
+        .. Enumerable.Repeat((byte)0xBB, Math.Max(6, codes.Length * 6)),
+        .. codes.SelectMany<byte, byte>(c => [0xFD, c]),
+        GameText.Terminator,
+    ];
+
+    [Fact]
+    public void TheGapsInASentenceAreFilledIn()
+    {
+        // 0xFD marks a gap and the byte after it says what goes there. Derived by
+        // counting sites and reading sentences: 0x01 is the player at 109 of them and
+        // 0x06 is the rival at 33, always as a speaker's label before a colon.
+        byte[] text = Gap(0x06, 0x01);
+
+        Rom rom = Image((Start, [ScriptCommands.Message, .. At(SaysA), ScriptCommands.End]), (SaysA, text));
+
+        ScriptRun run = ScriptRunner.Run(rom, Start, new ScriptState { PlayerName = "KOOP" });
+
+        Assert.Equal("AAAAAAAAAAAARIVALKOOP", Assert.Single(run.Pages));
+    }
+
+    [Fact]
+    public void AGapWithNothingBehindItIsLeftExactlyAsFound()
+    {
+        // The trades fill 0x03 through a special routine, which this project cannot
+        // follow. Substituting an empty string would turn "trade it for my {FD}{03}?"
+        // into "trade it for my ?" — a sentence that looks like the cartridge's own and
+        // is not, which is the one failure everything here is arranged against.
+        byte[] text = Gap(0x03);
+
+        Rom rom = Image((Start, [ScriptCommands.Message, .. At(SaysA), ScriptCommands.End]), (SaysA, text));
+
+        Assert.Equal("AAAAAA{FD}{03}", Assert.Single(ScriptRunner.Run(rom, Start).Pages));
+    }
+
+    [Fact]
+    public void NamingASpeciesFillsTheGapThatFollowsIt()
+    {
+        // 0x7D sits between a handover and a text box at every gift site. Its first
+        // argument picks the gap and the word after it is a species — or a variable
+        // holding one, as the starter is, because which ball was pressed is what decides
+        // it. The pairing is off by two and the ball script is what says so: it writes
+        // buffer 0 and then asks about {FD}{02}.
+        byte[] text = Gap(0x02);
+
+        Rom rom = Image(
+            (Start,
+            [
+                0x7D, 0x00, .. Word(4),
+                ScriptCommands.Message, .. At(SaysA),
+                ScriptCommands.End,
+            ]),
+            (SaysA, text));
+
+        ScriptRun run = ScriptRunner.Run(
+            rom, Start, new ScriptState { NameOfSpecies = species => species == 4 ? "CHARMANDER" : "?" });
+
+        Assert.Equal("AAAAAACHARMANDER", Assert.Single(run.Pages));
+    }
+
+    [Fact]
+    public void ASpeciesNamedFromAVariableIsResolvedFirst()
+    {
+        // The starters are one script. The species is not written down anywhere in it —
+        // 0x4002 holds whichever ball was pressed, and the gift and the sentence both
+        // read it.
+        byte[] text = Gap(0x02);
+
+        Rom rom = Image(
+            (Start,
+            [
+                0x7D, 0x00, .. Word(0x4002),
+                ScriptCommands.Message, .. At(SaysA),
+                ScriptCommands.End,
+            ]),
+            (SaysA, text));
+
+        var save = new ScriptState { NameOfSpecies = species => species == 7 ? "SQUIRTLE" : "?" };
+        save.Write(0x4002, 7);
+
+        Assert.Equal("AAAAAASQUIRTLE", Assert.Single(ScriptRunner.Run(rom, Start, save).Pages));
+    }
+
     [Fact]
     public void ACallIntoSomethingUnreadableComesBackToo()
     {

@@ -174,6 +174,29 @@ public sealed record ScriptRun
     /// </summary>
     public IReadOnlyList<uint> CodeCalled { get; init; } = [];
 
+    /// <summary>
+    /// Objects this run took off the map, by their number on it.
+    /// <para>
+    /// Command 0x53, derived from its arguments: 224 sites and every single one holds
+    /// either a number between 1 and 10 or a variable — never anything else. Numbers
+    /// that small, in that range, on a command that appears where things stop being
+    /// there, are object numbers. Its partner 0x55 has 34 sites and every one is a plain
+    /// number, which is the right proportion for a game that hides far more than it
+    /// reveals.
+    /// </para>
+    /// <para>
+    /// The clincher is a literal: the rival leaves the professor's lab through
+    /// <c>0x53 08</c>, and person 8 on that map is the rival.
+    /// </para>
+    /// <para>
+    /// The item balls are not in here and do not need to be. They vanish inside the
+    /// standard routine that hands the item over, which is code — and it is why 575
+    /// objects in this cartridge carry a flag that takes them off the map and only 7 of
+    /// them have a script that sets it.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<int> Hides { get; init; } = [];
+
     public bool IsEmpty =>
         Pages.Count == 0 && Stock.Count == 0 && TrainerId is null && GivesItem is null &&
         FlagsSet.Count == 0 && FlagsCleared.Count == 0 && VariablesWritten.Count == 0;
@@ -235,6 +258,12 @@ public static class ScriptRunner
         var written = new Dictionary<int, int>();
         var stack = new Stack<uint>();
         var codeCalled = new List<uint>();
+
+        // What a script has put where its dialogue leaves a gap. Two are ever written
+        // to in this cartridge and only the first by anything read so far; the array is
+        // sized for the codes the text actually uses.
+        var buffers = new string?[4];
+        var hides = new List<int>();
 
         int? trainerId = null;
         int? gives = null;
@@ -378,7 +407,7 @@ public static class ScriptRunner
                     break;
 
                 case ScriptCommands.Message:
-                    Say(rom, command.Pointer(), pages, beats, maxPages);
+                    Say(rom, command.Pointer(), pages, beats, maxPages, save, buffers);
                     pending = 0;
                     break;
 
@@ -434,7 +463,7 @@ public static class ScriptRunner
                     // pointer is the thing to say and the routine number is not read.
                     if (pending != 0)
                     {
-                        Say(rom, pending, pages, beats, maxPages);
+                        Say(rom, pending, pages, beats, maxPages, save, buffers);
                         pending = 0;
                     }
 
@@ -485,6 +514,43 @@ public static class ScriptRunner
 
                     break;
 
+                case 0x53:                              // takes an object off the map
+                    // A number or a variable holding one, exactly as givemon's species
+                    // is. The bound is the object list's own: a map's people are
+                    // numbered from one and the largest in this cartridge is well inside
+                    // this, so a variable that happens to hold a large number is a
+                    // variable this run has not understood rather than a person.
+                    {
+                        int named = command.Word();
+                        int who = named >= 0x4000 ? save.Read(named) : named;
+
+                        if (who is > 0 and < 64 && !hides.Contains(who)) hides.Add(who);
+                    }
+
+                    break;
+
+                case 0x7D:                              // names a species for the text
+                    // Adopted at width 3 last time on the evidence that it sits between
+                    // a handover and a text box at every gift site — "the game about to
+                    // say which one you got". This is that sentence finished: the first
+                    // argument picks which gap in the dialogue to fill and the word
+                    // after it is a species, or a variable holding one, exactly as
+                    // givemon's is.
+                    //
+                    // The pairing is off by two, and the cartridge says so rather than
+                    // any table: the ball script writes buffer 0 and the very next thing
+                    // it says is "Do you want to give a nickname to this {FD}{02}?".
+                    {
+                        int which = command.Arguments[0] + 2;
+                        int named = command.Word(1);
+                        int species = named >= 0x4000 ? save.Read(named) : named;
+
+                        if (which >= 0 && which < buffers.Length && species > 0)
+                            buffers[which] = save.NameOfSpecies?.Invoke(species);
+                    }
+
+                    break;
+
                 case 0x7C:                              // findmove
                     // The command every cut tree, boulder and heap of rubble opens with.
                     // It names a move and answers with the party slot that knows it, or
@@ -522,7 +588,8 @@ public static class ScriptRunner
 
                     // Every variant but one opens with the line they say on sight, and
                     // that line belongs to the fight rather than to what comes after it.
-                    if (command.Arguments[0] != 3) Say(rom, command.Pointer(5), pages, beats, maxPages);
+                    if (command.Arguments[0] != 3)
+                        Say(rom, command.Pointer(5), pages, beats, maxPages, save, buffers);
 
                     stop = true;
                     break;
@@ -546,6 +613,7 @@ public static class ScriptRunner
             Beats = beats,
             SpecialsCalled = specials,
             CodeCalled = codeCalled,
+            Hides = hides,
             Stock = stock,
             TrainerId = trainerId,
             GivesItem = gives,
@@ -561,7 +629,9 @@ public static class ScriptRunner
         };
     }
 
-    private static void Say(Rom rom, uint address, List<string> pages, List<SceneBeat> beats, int maxPages)
+    private static void Say(
+        Rom rom, uint address, List<string> pages, List<SceneBeat> beats, int maxPages,
+        ScriptState save, string?[] buffers)
     {
         if (address == 0) return;
         if (rom.ToOffsetOrNull(address) is not { } at) return;
@@ -570,13 +640,47 @@ public static class ScriptRunner
 
         if (!GameText.LooksLikeDialogue(bytes)) return;
 
-        foreach (string page in GameText.DecodeDialogue(bytes))
+        foreach (string raw in GameText.DecodeDialogue(bytes))
         {
             if (pages.Count >= maxPages) return;
+
+            string page = Fill(raw, save, buffers);
 
             pages.Add(page);
             beats.Add(new SceneBeat.Say(page));
         }
+    }
+
+    /// <summary>
+    /// Puts the player, the rival and whatever a script has named into the gaps the
+    /// cartridge's dialogue leaves.
+    /// <para>
+    /// Four codes, all derived by counting sites and reading sentences rather than by
+    /// remembering a table: 0x01 is the player at 109 sites, 0x06 is the rival at 33,
+    /// and 0x02 and 0x03 are species at 19 each. Only 0x02 is ever filled by anything
+    /// this project has read — 0x03 belongs to the in-game trades, which are a special
+    /// routine and so out of reach.
+    /// </para>
+    /// <para>
+    /// A code with nothing behind it is left exactly as it was found. Substituting an
+    /// empty string there would turn "Want to trade it for my {FD}{03}?" into "Want to
+    /// trade it for my ?" — a sentence that looks like the cartridge's own and is not,
+    /// which is the one failure this whole project is arranged against.
+    /// </para>
+    /// </summary>
+    private static string Fill(string page, ScriptState save, string?[] buffers)
+    {
+        if (!page.Contains("{FD}", StringComparison.Ordinal)) return page;
+
+        page = Replace(page, 0x01, save.PlayerName);
+        page = Replace(page, 0x06, save.RivalName);
+
+        for (int i = 0; i < buffers.Length; i++) page = Replace(page, i, buffers[i]);
+
+        return page;
+
+        static string Replace(string text, int code, string? with) =>
+            string.IsNullOrEmpty(with) ? text : text.Replace($"{{FD}}{{{code:X2}}}", with, StringComparison.Ordinal);
     }
 
     private static List<int> Mart(Rom rom, uint address, int maxItems = 64)

@@ -257,7 +257,11 @@ public static class ScriptCommands
         // A hundred and thirty-nine scripts stopped here, which was the largest single
         // stop on the cartridge once the fifth list was being read at all.
         [0xA2] = 8,
-        [0x53] = 2,     // givemoney-ish
+        // Two, and it is not about money. Every one of its 224 sites holds either a
+        // number between 1 and 10 or a variable, and nothing else — which is an object
+        // number. The rival walks out of the professor's lab through `53 08 00`, and
+        // person 8 on that map is the rival.
+        [0x53] = 2,     // takes an object off the map
         [0x54] = 2,
         [0x55] = 2,
         // Six bytes — three words — on ten sites across four maps, and the argument is

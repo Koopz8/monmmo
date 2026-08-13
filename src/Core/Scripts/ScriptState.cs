@@ -60,6 +60,41 @@ public sealed class ScriptState
     /// </summary>
     public bool IsGirl { get; init; }
 
+    /// <summary>
+    /// Who to put where the cartridge's dialogue leaves a gap.
+    /// <para>
+    /// 0xFD in a run of text is a marker meaning "something goes here" and the byte after
+    /// it says what. The four this cartridge uses were derived by counting every site and
+    /// reading the sentences: 0x01 appears 109 times and is always the person being
+    /// spoken to or acted upon — "{FD}{01} obtained HM01 from the CAPTAIN!" — and 0x06
+    /// appears 33 times and is always a speaker's label before a colon, in the mouth of
+    /// the boy who follows you around the game.
+    /// </para>
+    /// <para>
+    /// 0x02 and 0x03 are species, filled by a command rather than by the save, and only
+    /// 0x02 is ever filled by anything this project has read. See the runner.
+    /// </para>
+    /// <para>
+    /// The rival's name is a placeholder and is meant to look like one. The cartridge
+    /// offers a menu of names for him during an intro this game does not run, and that
+    /// menu has not been located — so writing a name here out of memory of the games
+    /// would be exactly the kind of guess this project does not make.
+    /// </para>
+    /// </summary>
+    public string PlayerName { get; set; } = "";
+
+    public string RivalName { get; set; } = "RIVAL";
+
+    /// <summary>
+    /// What to call a species, when there is anybody about who knows.
+    /// <para>
+    /// A delegate because the answer lives on a cartridge and this class is in the half
+    /// of the project that has never seen one. The server fills nothing in: its rules
+    /// file carries no names of any kind, deliberately, and it has no text to render.
+    /// </para>
+    /// </summary>
+    public Func<int, string>? NameOfSpecies { get; set; }
+
     private readonly HashSet<int> _flags;
     private readonly Dictionary<int, int> _variables;
     private readonly HashSet<int> _beaten;
@@ -166,7 +201,8 @@ public sealed class ScriptState
         else _variables[variable] = value;
     }
 
-    public ScriptState Copy() => new(_flags, _variables, _beaten, _partyMoves) { IsGirl = IsGirl };
+    public ScriptState Copy() =>
+        new ScriptState(_flags, _variables, _beaten, _partyMoves) { IsGirl = IsGirl }.As(this);
 
     /// <summary>
     /// The same state with a party attached, for the one run that needs one.
@@ -177,7 +213,24 @@ public sealed class ScriptState
     /// </para>
     /// </summary>
     public ScriptState WithParty(IEnumerable<IReadOnlyList<int>> partyMoves) =>
-        new(_flags, _variables, _beaten, partyMoves) { IsGirl = IsGirl };
+        new ScriptState(_flags, _variables, _beaten, partyMoves) { IsGirl = IsGirl }.As(this);
+
+    /// <summary>
+    /// Carries the naming across a derived state.
+    /// <para>
+    /// Every caller of <see cref="Copy"/> and <see cref="WithParty"/> wants it and not
+    /// one of them would remember to pass it, and a state that has forgotten who the
+    /// player is renders "{FD}{01}" in the middle of a sentence rather than failing.
+    /// </para>
+    /// </summary>
+    private ScriptState As(ScriptState other)
+    {
+        PlayerName = other.PlayerName;
+        RivalName = other.RivalName;
+        NameOfSpecies = other.NameOfSpecies;
+
+        return this;
+    }
 
     /// <summary>How two numbers compare, in the only three answers a script has.</summary>
     public static Comparison Compare(int left, int right) =>

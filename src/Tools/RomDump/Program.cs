@@ -144,6 +144,10 @@ public static class Program
 
         if (options.ScriptRuns) WriteRunHistogram(rom);
 
+        if (options.Substitutions) WriteSubstitutions(rom);
+
+        if (options.HideFlags) WriteHideFlags(rom);
+
         if (options.Specials) WriteSpecials(rom);
 
         if (options.Special is { } routine) WriteSpecial(rom, routine);
@@ -1458,6 +1462,7 @@ public static class Program
             Console.WriteLine(
                 $"  person {person.LocalId} at ({person.X}, {person.Y}), {away} away" +
                 (person.HasScript ? $", script 0x{person.ScriptAddress:X8}" : ", no script") +
+                (person.HiddenBy != 0 ? $", gone once flag 0x{person.HiddenBy:X4} is set" : "") +
                 (person.Talks ? ", talks" : ""));
         }
 
@@ -1657,6 +1662,269 @@ public static class Program
     /// and the second one is the one that matters.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Which substitution codes this cartridge's dialogue uses, how often, and in what
+    /// sentences.
+    /// <para>
+    /// Every line of the opening reads "{FD}{06}: I'll take this one, then!" because
+    /// 0xFD is a marker meaning "put something here" and the byte after it says what.
+    /// Which byte means which thing is not written down anywhere in the image, so it is
+    /// derived the only way anything is derived here: count every site, print the
+    /// sentences, and let the sentences say it. A code that only ever appears after
+    /// "received the" and before "from PROF. OAK" is a species name, and no amount of
+    /// remembering another game's table is worth as much as that one observation.
+    /// </para>
+    /// </summary>
+    /// <summary>
+    /// Whether the flag that takes an object off the map is the same number a script
+    /// sets, or an offset one.
+    /// <para>
+    /// The three balls on the professor's table are hidden by flags 0x0028, 0x0029 and
+    /// 0x002A, and the script that hands one over sets 0x0828. Both cannot be right, and
+    /// which is right is not something to remember — so both are counted. If the object
+    /// numbering and the script numbering are the same space, the raw values will be the
+    /// ones scripts set; if they are separated by a constant, the shifted values will be.
+    /// </para>
+    /// </summary>
+    private static void WriteHideFlags(Rom rom)
+    {
+        MapLibrary library = MapLibrary.Open(rom);
+
+        var hidden = new HashSet<int>();
+        var set = new HashSet<int>();
+
+        Console.WriteLine();
+        Console.WriteLine("Flags that take an object off the map");
+
+        foreach (LoadedMap map in library.All())
+        {
+            foreach (MapObject person in map.Objects)
+            {
+                if (person.HiddenBy != 0) hidden.Add(person.HiddenBy);
+            }
+
+            IEnumerable<uint> addresses =
+            [
+                .. map.Objects.Where(o => o.HasScript).Select(o => o.ScriptAddress),
+                .. map.OnEntry.Where(e => e.HasScript).Select(e => e.ScriptAddress),
+                .. map.Triggers.Where(t => t.HasScript).Select(t => t.ScriptAddress),
+            ];
+
+            foreach (uint address in addresses)
+            {
+                foreach (ScriptCommand command in ScriptReader.ReadAll(rom, address))
+                {
+                    if (command.Code is 0x29 or 0x2A) set.Add(command.Word());
+                }
+            }
+        }
+
+        Console.WriteLine($"  {hidden.Count} flags hide something, {set.Count} flags are set or cleared by a script");
+
+        // The other hypothesis, and the one the balls point at. If an object goes away
+        // because a command says so rather than because a flag moved, the command will
+        // be in the scripts of the things that go away — the item balls, every one of
+        // which is picked up and vanishes — and nowhere near the ones that do not.
+        var withCommand = new Dictionary<byte, (int Gifts, int Others)>();
+
+        foreach (LoadedMap map in library.All())
+        {
+            foreach (MapObject person in map.Objects.Where(o => o.HasScript))
+            {
+                ScriptRun run = ScriptRunner.Run(rom, person.ScriptAddress);
+                bool gift = run.GivesItem is not null;
+
+                foreach (byte code in ScriptReader
+                             .ReadAll(rom, person.ScriptAddress)
+                             .Select(c => c.Code)
+                             .Distinct())
+                {
+                    (int gifts, int others) = withCommand.GetValueOrDefault(code);
+
+                    withCommand[code] = gift ? (gifts + 1, others) : (gifts, others + 1);
+                }
+            }
+        }
+
+        // Sharper: pair every object that carries a hide flag with its own script, and
+        // ask what that script sets. A global count lets any script in the game explain
+        // any object's flag; this one does not.
+        var pairs = new Dictionary<int, int>();
+        int paired = 0;
+
+        foreach (LoadedMap map in library.All())
+        {
+            foreach (MapObject person in map.Objects.Where(o => o.HasScript && o.HiddenBy != 0))
+            {
+                paired++;
+
+                foreach (ScriptCommand command in ScriptReader.ReadAll(rom, person.ScriptAddress))
+                {
+                    if (command.Code is not (0x29 or 0x2A)) continue;
+
+                    int difference = command.Word() - person.HiddenBy;
+
+                    pairs[difference] = pairs.GetValueOrDefault(difference) + 1;
+                }
+            }
+        }
+
+        Console.WriteLine();
+        Console.WriteLine($"  {paired} objects carry a hide flag and have a script. What their own scripts set:");
+
+        foreach ((int difference, int count) in pairs.OrderByDescending(e => e.Value).Take(6))
+        {
+            Console.WriteLine(
+                $"    their own flag {(difference < 0 ? "-" : "+")} 0x{Math.Abs(difference):X4}  {count} times");
+        }
+
+        // 0x53 turns up in the ball script holding 0x800F, in the rival's holding
+        // 0x4004, and once holding a plain 8 — which is the rival's own object number,
+        // in the script where he walks out of the lab. If it means "this one is not here
+        // any more", its arguments will be object numbers and nothing else.
+        var arguments = new Dictionary<byte, List<int>>();
+
+        foreach (LoadedMap map in library.All())
+        {
+            IEnumerable<uint> addresses =
+            [
+                .. map.Objects.Where(o => o.HasScript).Select(o => o.ScriptAddress),
+                .. map.OnEntry.Where(e => e.HasScript).Select(e => e.ScriptAddress),
+                .. map.Triggers.Where(t => t.HasScript).Select(t => t.ScriptAddress),
+            ];
+
+            foreach (uint address in addresses)
+            {
+                foreach (ScriptCommand command in ScriptReader.ReadAll(rom, address))
+                {
+                    if (command.Code is not (0x53 or 0x54 or 0x55)) continue;
+
+                    (arguments.TryGetValue(command.Code, out List<int>? had)
+                        ? had
+                        : arguments[command.Code] = []).Add(command.Word());
+                }
+            }
+        }
+
+        // If 0x800F is ever written by a script, it is a working variable and 0x53's
+        // meaning depends on what put it there. If it is never written and only read,
+        // something outside the script language fills it — and the only thing outside
+        // the script language that a person's own script knows about is the person.
+        int writes = 0;
+
+        foreach (LoadedMap map in library.All())
+        {
+            IEnumerable<uint> all =
+            [
+                .. map.Objects.Where(o => o.HasScript).Select(o => o.ScriptAddress),
+                .. map.OnEntry.Where(e => e.HasScript).Select(e => e.ScriptAddress),
+                .. map.Triggers.Where(t => t.HasScript).Select(t => t.ScriptAddress),
+            ];
+
+            foreach (uint address in all)
+            {
+                foreach (ScriptCommand command in ScriptReader.ReadAll(rom, address))
+                {
+                    if (command.Code is (0x16 or 0x17 or 0x18 or 0x19 or 0x1A) && command.Word() == 0x800F) writes++;
+                }
+            }
+        }
+
+        Console.WriteLine();
+        Console.WriteLine($"  0x800F is written by a script {writes} times");
+
+        foreach ((byte code, List<int> words) in arguments.OrderBy(e => e.Key))
+        {
+            int objectLike = words.Count(w => w is > 0 and < 64);
+            int variables = words.Count(w => w >= 0x4000);
+
+            Console.WriteLine();
+            Console.WriteLine(
+                $"  0x{code:X2}  {words.Count} sites: {objectLike} look like an object number, " +
+                $"{variables} are a variable, {words.Count - objectLike - variables} are neither");
+
+            Console.WriteLine($"    values: {string.Join(", ", words.Distinct().OrderBy(w => w).Take(16))}");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("  Commands that appear in the scripts of things you pick up, and how exclusively");
+
+        foreach ((byte code, (int gifts, int others)) in withCommand
+                     .Where(e => e.Value.Gifts >= 20)
+                     .OrderByDescending(e => (double)e.Value.Gifts / (e.Value.Gifts + e.Value.Others))
+                     .Take(8))
+        {
+            Console.WriteLine(
+                $"    0x{code:X2}  in {gifts} pickup scripts and {others} others " +
+                $"({100.0 * gifts / (gifts + others):F0} % of its sites are pickups)");
+        }
+
+        // Every offset worth trying, reported side by side rather than one at a time.
+        // A survey that only tests the answer somebody expected cannot disagree with them.
+        foreach (int shift in (int[])[0, 0x100, 0x200, 0x400, 0x800, 0x1000])
+        {
+            int matched = hidden.Count(f => set.Contains(f + shift));
+
+            Console.WriteLine(
+                $"    +0x{shift:X4}  {matched} of {hidden.Count} hide-flags are touched by a script " +
+                $"({100.0 * matched / Math.Max(1, hidden.Count):F0} %)");
+        }
+    }
+
+    private static void WriteSubstitutions(Rom rom)
+    {
+        MapLibrary library = MapLibrary.Open(rom);
+        var counts = new Dictionary<byte, int>();
+        var examples = new Dictionary<byte, List<string>>();
+
+        Console.WriteLine();
+        Console.WriteLine("Substitution codes in dialogue");
+
+        foreach (LoadedMap map in library.All())
+        {
+            IEnumerable<uint> addresses =
+            [
+                .. map.Objects.Where(o => o.HasScript).Select(o => o.ScriptAddress),
+                .. map.OnEntry.Where(e => e.HasScript).Select(e => e.ScriptAddress),
+                .. map.Triggers.Where(t => t.HasScript).Select(t => t.ScriptAddress),
+            ];
+
+            foreach (uint address in addresses)
+            {
+                foreach (string page in ScriptRunner.Run(rom, address).Pages)
+                {
+                    for (int i = page.IndexOf("{FD}", StringComparison.Ordinal); i >= 0;
+                         i = page.IndexOf("{FD}", i + 1, StringComparison.Ordinal))
+                    {
+                        if (i + 8 > page.Length || page[i + 4] != '{') continue;
+                        if (!byte.TryParse(page.AsSpan(i + 5, 2), System.Globalization.NumberStyles.HexNumber,
+                                null, out byte which))
+                        {
+                            continue;
+                        }
+
+                        counts[which] = counts.GetValueOrDefault(which) + 1;
+
+                        List<string> seen = examples.TryGetValue(which, out List<string>? had)
+                            ? had
+                            : examples[which] = [];
+
+                        string flat = $"0x{address:X8}  {page.Replace("\n", " ")}";
+                        if (seen.Count < 4 && !seen.Any(e => e.EndsWith(page.Replace("\n", " "), StringComparison.Ordinal))) seen.Add(flat);
+                    }
+                }
+            }
+        }
+
+        foreach ((byte which, int count) in counts.OrderByDescending(e => e.Value))
+        {
+            Console.WriteLine();
+            Console.WriteLine($"  {{FD}}{{{which:X2}}}  {count} times");
+
+            foreach (string page in examples[which]) Console.WriteLine($"    \"{page}\"");
+        }
+    }
+
     private static void WriteRunHistogram(Rom rom)
     {
         Console.WriteLine();
@@ -3346,6 +3614,10 @@ public static class Program
         /// <summary>Count what stops a run, across every script on the cartridge.</summary>
         public bool ScriptRuns { get; private init; }
 
+        public bool Substitutions { get; private init; }
+
+        public bool HideFlags { get; private init; }
+
         /// <summary>Count which special routines get called, and on which maps.</summary>
         public bool Specials { get; private init; }
 
@@ -3414,6 +3686,8 @@ public static class Program
             string at = "";
             string scriptRun = "";
             bool scriptRuns = false;
+            bool substitutions = false;
+            bool hideFlags = false;
             bool specials = false;
             int? special = null;
             byte? answers = null;
@@ -3511,6 +3785,12 @@ public static class Program
                         break;
                     case "--script-runs":
                         scriptRuns = true;
+                        break;
+                    case "--substitutions":
+                        substitutions = true;
+                        break;
+                    case "--hide-flags":
+                        hideFlags = true;
                         break;
                     case "--specials-on":
                         specialsOn = Next(args, ref i, "--specials-on");
@@ -3649,6 +3929,8 @@ public static class Program
                 Probe = probe,
                 ScriptRun = scriptRun,
                 ScriptRuns = scriptRuns,
+                Substitutions = substitutions,
+                HideFlags = hideFlags,
                 Specials = specials,
                 Special = special,
                 Answers = answers,

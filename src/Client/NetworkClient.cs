@@ -149,6 +149,12 @@ public sealed class NetworkClient : IDisposable
             run.FlagsCleared,
             [.. run.VariablesWritten.Select(v => new SavedVariable(v.Key, v.Value))]));
 
+    /// <summary>
+    /// Flags with no script behind them: the ones that say somebody is not on the map
+    /// any more, which a script asks for by object number rather than by flag.
+    /// </summary>
+    public void SendFlagsSet(IReadOnlyList<int> flags) => Send(new ScriptRan(flags, [], []));
+
     public void SendBuy(int itemId, int count) => Send(new BuyRequest(itemId, count));
 
     public void SendSell(int itemId, int count) => Send(new SellRequest(itemId, count));
