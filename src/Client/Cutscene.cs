@@ -65,6 +65,12 @@ public sealed class Cutscene
 
     public bool IsFinished => _beat >= _beats.Count && Saying is null;
 
+    /// <summary>How far through, for the status bar. A scene that never ends looks like a
+    /// game that has frozen, and the beat it is stuck on is the whole of the answer.</summary>
+    public string Progress => $"scene beat {_beat + 1}/{_beats.Count} step {_step}" +
+        (Saying is null ? "" : " (talking)") +
+        (_beat < _beats.Count ? $" {_beats[_beat]}" : "");
+
     /// <summary>Everybody this scene moved, and where it left them.</summary>
     public IEnumerable<(int LocalId, GridPosition Square, Direction Facing)> Moved =>
         _walking.Select(w => (w.Key, w.Value.Square, w.Value.Facing));

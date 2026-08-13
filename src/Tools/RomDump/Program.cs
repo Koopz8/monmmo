@@ -1047,6 +1047,20 @@ public static class Program
 
             foreach (string page in run.Pages)
                 Console.WriteLine($"    \"{GameText.ToAscii(page).Replace('\n', ' ')}\"");
+
+            // The beats, in order, because a scene that never ends is a scene stuck on
+            // one of these and there is no way to know which by looking at the pages.
+            foreach (SceneBeat beat in run.Beats)
+            {
+                Console.WriteLine(beat switch
+                {
+                    SceneBeat.Say say => $"      say: \"{GameText.ToAscii(say.Page).Replace('\n', ' ')}\"",
+                    SceneBeat.Walk walk =>
+                        $"      walk {(walk.IsPlayer ? "the player" : $"person {walk.PersonId}")}: " +
+                        $"{walk.Steps.Count} steps [{string.Join(" ", walk.Steps.Select(b => $"{b:X2}"))}]",
+                    _ => "      ?",
+                });
+            }
         }
     }
 

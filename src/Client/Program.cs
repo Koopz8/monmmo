@@ -544,7 +544,8 @@ public static class Program
             }
 
             DrawStatus(
-                view.Map, player, network, others.Count, money, bag.Count, camera.Target, sprite, worstFrame);
+                view.Map, player, network, others.Count, money, bag.Count, camera.Target, sprite, worstFrame,
+                scene?.Progress);
             // A scene's line goes in the same box a conversation's does. There is only
             // one box on screen and only one thing being said at a time.
             (scene?.Saying ?? talking)?.Draw(WindowWidth, WindowHeight);
@@ -1160,7 +1161,7 @@ public static class Program
 
     private static void DrawStatus(
         LoadedMap map, WalkingCharacter player, NetworkClient network, int others, int money, int carrying,
-        System.Numerics.Vector2 camera, CharacterSprite? sprite, float worstFrame)
+        System.Numerics.Vector2 camera, CharacterSprite? sprite, float worstFrame, string? scene)
     {
         string connection = network.Failure is { } failure
             ? $"   offline: {failure}"
@@ -1192,6 +1193,12 @@ public static class Program
 
         Raylib.DrawText(second, 13, 37, 20, Color.Black);
         Raylib.DrawText(second, 12, 36, 20, Color.White);
+
+        if (scene is not null)
+        {
+            Raylib.DrawText(scene, 13, 133, 20, Color.Black);
+            Raylib.DrawText(scene, 12, 132, 20, Color.White);
+        }
 
         for (int i = 0; i < Talks.Count; i++)
         {
