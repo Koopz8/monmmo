@@ -232,7 +232,7 @@ public static class Program
     {
         List<MapObject> trainers = world.Maps
             .SelectMany(m => m.Objects)
-            .Where(o => o.IsTrainer)
+            .Where(o => o.IsTrainer || o.CanBeFought)
             .ToList();
 
         if (trainers.Count == 0)
@@ -244,9 +244,15 @@ public static class Program
         int named = trainers.Count(o => o.CanBeFought);
         int seeing = trainers.Count(o => o.SightRange > 0);
 
+        // Counted apart because they are two different things. A line of sight is how
+        // most fights start; a gym leader has none and is fought by being talked to, and
+        // for a while that difference was the difference between BROCK fighting and
+        // BROCK saying seven pages and going quiet.
+        int spoken = trainers.Count(o => o.CanBeFought && o.SightRange == 0);
+
         Console.WriteLine(
             $"  {trainers.Count} trainers on maps, {named} of them naming a trainer id, " +
-            $"{seeing} with a line of sight");
+            $"{seeing} with a line of sight, {spoken} fought by talking to them");
 
         if (rules is null) return;
 
@@ -656,6 +662,8 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                                 Console.WriteLine(
                                     $"= #{playerId} battle over: {finished.Winner?.ToString() ?? "draw"}" +
                                     $"{(finished.Caught ? ", caught it" : "")}, {finished.Party.Count} in party");
+
+                                if (world.LastPrize is { } prize) Console.WriteLine($"+ #{playerId} {prize}");
 
                                 // Written the moment a battle ends rather than on
                                 // disconnect, because disconnects are not always polite.

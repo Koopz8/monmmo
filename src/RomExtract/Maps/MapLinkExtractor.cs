@@ -145,11 +145,17 @@ public static class MapLinkExtractor
 
             bool hasScript = rom.IsRomAddress(script);
 
-            // Which trainer somebody is is not in this record — only that they are one.
-            // The id is an argument to a command inside their script.
-            int trainerId = trainerType != 0 && hasScript
-                ? Scripts.ScriptReader.FindTrainer(rom, script) ?? 0
-                : 0;
+            // Which trainer somebody is is not in this record — only whether they watch
+            // for one. The id is an argument to a command inside their script, and it is
+            // asked of everybody with a script rather than only of the marked ones.
+            //
+            // BROCK is why. A gym leader's record says trainer type nothing at all: he
+            // has no line of sight and never walks over, because a gym leader is fought
+            // by being talked to. Reading the id only for the marked ones left him with
+            // no trainer id, so the server had nobody to field — he said all seven pages
+            // of "my POKeMON are all the ROCK type!" and then the box closed and nothing
+            // happened. The mark means "watches"; the script means "fights".
+            int trainerId = hasScript ? Scripts.ScriptReader.FindTrainer(rom, script) ?? 0 : 0;
 
             // Shopkeepers are not marked in any way. The only thing that distinguishes
             // one is a pokemart command in their script, so every scriptable person has

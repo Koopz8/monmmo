@@ -357,6 +357,69 @@ public class TrainerBattleTests
     }
 
     [Fact]
+    public void BeatingAGymLeaderHandsOverWhatTheFightPaysOut()
+    {
+        // Eight fights in this cartridge pay out more than money, and every one is a
+        // gym. The TM is inside the script the trainerbattle runs on being won, which no
+        // conversation reaches — BROCK says he is PEWTER's gym leader before the fight
+        // and muses about trainers everywhere after it, and neither line mentions TM39.
+        //
+        // Talked to rather than walked past, because that is the only way a leader is
+        // fought: their record carries no sight range at all.
+        var leader = new MapObject(
+            1, 5, 4, 1, Direction.Down, 0, IsTrainer: false, TrainerId: TestRules.OneAlone, SightRange: 0)
+        {
+            WinsItemId = TestRules.PotionItem,
+            WinsCount = 1,
+        };
+
+        GameWorld world = World(leader);
+        ServerPlayer player = Join(world);
+
+        player.Square = new GridPosition(4, 2);
+        player.Facing = Direction.Up;
+
+        Assert.Single(world.StartTalking(player.Id, 1).Select(o => o.Message).OfType<BattleStarted>());
+
+        List<NetMessage> said = FightToTheEnd(world, player);
+
+        Assert.Equal(Side.Player, said.OfType<BattleFinished>().Single().Winner);
+        Assert.Equal(1, player.Bag.CountOf(TestRules.PotionItem));
+        Assert.Contains("for beating trainer", world.LastPrize ?? "");
+    }
+
+    [Fact]
+    public void AGymLeaderPaysOutOnce()
+    {
+        // The same ledger a ball on the ground uses. Without it, a client that could get
+        // the fight to end twice could get the TM twice.
+        var leader = new MapObject(
+            1, 5, 4, 1, Direction.Down, 0, IsTrainer: false, TrainerId: TestRules.OneAlone, SightRange: 0)
+        {
+            WinsItemId = TestRules.PotionItem,
+            WinsCount = 1,
+        };
+
+        GameWorld world = World(leader);
+        ServerPlayer player = Join(world);
+
+        player.Square = new GridPosition(4, 2);
+        player.Facing = Direction.Up;
+
+        world.StartTalking(player.Id, 1);
+        FightToTheEnd(world, player);
+
+        // Beaten once, so the second conversation is a conversation and not a fight.
+        player.DefeatedTrainers.Remove(TestRules.OneAlone);
+
+        world.StartTalking(player.Id, 1);
+        FightToTheEnd(world, player);
+
+        Assert.Equal(1, player.Bag.CountOf(TestRules.PotionItem));
+        Assert.Null(world.LastPrize);
+    }
+
+    [Fact]
     public void SomebodyWithNoLineOfSightSaysSoToo()
     {
         GameWorld world = World(Trainer(1, 4, 1, Direction.Down, TestRules.OneAlone, sight: 0));

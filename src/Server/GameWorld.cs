@@ -2732,7 +2732,11 @@ public sealed class GameWorld
                 // client is not told about is a trainer who goes on greeting the player
                 // who beat them.
                 if (winner == Side.Player && encounter.TrainerId is { } won)
+                {
                     send.Add(new Outgoing(new TrainerBeaten(won), OnlyTo: playerId));
+                    send.AddRange(PrizeFor(player, won));
+                }
+
                 return send;
             }
 
@@ -2753,6 +2757,46 @@ public sealed class GameWorld
             return send;
         }
     }
+
+    /// <summary>
+    /// What beating somebody hands over, if beating them hands anything over.
+    /// <para>
+    /// Eight fights in this cartridge pay out more than money, and every one of them is
+    /// a gym: the TM is inside the script the <c>trainerbattle</c> runs on being won,
+    /// which is not a place any conversation goes. Talking to BROCK before the fight
+    /// gets "I'm PEWTER's GYM LEADER" and after it gets "there are all kinds of
+    /// TRAINERS"; neither branch has ever mentioned TM39.
+    /// </para>
+    /// <para>
+    /// Decided here rather than taken from the client for the ordinary reason — the
+    /// client runs the same script and shows the same words, and if it could also fill
+    /// its own bag it could fill it with anything. Once per person, by the same ledger a
+    /// ball on the ground uses.
+    /// </para>
+    /// </summary>
+    private List<Outgoing> PrizeFor(ServerPlayer player, int trainerId)
+    {
+        // Cleared first, or the second fight of the evening reports the first one's TM.
+        LastPrize = null;
+
+        if (_rules is null) return [];
+        if (_world.Find(player.MapId) is not { } map) return [];
+
+        if (map.Objects.FirstOrDefault(o => o.TrainerId == trainerId && o.WinsItem) is not { } leader) return [];
+
+        if (!player.ItemsTaken.Add($"{player.MapId}:{leader.LocalId}:won")) return [];
+
+        int count = Math.Max(1, leader.WinsCount);
+
+        player.Bag.Add(leader.WinsItemId, count);
+
+        LastPrize = $"item {leader.WinsItemId} x{count} for beating trainer {trainerId}";
+
+        return [new Outgoing(new ItemFound(leader.WinsItemId, count, player.Bag.Entries), OnlyTo: player.Id)];
+    }
+
+    /// <summary>What the last fight paid out beyond money, if anything.</summary>
+    public string? LastPrize { get; private set; }
 
     /// <summary>
     /// Whether the fight as a whole is over, and who won it.

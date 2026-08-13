@@ -306,6 +306,27 @@ public sealed record MapObject(
     public bool GivesItem => GivesItemId != 0;
 
     /// <summary>
+    /// What beating this one pays out, beyond the prize money.
+    /// <para>
+    /// A separate field from <see cref="GivesItemId"/> because the moment is different,
+    /// and the moment is the whole of it: this is not handed over by talking. BROCK's
+    /// TM39 is inside the script his <c>trainerbattle</c> runs when it is won, which is
+    /// a place no conversation reaches — talk to him before the fight and he says he is
+    /// PEWTER's gym leader; talk to him after and he muses about trainers everywhere.
+    /// Neither branch mentions the TM.
+    /// </para>
+    /// <para>
+    /// Kept on this side of the split for the ordinary reason: a client that could say
+    /// "the script gave me a TM" could say it about anything.
+    /// </para>
+    /// </summary>
+    public int WinsItemId { get; init; }
+
+    public int WinsCount { get; init; }
+
+    public bool WinsItem => WinsItemId != 0;
+
+    /// <summary>
     /// The monster this one hands over, or zero. May be a variable id rather than a
     /// species, which is how the three balls on the professor's table are one script.
     /// <para>
@@ -400,6 +421,8 @@ public sealed record MapObject(
         Heals == other.Heals &&
         GivesItemId == other.GivesItemId &&
         GivesCount == other.GivesCount &&
+        WinsItemId == other.WinsItemId &&
+        WinsCount == other.WinsCount &&
         Talks == other.Talks &&
         ShiftedBy == other.ShiftedBy &&
         Stock.SequenceEqual(other.Stock);
@@ -423,7 +446,15 @@ public sealed record MapObject(
     public GridPosition Square => new(X, Y);
 
     /// <summary>True when this one has a party the server can actually field.</summary>
-    public bool CanBeFought => IsTrainer && TrainerId != 0;
+    /// <summary>
+    /// Whether there is a fight here at all.
+    /// <para>
+    /// The trainer id alone, and not the record's mark. The mark says somebody watches
+    /// the corridor and walks over; a gym leader does neither and still fights, which is
+    /// what "talk to the leader" means. Requiring both left BROCK unfightable.
+    /// </para>
+    /// </summary>
+    public bool CanBeFought => TrainerId != 0;
 
     /// <summary>
     /// Whether a player standing here is in this trainer's line of sight.

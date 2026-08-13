@@ -384,6 +384,27 @@ public static class ScriptRunner
                     written[command.Word()] = command.Word(2);
                     break;
 
+                case 0x19:                              // copyvar
+                    // One variable into another, and it had a width and no meaning here
+                    // for a long time — which made it a no-op, and a no-op that reads a
+                    // number is a zero nobody can see.
+                    //
+                    // BROCK is where that surfaced. Winning a gym runs a shared routine
+                    // that starts `copyvar 0x8000, 0x8008` and then compares 0x8000
+                    // against one through eight — the badge number, written into 0x8008
+                    // by the leader's own script two commands earlier. Unwritten, 0x8000
+                    // stayed nought, all eight comparisons failed, the routine ran off
+                    // its own end, and the badge, the TM and five flags were never
+                    // reached. The pair of them is also how the professor's rating gets
+                    // its two numbers.
+                    //
+                    // Which way round is the cartridge's own: the leader writes 0x8008
+                    // and the routine compares 0x8000, so the first word is where it
+                    // goes and the second is where it comes from.
+                    save.Write(command.Word(), save.Read(command.Word(2)));
+                    written[command.Word()] = save.Read(command.Word());
+                    break;
+
                 case 0x1A:                              // copyvarifnotzero
                     // The argument slots a standard routine reads from. Written here
                     // rather than treated as ordinary variables because that is what

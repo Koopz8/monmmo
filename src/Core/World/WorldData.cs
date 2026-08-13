@@ -160,7 +160,7 @@ public sealed class WorldData
     /// <summary>Identifies the format, so a wrong or stale file fails loudly.</summary>
     private static readonly byte[] Magic = "MONWORLD"u8.ToArray();
 
-    private const int Version = 20;
+    private const int Version = 21;
 
     private readonly Dictionary<string, MapData> _maps;
 
@@ -315,6 +315,12 @@ public sealed class WorldData
             writer.Write(entry.Heals);
             writer.Write(entry.GivesItemId);
             writer.Write(entry.GivesCount);
+
+            // What a fight pays out, which is a different question from what a person
+            // hands over on being talked to. A gym leader's TM is inside the script the
+            // fight runs on being won, and nothing reaches it by talking.
+            writer.Write(entry.WinsItemId);
+            writer.Write(entry.WinsCount);
             writer.Write(entry.TakesItemId);
             writer.Write(entry.TakesCount);
             writer.Write(entry.Talks);
@@ -511,6 +517,8 @@ public sealed class WorldData
                 Heals = reader.ReadBoolean(),
                 GivesItemId = reader.ReadInt32(),
                 GivesCount = reader.ReadInt32(),
+                WinsItemId = reader.ReadInt32(),
+                WinsCount = reader.ReadInt32(),
                 TakesItemId = reader.ReadInt32(),
                 TakesCount = reader.ReadInt32(),
                 Talks = reader.ReadBoolean(),

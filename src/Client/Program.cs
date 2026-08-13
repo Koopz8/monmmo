@@ -1348,11 +1348,23 @@ public static class Program
                     //
                     // This arrives only on a win, which is the only case that has an
                     // afterwards — a script does not carry on past a fight you lost.
-                    afterTheFight =
+                    uint? theirs =
                         view.Map.Triggers.FirstOrDefault(t => t.HasScript && t.Fields(beaten.TrainerId))
                             ?.ScriptAddress
                         ?? view.Map.Objects.FirstOrDefault(o => o.HasScript && o.TrainerId == beaten.TrainerId)
                             ?.ScriptAddress;
+
+                    // The fight's own afterwards, when it has one, and their script from
+                    // the top when it does not. Most trainers carry straight on from the
+                    // command that started the fight, and running them again with the
+                    // fight marked as done lands on exactly that line. A gym leader does
+                    // not: the badge, the TM and five flags are behind a pointer the
+                    // command carries, and BROCK spent a whole session saying "There are
+                    // all kinds of TRAINERS in this huge world of ours" and handing over
+                    // nothing because this ran his script from the top instead.
+                    afterTheFight = theirs is { } start
+                        ? ScriptReader.AfterTheFight(data.Rom, start, beaten.TrainerId) ?? start
+                        : null;
 
                     break;
 

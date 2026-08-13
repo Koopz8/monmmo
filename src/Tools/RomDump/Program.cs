@@ -154,6 +154,8 @@ public static class Program
 
         if (options.Gaps) WriteGaps(rom, options.GapLike);
 
+        if (options.FightKinds) WriteFightKinds(rom);
+
         if (!string.IsNullOrEmpty(options.Walkable)) WriteWalkable(rom, options.Walkable);
 
         if (options.Specials) WriteSpecials(rom);
@@ -1920,6 +1922,92 @@ public static class Program
             }
         }
 
+    }
+
+    /// <summary>
+    /// Every <c>trainerbattle</c> on the cartridge, by variant, and what its pointers are.
+    /// <para>
+    /// The command has a different length for each variant, and the longer ones carry a
+    /// pointer past the two everybody has. What that pointer holds is the question BROCK
+    /// raised: the badge, the TM and every flag a gym win sets live at the end of it, and
+    /// nothing here followed it.
+    /// </para>
+    /// <para>
+    /// Script or text is not asserted, it is measured — the same way every text pointer
+    /// in this project is checked, by decoding what is there and asking whether it reads
+    /// as speech.
+    /// </para>
+    /// </summary>
+    private static void WriteFightKinds(Rom rom)
+    {
+        MapLibrary library = MapLibrary.Open(rom);
+
+        var kinds = new Dictionary<byte, int>();
+        var speech = new Dictionary<byte, int>();
+        var code = new Dictionary<byte, int>();
+        var examples = new Dictionary<byte, List<string>>();
+
+        Console.WriteLine();
+        Console.WriteLine("Every trainerbattle, by variant");
+
+        foreach (LoadedMap map in library.All())
+        {
+            IEnumerable<uint> addresses =
+            [
+                .. map.Objects.Where(o => o.HasScript).Select(o => o.ScriptAddress),
+                .. map.OnEntry.Where(e => e.HasScript).Select(e => e.ScriptAddress),
+                .. map.Triggers.Where(t => t.HasScript).Select(t => t.ScriptAddress),
+            ];
+
+            foreach (uint address in addresses.Distinct())
+            {
+                foreach (ScriptCommand command in ScriptReader.ReadAll(rom, address))
+                {
+                    if (command.Code != ScriptCommands.TrainerBattle) continue;
+
+                    byte kind = command.Arguments[0];
+
+                    kinds[kind] = kinds.GetValueOrDefault(kind) + 1;
+
+                    // The pointer past the two every variant has.
+                    if (command.Arguments.Length < 17) continue;
+
+                    uint third = command.Pointer(13);
+
+                    if (rom.ToOffsetOrNull(third) is not { } at) continue;
+
+                    bool reads = GameText.LooksLikeDialogue(rom.Span[at..]);
+
+                    if (reads) speech[kind] = speech.GetValueOrDefault(kind) + 1;
+                    else code[kind] = code.GetValueOrDefault(kind) + 1;
+
+                    List<string> seen = examples.TryGetValue(kind, out List<string>? had) ? had : examples[kind] = [];
+
+                    if (seen.Count < 3)
+                    {
+                        seen.Add(
+                            $"0x{address:X8} trainer {command.Word(1)} -> 0x{third:X8}  " +
+                            (reads
+                                ? $"\"{string.Join(" ", ScriptReader.ReadDialogue(rom, third)).Replace("\n", " ")}\""
+                                : string.Join(
+                                    ", ",
+                                    ScriptReader.Read(rom, third).Take(4).Select(c => ScriptCommands.NameOf(c.Code)))));
+                    }
+                }
+            }
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("  kind   sites   third pointer reads as speech / as script");
+
+        foreach ((byte kind, int count) in kinds.OrderByDescending(e => e.Value))
+        {
+            Console.WriteLine(
+                $"  {kind,4}   {count,5}   {speech.GetValueOrDefault(kind),4} / {code.GetValueOrDefault(kind),4}" +
+                (ScriptCommands.TrainerBattleLength(kind) is { } length ? $"   ({length + 1} bytes)" : "   (unknown)"));
+
+            foreach (string one in examples.GetValueOrDefault(kind, [])) Console.WriteLine($"      {one}");
+        }
     }
 
     private static void WriteSightLines(Rom rom)
@@ -4152,6 +4240,9 @@ public static class Program
         /// <summary>Narrows the run-ups printed to lines containing this.</summary>
         public string GapLike { get; private init; } = "";
 
+        /// <summary>Every trainerbattle by variant, and what its extra pointer holds.</summary>
+        public bool FightKinds { get; private init; }
+
         /// <summary>Count which special routines get called, and on which maps.</summary>
         public bool Specials { get; private init; }
 
@@ -4227,6 +4318,7 @@ public static class Program
             bool sightLines = false;
             bool gaps = false;
             string gapLike = "";
+            bool fightKinds = false;
             bool specials = false;
             int? special = null;
             byte? answers = null;
@@ -4336,6 +4428,9 @@ public static class Program
                         break;
                     case "--walkable":
                         walkable = Next(args, ref i, "--walkable");
+                        break;
+                    case "--fight-kinds":
+                        fightKinds = true;
                         break;
                     case "--sight-lines":
                         sightLines = true;
@@ -4494,6 +4589,7 @@ public static class Program
                 SightLines = sightLines,
                 Gaps = gaps,
                 GapLike = gapLike,
+                FightKinds = fightKinds,
                 Specials = specials,
                 Special = special,
                 Answers = answers,

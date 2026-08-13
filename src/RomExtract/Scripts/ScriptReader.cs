@@ -994,6 +994,46 @@ public static class ScriptReader
     }
 
     /// <summary>
+    /// The script a fight runs when it is won, if it carries one.
+    /// <para>
+    /// BROCK is why this exists. Beating a gym leader used to run his script again from
+    /// the top with the fight marked as done, which reads the line he says on a later
+    /// visit — "There are all kinds of TRAINERS in this huge world of ours" — and never
+    /// touches the badge. The badge, the TM and five flags are at the end of a pointer
+    /// the <c>trainerbattle</c> command carries and nothing followed.
+    /// </para>
+    /// <para>
+    /// Which variants carry one is measured rather than remembered. Every variant has an
+    /// intro and a defeat pointer; the longer ones have a third, and across this
+    /// cartridge that third is script at 27 sites and text at 54 — so it is decided the
+    /// same way every text pointer in this project is decided, by decoding what is there
+    /// and asking whether it reads as speech. The eight that read as script and are
+    /// reached by talking are the eight gym leaders.
+    /// </para>
+    /// </summary>
+    public static uint? AfterTheFight(Rom rom, uint address, int trainerId)
+    {
+        foreach (ScriptCommand command in ReadAll(rom, address))
+        {
+            if (command.Code != ScriptCommands.TrainerBattle) continue;
+            if (command.Word(1) != trainerId) continue;
+
+            // The pointer past the two every variant has. Shorter variants have none,
+            // and a script that carries on inline after the fight is the ordinary case.
+            if (command.Arguments.Length < 17) continue;
+
+            uint after = command.Pointer(13);
+
+            if (rom.ToOffsetOrNull(after) is not { } at) continue;
+            if (GameText.LooksLikeDialogue(rom.Span[at..])) continue;
+
+            return after;
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Whether reading everything reachable from here ran into its own limit.
     /// <para>
     /// The instrument for the limit, kept because a cap nobody measures is a cap that

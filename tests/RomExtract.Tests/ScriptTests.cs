@@ -836,6 +836,81 @@ public class ScriptRunnerTests
     }
 
     [Fact]
+    public void AGymLeadersFightCarriesTheScriptToRunOnWinning()
+    {
+        // The longer variants of the command carry a pointer past the two every variant
+        // has, and at 27 sites on a real image that pointer is script while at 54 it is
+        // text. So it is decided by decoding what is there — the same way every text
+        // pointer in this project is decided — rather than by variant number.
+        //
+        // BROCK is the one that matters. His badge, his TM and five flags are all at the
+        // end of that pointer, and running his script again from the top instead lands
+        // on the line he says on a later visit and hands over nothing.
+        byte[] gym =
+        [
+            ScriptCommands.TrainerBattle, 0x01, .. Word(414), .. Word(0),
+            .. At(SaysA), .. At(SaysB), .. At(Elsewhere),
+            ScriptCommands.End,
+        ];
+
+        Rom rom = Image(
+            (Start, gym),
+            (SaysA, Speech('A')),
+            (SaysB, Speech('B')),
+            (Elsewhere, [0x29, .. Word(0x4B0), ScriptCommands.End]));
+
+        Assert.Equal(Elsewhere, ScriptReader.AfterTheFight(rom, Start, 414));
+
+        // And nothing for the trainer who is not there, because the pointer belongs to
+        // one fight rather than to the script.
+        Assert.Null(ScriptReader.AfterTheFight(rom, Start, 415));
+    }
+
+    [Fact]
+    public void APointerToWordsIsNotAScriptToRunAfterwards()
+    {
+        // Fifty-four sites carry text in that slot. Handing one of those to the client
+        // as a script would run a sentence as instructions, which is the same failure as
+        // a wrong argument width and looks just as much like a game.
+        byte[] fight =
+        [
+            ScriptCommands.TrainerBattle, 0x04, .. Word(41), .. Word(0),
+            .. At(SaysA), .. At(SaysB), .. At(SaysB),
+            ScriptCommands.End,
+        ];
+
+        Rom rom = Image((Start, fight), (SaysA, Speech('A')), (SaysB, Speech('B')));
+
+        Assert.Null(ScriptReader.AfterTheFight(rom, Start, 41));
+    }
+
+    [Fact]
+    public void OneVariableCanBeCopiedIntoAnother()
+    {
+        // Winning a gym runs a shared routine that opens `copyvar 0x8000, 0x8008` and
+        // then compares 0x8000 against one through eight — the badge number, which the
+        // leader's own script wrote into 0x8008 two commands earlier. With this command
+        // doing nothing, 0x8000 stayed nought, all eight comparisons failed, and the
+        // badge was never reached.
+        Rom rom = Image(
+            (Start,
+            [
+                0x16, .. Word(0x8008), .. Word(3),
+                0x19, .. Word(0x8000), .. Word(0x8008),
+                0x21, .. Word(0x8000), .. Word(3),
+                ScriptCommands.GotoIf, 0x01, .. At(Elsewhere),
+                ScriptCommands.End,
+            ]),
+            (Elsewhere, Says(SaysA)),
+            (SaysA, Speech('A')));
+
+        ScriptRun run = ScriptRunner.Run(rom, Start);
+
+        Assert.Equal("AAAAAA", Assert.Single(run.Pages));
+        Assert.Equal(3, run.VariablesWritten.Single(v => v.Key == 0x8000).Value);
+    }
+
+    [Fact]
     public void WhatAScriptWritesIsReportedRatherThanApplied()
     {
         // A run has to be repeatable: the client runs one to find out whether there is

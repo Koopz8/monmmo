@@ -138,9 +138,26 @@ public static class WorldExporter
                                 .FirstOrDefault(c => c.Code == 0x45)?.Word(2) ?? 1),
                         };
 
-                        return run.GivesItem is { } item
+                        read = run.GivesItem is { } item
                             ? read with { GivesItemId = item, GivesCount = Math.Max(1, run.GivesCount) }
                             : read;
+
+                        // And what winning a fight with them pays out, which is somewhere
+                        // else entirely: the script a trainerbattle runs on being won.
+                        // Nothing above reaches it — a run walks the path a fresh save
+                        // takes and that path stops at the fight, and reading the object's
+                        // own script does not follow a pointer the command carries rather
+                        // than a goto. BROCK's TM39 sat there unread.
+                        if (read.CanBeFought
+                            && Scripts.ScriptReader.AfterTheFight(rom, o.ScriptAddress, read.TrainerId) is { } won)
+                        {
+                            Scripts.ScriptRun after = Scripts.ScriptRunner.Run(rom, won);
+
+                            if (after.GivesItem is { } prize)
+                                read = read with { WinsItemId = prize, WinsCount = Math.Max(1, after.GivesCount) };
+                        }
+
+                        return read;
                     }),
                 ],
             };
@@ -176,6 +193,19 @@ public static class WorldExporter
 
         log?.Invoke($"  {warps} warps, {connections} edge connections");
         log?.Invoke($"  {objects} objects, {trainers} of them trainers");
+
+        // Two different questions, and conflating them cost BROCK his fight. The mark on
+        // the record says somebody watches a corridor and walks over; the id in the
+        // script says who they field. A gym leader has the second and not the first, so
+        // the ones counted apart here are the ones you have to talk to.
+        int fightable = maps.Sum(m => m.Objects.Count(o => o.CanBeFought));
+        int spoken = maps.Sum(m => m.Objects.Count(o => o.CanBeFought && !o.IsTrainer));
+
+        int prizes = maps.Sum(m => m.Objects.Count(o => o.WinsItem));
+
+        log?.Invoke(
+            $"  {fightable} of them will fight, {spoken} of those only when talked to, " +
+            $"{prizes} handing something over for winning");
 
         int lying = maps.Sum(m => m.Objects.Count(o => o.GivesItem));
 
