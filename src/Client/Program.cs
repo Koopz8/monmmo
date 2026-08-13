@@ -241,6 +241,10 @@ public static class Program
         // would have shown is a keyboard drawn in code.
         NamingScreen? naming = null;
 
+        // A line to type commands into. It sends text and shows text; the server decides
+        // everything, and refuses everybody it was not told to allow.
+        var console = new ConsoleBox();
+
         ShopScreen? shop = null;
         IReadOnlyList<BagEntry> bag = [];
         int money = 0;
@@ -350,7 +354,7 @@ public static class Program
                 network, others, player, view, data, trainers, items, script, carrying,
                 ref talking, ref battle, ref shop, ref bag, ref party, ref money,
                 ref correction, ref watching, ref exclaimFor, ref scene, ref arrived, ref fadingIn, ref holdInput,
-                ref afterTheFight);
+                ref afterTheFight, console);
 
             // A battle suspends the overworld entirely: the server is running it, and
             // walking on meanwhile would put the two sides out of step.
@@ -474,9 +478,26 @@ public static class Program
                 continue;
             }
 
+            // Ahead of the naming screen even, because it is the same kind of thing and
+            // opening one on top of the other would leave two fields taking the same
+            // letters.
+            console.Update();
+
+            if (console.TakePending() is { } typed) network.SendConsole(typed);
+
+            if (!console.IsOpen && naming is null && talking is null && battle is null &&
+                Raylib.IsKeyPressed(KeyboardKey.Slash))
+            {
+                console.Open();
+            }
+
             // Ahead of everything else, because a name is being typed and W, A, S and D
             // are letters before they are directions.
-            if (naming is not null)
+            if (console.IsOpen)
+            {
+                // Nothing else reads the keyboard while a command is being typed.
+            }
+            else if (naming is not null)
             {
                 naming.Update();
 
@@ -571,7 +592,8 @@ public static class Program
             // asked the question in. The first run of this had the rival's challenge
             // fire while the box was still open.
             Direction? input =
-                scene is null && talking is null && naming is null && watching is null && holdInput <= 0f
+                scene is null && talking is null && naming is null && !console.IsOpen &&
+                watching is null && holdInput <= 0f
                     ? ReadDirection()
                     : null;
 
@@ -684,6 +706,9 @@ public static class Program
             // still the last thing said, and a screen that clears it reads as a
             // different scene.
             naming?.Draw(WindowWidth, WindowHeight);
+
+            // Over everything, because it is the one thing on screen that is not the game.
+            console.Draw(WindowWidth, WindowHeight);
             Raylib.EndDrawing();
         }
 
@@ -1170,12 +1195,17 @@ public static class Program
         ref bool arrived,
         ref float fadingIn,
         ref float holdInput,
-        ref uint? afterTheFight)
+        ref uint? afterTheFight,
+        ConsoleBox console)
     {
         foreach (NetMessage message in network.Drain())
         {
             switch (message)
             {
+                case ConsoleReply reply:
+                    console.Said(reply.Text);
+                    break;
+
                 case Welcome welcome:
                     // The title was set from whatever client.json asked for; the server
                     // decides where you actually are, and it is usually somewhere else.
@@ -1187,6 +1217,11 @@ public static class Program
                     money = welcome.Money;
 
                     watching = null;
+
+                    // Cleared first. This arrives again whenever the console changes any
+                    // of it, and a flag that has been turned off has to actually go —
+                    // adding to what was already here would make "clear" mean nothing.
+                    script.Forget();
 
                     foreach (int flag in welcome.Flags) script.Set(flag);
                     foreach (SavedVariable variable in welcome.Variables) script.Write(variable.Id, variable.Value);

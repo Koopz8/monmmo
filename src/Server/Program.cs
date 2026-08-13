@@ -103,6 +103,14 @@ public static class Program
         // past the lab meant driving the whole opening again to get a party, and the
         // opening takes a quarter of an hour to play. It hands something over; it does
         // not decide anything a player could not have reached honestly.
+        // Who may run the console, named here and nowhere else. An empty set refuses
+        // everybody, which is what a server nobody has thought about should do.
+        foreach (string name in ArgumentValues(args, "--operator"))
+        {
+            game.Operators.Add(name);
+            Console.WriteLine($"  {name} may use the console");
+        }
+
         if (ArgumentValue(args, "--give") is { } giving)
         {
             if (Gift(giving) is not { } gift)
@@ -459,6 +467,13 @@ public static class Program
 
         return null;
     }
+
+    /// <summary>Every value given for a flag, because some may be given more than once.</summary>
+    private static IEnumerable<string> ArgumentValues(string[] args, string name)
+    {
+        for (int i = 0; i < args.Length - 1; i++)
+            if (args[i] == name) yield return args[i + 1];
+    }
 }
 
 /// <summary>Accepts connections and fans messages out to them.</summary>
@@ -718,6 +733,14 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                             await DispatchAsync(
                                 world.UseItem(playerId, use.ItemId, use.Slot), playerId, cancellationToken)
                                 .ConfigureAwait(false);
+                            break;
+
+                        case ConsoleCommand typed when playerId != 0:
+                            await DispatchAsync(
+                                    world.RunConsole(playerId, typed.Text, Now), playerId, cancellationToken)
+                                .ConfigureAwait(false);
+
+                            if (world.LastConsole is { } logged) Console.WriteLine($"$ {logged}");
                             break;
 
                         case NameMonRequest named when playerId != 0:

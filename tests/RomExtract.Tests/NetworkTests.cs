@@ -86,6 +86,8 @@ public class MessageChannelTests
             new ObstacleShifted(4, 15, 1),
             new TriggerFired(9, 12),
             new NameMonRequest(0, "SPROUT"),
+            new ConsoleCommand("/tp 3.1 25 20"),
+            new ConsoleReply("moved to VIRIDIAN CITY (25, 20)"),
             new ScenePlaced(2, 5, 6, Direction.Left),
             new SceneCast([3, 4]),
             new BuyRequest(4, 5),

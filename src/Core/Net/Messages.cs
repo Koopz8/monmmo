@@ -34,6 +34,8 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(WentInside), "wentinside")]
 [JsonDerivedType(typeof(TriggerFired), "triggered")]
 [JsonDerivedType(typeof(NameMonRequest), "namemon")]
+[JsonDerivedType(typeof(ConsoleCommand), "console")]
+[JsonDerivedType(typeof(ConsoleReply), "consolesaid")]
 [JsonDerivedType(typeof(ScenePlaced), "sceneplaced")]
 [JsonDerivedType(typeof(SceneCast), "scenecast")]
 [JsonDerivedType(typeof(BuyRequest), "buy")]
@@ -120,6 +122,20 @@ public sealed record TriggerFired(int X, int Y, int? TrainerId = null) : NetMess
 /// </para>
 /// </summary>
 public sealed record NameMonRequest(int Slot, string Name) : NetMessage;
+
+/// <summary>
+/// A line typed into the operator console.
+/// <para>
+/// Text, and nothing more. Every command is parsed and every effect decided on the
+/// server, because a console the client acted on would be a cheat menu with extra steps
+/// — and because the only account allowed to run one is named on the server's own
+/// command line.
+/// </para>
+/// </summary>
+public sealed record ConsoleCommand(string Text) : NetMessage;
+
+/// <summary>What the console said back. One line, for the client to show.</summary>
+public sealed record ConsoleReply(string Text) : NetMessage;
 
 /// <summary>
 /// Where a scene left somebody.

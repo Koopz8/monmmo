@@ -179,6 +179,13 @@ public sealed class ScriptState
 
     public bool MarkBeaten(int trainerId) => _beaten.Add(trainerId);
 
+    /// <summary>Throws the story away, which is what an operator's console is for.</summary>
+    public void Forget()
+    {
+        _flags.Clear();
+        _variables.Clear();
+    }
+
     public IReadOnlyCollection<int> Flags => _flags;
 
     public IReadOnlyDictionary<int, int> Variables => _variables;

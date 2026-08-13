@@ -1626,6 +1626,67 @@ public class TriggerTests
     }
 
     [Fact]
+    public void ThereIsNoConsoleForSomebodyWhoWasNotNamed()
+    {
+        // The account allowed to run one is named on the server's own command line,
+        // which is somewhere a player cannot reach. An empty set refuses everybody,
+        // which is what a server nobody has thought about should do.
+        (GameWorld world, ServerPlayer player) = AtADoorInto(HandsOverAPotion);
+
+        List<Outgoing> answered = world.RunConsole(player.Id, "/var 0x4055 9");
+
+        Assert.Contains("There is no console here", Said(answered));
+        Assert.Equal(0, player.Script.Read(0x4055));
+    }
+
+    [Fact]
+    public void AnOperatorCanWriteAVariable()
+    {
+        (GameWorld world, ServerPlayer player) = AtADoorInto(HandsOverAPotion);
+
+        world.Operators.Add(player.Name);
+
+        world.RunConsole(player.Id, "/var 0x4055 9");
+
+        Assert.Equal(9, player.Script.Read(0x4055));
+    }
+
+    [Fact]
+    public void HexadecimalIsWhatTheseNumbersAreWrittenIn()
+    {
+        // Every flag and variable in this cartridge is written 0x4055 — in its own
+        // scripts, in this project's comments and in every note anybody has taken. Making
+        // somebody convert that by hand is asking them to introduce a typo.
+        (GameWorld world, ServerPlayer player) = AtADoorInto(HandsOverAPotion);
+
+        world.Operators.Add(player.Name);
+
+        world.RunConsole(player.Id, "/var 0x4055 3");
+        Assert.Equal(3, player.Script.Read(0x4055));
+
+        world.RunConsole(player.Id, "/var 16469 4");
+        Assert.Equal(4, player.Script.Read(0x4055));
+    }
+
+    [Fact]
+    public void NobodyIsTeleportedIntoAWall()
+    {
+        // The console decides nothing the rest of the server would not allow. A square
+        // nobody can stand on is a square nobody is put on, operator or not.
+        (GameWorld world, ServerPlayer player) = AtADoorInto(HandsOverAPotion);
+
+        world.Operators.Add(player.Name);
+
+        string before = player.MapId;
+
+        Assert.Contains("not somewhere anybody can stand", Said(world.RunConsole(player.Id, "/tp 4.3 99 99")));
+        Assert.Equal(before, player.MapId);
+    }
+
+    private static string Said(IEnumerable<Outgoing> outgoing) =>
+        string.Join("\n", outgoing.Select(o => o.Message).OfType<ConsoleReply>().Select(r => r.Text));
+
+    [Fact]
     public void ArrivalScriptsSurviveTheWorldFileToo()
     {
         MapData map = new(Town, "PALLET TOWN", 8, 8, new byte[64])

@@ -197,6 +197,17 @@ public sealed class GameWorld
     private readonly BattleRng _objectRng = new(0x5EED);
 
 
+    /// <summary>
+    /// Who is allowed to run the console, by name.
+    /// <para>
+    /// Named on the server's own command line and nowhere else. A console is a way to
+    /// write anything into anybody's save, so the question of who may use one is not a
+    /// question a client gets to answer, and it is not a mode the server can be left in
+    /// by accident — an empty set is the default and it refuses everybody.
+    /// </para>
+    /// </summary>
+    public HashSet<string> Operators { get; } = new(StringComparer.OrdinalIgnoreCase);
+
     public GameWorld(
         WorldData world,
         string startingMapId,
@@ -368,19 +379,7 @@ public sealed class GameWorld
             // only state that is always recoverable.
             if (player.Party.Count > 0 && !CanFight(player)) HealParty(player);
 
-            var send = new List<Outgoing>
-            {
-                new(
-                    new Welcome(
-                        player.Id, mapId, square.X, square.Y, player.Facing,
-                        player.Money, player.Bag.Entries, player.Party)
-                    {
-                        Flags = [.. player.Script.Flags],
-                        Variables = [.. player.Script.Variables.Select(v => new SavedVariable(v.Key, v.Value))],
-                        Beaten = [.. player.DefeatedTrainers],
-                    },
-                    OnlyTo: player.Id),
-            };
+            var send = new List<Outgoing> { new(WelcomeFor(player), OnlyTo: player.Id) };
 
             // Tell the newcomer about everyone already on this map, before announcing them.
             foreach (ServerPlayer existing in _players.Values.Where(p => p.MapId == mapId))
@@ -2203,6 +2202,193 @@ public sealed class GameWorld
             new ItemFound(entry.GivesItemId, count, player.Bag.Entries),
             OnlyTo: player.Id)];
     }
+
+    /// <summary>
+    /// Runs a line typed into the operator console.
+    /// <para>
+    /// Everything a console does, it does here. The client sends text and nothing else,
+    /// because a console the client acted on would be a cheat menu with extra steps —
+    /// and because the account allowed to run one is named on this server's own command
+    /// line, which is a place a player cannot reach.
+    /// </para>
+    /// <para>
+    /// Refusing is silent to everyone but the person who asked. Somebody probing for a
+    /// console on a server that has none should learn nothing from the reply that they
+    /// could not have guessed, and the person who mistyped a command should be told
+    /// exactly what went wrong.
+    /// </para>
+    /// </summary>
+    public List<Outgoing> RunConsole(int playerId, string text, double nowSeconds = 0)
+    {
+        lock (_gate)
+        {
+            if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
+
+            if (!Operators.Contains(player.Name))
+            {
+                LastConsole = $"refused: {player.Name} is not an operator";
+                return [Said(player, "There is no console here.")];
+            }
+
+            ConsoleLine line = ConsoleLine.Of(text);
+
+            List<Outgoing> done = Run(player, line, nowSeconds);
+
+            LastConsole = $"{player.Name}: {text}";
+
+            return done;
+        }
+    }
+
+    /// <summary>
+    /// Everything about a player that the client keeps its own copy of.
+    /// <para>
+    /// Sent on arrival and again whenever the console changes any of it, because which
+    /// flags are set decides which of somebody's lines they are on — and a client
+    /// working from the flags it had a second ago reads the wrong one.
+    /// </para>
+    /// </summary>
+    private Welcome WelcomeFor(ServerPlayer player) =>
+        new(
+            player.Id, player.MapId, player.Square.X, player.Square.Y, player.Facing,
+            player.Money, player.Bag.Entries, player.Party)
+        {
+            Flags = [.. player.Script.Flags],
+            Variables = [.. player.Script.Variables.Select(v => new SavedVariable(v.Key, v.Value))],
+            Beaten = [.. player.DefeatedTrainers],
+        };
+
+    /// <summary>What the console was last asked to do, and by whom.</summary>
+    public string? LastConsole { get; private set; }
+
+    private Outgoing Said(ServerPlayer player, string line) =>
+        new(new ConsoleReply(line), OnlyTo: player.Id);
+
+    /// <summary>
+    /// The commands themselves.
+    /// <para>
+    /// Each one ends by sending the player their save again, because a console changes
+    /// things the client is holding its own copy of — which flags are set decides which
+    /// of somebody's lines they are on, and a client working from the flags it had a
+    /// second ago would read the wrong one.
+    /// </para>
+    /// </summary>
+    private List<Outgoing> Run(ServerPlayer player, ConsoleLine line, double nowSeconds)
+    {
+        switch (line.Verb)
+        {
+            case "" or "help":
+                return [.. ConsoleHelp.Lines.Select(l => Said(player, l))];
+
+            case "where":
+                return [Said(player, $"{player.MapId} {_world.Find(player.MapId)?.Name} at {player.Square}")];
+
+            case "tp":
+            {
+                if (_world.Find(line.Word(0)) is not { } target)
+                    return [Said(player, $"no map {line.Word(0)}")];
+
+                if (line.Number(1) is not { } x || line.Number(2) is not { } y)
+                    return [Said(player, "/tp <map> <x> <y>")];
+
+                var square = new GridPosition(x, y);
+
+                if (!GridFor(target.Id).IsWalkable(square))
+                    return [Said(player, $"{square} is not somewhere anybody can stand on {target.Id}")];
+
+                return
+                [
+                    .. Transfer(player, target.Id, square, player.Facing, nowSeconds),
+                    Said(player, $"{target.Name} at {square}"),
+                ];
+            }
+
+            case "give":
+            {
+                if (_battles is null) return [Said(player, "this server has no rules loaded")];
+                if (line.Number(0) is not { } species) return [Said(player, "/give <species> <level>")];
+
+                int level = line.Number(1) ?? 5;
+
+                if (player.Party.Count >= MaxPartySize) return [Said(player, "the party is full")];
+                if (_battles.Wild(species, level) is not { } made)
+                    return [Said(player, $"species {species} is not one this server can field")];
+
+                player.Party.Add(BattleFactory.Save(made));
+
+                return [Said(player, $"species {species} at level {level}"), .. Resend(player)];
+            }
+
+            case "item":
+            {
+                if (line.Number(0) is not { } itemId) return [Said(player, "/item <id> [count]")];
+
+                int count = Math.Max(1, line.Number(1) ?? 1);
+
+                player.Bag.Add(itemId, count);
+
+                return [Said(player, $"item {itemId} x{count}"), .. Resend(player)];
+            }
+
+            case "flag":
+            {
+                if (line.Number(0) is not { } flag) return [Said(player, "/flag <id> [on|off]")];
+
+                bool on = !string.Equals(line.Word(1), "off", StringComparison.OrdinalIgnoreCase);
+
+                if (on) player.Script.Set(flag);
+                else player.Script.Clear(flag);
+
+                return [Said(player, $"flag 0x{flag:X4} is {(on ? "set" : "clear")}"), .. Resend(player)];
+            }
+
+            case "var":
+            {
+                if (line.Number(0) is not { } id || line.Number(1) is not { } value)
+                    return [Said(player, "/var <id> <value>")];
+
+                player.Script.Write(id, value);
+
+                return [Said(player, $"0x{id:X4} holds {value}"), .. Resend(player)];
+            }
+
+            case "read":
+            {
+                if (line.Number(0) is not { } id) return [Said(player, "/read <id>")];
+
+                return [Said(player, $"0x{id:X4} holds {player.Script.Read(id)}")];
+            }
+
+            case "heal":
+                HealParty(player);
+                return [Said(player, $"{player.Party.Count} back on their feet"), .. Resend(player)];
+
+            case "money":
+            {
+                if (line.Number(0) is not { } amount) return [Said(player, "/money <amount>")];
+
+                player.Money = Math.Clamp(amount, 0, MaxMoney);
+
+                return [Said(player, $"money is {player.Money}"), .. Resend(player)];
+            }
+
+            case "forget":
+                player.Script.Forget();
+                return [Said(player, "every flag and variable, gone"), .. Resend(player)];
+
+            default:
+                return [Said(player, $"no command \"{line.Verb}\" — try /help")];
+        }
+    }
+
+    /// <summary>
+    /// Sends a player their own save again, which is what makes a console change stick
+    /// on the side that has to read it.
+    /// </summary>
+    private List<Outgoing> Resend(ServerPlayer player) =>
+    [
+        new Outgoing(WelcomeFor(player), OnlyTo: player.Id),
+    ];
 
     /// <summary>What the map somebody last arrived on had to say for itself.</summary>
     public string? LastArrivalScript { get; private set; }
