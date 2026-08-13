@@ -180,6 +180,26 @@ public sealed record MapSign(int X, int Y, int Kind, uint ScriptAddress)
 /// </summary>
 public sealed record MapEntryScript(int Variable, int Value, uint ScriptAddress)
 {
+    /// <summary>
+    /// What arriving here hands over, if it hands anything over.
+    /// <para>
+    /// The shop in Viridian is the one that needed this. Walking in runs an arrival
+    /// script, the clerk asks whether you know the professor, and the script hands over
+    /// the parcel the rest of the story turns on — and nobody is being talked to, so
+    /// none of the machinery that gives a person's gift applies.
+    /// </para>
+    /// <para>
+    /// Read at export by running the script, the same way a person's gift is. The world
+    /// file is the server's only knowledge of the cartridge, so anything it has to hand
+    /// over has to be in there.
+    /// </para>
+    /// </summary>
+    public int GivesItemId { get; init; }
+
+    public int GivesCount { get; init; }
+
+    public bool Gives => GivesItemId != 0;
+
     public bool HasScript => ScriptAddress != 0;
 
     public bool Armed(int held) => held == Value;

@@ -81,6 +81,23 @@ public static class WorldExporter
         {
             maps[i] = maps[i] with
             {
+                // And what arriving somewhere hands over, which nobody is talked to for.
+                // Walking into the shop in Viridian is what hands over the parcel the
+                // rest of the story turns on, and there is no person in that exchange
+                // for the usual machinery to hang off.
+                OnEntry =
+                [
+                    .. maps[i].OnEntry.Select(e =>
+                    {
+                        if (!e.HasScript) return e;
+
+                        Scripts.ScriptRun arriving = Scripts.ScriptRunner.Run(rom, e.ScriptAddress);
+
+                        return arriving.GivesItem is { } given
+                            ? e with { GivesItemId = given, GivesCount = Math.Max(1, arriving.GivesCount) }
+                            : e;
+                    }),
+                ],
                 Objects =
                 [
                     .. maps[i].Objects.Select(o =>

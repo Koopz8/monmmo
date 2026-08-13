@@ -477,6 +477,7 @@ public static class ScriptRunner
 
                     break;
 
+                case 0x44:                              // hands an item over, as 0x46 does
                 case 0x46:                              // giveitem
                     // The command itself, now that its width is known. What follows it
                     // is always `compare 0x800D, 0` and a branch, and the arm that
@@ -487,6 +488,15 @@ public static class ScriptRunner
                     // whether something worked was hearing no, and four people in this
                     // game were reported as saying the bag-full line as though it were
                     // their only one.
+                    // Two commands, not one, and the second was found by walking into
+                    // the Viridian shop and being handed nothing. Both carry a word and
+                    // a word, and both are followed within a few commands by their own
+                    // first word being written into 0x8000 for the "obtained" fanfare:
+                    // 39 of 0x44's 42 sites and 27 of 0x46's 32. Whatever separates
+                    // them, it is not whether they hand something over — and 0x44 is the
+                    // commoner of the two, so ignoring it lost forty-two handovers
+                    // including the parcel the whole story turns on.
+                    //
                     // Item zero is not an item. A script that reaches this with nothing
                     // loaded is doing something else with the command, and reporting a
                     // handover of nothing would put a person who says "Mew!" on the list

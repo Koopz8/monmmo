@@ -2018,6 +2018,54 @@ public static class Program
             Console.WriteLine($"    values: {string.Join(", ", words.Distinct().OrderBy(w => w).Take(16))}");
         }
 
+        // 0x44 and 0x46 both carry a word and a word, and 0x46 was adopted as the one
+        // that hands an item over. If 0x44 is the same thing, its first word will be an
+        // item the script then names in 0x8000 for the "obtained" fanfare — the two are
+        // written a few commands apart at every real handover.
+        foreach (byte give in (byte[])[0x44, 0x46])
+        {
+            int sites = 0;
+            int announced = 0;
+
+            foreach (LoadedMap map in library.All())
+            {
+                IEnumerable<uint> all =
+                [
+                    .. map.Objects.Where(o => o.HasScript).Select(o => o.ScriptAddress),
+                    .. map.OnEntry.Where(e => e.HasScript).Select(e => e.ScriptAddress),
+                    .. map.Triggers.Where(t => t.HasScript).Select(t => t.ScriptAddress),
+                ];
+
+                foreach (uint address in all)
+                {
+                    List<ScriptCommand> read = ScriptReader.ReadAll(rom, address);
+
+                    for (int i = 0; i < read.Count; i++)
+                    {
+                        if (read[i].Code != give) continue;
+
+                        sites++;
+
+                        int item = read[i].Word();
+
+                        for (int j = i + 1; j < Math.Min(read.Count, i + 8); j++)
+                        {
+                            if (read[j].Code == 0x1A && read[j].Word() == 0x8000 && read[j].Word(2) == item)
+                            {
+                                announced++;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            Console.WriteLine();
+            Console.WriteLine(
+                $"  0x{give:X2}  {sites} sites, {announced} of them name their own first word " +
+                $"into 0x8000 within a few commands");
+        }
+
         Console.WriteLine();
         Console.WriteLine("  Commands that appear in the scripts of things you pick up, and how exclusively");
 

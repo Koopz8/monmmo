@@ -160,7 +160,7 @@ public sealed class WorldData
     /// <summary>Identifies the format, so a wrong or stale file fails loudly.</summary>
     private static readonly byte[] Magic = "MONWORLD"u8.ToArray();
 
-    private const int Version = 18;
+    private const int Version = 19;
 
     private readonly Dictionary<string, MapData> _maps;
 
@@ -357,6 +357,11 @@ public sealed class WorldData
         {
             writer.Write(entry.Variable);
             writer.Write(entry.Value);
+
+            // No script address, as ever — but what the script hands over is a number
+            // and travels, because the server is the only thing that may hand it over.
+            writer.Write(entry.GivesItemId);
+            writer.Write(entry.GivesCount);
         }
     }
 
@@ -370,7 +375,13 @@ public sealed class WorldData
         var entries = new List<MapEntryScript>(count);
 
         for (int i = 0; i < count; i++)
-            entries.Add(new MapEntryScript(reader.ReadInt32(), reader.ReadInt32(), ScriptAddress: 0));
+        {
+            entries.Add(new MapEntryScript(reader.ReadInt32(), reader.ReadInt32(), ScriptAddress: 0)
+            {
+                GivesItemId = reader.ReadInt32(),
+                GivesCount = reader.ReadInt32(),
+            });
+        }
 
         return entries;
     }

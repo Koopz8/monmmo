@@ -2134,6 +2134,7 @@ public sealed class GameWorld
         send.Add(new Outgoing(player.ToAppeared(), Except: player.Id, OnMap: mapId));
 
         OpenWindowForArrival(player, nowSeconds);
+        send.AddRange(HandOverOnArrival(player));
 
         return send;
     }
@@ -2162,6 +2163,45 @@ public sealed class GameWorld
         player.SceneOn = player.MapId;
 
         LastArrivalScript = $"arriving runs something here: 0x{entry.Variable:X4} holds {entry.Value}";
+    }
+
+    /// <summary>
+    /// Gives the player whatever arriving somewhere hands over.
+    /// <para>
+    /// Walking into the shop in Viridian is what hands over the parcel the rest of the
+    /// story turns on, and nobody is talked to in that exchange — so none of the
+    /// machinery that gives a person's gift applies to it.
+    /// </para>
+    /// <para>
+    /// Decided here rather than asked for, exactly as the scene window above is. The
+    /// server has the condition in its own world file and the variable in its own copy of
+    /// the save, and now it has what the script hands over too — so nothing about this is
+    /// taken on trust and no message could disagree with it.
+    /// </para>
+    /// <para>
+    /// Once. The same set that stops a second starter stops a second parcel: a doorway
+    /// somebody walks back through is a doorway whose script is armed exactly as it was
+    /// the first time, and the variable that disarms it is not written until the scene
+    /// the client is still playing gets to the end of itself.
+    /// </para>
+    /// </summary>
+    private List<Outgoing> HandOverOnArrival(ServerPlayer player)
+    {
+        if (_world.Find(player.MapId)?.EntryFor(player.Script.Read) is not { Gives: true } entry) return [];
+        // Keyed by the map and the condition rather than by the item, because two
+        // doorways in the world could reasonably hand over the same thing and neither
+        // should spend the other.
+        if (!player.ItemsTaken.Add($"{player.MapId}:entry:{entry.Variable:X4}={entry.Value}")) return [];
+
+        int count = Math.Max(1, entry.GivesCount);
+
+        player.Bag.Add(entry.GivesItemId, count);
+
+        LastGift = $"item {entry.GivesItemId} x{count} for arriving";
+
+        return [new Outgoing(
+            new ItemFound(entry.GivesItemId, count, player.Bag.Entries),
+            OnlyTo: player.Id)];
     }
 
     /// <summary>What the map somebody last arrived on had to say for itself.</summary>

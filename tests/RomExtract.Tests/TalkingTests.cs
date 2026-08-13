@@ -1570,6 +1570,61 @@ public class TriggerTests
         Assert.Contains("holding 1 of 1", world.LastSceneCast);
     }
 
+    /// <summary>Two maps and a door between them, which is what an arrival needs.</summary>
+    private static (GameWorld World, ServerPlayer Player) AtADoorInto(MapEntryScript arrival)
+    {
+        MapData outside = new(Town, "VIRIDIAN CITY", 8, 8, new byte[64])
+        {
+            Warps = [new Warp(3, 4, 0, Elsewhere)],
+        };
+
+        MapData inside = new(Elsewhere, "VIRIDIAN MART", 8, 8, new byte[64])
+        {
+            Warps = [new Warp(1, 1, 0, Town)],
+            OnEntry = [arrival],
+        };
+
+        var world = new GameWorld(new WorldData([outside, inside]), Town, TestRules.All);
+
+        (ServerPlayer player, _) = world.Join(1, "Koop", SavedCharacter.Fresh(Town, 3, 3));
+
+        return (world, player);
+    }
+
+    private static MapEntryScript HandsOverAPotion =>
+        new(Variable, 0, ScriptAddress: 0) { GivesItemId = TestRules.PotionItem, GivesCount = 1 };
+
+    [Fact]
+    public void ArrivingSomewhereCanHandSomethingOver()
+    {
+        // Walking into the shop in Viridian is what hands over the parcel the rest of
+        // the story turns on, and nobody is talked to in that exchange — so none of the
+        // machinery that gives a person's gift applies to it.
+        (GameWorld world, ServerPlayer player) = AtADoorInto(HandsOverAPotion);
+
+        List<Outgoing> walkedIn = world.Move(player.Id, Direction.Down, 10);
+
+        Assert.Contains(walkedIn.Select(o => o.Message), m => m is ItemFound);
+        Assert.Equal(1, player.Bag.CountOf(TestRules.PotionItem));
+    }
+
+    [Fact]
+    public void WalkingBackInDoesNotHandItOverAgain()
+    {
+        // A doorway somebody walks back through is armed exactly as it was the first
+        // time — the variable that disarms it is not written until the scene the client
+        // is still playing gets to the end of itself.
+        (GameWorld world, ServerPlayer player) = AtADoorInto(HandsOverAPotion);
+
+        world.Move(player.Id, Direction.Down, 10);
+
+        // Out through the door on the other side, and back in again.
+        world.Move(player.Id, Direction.Up, 20);
+        world.Move(player.Id, Direction.Down, 30);
+
+        Assert.Equal(1, player.Bag.CountOf(TestRules.PotionItem));
+    }
+
     [Fact]
     public void ArrivalScriptsSurviveTheWorldFileToo()
     {
