@@ -424,15 +424,15 @@ public static class Program
             {
                 talking.Update();
 
-                if (talking.IsFinished)
+                if (talking is { IsFinished: true } answered)
                 {
                     // A question is not the end of a script, it is the middle of one. The
                     // run stopped where it was asked because nothing in a save can answer
                     // it; now somebody has, so the rest of it runs with the answer in
                     // place — which is how a starter gets taken rather than declined.
-                    talking = Answered(data, view, network, script, party, talking);
+                    (talking, scene) = Answered(data, view, network, script, party, answered);
 
-                    if (talking is null) network.SendTalkFinished();
+                    if (talking is null && scene is null) network.SendTalkFinished();
                 }
             }
             else if (DialogueBox.Pressed() && !player.IsStepping)
@@ -823,23 +823,38 @@ public static class Program
     /// being declined before anybody saw it.
     /// </para>
     /// </summary>
-    private static DialogueBox? Answered(
+    private static (DialogueBox? Talking, Cutscene? Scene) Answered(
         GameData data, MapView view, NetworkClient network, ScriptState script,
         IReadOnlyList<SavedMon> party, DialogueBox asked)
     {
-        if (asked.Resume is not { } from) return null;
+        if (asked.Resume is not { } from) return (null, null);
 
         script.Write(0x800D, asked.Answer ? 1 : 0);
 
         ScriptRun run = ScriptRunner.Run(data.Rom, from, script.WithParty(party.Select(m => m.Moves)));
 
-        Note($"answered {(asked.Answer ? "yes" : "no")}, carried on from 0x{from:X8}: {run.Pages.Count} pages");
+        Note(
+            $"answered {(asked.Answer ? "yes" : "no")}, carried on from 0x{from:X8}: " +
+            $"{run.Pages.Count} pages, {run.Beats.Count} beats");
+
+        // What comes after an answer is not always more talking. Saying yes to the ball
+        // on the professor's table runs on into the rival taking his and walking over,
+        // which is a scene — and a scene handed to a text box is a text box with nothing
+        // in it, which is exactly what "the box went away and nothing happened" was.
+        if (run.IsScene)
+        {
+            var playing = new Cutscene(run.Beats, view, [run]);
+
+            if (playing.Cast.ToList() is { Count: > 0 } cast) network.SendSceneCast(cast);
+
+            return (null, playing);
+        }
 
         Remember(run, script, network);
 
         var box = new DialogueBox(run.Pages, run.Question);
 
-        return box.IsEmpty && !box.IsQuestion ? null : box;
+        return (box.IsEmpty && !box.IsQuestion ? null : box, null);
     }
 
     /// <summary>

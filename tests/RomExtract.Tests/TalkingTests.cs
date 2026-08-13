@@ -1435,6 +1435,38 @@ public class TriggerTests
         send.Select(o => o.Message).OfType<ObjectsPlaced>().SelectMany(p => p.Objects).ToList();
 
     [Fact]
+    public void AConversationIsAsGoodAWarrantForASceneAsATrigger()
+    {
+        // Scenes do not only start on squares. Saying yes to the ball on the professor's
+        // table runs straight on into the rival taking his and walking over, and the only
+        // thing the server agreed to there was the conversation — which it arbitrated,
+        // and which is the same kind of warrant a trigger is.
+        MapData map = new(Town, "PALLET TOWN", 8, 8, new byte[64])
+        {
+            Objects =
+            [
+                new MapObject(1, 5, 3, 3, Direction.Down, 0, false, ScriptAddress: 0x08123456),
+                new MapObject(2, 5, 6, 6, Direction.Down, 0, false),
+            ],
+        };
+
+        var world = new GameWorld(new WorldData([map]), Town, TestRules.All);
+
+        (ServerPlayer player, _) = world.Join(1, "Koop", SavedCharacter.Fresh(Town, 3, 4));
+
+        player.Facing = Direction.Up;
+
+        // Nothing has happened yet, so nobody can be frozen across the map.
+        world.HoldSceneCast(player.Id, [2], 10);
+        Assert.Contains("no scene is running", world.LastSceneCast);
+
+        world.StartTalking(player.Id, 1);
+        world.HoldSceneCast(player.Id, [2], 10);
+
+        Assert.Contains("holding 1 of 1", world.LastSceneCast);
+    }
+
+    [Fact]
     public void ArrivalScriptsSurviveTheWorldFileToo()
     {
         MapData map = new(Town, "PALLET TOWN", 8, 8, new byte[64])

@@ -772,6 +772,14 @@ public sealed class GameWorld
             // loses a "finished" message cannot accumulate frozen people behind it.
             people.Release(holder => holder == playerId);
 
+            // A conversation opens a scene window, for the same reason a trigger does.
+            // Scenes do not only start on squares: saying yes to the ball on the
+            // professor's table runs straight on into the rival taking his and walking
+            // over, and the only thing the server agreed to there was the conversation.
+            // It is the same warrant — something this side decided was allowed to happen.
+            player.SceneUntil = LastTickAt + SceneSeconds;
+            player.SceneOn = player.MapId;
+
             // The square in front, or the one past it when a counter is in the way.
             CollisionGrid grid = GridFor(player.MapId);
 
