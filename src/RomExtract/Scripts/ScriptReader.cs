@@ -232,6 +232,19 @@ public static class ScriptCommands
         // Silph's top floor and in Celadon. The starter is the one whose species comes
         // out of a variable, at level 5.
         [0x79] = 14,     // gives a monster
+        // Three, and the argument says what it is. Thirteen sites, and at every one the
+        // last two bytes are a species or a variable holding one — the same numbers the
+        // command above it hands over:
+        //
+        //   7D 00 | 02 40 | 67 0D E3 18 08     4.3   the starter, from 0x4002
+        //   7D 00 | 83 00 | 0F 00 A7 56 1A 08  1.53  LAPRAS
+        //   7D 00 | 85 00 | 0F 00 A7 56 1A 08  10.11 EEVEE
+        //   7D 00 | 09 80 | 0F 00 18 5B 1A 08  1.30
+        //
+        // Eight of the thirteen resume on a loadpointer, which is the first half of every
+        // text box in this game, and it sits immediately after the handover at every gift
+        // site. Whatever it is called, it is the game about to say which one you got.
+        [0x7D] = 3,
         [0x39] = 1,
         [0x3A] = 0,
         // Eight bytes — four words — and the cleanest column this project has seen. The
