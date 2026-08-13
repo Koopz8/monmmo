@@ -43,6 +43,16 @@ public sealed record ServerPlayer(int Id, long AccountId, string Name)
     public int? WatchedBy { get; set; }
 
     /// <summary>
+    /// Who is waiting to fight this player as soon as they stop reading.
+    /// <para>
+    /// A trainer who has to be talked to has words first, and often a whole scene of
+    /// them. Kept here rather than found again when the box closes, because by then the
+    /// only thing that says who was being spoken to is this.
+    /// </para>
+    /// </summary>
+    public int FightingWhenDone { get; set; }
+
+    /// <summary>
     /// Trainers this player has already beaten, so they do not start again the moment
     /// you walk back past them.
     /// </summary>
@@ -812,12 +822,27 @@ public sealed class GameWorld
                 return [];
             }
 
-            // Somebody who wants a fight gets one. The client opened a text box on the
-            // way in; the battle arriving is what closes it.
-            if (StartTrainerBattle(player, person.Template) is { Count: > 0 } challenge)
+            // Somebody who wants a fight still has to be allowed to finish talking.
+            //
+            // The fight used to start here, and the note above this line used to say
+            // that the battle arriving is what closes the text box. It closed rather
+            // more than that. The man at the top of NUGGET BRIDGE congratulates you,
+            // hands over a NUGGET, offers you a place in TEAM ROCKET and asks four
+            // times — and every word of it was skipped, because the first thing the
+            // server did on being told he had been spoken to was field his fight.
+            //
+            // So it waits for the box to close, which the client says out loud already.
+            // Nothing is trusted that was not trusted before: whether there is a fight,
+            // and with whom, is still read off this map's own record on this side.
+            if (person.Template.CanBeFought && !player.DefeatedTrainers.Contains(person.Template.TrainerId))
             {
-                LastTalkOutcome = $"a fight with trainer {person.Template.TrainerId}";
-                return challenge;
+                person.HeldBy = playerId;
+                player.FightingWhenDone = localId;
+
+                LastTalkOutcome =
+                    $"a fight with trainer {person.Template.TrainerId}, once they have finished talking";
+
+                return [];
             }
 
             // Something in the way, and somebody in the party who can move it. Before
@@ -1859,15 +1884,34 @@ public sealed class GameWorld
         }
     }
 
-    /// <summary>The text box is closed. Whoever this player was holding carries on.</summary>
-    public void StopTalking(int playerId)
+    /// <summary>
+    /// The text box is closed. Whoever this player was holding carries on — and if what
+    /// they were holding was somebody who wanted a fight, the fight starts now.
+    /// </summary>
+    public List<Outgoing> StopTalking(int playerId)
     {
         lock (_gate)
         {
-            if (_players.TryGetValue(playerId, out ServerPlayer? shopper)) shopper.Shopping = [];
+            if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
+
+            player.Shopping = [];
 
             foreach (MapPopulation people in _populated.Values)
                 people.Release(holder => holder == playerId);
+
+            int localId = player.FightingWhenDone;
+
+            player.FightingWhenDone = 0;
+
+            if (localId == 0) return [];
+            if (!_populated.TryGetValue(player.MapId, out MapPopulation? here)) return [];
+            if (here.ById(localId) is not { } person) return [];
+
+            List<Outgoing> fight = StartTrainerBattle(player, person.Template);
+
+            if (fight.Count > 0) LastTalkOutcome = $"a fight with trainer {person.Template.TrainerId}";
+
+            return fight;
         }
     }
 

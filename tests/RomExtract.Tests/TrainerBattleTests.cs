@@ -141,12 +141,37 @@ public class TrainerBattleTests
         player.Square = new GridPosition(4, 2);
         player.Facing = Direction.Down;
 
+        // Talking holds them still. It does not fight them: a trainer who has to be
+        // spoken to has words first, and the man at the top of NUGGET BRIDGE has a
+        // whole scene of them.
         List<NetMessage> said = world.StartTalking(player.Id, 1).Select(o => o.Message).ToList();
 
-        Assert.Single(said.OfType<BattleStarted>());
+        Assert.Empty(said.OfType<BattleStarted>());
 
-        // And they are fighting rather than standing still being spoken to.
+        // The fight is what closing the box comes to.
+        Assert.Single(world.StopTalking(player.Id).Select(o => o.Message).OfType<BattleStarted>());
+
         Assert.Null(world.TalkingTo(player.Id));
+    }
+
+    [Fact]
+    public void SomebodyAlreadyBeatenIsJustSomebodyToTalkTo()
+    {
+        // The other half of waiting for the box to close. A trainer who is queued up on
+        // being spoken to has to be un-queued by having been beaten, or every later
+        // conversation with them would end in a fight they have already lost.
+        GameWorld world = World(Trainer(1, 4, 3, Direction.Up, TestRules.OneAlone));
+        ServerPlayer player = Join(world);
+
+        player.Square = new GridPosition(4, 2);
+        player.Facing = Direction.Down;
+
+        player.DefeatedTrainers.Add(TestRules.OneAlone);
+
+        world.StartTalking(player.Id, 1);
+
+        Assert.Empty(world.StopTalking(player.Id).Select(o => o.Message).OfType<BattleStarted>());
+        Assert.Null(player.Battle);
     }
 
     [Fact]
@@ -439,7 +464,9 @@ public class TrainerBattleTests
         player.Square = new GridPosition(4, 2);
         player.Facing = Direction.Up;
 
-        Assert.Single(world.StartTalking(player.Id, 1).Select(o => o.Message).OfType<BattleStarted>());
+        world.StartTalking(player.Id, 1);
+
+        Assert.Single(world.StopTalking(player.Id).Select(o => o.Message).OfType<BattleStarted>());
 
         List<NetMessage> said = FightToTheEnd(world, player);
 
@@ -498,12 +525,14 @@ public class TrainerBattleTests
         player.Facing = Direction.Up;
 
         world.StartTalking(player.Id, 1);
+        world.StopTalking(player.Id);
         FightToTheEnd(world, player);
 
         // Beaten once, so the second conversation is a conversation and not a fight.
         player.DefeatedTrainers.Remove(TestRules.OneAlone);
 
         world.StartTalking(player.Id, 1);
+        world.StopTalking(player.Id);
         FightToTheEnd(world, player);
 
         Assert.Equal(1, player.Bag.CountOf(TestRules.PotionItem));

@@ -155,6 +155,7 @@ public static class Program
         if (options.Gaps) WriteGaps(rom, options.GapLike);
 
         if (options.FightKinds) WriteFightKinds(rom);
+        if (options.Challenges) WriteChallenges(rom);
 
         if (options.DoorSteps) WriteDoorSteps(rom);
 
@@ -1932,6 +1933,11 @@ public static class Program
 
             if (run.TrainerId is { } trainer) Console.WriteLine($"      fights trainer {trainer}");
 
+            // Kept apart from the pages, because it is: the line belongs to the fight
+            // and the fight has its own screen.
+            foreach (string page in run.Challenge)
+                Console.WriteLine($"      on the way in: \"{GameText.ToAscii(page).Replace("\n", " ")}\"");
+
             if (run.Stock.Count > 0) Console.WriteLine($"      opens a shop of {run.Stock.Count} things");
 
             foreach (int flag in run.FlagsSet) Console.WriteLine($"      sets flag 0x{flag:X}");
@@ -2294,6 +2300,70 @@ public static class Program
 
             foreach (string one in examples.GetValueOrDefault(kind, [])) Console.WriteLine($"      {one}");
         }
+    }
+
+    /// <summary>
+    /// What every trainer in the game says on the way into their fight.
+    /// <para>
+    /// The number is the point. This project opened four hundred and fifty fights with
+    /// one sentence of its own making, and the cartridge had a different one for almost
+    /// every trainer sitting three arguments into the command that starts the fight.
+    /// </para>
+    /// <para>
+    /// Counted the same way everything else here is: by finding it from the trainer id
+    /// through the same function the client uses, rather than by trusting that the
+    /// pointer is where it ought to be. A line that does not decode as speech is not
+    /// counted, because a wrong pointer that prints anyway is the failure this project
+    /// is arranged against.
+    /// </para>
+    /// </summary>
+    private static void WriteChallenges(Rom rom)
+    {
+        MapLibrary library = MapLibrary.Open(rom);
+
+        int fields = 0;
+        int found = 0;
+        var silent = new List<int>();
+        var shown = new List<string>();
+
+        foreach (LoadedMap map in library.All())
+        {
+            IEnumerable<uint> addresses =
+            [
+                .. map.Objects.Where(o => o.HasScript).Select(o => o.ScriptAddress),
+                .. map.Triggers.Where(t => t.HasScript).Select(t => t.ScriptAddress),
+            ];
+
+            foreach (uint address in addresses.Distinct())
+            {
+                foreach (int trainer in ScriptReader.FindTrainers(rom, address))
+                {
+                    fields++;
+
+                    if (ScriptReader.BeforeTheFight(rom, address, trainer) is not { } said)
+                    {
+                        silent.Add(trainer);
+                        continue;
+                    }
+
+                    found++;
+
+                    List<string> pages = ScriptRunner.Speech(rom, said);
+
+                    if (shown.Count < 12 && pages.Count > 0)
+                        shown.Add($"trainer {trainer,4}  \"{pages[0].Replace('\n', ' ')}\"");
+                }
+            }
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("What a trainer says on the way in");
+        Console.WriteLine();
+        Console.WriteLine($"  {fields} fights a script can start, {found} of them opening with words of their own");
+        Console.WriteLine($"  {silent.Count} without: the variant that carries no intro text");
+        Console.WriteLine();
+
+        foreach (string one in shown) Console.WriteLine($"    {one}");
     }
 
     /// <summary>
@@ -4635,6 +4705,8 @@ public static class Program
 
         public bool FifthMove { get; private init; }
 
+        public bool Challenges { get; private init; }
+
         /// <summary>Which trainers are fought by a script that names the rival.</summary>
         public bool RivalFights { get; private init; }
 
@@ -4717,6 +4789,7 @@ public static class Program
             bool doorSteps = false;
             bool moveEffects = false;
             bool fifthMove = false;
+            bool challenges = false;
             bool rivalFights = false;
             bool specials = false;
             int? special = null;
@@ -4841,6 +4914,10 @@ public static class Program
                     case "--door-steps":
                         doorSteps = true;
                         break;
+                    case "--challenges":
+                        challenges = true;
+                        break;
+
                     case "--fight-kinds":
                         fightKinds = true;
                         break;
@@ -5005,6 +5082,7 @@ public static class Program
                 DoorSteps = doorSteps,
                 MoveEffects = moveEffects,
                 FifthMove = fifthMove,
+                Challenges = challenges,
                 RivalFights = rivalFights,
                 Specials = specials,
                 Special = special,

@@ -686,8 +686,14 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                             break;
 
                         case TalkFinished when playerId != 0:
-                            world.StopTalking(playerId);
+                        {
+                            List<Outgoing> done = world.StopTalking(playerId);
+
+                            if (done.Count > 0)
+                                await DispatchAsync(done, playerId, cancellationToken).ConfigureAwait(false);
+
                             break;
+                        }
 
                         case SceneCast cast when playerId != 0:
                             world.HoldSceneCast(playerId, cast.LocalIds, Now);

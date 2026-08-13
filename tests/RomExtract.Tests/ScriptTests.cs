@@ -852,12 +852,58 @@ public class ScriptRunnerTests
         ScriptRun first = ScriptRunner.Run(rom, Start);
 
         Assert.Equal(41, first.TrainerId);
-        Assert.Equal("AAAAAA", Assert.Single(first.Pages));
+
+        // In its own list rather than among the pages: the line belongs to the fight,
+        // and whoever is showing a conversation is not showing a fight.
+        Assert.Empty(first.Pages);
+        Assert.Equal("AAAAAA", Assert.Single(first.Challenge));
 
         ScriptRun again = ScriptRunner.Run(rom, Start, new ScriptState(beaten: [41]));
 
         Assert.Null(again.TrainerId);
         Assert.Equal("BBBBBB", Assert.Single(again.Pages));
+    }
+
+    [Fact]
+    public void AFightCarriesTheLineTheTrainerOpensWith()
+    {
+        // Four hundred and fifty trainers on this cartridge, and every one of them used
+        // to open with a sentence this project wrote. Theirs is the third argument of
+        // the command that starts the fight, next to the one this project has been
+        // reading all along.
+        byte[] fight =
+        [
+            ScriptCommands.TrainerBattle, 0x00, .. Word(41), .. Word(0), .. At(SaysA), .. At(SaysB),
+            ScriptCommands.End,
+        ];
+
+        Rom rom = Image((Start, fight), (SaysA, Speech('A')), (SaysB, Speech('B')));
+
+        Assert.Equal(SaysA, ScriptReader.BeforeTheFight(rom, Start, 41));
+
+        // And nothing for somebody else's fight: the line belongs to one command, not
+        // to the script it sits in.
+        Assert.Null(ScriptReader.BeforeTheFight(rom, Start, 42));
+
+        Assert.Equal("AAAAAA", Assert.Single(ScriptRunner.Speech(rom, SaysA)));
+    }
+
+    [Fact]
+    public void TheVariantWithNoIntroTextIsGivenNoWords()
+    {
+        // Variant 3 is nine bytes rather than thirteen because it has no intro pointer.
+        // Reading one anyway would take whatever follows the command and print it, and a
+        // sentence that looks like the cartridge's and is not is the one failure this
+        // whole project is arranged against.
+        byte[] fight =
+        [
+            ScriptCommands.TrainerBattle, 0x03, .. Word(41), .. Word(0), .. At(SaysA),
+            ScriptCommands.End,
+        ];
+
+        Rom rom = Image((Start, fight), (SaysA, Speech('A')));
+
+        Assert.Null(ScriptReader.BeforeTheFight(rom, Start, 41));
     }
 
     [Fact]

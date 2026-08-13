@@ -106,9 +106,14 @@ public sealed class BattleScreen
         return answer;
     }
 
+    /// <param name="challenge">
+    /// What this trainer says on the way in, off their own script. Every trainer in this
+    /// game used to open with "NAME wants to fight!" — a sentence this project wrote,
+    /// standing in for four hundred and fifty the cartridge already had.
+    /// </param>
     public BattleScreen(
         BattleStarted start, GameData data, TrainerNames? trainers = null, ItemNames? items = null,
-        string? calledInstead = null)
+        string? calledInstead = null, IReadOnlyList<string>? challenge = null)
     {
         _data = data;
         _items = items;
@@ -136,6 +141,12 @@ public sealed class BattleScreen
         (_wildSprite, _hasWildSprite) = LoadSprite(data, start.Opponent.Species, back: false);
         (_playerSprite, _hasPlayerSprite) = LoadSprite(data, start.You.Species, back: true);
 
+        // Theirs first, then ours. Ours is not redundant once theirs exists: a line like
+        // "I saw your feat from the grass!" never says who is talking, and the name is
+        // the only thing on the screen that does.
+        if (IsTrainerBattle && challenge is not null)
+            foreach (string page in challenge) Say(page);
+
         Say(IsTrainerBattle
             ? $"{_trainerName} wants to fight!"
             : $"A wild {SpeciesNameOf(start.Opponent)} appeared!");
@@ -155,8 +166,16 @@ public sealed class BattleScreen
 
     private string NameOf(int itemId) => _items?.Of(itemId) ?? $"item {itemId}";
 
+    /// <summary>
+    /// A species' name, in characters this font can draw.
+    /// <para>
+    /// NIDORAN's is not just letters. The cartridge writes the male and female symbols
+    /// as characters of its own, and a font with no glyph for either drew "NIDORAN?" at
+    /// the top of the screen for the whole of NUGGET BRIDGE.
+    /// </para>
+    /// </summary>
     private string SpeciesNameOf(BattlerView battler) =>
-        battler.Nickname ?? _data.SpeciesAt(battler.Species)?.Name ?? $"species {battler.Species}";
+        GameText.ToAscii(battler.Nickname ?? _data.SpeciesAt(battler.Species)?.Name ?? $"species {battler.Species}");
 
     /// <summary>
     /// Rebuilds the names narration uses, which change whenever either side does.
@@ -177,7 +196,7 @@ public sealed class BattleScreen
             id => _data.MoveAt(id)?.Name ?? $"move {id}");
     }
 
-    private string MoveNamed(int moveId) => _data.MoveAt(moveId)?.Name ?? $"move {moveId}";
+    private string MoveNamed(int moveId) => GameText.ToAscii(_data.MoveAt(moveId)?.Name ?? $"move {moveId}");
 
     private void RefreshMoveNames()
     {
@@ -279,7 +298,16 @@ public sealed class BattleScreen
         return (texture, true);
     }
 
-    private void Say(string line) => _pending.Enqueue(line);
+    /// <summary>
+    /// Queues a line to read, in characters this font can actually draw.
+    /// <para>
+    /// The same pass a dialogue box has always made, and this screen did without for as
+    /// long as every line on it was written here. The moment a trainer's own words
+    /// arrived, "I'm second!" came out as "I?m second!" — the cartridge's apostrophe is
+    /// a curly one and it turns up in about every other sentence anybody says.
+    /// </para>
+    /// </summary>
+    private void Say(string line) => _pending.Enqueue(GameText.ToAscii(line));
 
     /// <summary>Folds a turn's result in: what to read, and where both sides now stand.</summary>
     public void Apply(BattleUpdate update)

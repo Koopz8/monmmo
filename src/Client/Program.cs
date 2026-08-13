@@ -885,6 +885,14 @@ public static class Program
         // And off the map, if what was just talked to was a ball on the ground.
         PickedUp(run, person, view, script, network);
 
+        // And into the bag, if they handed something over while talking. This was the
+        // one door into the bag that a conversation did not have: a ball on the ground
+        // came through the branch above, a fossil came through a scene's aftermath, and
+        // a gym leader's TM came off the fight — so the man at the top of NUGGET BRIDGE
+        // said "tester received a NUGGET from the mystery TRAINER!" to a bag with a
+        // POKe BALL in it and nothing else, and nothing anywhere reported a problem.
+        Handed(run, script, network);
+
         // A counter that heals asks, and until now this project answered for the player.
         // The yes and the no are inside a standard routine — code, never followed here —
         // so the words stay hers and only the box is ours.
@@ -1211,6 +1219,38 @@ public static class Program
     private static void TakeAway(ScriptRun run, MapView view, ScriptState script, NetworkClient network)
     {
         TakeAway(run.Hides, view, script, network);
+    }
+
+    /// <summary>
+    /// What a trainer says on the way into a fight, off their own script.
+    /// <para>
+    /// Which script that is has to be looked up rather than remembered, exactly as the
+    /// afterwards is: the world knows which person or which square on this map fields
+    /// this trainer, and a note kept across the moment a fight starts is a note that can
+    /// be wrong. The rival at the lab door is three trainers behind one square, so the
+    /// lookup is by what the script <em>can</em> field, not by a number stored on it.
+    /// </para>
+    /// <para>
+    /// Nothing here is load-bearing. A trainer whose script cannot be found, or whose
+    /// fight is the one variant with no intro text, opens the fight the way every fight
+    /// in this project has opened until now.
+    /// </para>
+    /// </summary>
+    private static IReadOnlyList<string>? Challenge(
+        GameData data, MapView view, ScriptState script, int? trainerId)
+    {
+        if (trainerId is not { } id) return null;
+
+        uint? theirs =
+            view.Map.Triggers.FirstOrDefault(t => t.HasScript && t.Fields(id))?.ScriptAddress
+            ?? view.Map.Objects.FirstOrDefault(o => o.HasScript && o.TrainerId == id)?.ScriptAddress;
+
+        if (theirs is not { } start) return null;
+        if (ScriptReader.BeforeTheFight(data.Rom, start, id) is not { } said) return null;
+
+        List<string> pages = ScriptRunner.Speech(data.Rom, said, script);
+
+        return pages.Count > 0 ? pages : null;
     }
 
     /// <summary>
@@ -1558,9 +1598,17 @@ public static class Program
                     break;
 
                 case BattleStarted started:
+                    // What they say on the way in, found the same way the afterwards is:
+                    // by asking the map which script fields this trainer, and then asking
+                    // that script's own fight command. Done here rather than in whatever
+                    // started the fight, because the three ways a fight can start — a
+                    // line of sight, a conversation, a square stepped on — lose the words
+                    // in three different places, and this is the one place all three
+                    // arrive at.
                     battle = new BattleScreen(
                         started, data, trainers, items,
-                        calledInstead: rival.Take() ? script.RivalName : null)
+                        calledInstead: rival.Take() ? script.RivalName : null,
+                        challenge: Challenge(data, view, script, started.TrainerId))
                     {
                         // Who else could come out. Kept up to date below, because a party
                         // that goes stale mid-fight is a list offering somebody who

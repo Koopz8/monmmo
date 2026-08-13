@@ -83,6 +83,19 @@ public sealed record ScriptRun
     public int? TrainerId { get; init; }
 
     /// <summary>
+    /// What the trainer says on the way into that fight, kept apart from the rest.
+    /// <para>
+    /// Apart because it belongs to the fight and not to the conversation. The Nugget
+    /// Bridge man congratulates you, hands over a NUGGET, offers you a place in TEAM
+    /// ROCKET and asks four times — and only then, when you have refused, says the line
+    /// that opens the fight. Reading all of that in one box and then reading the last
+    /// sentence again on the battle screen is one sentence too many; reading none of it
+    /// because the fight arrived first, which is what used to happen, is a scene lost.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<string> Challenge { get; init; } = [];
+
+    /// <summary>
     /// What this run hands over, if it hands over anything.
     /// <para>
     /// A ball lying on the ground is a script like any other: it puts an item id in one
@@ -263,11 +276,31 @@ public static class ScriptRunner
     /// </summary>
     private const byte Question = 5;
 
+    /// <summary>
+    /// Text at an address, read as somebody speaking rather than as a script.
+    /// <para>
+    /// For the two places where a pointer is known to lead to words and there is no
+    /// script around it to run — a trainer's challenge, which is an argument of the
+    /// command that starts the fight. Everything a page needs still applies: the gaps
+    /// are filled from the save, so a line naming the player names them.
+    /// </para>
+    /// </summary>
+    public static List<string> Speech(Rom rom, uint address, ScriptState? state = null, int maxPages = 8)
+    {
+        var pages = new List<string>();
+        var beats = new List<SceneBeat>();
+
+        Say(rom, address, pages, beats, maxPages, (state ?? new ScriptState()).Copy(), new string?[5]);
+
+        return pages;
+    }
+
     public static ScriptRun Run(Rom rom, uint address, ScriptState? state = null, int maxPages = 32)
     {
         ScriptState save = (state ?? new ScriptState()).Copy();
 
         var pages = new List<string>();
+        var challenge = new List<string>();
         var beats = new List<SceneBeat>();
         var specials = new List<int>();
         var stock = new List<int>();
@@ -671,8 +704,10 @@ public static class ScriptRunner
 
                     // Every variant but one opens with the line they say on sight, and
                     // that line belongs to the fight rather than to what comes after it.
+                    // Which is why it goes in its own list: whoever is showing this run
+                    // is showing a conversation, and the fight has its own screen.
                     if (command.Arguments[0] != 3)
-                        Say(rom, command.Pointer(5), pages, beats, maxPages, save, buffers, namedRival);
+                        Say(rom, command.Pointer(5), challenge, beats, maxPages, save, buffers, namedRival);
 
                     stop = true;
                     break;
@@ -693,6 +728,7 @@ public static class ScriptRunner
         return new ScriptRun
         {
             Pages = pages,
+            Challenge = challenge,
             Beats = beats,
             SpecialsCalled = specials,
             NamesRival = namedRival[0],

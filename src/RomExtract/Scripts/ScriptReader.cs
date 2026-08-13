@@ -1022,6 +1022,48 @@ public static class ScriptReader
     }
 
     /// <summary>
+    /// What a trainer says on the way into the fight.
+    /// <para>
+    /// Every trainer in this game has said the same sentence — "CALE wants to fight!" —
+    /// and that sentence is this project's, not the cartridge's. Theirs is right there,
+    /// as the third argument of the command that starts the fight: "People call this the
+    /// NUGGET BRIDGE!", "You're going to see BILL? First, we battle!", "I saw your feat
+    /// from the grass!". Four hundred and fifty of them, all thrown away.
+    /// </para>
+    /// <para>
+    /// Thrown away twice over, and for two different reasons. A trainer with a line of
+    /// sight never has their script run at all — the server starts the fight from the
+    /// geometry. A trainer who has to be talked to does have it run, and the words are
+    /// in the box that the battle screen then opens on top of. Reading them here, from
+    /// the fight rather than from the conversation, covers both.
+    /// </para>
+    /// <para>
+    /// Variant 3 is the exception the length table already knew about: nine bytes rather
+    /// than thirteen, because it has no intro text. Those are the fights that begin
+    /// without anybody saying anything, and giving them a line would be inventing one.
+    /// </para>
+    /// </summary>
+    public static uint? BeforeTheFight(Rom rom, uint address, int trainerId)
+    {
+        foreach (ScriptCommand command in ReadAll(rom, address))
+        {
+            if (command.Code != ScriptCommands.TrainerBattle) continue;
+            if (command.Word(1) != trainerId) continue;
+            if (command.Arguments.Length < 13) continue;
+            if (command.Arguments[0] == 3) continue;
+
+            uint said = command.Pointer(5);
+
+            if (rom.ToOffsetOrNull(said) is not { } at) continue;
+            if (!GameText.LooksLikeDialogue(rom.Span[at..])) continue;
+
+            return said;
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// The script a fight runs when it is won, if it carries one.
     /// <para>
     /// BROCK is why this exists. Beating a gym leader used to run his script again from
