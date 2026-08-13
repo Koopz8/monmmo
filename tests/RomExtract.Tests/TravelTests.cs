@@ -382,6 +382,120 @@ public class TravelTests
         Assert.Equal(new GridPosition(1, 1), player.Square);
     }
 
+    /// <summary>
+    /// A house on a street, built the way the cartridge builds one: the door is a square
+    /// the block data calls solid, with the building above it and the street below.
+    /// </summary>
+    private static GameWorld WithAFrontDoor(GridPosition[]? alsoSolid = null, GridPosition[]? alsoOpen = null)
+    {
+        // 4x4. The whole top two rows are the building, and (1, 1) is the doorway in it.
+        var walls = new byte[16];
+
+        for (int x = 0; x < 4; x++)
+        {
+            walls[x] = 1;
+            walls[4 + x] = 1;
+        }
+
+        foreach (GridPosition square in alsoSolid ?? []) walls[square.Y * 4 + square.X] = 1;
+        foreach (GridPosition square in alsoOpen ?? []) walls[square.Y * 4 + square.X] = 0;
+
+        MapData street = new(Town, "PALLET TOWN", 4, 4, walls)
+        {
+            Warps = [new Warp(1, 1, 0, Cave)],
+        };
+
+        MapData house = Open(Cave, "A HOUSE", 3, 3) with
+        {
+            Warps = [new Warp(1, 2, 0, Town)],
+        };
+
+        return new GameWorld(new WorldData([street, house]), Cave);
+    }
+
+    [Fact]
+    public void ComingOutOfABuildingLeavesTheDoorway()
+    {
+        // The cartridge's warp puts you in the doorway and the games walk you out of it.
+        // Without that step the mat is somewhere you get stuck: the arrival that would
+        // take you back inside has already happened, so pressing towards the door does
+        // nothing at all and the way back in is to step off it and on again.
+        GameWorld world = WithAFrontDoor();
+        ServerPlayer player = JoinAt(world, "Mason", Cave, 1, 1);
+
+        Step(world, player, Direction.Down, 10);
+
+        Assert.Equal(Town, player.MapId);
+
+        // Out of the doorway at (1, 1) and onto the street below it, looking that way.
+        Assert.Equal(new GridPosition(1, 2), player.Square);
+        Assert.Equal(Direction.Down, player.Facing);
+    }
+
+    [Fact]
+    public void ADoorWithOnlyOneWayOutUsesIt()
+    {
+        // Down first, because down is what a building front is — 218 of this cartridge's
+        // 279 doors have open ground below them. Forty-seven have open ground above
+        // instead, and taking the ways in a fixed order is what makes those come out the
+        // same way twice.
+        GameWorld world = WithAFrontDoor([new GridPosition(1, 2)], [new GridPosition(1, 0)]);
+        ServerPlayer player = JoinAt(world, "Mason", Cave, 1, 1);
+
+        Step(world, player, Direction.Down, 10);
+
+        Assert.Equal(new GridPosition(1, 0), player.Square);
+        Assert.Equal(Direction.Up, player.Facing);
+    }
+
+    [Fact]
+    public void ADoorWithNowhereToGoLeavesYouStandingInIt()
+    {
+        // Thirteen doors on a real image open onto nothing but more doors. Standing in
+        // one is better than being moved into a wall.
+        GameWorld world = WithAFrontDoor([new GridPosition(1, 2)]);
+
+        ServerPlayer player = JoinAt(world, "Mason", Cave, 1, 1);
+
+        Step(world, player, Direction.Down, 10);
+
+        Assert.Equal(Town, player.MapId);
+        Assert.Equal(new GridPosition(1, 1), player.Square);
+    }
+
+    [Fact]
+    public void WalkingInStepsOffTheMatAsWell()
+    {
+        // The two ends of a door are one thing. The street side is a square the block
+        // data calls solid and the mat inside it is ordinary floor, so asking only "is
+        // this arrival a door?" fixes the way out and leaves the way in stuck — which is
+        // exactly how it was found: coming into the gym landed on the mat, and pressing
+        // down towards the door walked into the wall below it.
+        GameWorld world = WithAFrontDoor();
+        ServerPlayer player = JoinAt(world, "Mason", Town, 1, 2);
+
+        Step(world, player, Direction.Up, 10);
+
+        Assert.Equal(Cave, player.MapId);
+        Assert.Equal(new GridPosition(1, 1), player.Square);
+        Assert.Equal(Direction.Up, player.Facing);
+    }
+
+    [Fact]
+    public void StairsAndCaveMouthsAreLeftAlone()
+    {
+        // 717 of this cartridge's warps have a door at neither end, and the games do let
+        // you stand on those: a cave mouth is somewhere you arrive and stay. Nothing
+        // here is solid, so nothing here is a door.
+        GameWorld world = World();
+        ServerPlayer player = JoinAt(world, "Mason", Town, 2, 0);
+
+        Step(world, player, Direction.Down, 10);
+
+        Assert.Equal(Cave, player.MapId);
+        Assert.Equal(new GridPosition(1, 2), player.Square);
+    }
+
     [Fact]
     public void ADoorLeadingNowhereLeavesYouWhereYouAre()
     {

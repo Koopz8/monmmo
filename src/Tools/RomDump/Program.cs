@@ -156,6 +156,8 @@ public static class Program
 
         if (options.FightKinds) WriteFightKinds(rom);
 
+        if (options.DoorSteps) WriteDoorSteps(rom);
+
         if (!string.IsNullOrEmpty(options.Walkable)) WriteWalkable(rom, options.Walkable);
 
         if (options.Specials) WriteSpecials(rom);
@@ -2008,6 +2010,104 @@ public static class Program
 
             foreach (string one in examples.GetValueOrDefault(kind, [])) Console.WriteLine($"      {one}");
         }
+    }
+
+    /// <summary>
+    /// Where a door puts you, and whether there is anywhere to step from there.
+    /// <para>
+    /// Walking out of a building leaves you standing on the door — that is what the
+    /// cartridge's warp says, and the games then walk you one square clear of it. Without
+    /// that step the mat is a place you get stuck: the arrival that would take you back
+    /// inside has already happened, so pressing towards the door does nothing and you
+    /// have to step off and back on.
+    /// </para>
+    /// <para>
+    /// Which way to step is the question, and it is asked of the cartridge rather than
+    /// answered from memory of the games. A door is already defined here as a warp on a
+    /// square the block data calls solid; this counts, for every one of them, which of the
+    /// four neighbours you could actually stand on.
+    /// </para>
+    /// </summary>
+    private static void WriteDoorSteps(Rom rom)
+    {
+        Core.World.WorldData world = WorldExporter.Export(rom);
+
+        Console.WriteLine();
+        Console.WriteLine("Doors, and where there is room to step");
+
+        // A warp with a door at either end is a building, and a building is walked out
+        // of rather than stood in. Asked of both ends because the two ends are one thing:
+        // the outside of a shop is a door and the mat inside it is not, and the step
+        // happens in both directions.
+        var counts = new Dictionary<Direction, int>();
+        var only = new Dictionary<Direction, int>();
+
+        int through = 0;
+        int stuck = 0;
+        int elsewhere = 0;
+        var nowhere = new List<string>();
+
+        foreach (MapData map in world.Maps)
+        {
+            foreach (Warp warp in map.Warps)
+            {
+                if (world.Find(warp.TargetMapId) is not { } target) continue;
+
+                GridPosition arrival = warp.TargetWarpId >= 0 && warp.TargetWarpId < target.Warps.Count
+                    ? target.Warps[warp.TargetWarpId].Square
+                    : new GridPosition(-1, -1);
+
+                if (arrival.X < 0) continue;
+
+                if (!map.IsDoor(warp.Square) && !target.IsDoor(arrival))
+                {
+                    elsewhere++;
+                    continue;
+                }
+
+                through++;
+
+                CollisionGrid grid = target.ToGrid();
+                var open = new List<Direction>();
+
+                foreach (Direction way in (Direction[])[Direction.Down, Direction.Up, Direction.Left, Direction.Right])
+                {
+                    GridPosition next = arrival.Step(way);
+
+                    // A neighbour that is itself a warp is not a way out — shop fronts
+                    // are three doors side by side, and stepping along one lands on
+                    // another.
+                    if (!grid.IsWalkable(next) || target.WarpAt(next) is not null) continue;
+
+                    open.Add(way);
+                    counts[way] = counts.GetValueOrDefault(way) + 1;
+                }
+
+                if (open.Count > 0) only[open[0]] = only.GetValueOrDefault(open[0]) + 1;
+                else
+                {
+                    stuck++;
+                    if (nowhere.Count < 6) nowhere.Add($"{target.Id} {target.Name} at {arrival}");
+                }
+            }
+        }
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  {through} warps with a door at one end or the other, {stuck} of those " +
+            "arriving somewhere with nowhere to step");
+
+        Console.WriteLine($"  {elsewhere} others — stairs, cave mouths, ladders — left alone");
+        Console.WriteLine();
+        Console.WriteLine("  way      can step   taken first");
+
+        foreach (Direction way in (Direction[])[Direction.Down, Direction.Up, Direction.Left, Direction.Right])
+        {
+            Console.WriteLine(
+                $"  {way,-8} {counts.GetValueOrDefault(way),5} / {through}   {only.GetValueOrDefault(way),5}");
+        }
+
+        foreach (string one in nowhere) Console.WriteLine($"    nowhere to go: {one}");
     }
 
     private static void WriteSightLines(Rom rom)
@@ -4243,6 +4343,9 @@ public static class Program
         /// <summary>Every trainerbattle by variant, and what its extra pointer holds.</summary>
         public bool FightKinds { get; private init; }
 
+        /// <summary>Where a door puts you, and which way there is room to step.</summary>
+        public bool DoorSteps { get; private init; }
+
         /// <summary>Count which special routines get called, and on which maps.</summary>
         public bool Specials { get; private init; }
 
@@ -4319,6 +4422,7 @@ public static class Program
             bool gaps = false;
             string gapLike = "";
             bool fightKinds = false;
+            bool doorSteps = false;
             bool specials = false;
             int? special = null;
             byte? answers = null;
@@ -4428,6 +4532,9 @@ public static class Program
                         break;
                     case "--walkable":
                         walkable = Next(args, ref i, "--walkable");
+                        break;
+                    case "--door-steps":
+                        doorSteps = true;
                         break;
                     case "--fight-kinds":
                         fightKinds = true;
@@ -4590,6 +4697,7 @@ public static class Program
                 Gaps = gaps,
                 GapLike = gapLike,
                 FightKinds = fightKinds,
+                DoorSteps = doorSteps,
                 Specials = specials,
                 Special = special,
                 Answers = answers,

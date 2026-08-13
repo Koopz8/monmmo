@@ -2090,7 +2090,65 @@ public sealed class GameWorld
 
         if (!GridFor(target.Id).IsWalkable(arrival)) arrival = FindSpawn(target.Id);
 
-        return Transfer(player, target.Id, arrival, player.Facing, nowSeconds);
+        Direction facing = player.Facing;
+
+        // And then out of the doorway, because the cartridge's warp puts you in it. The
+        // games walk you through a door — out of one onto the street, in through one onto
+        // the floor — and skipping that step leaves both ends of every building somewhere
+        // a player is stuck: the arrival that would use the warp again has already
+        // happened, so pressing towards it does nothing at all and the only way through
+        // is to step off the square and back onto it.
+        if (StepClearOf(player, _world.Find(player.MapId), warp.Square, target, arrival) is { } step)
+        {
+            arrival = step.Square;
+            facing = step.Facing;
+        }
+
+        return Transfer(player, target.Id, arrival, facing, nowSeconds);
+    }
+
+    /// <summary>
+    /// Where a doorway lets you out, and which way you are looking when it does.
+    /// <para>
+    /// Which warps are doorways is asked of the cartridge, and asked of <em>both</em>
+    /// ends, because the two ends are one thing: a door is a square the block data calls
+    /// solid and this project opens for walking through, and a shop has one on the street
+    /// while the mat inside it is ordinary floor. Either end being a door makes the pair
+    /// a building, and the step happens in both directions.
+    /// </para>
+    /// <para>
+    /// That is 558 of this cartridge's warps, and it leaves 717 alone — the stairs, cave
+    /// mouths and ladders, which the games do let you stand on. Of the 558, down is the
+    /// first way out at 326 and up at 220, which is exactly the two halves of a building:
+    /// out onto the street, and in onto the floor. Six arrive somewhere with nowhere to
+    /// step, and standing in the doorway beats being moved into a wall.
+    /// </para>
+    /// <para>
+    /// A neighbour that is itself a warp is not a way out. Shop fronts are three doors
+    /// side by side, and stepping along one lands on another — which is a walk out of a
+    /// building that puts you straight back inside it.
+    /// </para>
+    /// </summary>
+    private (GridPosition Square, Direction Facing)? StepClearOf(
+        ServerPlayer player, MapData? from, GridPosition left, MapData map, GridPosition door)
+    {
+        if (from?.IsDoor(left) != true && !map.IsDoor(door)) return null;
+
+        CollisionGrid grid = GridFor(map.Id);
+
+        foreach (Direction way in (Direction[])[Direction.Down, Direction.Up, Direction.Left, Direction.Right])
+        {
+            GridPosition next = door.Step(way);
+
+            if (!grid.IsWalkable(next) || map.WarpAt(next) is not null) continue;
+            if (IsOccupiedFor(player, map.Id, next)) continue;
+
+            return (next, way);
+        }
+
+        // Six arrivals on this cartridge have nothing but more warps around them.
+        // Standing in the doorway is better than being moved into a wall.
+        return null;
     }
 
     /// <summary>

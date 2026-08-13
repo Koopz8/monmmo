@@ -631,7 +631,18 @@ public static class Program
                 arrived = false;
                 standingOn = player.Square;
 
+                DialogueBox? before = talking;
+
                 (talking, scene) = OnArrival(data, view, network, script, party, talking);
+
+                // And whatever is waiting on the square, if the map itself had nothing.
+                // This used to be unreachable: arriving through a door landed you on the
+                // door, and the square in front of it was reached by walking, which is
+                // the branch below. Now that a doorway is stepped out of, the first
+                // square somebody stands on can be a trigger — and standing somewhere is
+                // standing somewhere however you came to be there.
+                if (scene is null && ReferenceEquals(talking, before))
+                    (talking, scene) = Arrive(data, view, player, network, script, party, talking);
             }
             else if (!player.IsStepping && player.Square != standingOn && scene is null)
             {
