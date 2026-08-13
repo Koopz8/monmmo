@@ -289,7 +289,7 @@ public static class MapLinkExtractor
                 // command inside the script, not a field of the record. A rival waiting
                 // on a route is a trigger, and the server has to be able to field him
                 // without ever seeing a cartridge.
-                real ? Scripts.ScriptReader.FindTrainer(rom, script) ?? 0 : 0));
+                real ? Scripts.ScriptReader.FindTrainers(rom, script) : []));
         }
 
         return triggers;

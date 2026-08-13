@@ -1808,7 +1808,7 @@ public sealed class GameWorld
     /// forever, and the variable that was supposed to spend it counts for nothing.
     /// </para>
     /// </summary>
-    public List<Outgoing> FireTrigger(int playerId, int x, int y, double nowSeconds = 0)
+    public List<Outgoing> FireTrigger(int playerId, int x, int y, int? trainerId = null, double nowSeconds = 0)
     {
         lock (_gate)
         {
@@ -1824,17 +1824,26 @@ public sealed class GameWorld
                 return [];
             }
 
-            if (_world.Find(player.MapId)?.TriggerAt(square) is not { } trigger)
+            if (_world.Find(player.MapId) is not { } here)
             {
                 LastTriggerOutcome = "refused: nothing on that square runs anything";
                 return [];
             }
 
-            if (!trigger.Armed(player.Script.Read(trigger.Variable)))
+            // The armed one, not the first one. Two triggers share the square at the lab
+            // door and only ever one of them is live; asking the first whether it is
+            // armed refused the square for the whole of the rival's beat.
+            if (here.ArmedTriggerAt(square, player.Script.Read) is not { } trigger)
             {
+                if (here.TriggerAt(square) is not { } disarmed)
+                {
+                    LastTriggerOutcome = "refused: nothing on that square runs anything";
+                    return [];
+                }
+
                 LastTriggerOutcome =
-                    $"refused: variable 0x{trigger.Variable:X4} holds " +
-                    $"{player.Script.Read(trigger.Variable)}, and this wants {trigger.Value}";
+                    $"refused: nothing armed here — variable 0x{disarmed.Variable:X4} holds " +
+                    $"{player.Script.Read(disarmed.Variable)}";
 
                 return [];
             }
@@ -1845,9 +1854,22 @@ public sealed class GameWorld
             player.SceneUntil = nowSeconds + SceneSeconds;
             player.SceneOn = player.MapId;
 
-            if (!trigger.CanBeFought)
+            if (!trigger.CanBeFought || trainerId is null)
             {
                 LastTriggerOutcome = "a script the client runs; nothing here to arbitrate";
+                return [];
+            }
+
+            // Which of them is a fact about the save, and the save's script ran on the
+            // other side of the split. So the client names one and this side checks the
+            // name is on the list — which is the whole of the trust here. A client that
+            // names the champion at the lab door gets nothing.
+            if (!trigger.Fields(trainerId.Value))
+            {
+                LastTriggerOutcome =
+                    $"refused: trainer {trainerId} is not one this square fields " +
+                    $"({string.Join(", ", trigger.Fights)})";
+
                 return [];
             }
 
@@ -1855,15 +1877,15 @@ public sealed class GameWorld
             // routine that starts them has been right about parties, beaten trainers and
             // healthy leads since trainers existed.
             var asPerson = new MapObject(
-                0, 0, x, y, player.Facing, 0, IsTrainer: true, TrainerId: trigger.TrainerId);
+                0, 0, x, y, player.Facing, 0, IsTrainer: true, TrainerId: trainerId.Value);
 
             if (StartTrainerBattle(player, asPerson) is not { Count: > 0 } challenge)
             {
-                LastTriggerOutcome = $"trainer {trigger.TrainerId} is not one this server can field right now";
+                LastTriggerOutcome = $"trainer {trainerId} is not one this server can field right now";
                 return [];
             }
 
-            LastTriggerOutcome = $"a fight with trainer {trigger.TrainerId}";
+            LastTriggerOutcome = $"a fight with trainer {trainerId}";
 
             return challenge;
         }

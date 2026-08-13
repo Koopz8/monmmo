@@ -847,8 +847,18 @@ public static class ScriptReader
     /// reading both is the difference between knowing what somebody might say and knowing
     /// nothing. What comes back is therefore everything reachable, not a transcript.
     /// </para>
+    /// <para>
+    /// <paramref name="maxScripts"/> was sixteen and sixteen was not enough. The rival's
+    /// challenge in the professor's lab branches three ways on which starter was taken
+    /// and three ways again inside each of those, which is thirteen blocks before the
+    /// first fight is even queued — so the traversal ran out one block short of the only
+    /// thing anybody wanted from it, and the square recorded no trainer at all. A limit
+    /// that silently truncates is the same failure as a wrong width: the read comes back
+    /// clean and quietly contains less. Ninety-six is past the largest script in this
+    /// cartridge; <see cref="ReadAllTruncated"/> is how we know that.
+    /// </para>
     /// </summary>
-    public static List<ScriptCommand> ReadAll(Rom rom, uint address, int maxScripts = 16)
+    public static List<ScriptCommand> ReadAll(Rom rom, uint address, int maxScripts = 96)
     {
         var all = new List<ScriptCommand>();
         var seen = new HashSet<uint>();
@@ -915,14 +925,71 @@ public static class ScriptReader
     /// why reading scripts had to come first.
     /// </para>
     /// </summary>
-    public static int? FindTrainer(Rom rom, uint address)
+    public static int? FindTrainer(Rom rom, uint address) =>
+        FindTrainers(rom, address) is [int first, ..] ? first : null;
+
+    /// <summary>
+    /// Every trainer a script can pick a fight with, in the order they are reached.
+    /// <para>
+    /// One is not always the answer. The rival's challenge at the lab door is three
+    /// fights behind one square: the script compares 0x4031 — which starter was taken —
+    /// and picks the one holding the type yours is weak to. Recording the first of them
+    /// and calling it the trainer would field the wrong boy two times in three.
+    /// </para>
+    /// <para>
+    /// Which one it is cannot be decided here, because it is a fact about a save this has
+    /// never seen. What can be decided here is the set it must come from, and that is
+    /// exactly what a server with no cartridge needs: not the answer, but the list of
+    /// answers a client is allowed to give.
+    /// </para>
+    /// </summary>
+    public static List<int> FindTrainers(Rom rom, uint address)
     {
+        var found = new List<int>();
+
         foreach (ScriptCommand command in ReadAll(rom, address))
         {
-            if (command.Code == ScriptCommands.TrainerBattle) return command.Word(1);
+            if (command.Code != ScriptCommands.TrainerBattle) continue;
+
+            int id = command.Word(1);
+            if (id != 0 && !found.Contains(id)) found.Add(id);
         }
 
-        return null;
+        return found;
+    }
+
+    /// <summary>
+    /// Whether reading everything reachable from here ran into its own limit.
+    /// <para>
+    /// The instrument for the limit, kept because a cap nobody measures is a cap that
+    /// will one day be wrong quietly. Across this cartridge it fires for nothing, which
+    /// is the only reason ninety-six is defensible as a number.
+    /// </para>
+    /// </summary>
+    public static bool ReadAllTruncated(Rom rom, uint address, int maxScripts = 96)
+    {
+        var seen = new HashSet<uint> { address };
+        var queue = new Queue<uint>([address]);
+
+        while (queue.Count > 0)
+        {
+            if (seen.Count > maxScripts) return true;
+
+            foreach (ScriptCommand command in Read(rom, queue.Dequeue()))
+            {
+                uint target = command.Code switch
+                {
+                    ScriptCommands.Call or ScriptCommands.Goto => command.Pointer(),
+                    ScriptCommands.CallIf or ScriptCommands.GotoIf => command.Pointer(1),
+                    _ => 0,
+                };
+
+                if (target == 0 || !rom.IsRomAddress(target)) continue;
+                if (seen.Add(target)) queue.Enqueue(target);
+            }
+        }
+
+        return false;
     }
 
     /// <summary>

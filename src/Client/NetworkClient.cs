@@ -130,7 +130,8 @@ public sealed class NetworkClient : IDisposable
     public void SendTalkFinished() => Send(new TalkFinished());
 
     /// <summary>Says a square was stepped onto, so the server can decide what that means.</summary>
-    public void SendTriggerFired(int x, int y) => Send(new TriggerFired(x, y));
+    public void SendTriggerFired(int x, int y, int? trainerId = null) =>
+        Send(new TriggerFired(x, y, trainerId));
 
     /// <summary>Says where a scene left somebody, for the server to accept or refuse.</summary>
     /// <summary>Asks for a scene's cast to stand still, wherever they are.</summary>

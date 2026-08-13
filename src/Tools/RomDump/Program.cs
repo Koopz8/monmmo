@@ -1527,7 +1527,7 @@ public static class Program
             Console.WriteLine(
                 $"  trigger at ({trigger.X}, {trigger.Y}), script 0x{trigger.ScriptAddress:X8}, " +
                 $"armed while variable 0x{trigger.Variable:X4} holds {trigger.Value}" +
-                (trigger.CanBeFought ? $", fights trainer {trigger.TrainerId}" : ""));
+                (trigger.CanBeFought ? $", fights trainer {string.Join(" or ", trigger.Fights)}" : ""));
 
             foreach (ScriptCommand command in ScriptReader.Read(rom, trigger.ScriptAddress))
                 Console.WriteLine($"    {command}");
@@ -1674,6 +1674,7 @@ public static class Program
         int shops = 0;
         int fights = 0;
         int returned = 0;
+        int truncated = 0;
 
         foreach (LoadedMap map in library.All())
         {
@@ -1709,6 +1710,7 @@ public static class Program
                 finished++;
                 if (run.IsEmpty) silent++;
                 if (run.CodeCalled.Count > 0) returned++;
+                if (ScriptReader.ReadAllTruncated(rom, address)) truncated++;
 
                 pages += run.Pages.Count;
                 shops += run.Stock.Count > 0 ? 1 : 0;
@@ -1731,6 +1733,7 @@ public static class Program
         // what a stop is not. Counting them together would let a width we have not
         // adopted hide inside a routine we can never adopt.
         Console.WriteLine($"  {returned} of those finish by returning from code they cannot read");
+        Console.WriteLine($"  {truncated} read more blocks than the traversal limit allows");
 
         foreach ((byte code, int count) in counts.OrderByDescending(e => e.Value))
         {

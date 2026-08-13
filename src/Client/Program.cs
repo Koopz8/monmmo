@@ -714,11 +714,27 @@ public static class Program
             return (talking, null);
         }
 
+        // Which fight, if any, this square comes to for this save. Run on a copy and
+        // thrown away: the real run happens in Play a moment later, and what is wanted
+        // here is only the trainer's number.
+        //
+        // It has to be looked for rather than read off the trigger, because the rival at
+        // the lab door is three trainers and the script picks between them on which
+        // starter was taken. The server holds the set and checks this against it.
+        int? fight = ScriptRunner
+            .Run(data.Rom, trigger.ScriptAddress, script.Copy().WithParty(party.Select(m => m.Moves)))
+            .TrainerId;
+
         // Sent whether or not there is anything to read, for the same reason talking is:
         // what happens next is not this side's decision. Nineteen of these squares start
         // a fight, and gating the message on finding dialogue would mean a rival who
         // says nothing could never challenge anybody.
-        network.SendTriggerFired(player.Square.X, player.Square.Y);
+        //
+        // And sent before Play, not after. Play tells the server what the script wrote,
+        // and the last thing a story script writes is the variable that disarms its own
+        // square — so a trigger message arriving afterwards is a trigger the server has
+        // already spent.
+        network.SendTriggerFired(player.Square.X, player.Square.Y, fight);
 
         return Play(data, view, network, script, party, talking, [trigger.ScriptAddress]);
     }

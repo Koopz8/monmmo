@@ -52,6 +52,26 @@ public sealed record MapData(string Id, string Name, int Width, int Height, byte
     public MapTrigger? TriggerAt(GridPosition square) =>
         Triggers.FirstOrDefault(t => t.X == square.X && t.Y == square.Y);
 
+    /// <summary>
+    /// The trigger on a square that is actually armed for a given save, if any is.
+    /// <para>
+    /// A square can carry more than one, and the lab door carries two: one waiting for
+    /// 0x4055 to hold 2 and one waiting for it to hold 3. Taking the first of them and
+    /// asking whether it is armed answers no for the square whenever the other one is
+    /// the live one, which is how the rival's challenge could play on the client and be
+    /// refused by the server in the same breath — the client looks for an armed trigger
+    /// and this side looked for any trigger.
+    /// </para>
+    /// </summary>
+    /// <para>
+    /// No <c>HasScript</c> here, deliberately. A trigger's script address is a cartridge
+    /// address and this file is the server's, so every trigger the server loads has zero
+    /// in that field — asking for one would find nothing anywhere, forever.
+    /// </para>
+    public MapTrigger? ArmedTriggerAt(GridPosition square, Func<int, int> read) =>
+        Triggers.FirstOrDefault(t =>
+            t.X == square.X && t.Y == square.Y && t.Armed(read(t.Variable)));
+
     /// <summary>Whatever is standing on a square, if anything.</summary>
     public MapObject? ObjectAt(GridPosition square) =>
         Objects.FirstOrDefault(o => o.X == square.X && o.Y == square.Y);
@@ -140,7 +160,7 @@ public sealed class WorldData
     /// <summary>Identifies the format, so a wrong or stale file fails loudly.</summary>
     private static readonly byte[] Magic = "MONWORLD"u8.ToArray();
 
-    private const int Version = 17;
+    private const int Version = 18;
 
     private readonly Dictionary<string, MapData> _maps;
 
@@ -322,7 +342,13 @@ public sealed class WorldData
 
             // No script address, for the same reason an object carries none: it is a
             // cartridge address and this file is the server's.
-            writer.Write(trigger.TrainerId);
+            //
+            // A count and then the ids, because the rival is three trainers behind one
+            // square and which of them shows up is a fact about the save rather than
+            // about the square. The server keeps the set it is allowed to accept.
+            writer.Write(trigger.Fights.Count);
+
+            foreach (int id in trigger.Fights) writer.Write(id);
         }
 
         writer.Write(map.OnEntry.Count);
@@ -362,13 +388,20 @@ public sealed class WorldData
 
         for (int i = 0; i < count; i++)
         {
-            triggers.Add(new MapTrigger(
-                reader.ReadInt32(),
-                reader.ReadInt32(),
-                reader.ReadInt32(),
-                reader.ReadInt32(),
-                ScriptAddress: 0,
-                TrainerId: reader.ReadInt32()));
+            int x = reader.ReadInt32();
+            int y = reader.ReadInt32();
+            int variable = reader.ReadInt32();
+            int value = reader.ReadInt32();
+            int fightCount = reader.ReadInt32();
+
+            if (fightCount is < 0 or > 16)
+                throw new InvalidDataException($"A trigger claims {fightCount} fights.");
+
+            var fights = new List<int>(fightCount);
+
+            for (int f = 0; f < fightCount; f++) fights.Add(reader.ReadInt32());
+
+            triggers.Add(new MapTrigger(x, y, variable, value, ScriptAddress: 0, Fights: fights));
         }
 
         return triggers;

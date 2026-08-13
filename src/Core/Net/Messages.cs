@@ -96,8 +96,17 @@ public sealed record TalkFinished : NetMessage;
 /// and that the trigger's own condition still holds, which is the whole of its
 /// involvement unless the square starts a fight.
 /// </para>
+/// <para>
+/// <paramref name="TrainerId"/> is the fight the client's own run of the script arrived
+/// at, and it is here because one square is not always one fight. The rival at the lab
+/// door is three trainers, chosen by which starter was taken — a fact about the save,
+/// which lives on the client's side of the cartridge. So the client names one and the
+/// server checks the name is on the list that square is allowed to produce. Naming a
+/// trainer this square cannot field is refused, which is what stops the message being a
+/// way to ask for any fight in the game.
+/// </para>
 /// </summary>
-public sealed record TriggerFired(int X, int Y) : NetMessage;
+public sealed record TriggerFired(int X, int Y, int? TrainerId = null) : NetMessage;
 
 /// <summary>
 /// Where a scene left somebody.

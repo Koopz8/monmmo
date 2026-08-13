@@ -1053,15 +1053,44 @@ public class TriggerTests
     }
 
     private static MapTrigger Rival(int x, int y, int value = 0) =>
-        new(x, y, Variable, value, ScriptAddress: 0, TrainerId: TestRules.OneAlone);
+        new(x, y, Variable, value, ScriptAddress: 0, Fights: [TestRules.OneAlone]);
 
     [Fact]
     public void AnArmedSquareWithATrainerOnItStartsAFight()
     {
         (GameWorld world, ServerPlayer player) = Standing(Rival(3, 4));
 
+        // Named by the client, because which of a square's fights it is can only be
+        // decided by running the script, and the script needs a cartridge.
         Assert.Contains(
-            world.FireTrigger(player.Id, 3, 4).Select(o => o.Message),
+            world.FireTrigger(player.Id, 3, 4, TestRules.OneAlone).Select(o => o.Message),
+            m => m is BattleStarted);
+    }
+
+    [Fact]
+    public void ASquareWillNotFieldATrainerItDoesNotHave()
+    {
+        // The other half of letting the client name the fight. The set comes off the
+        // world file, so a client asking this square for the champion gets nothing —
+        // and a rule enforced on one side of the split needs its counterpart on the
+        // other.
+        (GameWorld world, ServerPlayer player) = Standing(Rival(3, 4));
+
+        Assert.Empty(world.FireTrigger(player.Id, 3, 4, TestRules.OneAlone + 1));
+    }
+
+    [Fact]
+    public void TheArmedTriggerIsTheOneThatRunsWhenASquareCarriesTwo()
+    {
+        // The lab door carries two: one waiting on 0x4055 holding 2 and one waiting on
+        // it holding 3. Taking the first and asking whether it is armed refused the
+        // square for the whole of the rival's beat.
+        (GameWorld world, ServerPlayer player) = Standing(
+            new MapTrigger(3, 4, Variable, 9, ScriptAddress: 0, Fights: [TestRules.OneAlone + 1]),
+            Rival(3, 4));
+
+        Assert.Contains(
+            world.FireTrigger(player.Id, 3, 4, TestRules.OneAlone).Select(o => o.Message),
             m => m is BattleStarted);
     }
 
@@ -1129,7 +1158,7 @@ public class TriggerTests
 
         (ServerPlayer player, _) = world.Join(1, "Koop", SavedCharacter.Fresh(Town, 3, 4));
 
-        world.FireTrigger(player.Id, 3, 4, 10);
+        world.FireTrigger(player.Id, 3, 4, nowSeconds: 10);
         world.HoldSceneCast(player.Id, [3], 11);
 
         Assert.Equal(3, world.TalkingTo(player.Id));
@@ -1172,7 +1201,7 @@ public class TriggerTests
 
         (ServerPlayer player, _) = world.Join(1, "Koop", SavedCharacter.Fresh(Town, 3, 4));
 
-        world.FireTrigger(player.Id, 3, 4, 10);
+        world.FireTrigger(player.Id, 3, 4, nowSeconds: 10);
         world.HoldSceneCast(player.Id, [3], 10.1);
 
         for (double now = 10.2; now < 14; now += 0.2) world.Tick(now);
@@ -1228,7 +1257,7 @@ public class TriggerTests
 
         (ServerPlayer player, _) = world.Join(1, "Koop", SavedCharacter.Fresh(Town, 3, 4));
 
-        world.FireTrigger(player.Id, 3, 4, 10);
+        world.FireTrigger(player.Id, 3, 4, nowSeconds: 10);
         world.Move(player.Id, Direction.Up, 11);
         world.Move(player.Id, Direction.Up, 12);
 
@@ -1245,7 +1274,7 @@ public class TriggerTests
         {
             // A script address on the way in, and none on the way out. It is a cartridge
             // address and the world file is the server's.
-            Triggers = [new MapTrigger(3, 4, Variable, 2, ScriptAddress: 0x08123456, TrainerId: 7)],
+            Triggers = [new MapTrigger(3, 4, Variable, 2, ScriptAddress: 0x08123456, Fights: [7, 9])],
         };
 
         using var buffer = new MemoryStream();
@@ -1255,7 +1284,7 @@ public class TriggerTests
 
         MapTrigger reloaded = WorldData.Load(buffer).Find(Town)!.Triggers.Single();
 
-        Assert.Equal(new MapTrigger(3, 4, Variable, 2, ScriptAddress: 0, TrainerId: 7), reloaded);
+        Assert.Equal(new MapTrigger(3, 4, Variable, 2, ScriptAddress: 0, Fights: [7, 9]), reloaded);
     }
 
     [Fact]
@@ -1572,7 +1601,7 @@ public class ScenePlacementTests
     {
         (GameWorld world, ServerPlayer player) = Standing(Somebody(1, 3, 3));
 
-        world.FireTrigger(player.Id, 3, 4, 10);
+        world.FireTrigger(player.Id, 3, 4, nowSeconds: 10);
 
         ObjectMoved moved = world.PlaceAfterScene(player.Id, 1, new GridPosition(5, 5), Direction.Left, 11)
             .Select(o => o.Message).OfType<ObjectMoved>().Single();
@@ -1609,7 +1638,7 @@ public class ScenePlacementTests
         (ServerPlayer player, _) = world.Join(1, "Koop", SavedCharacter.Fresh(Town, 3, 4));
         player.Facing = Direction.Up;
 
-        world.FireTrigger(player.Id, 3, 4, 10);
+        world.FireTrigger(player.Id, 3, 4, nowSeconds: 10);
 
         Assert.Empty(world.PlaceAfterScene(player.Id, 1, new GridPosition(5, 5), Direction.Left, 11));
         Assert.Contains("not somewhere anybody can stand", world.LastScenePlacement);
@@ -1620,7 +1649,7 @@ public class ScenePlacementTests
     {
         (GameWorld world, ServerPlayer player) = Standing(Somebody(1, 3, 3), Somebody(2, 5, 5));
 
-        world.FireTrigger(player.Id, 3, 4, 10);
+        world.FireTrigger(player.Id, 3, 4, nowSeconds: 10);
 
         Assert.Empty(world.PlaceAfterScene(player.Id, 1, new GridPosition(5, 5), Direction.Left, 11));
         Assert.Contains("already has object 2", world.LastScenePlacement);
@@ -1634,7 +1663,7 @@ public class ScenePlacementTests
         // whole map, once per person, once per scene, is noise nobody needs.
         (GameWorld world, ServerPlayer player) = Standing(Somebody(1, 3, 3));
 
-        world.FireTrigger(player.Id, 3, 4, 10);
+        world.FireTrigger(player.Id, 3, 4, nowSeconds: 10);
 
         Assert.Empty(world.PlaceAfterScene(player.Id, 1, new GridPosition(3, 3), Direction.Down, 11));
         Assert.Contains("already at", world.LastScenePlacement);
@@ -1661,7 +1690,7 @@ public class ScenePlacementTests
 
         (ServerPlayer player, _) = world.Join(1, "Koop", SavedCharacter.Fresh(Town, 3, 4));
 
-        world.FireTrigger(player.Id, 3, 4, 10);
+        world.FireTrigger(player.Id, 3, 4, nowSeconds: 10);
 
         WentInside inside = world.PlaceAfterScene(player.Id, 1, new GridPosition(6, 3), Direction.Up, 11)
             .Select(o => o.Message).OfType<WentInside>().Single();
@@ -1687,7 +1716,7 @@ public class ScenePlacementTests
 
         (ServerPlayer player, _) = world.Join(1, "Koop", SavedCharacter.Fresh(Town, 3, 4));
 
-        world.FireTrigger(player.Id, 3, 4, 10);
+        world.FireTrigger(player.Id, 3, 4, nowSeconds: 10);
 
         ObjectMoved moved = world.PlaceAfterScene(player.Id, 1, new GridPosition(6, 3), Direction.Up, 11)
             .Select(o => o.Message).OfType<ObjectMoved>().Single();
@@ -1705,7 +1734,7 @@ public class ScenePlacementTests
         // player who stepped off it could never step back on.
         (GameWorld world, ServerPlayer player) = Standing(Somebody(1, 3, 3));
 
-        world.FireTrigger(player.Id, 3, 4, 10);
+        world.FireTrigger(player.Id, 3, 4, nowSeconds: 10);
 
         Assert.Empty(world.PlaceAfterScene(player.Id, 1, player.Square, Direction.Left, 11));
         Assert.Contains($"has #{player.Id} standing on it", world.LastScenePlacement);

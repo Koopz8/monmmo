@@ -654,7 +654,7 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                             break;
 
                         case TriggerFired stepped when playerId != 0:
-                            List<Outgoing> fired = world.FireTrigger(playerId, stepped.X, stepped.Y, Now);
+                            List<Outgoing> fired = world.FireTrigger(playerId, stepped.X, stepped.Y, stepped.TrainerId, Now);
 
                             if (world.LastTriggerOutcome is { } triggerOutcome)
                             {

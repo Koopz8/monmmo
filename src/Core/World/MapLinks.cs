@@ -61,15 +61,60 @@ public sealed record MapTrigger(
     int Variable,
     int Value,
     uint ScriptAddress = 0,
-    int TrainerId = 0)
+    IReadOnlyList<int>? Fights = null)
 {
+    /// <summary>
+    /// Every trainer this square can pick a fight with — usually none, sometimes one,
+    /// and at the lab door three.
+    /// <para>
+    /// A list rather than a number because the rival is three trainers. His script
+    /// compares which starter was taken and fields the boy holding the type yours loses
+    /// to, so the fight behind that square is not a fact about the square: it is a fact
+    /// about the save, and the save lives on the other side of the split.
+    /// </para>
+    /// <para>
+    /// What this side keeps is the set, which is the part a server with no cartridge can
+    /// honestly hold. The client runs the script and names one; the server checks the
+    /// name came from this list. Neither half is enough alone, which is the usual shape.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<int> Fights { get; init; } = Fights ?? [];
+
     public GridPosition Square => new(X, Y);
 
     /// <summary>True when there is anything at all to run here.</summary>
     public bool HasScript => ScriptAddress != 0;
 
     /// <summary>True when walking onto this one starts a fight.</summary>
-    public bool CanBeFought => TrainerId != 0;
+    public bool CanBeFought => Fights.Count > 0;
+
+    /// <summary>Whether a trainer a client has named is one this square could produce.</summary>
+    public bool Fields(int trainerId) => Fights.Contains(trainerId);
+
+    // A record's generated equality compares the list by reference, which would make two
+    // triggers read from the same cartridge unequal and every world-file round-trip test
+    // fail for a reason that has nothing to do with what changed.
+    public bool Equals(MapTrigger? other) =>
+        other is not null &&
+        X == other.X && Y == other.Y &&
+        Variable == other.Variable && Value == other.Value &&
+        ScriptAddress == other.ScriptAddress &&
+        Fights.SequenceEqual(other.Fights);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+
+        hash.Add(X);
+        hash.Add(Y);
+        hash.Add(Variable);
+        hash.Add(Value);
+        hash.Add(ScriptAddress);
+
+        foreach (int id in Fights) hash.Add(id);
+
+        return hash.ToHashCode();
+    }
 
     /// <summary>
     /// Whether this one is armed, given what a save holds.
