@@ -33,6 +33,7 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(ObstacleShifted), "shifted")]
 [JsonDerivedType(typeof(WentInside), "wentinside")]
 [JsonDerivedType(typeof(TriggerFired), "triggered")]
+[JsonDerivedType(typeof(NameMonRequest), "namemon")]
 [JsonDerivedType(typeof(ScenePlaced), "sceneplaced")]
 [JsonDerivedType(typeof(SceneCast), "scenecast")]
 [JsonDerivedType(typeof(BuyRequest), "buy")]
@@ -107,6 +108,18 @@ public sealed record TalkFinished : NetMessage;
 /// </para>
 /// </summary>
 public sealed record TriggerFired(int X, int Y, int? TrainerId = null) : NetMessage;
+
+/// <summary>
+/// A name for one of the party, given by the player on a screen this project had to
+/// build itself.
+/// <para>
+/// The cartridge's keyboard is ARM code and cannot be read, so the script's call to it
+/// returns and the client asks instead. The server keeps the answer because the server
+/// keeps the party — and because a nickname a client held on its own would last until
+/// the next sign-in.
+/// </para>
+/// </summary>
+public sealed record NameMonRequest(int Slot, string Name) : NetMessage;
 
 /// <summary>
 /// Where a scene left somebody.

@@ -689,6 +689,12 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                                 .ConfigureAwait(false);
                             break;
 
+                        case NameMonRequest named when playerId != 0:
+                            await DispatchAsync(
+                                    world.NameMon(playerId, named.Slot, named.Name), playerId, cancellationToken)
+                                .ConfigureAwait(false);
+                            break;
+
                         case BuyRequest buy when playerId != 0:
                             await DispatchAsync(world.Buy(playerId, buy.ItemId, buy.Count), playerId, cancellationToken)
                                 .ConfigureAwait(false);

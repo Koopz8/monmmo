@@ -155,6 +155,8 @@ public sealed class NetworkClient : IDisposable
     /// </summary>
     public void SendFlagsSet(IReadOnlyList<int> flags) => Send(new ScriptRan(flags, [], []));
 
+    public void SendNameMon(int slot, string name) => Send(new NameMonRequest(slot, name));
+
     public void SendBuy(int itemId, int count) => Send(new BuyRequest(itemId, count));
 
     public void SendSell(int itemId, int count) => Send(new SellRequest(itemId, count));

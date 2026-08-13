@@ -1443,6 +1443,77 @@ public sealed class GameWorld
             OnlyTo: player.Id)];
     }
 
+    /// <summary>What the last attempt to name somebody came to.</summary>
+    public string? LastNaming { get; private set; }
+
+    /// <summary>
+    /// Names one of the party.
+    /// <para>
+    /// The screen it comes from is the client's own, because the cartridge's keyboard is
+    /// code and cannot be read. That makes the name a thing the player typed rather than
+    /// a thing the world decided, which is exactly why it is checked here: the slot has
+    /// to be one they have, and the text has to be text.
+    /// </para>
+    /// <para>
+    /// In a fight it is refused. A nickname changing mid-turn would rename somebody
+    /// half-way through the sentence describing what they just did.
+    /// </para>
+    /// </summary>
+    public List<Outgoing> NameMon(int playerId, int slot, string name)
+    {
+        lock (_gate)
+        {
+            LastNaming = null;
+
+            if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
+
+            if (player.InBattle)
+            {
+                LastNaming = "refused: in the middle of a fight";
+                return [];
+            }
+
+            if (slot < 0 || slot >= player.Party.Count)
+            {
+                LastNaming = $"refused: slot {slot} of a party of {player.Party.Count}";
+                return [];
+            }
+
+            // Letters, digits and single spaces, and no longer than the longest name the
+            // cartridge itself offers. A name goes into a save and onto other players'
+            // screens, so what arrives here is a suggestion rather than an instruction.
+            // Trimmed before it is cut, not after. Cutting first spends the length on
+            // whatever whitespace arrived in front of the name — "  AVERYLONGNAME" came
+            // out as eight letters rather than ten.
+            string clean = new string(name.Where(c => char.IsLetterOrDigit(c) || c == ' ').ToArray()).Trim();
+
+            if (clean.Length > MaxNameLength) clean = clean[..MaxNameLength];
+
+            if (clean.Length == 0)
+            {
+                LastNaming = "refused: nothing in it";
+                return [];
+            }
+
+            player.Party[slot] = player.Party[slot] with { Nickname = clean };
+            LastNaming = $"slot {slot} is called {clean}";
+
+            return [new Outgoing(
+                new BagUpdated(player.Bag.Entries, [.. player.Party], $"Called {clean}."),
+                OnlyTo: player.Id)];
+        }
+    }
+
+    /// <summary>
+    /// As long as the longest name this cartridge offers to give a character.
+    /// <para>
+    /// Ten, and it is the client that reads that out of the image — this side has never
+    /// seen one. Kept as a number here because a bound the server does not own is not a
+    /// bound.
+    /// </para>
+    /// </summary>
+    private const int MaxNameLength = 10;
+
     /// <summary>
     /// Uses something out of the bag on a party member, outside a fight.
     /// <para>

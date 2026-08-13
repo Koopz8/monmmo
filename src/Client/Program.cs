@@ -40,6 +40,12 @@ public static class Program
     /// </summary>
     private const int TalkingTo = 0x800F;
 
+    /// <summary>
+    /// The party slot a script is about to have named, which it writes just before it
+    /// calls the cartridge's keyboard.
+    /// </summary>
+    private const int NamingSlot = 0x8004;
+
     public static int Main(string[] args)
     {
         // The working directory, not the build output, so the file sits alongside the
@@ -218,6 +224,11 @@ public static class Program
         // than inside it: a box is one thing being said and a scene is an order of
         // things happening, and most scripts are the first kind.
         Cutscene? scene = null;
+
+        // The screen this project had to build itself, because the one the cartridge
+        // would have shown is a keyboard drawn in code.
+        NamingScreen? naming = null;
+
         ShopScreen? shop = null;
         IReadOnlyList<BagEntry> bag = [];
         int money = 0;
@@ -235,6 +246,11 @@ public static class Program
         {
             IsGirl = settings.Girl,
             PlayerName = signedInAs,
+
+            // The cartridge's own first suggestion rather than a word this project made
+            // up. Which of the forty-two the games give the rival is not settled by the
+            // list, but it is one of them — and "RIVAL" was none of them.
+            RivalName = NameSuggestions.FirstName(data.SuggestedNames) ?? "RIVAL",
             NameOfSpecies = species => data.SpeciesAt(species)?.Name ?? "",
         };
 
@@ -425,10 +441,40 @@ public static class Program
                 continue;
             }
 
+            // Ahead of everything else, because a name is being typed and W, A, S and D
+            // are letters before they are directions.
+            if (naming is not null)
+            {
+                naming.Update();
+
+                if (naming is { IsFinished: true } named)
+                {
+                    naming = null;
+
+                    // Only when they changed it. A monster with no nickname and one
+                    // nicknamed after its own species look identical on every screen,
+                    // but only one of them is still called whatever its species is
+                    // called — which matters the first time somebody plays in another
+                    // language.
+                    if (!named.Unchanged) network.SendNameMon(named.Slot, named.Name);
+
+                    Note(named.Unchanged
+                        ? $"slot {named.Slot} keeps the name {named.Species}"
+                        : $"slot {named.Slot} is called {named.Name}");
+
+                    // And then whatever the script was going to do next, which for the
+                    // ball on the professor's table is the rival taking his own.
+                    if (named.Rest is { } rest)
+                        (talking, scene) = Present(data, view, network, script, rest);
+
+                    if (talking is null && scene is null) network.SendTalkFinished();
+                }
+            }
+
             // A conversation stops the world the same way a battle does, except the map
             // stays on screen behind it. Reading movement here would have the player
             // walking away from somebody mid-sentence.
-            if (scene is not null)
+            else if (scene is not null)
             {
                 scene.Update(delta);
 
@@ -466,9 +512,9 @@ public static class Program
                     // run stopped where it was asked because nothing in a save can answer
                     // it; now somebody has, so the rest of it runs with the answer in
                     // place — which is how a starter gets taken rather than declined.
-                    (talking, scene) = Answered(data, view, network, script, party, answered);
+                    (talking, scene, naming) = Answered(data, view, network, script, party, answered);
 
-                    if (talking is null && scene is null) network.SendTalkFinished();
+                    if (talking is null && scene is null && naming is null) network.SendTalkFinished();
                 }
             }
             else if (DialogueBox.Pressed() && !player.IsStepping)
@@ -486,9 +532,15 @@ public static class Program
             // over the player is standing where they were and free to walk to it.
             holdInput = Math.Max(0f, holdInput - delta);
 
-            Direction? input = scene is null && talking is null && watching is null && holdInput <= 0f
-                ? ReadDirection()
-                : null;
+            // A name being typed stops the world for the same reason a conversation
+            // does, and with more urgency: the arrow keys move a caret through a field
+            // and would otherwise also walk the player out of the room they are being
+            // asked the question in. The first run of this had the rival's challenge
+            // fire while the box was still open.
+            Direction? input =
+                scene is null && talking is null && naming is null && watching is null && holdInput <= 0f
+                    ? ReadDirection()
+                    : null;
 
             player.Update(delta, input);
 
@@ -594,6 +646,11 @@ public static class Program
             // A scene's line goes in the same box a conversation's does. There is only
             // one box on screen and only one thing being said at a time.
             (scene?.Saying ?? talking)?.Draw(WindowWidth, WindowHeight);
+
+            // Over the box rather than instead of it: the question that led here is
+            // still the last thing said, and a screen that clears it reads as a
+            // different scene.
+            naming?.Draw(WindowWidth, WindowHeight);
             Raylib.EndDrawing();
         }
 
@@ -884,11 +941,11 @@ public static class Program
     /// being declined before anybody saw it.
     /// </para>
     /// </summary>
-    private static (DialogueBox? Talking, Cutscene? Scene) Answered(
+    private static (DialogueBox? Talking, Cutscene? Scene, NamingScreen? Naming) Answered(
         GameData data, MapView view, NetworkClient network, ScriptState script,
         IReadOnlyList<SavedMon> party, DialogueBox asked)
     {
-        if (asked.Resume is not { } from) return (null, null);
+        if (asked.Resume is not { } from) return (null, null, null);
 
         script.Write(0x800D, asked.Answer ? 1 : 0);
 
@@ -898,6 +955,42 @@ public static class Program
             $"answered {(asked.Answer ? "yes" : "no")}, carried on from 0x{from:X8}: " +
             $"{run.Pages.Count} pages, {run.Beats.Count} beats");
 
+        // A run that called into code it could not read, having just written the slot
+        // that code was going to work on, is the naming screen — and it is the only
+        // thing in the opening that is either. Three scripts in the whole cartridge end
+        // by returning from code, so this is not a net that catches much.
+        //
+        // The screen has to be ours: 0x081A74EB is a keyboard drawn by the game itself,
+        // and no amount of adopting command widths will ever decode a keyboard.
+        if (run.CodeCalled.Count > 0 && script.Read(NamingSlot) is var slot && slot < party.Count)
+        {
+            string species = data.SpeciesAt(party[slot].Species)?.Name ?? "it";
+
+            Note($"the script asked for a name for slot {slot} ({species})");
+
+            // The rest of the run is kept rather than played. The naming screen sits in
+            // the middle of it — the call the cartridge makes to its keyboard is followed
+            // by the goto that leads to the rival taking his own — so what comes after
+            // the name is what came after the call.
+            return (null, null, new NamingScreen(slot, species, data.SuggestedNames) { Rest = run });
+        }
+
+        (DialogueBox? box, Cutscene? scene) = Present(data, view, network, script, run);
+
+        return (box, scene, null);
+    }
+
+    /// <summary>
+    /// Turns a finished run into whatever the player should be looking at.
+    /// <para>
+    /// Shared because there are now three ways to arrive here — answering a question,
+    /// naming something, and the run that started it all — and the difference between a
+    /// scene and a box is not a thing any of them should decide separately.
+    /// </para>
+    /// </summary>
+    private static (DialogueBox? Talking, Cutscene? Scene) Present(
+        GameData data, MapView view, NetworkClient network, ScriptState script, ScriptRun run)
+    {
         // What comes after an answer is not always more talking. Saying yes to the ball
         // on the professor's table runs on into the rival taking his and walking over,
         // which is a scene — and a scene handed to a text box is a text box with nothing

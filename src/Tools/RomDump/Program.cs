@@ -148,6 +148,8 @@ public static class Program
 
         if (options.HideFlags) WriteHideFlags(rom);
 
+        if (options.NameRuns) WriteNameRuns(rom, extractor);
+
         if (options.Specials) WriteSpecials(rom);
 
         if (options.Special is { } routine) WriteSpecial(rom, routine);
@@ -1686,6 +1688,121 @@ public static class Program
     /// ones scripts set; if they are separated by a constant, the shifted values will be.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Runs of short names in the image that are not any table this project already
+    /// knows, which is how the rival's name menu gets found.
+    /// <para>
+    /// The game offers a list of names for him during an intro this project does not
+    /// run, and until it is located the rival is called "RIVAL" — a placeholder, and
+    /// deliberately one, because writing a name here from memory of the games is exactly
+    /// the guess everything else refuses to make.
+    /// </para>
+    /// <para>
+    /// The shape searched for is the shape every other name table in this cartridge has:
+    /// a fixed stride, one terminator per record, zero fill after it. No expected names
+    /// and no expected address go into the search, so what comes back is read rather
+    /// than confirmed.
+    /// </para>
+    /// </summary>
+    private static void WriteNameRuns(Rom rom, RomExtractor extractor)
+    {
+        Console.WriteLine();
+        Console.WriteLine("Runs of short names outside the tables already located");
+
+        // The list the rival is named from, which is not a fixed-width table and so is
+        // found by its run rather than by its stride.
+        IReadOnlyList<string> suggestions = NameSuggestions.Locate(rom, Console.WriteLine);
+
+        if (suggestions.Count > 0)
+        {
+            Console.WriteLine($"    all of them: {string.Join(", ", suggestions)}");
+            Console.WriteLine($"    the first that is a name and not a menu option: {NameSuggestions.FirstName(suggestions)}");
+        }
+
+
+        // Everything already accounted for, so a hit inside one of them is not reported
+        // as a discovery. The species names alone are 412 records and would drown it.
+        var known = new List<(int From, int To)>();
+
+        foreach (TableLocation? table in (TableLocation?[])[extractor.Tables.SpeciesNames, extractor.Tables.BaseStats])
+        {
+            if (table is not null) known.Add((table.Offset, table.Offset + table.EntrySize * table.EntryCount));
+        }
+
+        var found = new List<(int At, int Stride, int Count, List<string> Names)>();
+
+        for (int stride = 8; stride <= 8; stride++)
+        {
+            for (int at = 0; at + stride * 4 < rom.Length; at += 1)
+            {
+                if (known.Any(k => at >= k.From && at <= k.To)) continue;
+
+                var names = new List<string>();
+
+                for (int i = 0; at + (i + 1) * stride <= rom.Length; i++)
+                {
+                    if (Named(rom, at + i * stride, stride) is not { } name) break;
+
+                    names.Add(name);
+                }
+
+                if (names.Count is < 3 or > 12) continue;
+
+                found.Add((at, stride, names.Count, names));
+                at += names.Count * stride;
+            }
+        }
+
+        foreach ((int at, int stride, int count, List<string> names) in found
+                     .Where(f => f.Names.All(n => n.Length is >= 3 and <= 7 && n.All(char.IsUpper)))
+
+                     // The easy-chat word bank is thousands of short uppercase words in
+                     // exactly this shape and would fill any list this prints.
+                     .Where(f => f.At < 0x3E0000 || f.At > 0x420000)
+                     .OrderByDescending(f => f.Count)
+                     .Take(24))
+        {
+            Console.WriteLine();
+            Console.WriteLine($"  0x{Rom.BaseAddress + (uint)at:X8}  {count} names, {stride} bytes each");
+            Console.WriteLine($"    {string.Join(", ", names.Take(12))}");
+        }
+    }
+
+    /// <summary>
+    /// One fixed-width record read as a name, or nothing when it is not one.
+    /// <para>
+    /// Letters, then a terminator, then zeroes to the end of the record — which is what
+    /// a compiler does with an array of string literals, and what makes these tables
+    /// findable at all. Two letters is the shortest thing worth calling a name.
+    /// </para>
+    /// </summary>
+    private static string? Named(Rom rom, int at, int stride)
+    {
+        var text = new System.Text.StringBuilder();
+
+        for (int i = 0; i < stride; i++)
+        {
+            byte b = rom.ReadU8(at + i);
+
+            if (b == GameText.Terminator)
+            {
+                if (text.Length < 2) return null;
+
+                // The fill after the terminator is zero in the tables already located,
+                // but a menu of a few names need not have been written as an array of
+                // literals — so anything is allowed after it and the run length is what
+                // has to carry the evidence instead.
+                return text.ToString();
+            }
+
+            if (b >= 0xBB && b < 0xBB + 26) text.Append((char)('A' + (b - 0xBB)));
+            else if (b >= 0xD5 && b < 0xD5 + 26) text.Append((char)('a' + (b - 0xD5)));
+            else return null;
+        }
+
+        return null;
+    }
+
     private static void WriteHideFlags(Rom rom)
     {
         MapLibrary library = MapLibrary.Open(rom);
@@ -3618,6 +3735,8 @@ public static class Program
 
         public bool HideFlags { get; private init; }
 
+        public bool NameRuns { get; private init; }
+
         /// <summary>Count which special routines get called, and on which maps.</summary>
         public bool Specials { get; private init; }
 
@@ -3688,6 +3807,7 @@ public static class Program
             bool scriptRuns = false;
             bool substitutions = false;
             bool hideFlags = false;
+            bool nameRuns = false;
             bool specials = false;
             int? special = null;
             byte? answers = null;
@@ -3791,6 +3911,9 @@ public static class Program
                         break;
                     case "--hide-flags":
                         hideFlags = true;
+                        break;
+                    case "--name-runs":
+                        nameRuns = true;
                         break;
                     case "--specials-on":
                         specialsOn = Next(args, ref i, "--specials-on");
@@ -3931,6 +4054,7 @@ public static class Program
                 ScriptRuns = scriptRuns,
                 Substitutions = substitutions,
                 HideFlags = hideFlags,
+                NameRuns = nameRuns,
                 Specials = specials,
                 Special = special,
                 Answers = answers,

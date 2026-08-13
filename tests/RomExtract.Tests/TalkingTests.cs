@@ -620,6 +620,51 @@ public class BlackingOutTests
     private static SavedMon Wounded =>
         new(3, 30, null, 1, StatusCondition.None, Nature.Hardy, [TestRules.FirstMove]);
 
+    [Fact]
+    public void SomebodyInThePartyCanBeNamed()
+    {
+        // The screen this comes from is the client's own, because the cartridge's
+        // keyboard is code and cannot be read. That makes the name a thing a player
+        // typed rather than a thing the world decided — so it is checked here.
+        (GameWorld world, ServerPlayer player) = Playing();
+
+        Assert.NotEmpty(world.NameMon(player.Id, 0, "SPROUT"));
+        Assert.Equal("SPROUT", player.Party[0].Nickname);
+    }
+
+    [Fact]
+    public void ANameIsTrimmedToWhatTheCartridgeItselfCouldHold()
+    {
+        // Ten, which is the longest name in the list this game offers when it asks
+        // somebody to name a character. A player can have whatever the cartridge could.
+        (GameWorld world, ServerPlayer player) = Playing();
+
+        world.NameMon(player.Id, 0, "  AVERYLONGNAMEINDEED!!  ");
+
+        Assert.Equal("AVERYLONGN", player.Party[0].Nickname);
+    }
+
+    [Fact]
+    public void ASlotNobodyIsInIsRefused()
+    {
+        (GameWorld world, ServerPlayer player) = Playing();
+
+        Assert.Empty(world.NameMon(player.Id, 4, "SPROUT"));
+        Assert.Null(player.Party[0].Nickname);
+    }
+
+    [Fact]
+    public void ANameOfNothingAtAllIsRefused()
+    {
+        // A field that accepts anything a keyboard can produce is a field somebody will
+        // put a control character in, and a nickname of nothing is a party member with
+        // no name on any screen in the game.
+        (GameWorld world, ServerPlayer player) = Playing();
+
+        Assert.Empty(world.NameMon(player.Id, 0, "   !!!   "));
+        Assert.Null(player.Party[0].Nickname);
+    }
+
     private static (GameWorld World, ServerPlayer Player) Playing()
     {
         GameWorld world = World();

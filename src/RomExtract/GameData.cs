@@ -41,6 +41,15 @@ public sealed class GameData
 
     public IReadOnlyDictionary<int, Learnset> Learnsets { get; }
 
+    /// <summary>
+    /// The names this cartridge offers when it asks somebody to name a character.
+    /// <para>
+    /// Read at load because locating them walks the whole image, and because the first
+    /// line the rival says is in the first minute of the game.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<string> SuggestedNames { get; private init; } = [];
+
     public static GameData Load(string romPath, Action<string>? log = null)
     {
         Rom rom = Rom.Load(romPath);
@@ -63,7 +72,10 @@ public sealed class GameData
 
         Dictionary<int, Learnset> learnsets = LearnsetExtractor.Extract(rom, log);
 
-        return new GameData(rom, extractor, species, moves, learnsets);
+        return new GameData(rom, extractor, species, moves, learnsets)
+        {
+            SuggestedNames = NameSuggestions.Locate(rom, log),
+        };
     }
 
     public SpeciesData? SpeciesAt(int index) =>

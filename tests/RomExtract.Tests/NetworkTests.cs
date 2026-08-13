@@ -85,6 +85,7 @@ public class MessageChannelTests
             new WentInside(3),
             new ObstacleShifted(4, 15, 1),
             new TriggerFired(9, 12),
+            new NameMonRequest(0, "SPROUT"),
             new ScenePlaced(2, 5, 6, Direction.Left),
             new SceneCast([3, 4]),
             new BuyRequest(4, 5),
