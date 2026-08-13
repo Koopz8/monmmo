@@ -35,6 +35,18 @@ public sealed class BagScreen
     private int _member;
     private string _message = "";
 
+    /// <summary>
+    /// The move a machine has offered and which of the four it would replace.
+    /// <para>
+    /// Held here because this is where the machine was used. The battle screen asks the
+    /// same question in the same words; what differs is only which screen the player
+    /// happens to be looking at when it is asked.
+    /// </para>
+    /// </summary>
+    private (int Slot, int MoveId)? _offered;
+
+    private int _forget;
+
     public BagScreen(
         IReadOnlyList<BagEntry> bag,
         IReadOnlyList<SavedMon> party,
@@ -69,9 +81,26 @@ public sealed class BagScreen
         // Back to the list. Drinking the last Potion while standing on it would
         // otherwise leave the cursor pointing at something that is no longer there.
         _choosingWho = false;
+        _offered = null;
 
         Clamp();
     }
+
+    /// <summary>A machine has asked which of four moves to drop.</summary>
+    public void Apply(MoveOffered offer)
+    {
+        _offered = (offer.Slot, offer.MoveId);
+        _forget = 0;
+        _message = "";
+    }
+
+    private string MoveNamed(int moveId) =>
+        GameText.ToAscii(_data.MoveAt(moveId)?.Name ?? $"move {moveId}");
+
+    private IReadOnlyList<int> OfferedTo =>
+        _offered is { } offer && offer.Slot >= 0 && offer.Slot < _party.Count
+            ? _party[offer.Slot].Moves
+            : [];
 
     private List<BagEntry> Usable() => [.. _bag.Where(e => e.Count > 0)];
 
@@ -85,6 +114,14 @@ public sealed class BagScreen
 
     public void Update()
     {
+        // The question comes first, because it is a question. Walking away from an open
+        // one would leave the server holding an offer nothing will ever answer.
+        if (_offered is { } asking)
+        {
+            ChooseForget(asking);
+            return;
+        }
+
         if (Raylib.IsKeyPressed(KeyboardKey.Escape) || Raylib.IsKeyPressed(KeyboardKey.X))
         {
             // Backing out of the party list closes the list, not the bag. Two escapes
@@ -120,11 +157,45 @@ public sealed class BagScreen
         Pending = new UseItemRequest(lines[_row].ItemId, _member);
     }
 
+    /// <summary>
+    /// Which of the four to lose, or none of them.
+    /// <para>
+    /// Backing out is an answer rather than an escape, and it is sent as one: the games
+    /// let you keep what you have, and the server needs to be told so that the offer
+    /// stops standing.
+    /// </para>
+    /// </summary>
+    private void ChooseForget((int Slot, int MoveId) asking)
+    {
+        IReadOnlyList<int> moves = OfferedTo;
+        int rows = moves.Count + 1;
+
+        if (Raylib.IsKeyPressed(KeyboardKey.Down) || Raylib.IsKeyPressed(KeyboardKey.S))
+            _forget = (_forget + 1) % rows;
+
+        if (Raylib.IsKeyPressed(KeyboardKey.Up) || Raylib.IsKeyPressed(KeyboardKey.W))
+            _forget = (_forget - 1 + rows) % rows;
+
+        bool keep = Raylib.IsKeyPressed(KeyboardKey.Escape) || Raylib.IsKeyPressed(KeyboardKey.X);
+
+        if (!keep && !Raylib.IsKeyPressed(KeyboardKey.Z) && !Raylib.IsKeyPressed(KeyboardKey.Enter)) return;
+
+        Pending = new LearnMoveRequest(asking.MoveId, keep || _forget >= moves.Count ? -1 : _forget);
+
+        _offered = null;
+    }
+
     public void Draw()
     {
         Raylib.ClearBackground(new Color(28, 32, 44, 255));
 
         List<BagEntry> lines = Usable();
+
+        if (_offered is { } asking)
+        {
+            DrawForgetMenu(asking);
+            return;
+        }
 
         Raylib.DrawText(_choosingWho ? "USE ON WHO?" : "BAG", 40, 32, 28, Color.White);
 
@@ -175,5 +246,44 @@ public sealed class BagScreen
         Raylib.DrawText(
             _choosingWho ? "Z use    X back" : "Z choose    X close",
             40, Height - 56, 20, new Color(150, 150, 160, 255));
+    }
+
+    private void DrawForgetMenu((int Slot, int MoveId) asking)
+    {
+        IReadOnlyList<int> moves = OfferedTo;
+
+        string who = asking.Slot >= 0 && asking.Slot < _party.Count
+            ? GameText.ToAscii(
+                _party[asking.Slot].Nickname
+                ?? _data.SpeciesAt(_party[asking.Slot].Species)?.Name
+                ?? $"species {_party[asking.Slot].Species}")
+            : "It";
+
+        Raylib.DrawText($"{who} already knows four moves.", 40, 32, 26, Color.White);
+        Raylib.DrawText($"Forget one to make room for {MoveNamed(asking.MoveId)}?", 40, 70, 24,
+            new Color(190, 190, 200, 255));
+
+        for (int i = 0; i < moves.Count; i++)
+        {
+            int y = 140 + i * 34;
+            bool selected = i == _forget;
+
+            if (selected) Raylib.DrawText(">", 40, y, 24, Color.White);
+
+            Raylib.DrawText(
+                MoveNamed(moves[i]), 72, y, 24,
+                selected ? Color.White : new Color(190, 190, 200, 255));
+        }
+
+        int last = 140 + moves.Count * 34;
+
+        if (_forget >= moves.Count) Raylib.DrawText(">", 40, last, 24, Color.White);
+
+        Raylib.DrawText(
+            $"Keep all four, and do not learn {MoveNamed(asking.MoveId)}",
+            72, last, 24,
+            _forget >= moves.Count ? Color.White : new Color(190, 190, 200, 255));
+
+        Raylib.DrawText("Z choose    X keep all four", 40, Height - 56, 20, new Color(150, 150, 160, 255));
     }
 }

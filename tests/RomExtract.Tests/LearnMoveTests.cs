@@ -97,10 +97,13 @@ public class LearnMoveTests
         // closed would have nothing left to be an answer to.
         (_, ServerPlayer player) = AfterALevelUp();
 
-        (int slot, int moveId) = Assert.Single(player.MovesOffered);
+        (int slot, int moveId, int fromItem) = Assert.Single(player.MovesOffered);
 
         Assert.Equal(0, slot);
         Assert.Equal(TestRules.TaughtMove, moveId);
+
+        // Nought, because nothing was used to produce it: this offer came off a level.
+        Assert.Equal(0, fromItem);
 
         // And nothing has happened to the four yet.
         Assert.Equal(new[] { 1, 3, 4, 5 }, player.Party[0].Moves);

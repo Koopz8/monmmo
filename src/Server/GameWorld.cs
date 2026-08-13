@@ -109,7 +109,15 @@ public sealed record ServerPlayer(int Id, long AccountId, string Name)
     /// can only reply to something already on this list.
     /// </para>
     /// </summary>
-    public List<(int Slot, int MoveId)> MovesOffered { get; } = [];
+    /// <summary>
+    /// Moves this player has been offered and not yet answered about.
+    /// <para>
+    /// The item is carried alongside because a machine is spent by being used and a
+    /// level-up is not. A TM that vanished when the question was asked would be a TM
+    /// lost by declining it.
+    /// </para>
+    /// </summary>
+    public List<(int Slot, int MoveId, int FromItem)> MovesOffered { get; } = [];
 
     /// <summary>
     /// How long a scene may go on walking this player about.
@@ -1675,12 +1683,22 @@ public sealed class GameWorld
 
         if (member.Moves.Count >= MoveSlots)
         {
-            return [new Outgoing(
-                new BagUpdated(
-                    player.Bag.Entries,
-                    [.. player.Party],
-                    "It already knows four moves, and there is no way to forget one yet."),
-                OnlyTo: player.Id)];
+            // Asked rather than refused. This used to say "there is no way to forget one
+            // yet", and it went on saying it after there was one — the level-up path
+            // learned to ask and the machine path never did, so the question existed for
+            // moves nobody chose and not for the one move a player went and bought.
+            //
+            // The machine is not spent here. It is spent by being used, and declining is
+            // not using it.
+            if (player.MovesOffered.Any(o => o.Slot == slot && o.MoveId == machine.Teaches))
+                return [];
+
+            player.MovesOffered.Add((slot, machine.Teaches, machine.Id));
+
+            return
+            [
+                new Outgoing(new MoveOffered(slot, machine.Teaches), OnlyTo: player.Id),
+            ];
         }
 
         player.Party[slot] = member with { Moves = [.. member.Moves, machine.Teaches] };
@@ -2538,7 +2556,7 @@ public sealed class GameWorld
                 return [];
             }
 
-            (int slot, int _) = player.MovesOffered[at];
+            (int slot, int _, int fromItem) = player.MovesOffered[at];
 
             player.MovesOffered.RemoveAt(at);
 
@@ -2560,6 +2578,13 @@ public sealed class GameWorld
             moves[forget] = moveId;
 
             player.Party[slot] = member with { Moves = moves };
+
+            // And now the machine is spent, if it was a machine and if it is the kind
+            // that is used up. The eight the cartridge marks too important to sell are
+            // the eight that survive being used, which is the same line the teaching
+            // path has always drawn.
+            if (fromItem != 0 && _battles?.Rules.ItemAt(fromItem) is { IsReusableMachine: false })
+                player.Bag.Remove(fromItem);
 
             LastLearned = $"forgot move {dropped} and learned {moveId}";
 
@@ -3281,7 +3306,7 @@ public sealed class GameWorld
         // to drop; this remembers what was offered so the asking can happen once the
         // player has finished reading, and the answer can arrive after the fight is over.
         foreach (BattleEvent.MoveNotLearned offered in events.OfType<BattleEvent.MoveNotLearned>())
-            player.MovesOffered.Add((slot, offered.MoveId));
+            player.MovesOffered.Add((slot, offered.MoveId, 0));
 
         return events;
     }

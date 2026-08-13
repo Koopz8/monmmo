@@ -103,12 +103,15 @@ public sealed record MapData(string Id, string Name, int Width, int Height, byte
     /// </summary>
     public CollisionGrid ToGrid(bool surfing)
     {
-        CollisionGrid grid = new CollisionGrid(Width, Height, Collision)
-            .WithOpen(Warps.Select(w => w.Square));
+        var grid = new CollisionGrid(Width, Height, Collision);
 
-        if (Behaviours.Length == 0) return grid;
+        if (Behaviours.Length > 0)
+            grid = surfing ? grid.WithOpen(WaterSquares()) : grid.With(WaterSquares());
 
-        return surfing ? grid.WithOpen(WaterSquares()) : grid.With(WaterSquares());
+        // The doors last, and that order is the whole point. A warp on a water square
+        // would otherwise be sealed by the pass above — the sea would close a door, and
+        // a door that cannot be stood on is a map that cannot be entered.
+        return grid.WithOpen(Warps.Select(w => w.Square));
     }
 
     /// <summary>Every square of this map that is water.</summary>

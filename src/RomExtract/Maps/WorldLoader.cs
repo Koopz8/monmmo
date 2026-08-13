@@ -58,7 +58,12 @@ public sealed record LoadedMap(
             }
         }
 
-        return surfing ? Collision.WithOpen(water) : Collision.With(water);
+        // The doors are already open in Collision, so they are opened again after the
+        // water pass rather than before it: a warp on a water square must not be sealed
+        // by making the water solid.
+        CollisionGrid grid = surfing ? Collision.WithOpen(water) : Collision.With(water);
+
+        return grid.WithOpen(Warps.Select(w => w.Square));
     }
 
     /// <summary>People and things standing on this map.</summary>

@@ -637,21 +637,79 @@ public class TeachingTests
     }
 
     [Fact]
-    public void AFullSetOfFourIsRefusedRatherThanOverwritten()
+    public void AFullSetOfFourIsAskedAboutRatherThanOverwritten()
     {
-        // Choosing which move to lose belongs to the player, and there is nowhere yet
-        // for them to make that choice. Silently discarding the first one would be the
-        // server making it for them — and it would be the move they liked.
+        // Choosing which move to lose belongs to the player. This used to be a refusal
+        // — "there is no way to forget one yet" — and it went on being one after there
+        // was a way, because the level-up path learned to ask and the machine path never
+        // did. So the question existed for moves nobody chose and not for the one move a
+        // player went and bought.
         (GameWorld world, ServerPlayer player) = Standing(1, 2, 3, 4);
 
         player.Bag.Add(TestRules.HiddenMachineItem, 1);
 
-        BagUpdated said = world.UseItem(player.Id, TestRules.HiddenMachineItem, 0)
-            .Select(o => o.Message).OfType<BagUpdated>().Single();
+        MoveOffered asked = world.UseItem(player.Id, TestRules.HiddenMachineItem, 0)
+            .Select(o => o.Message).OfType<MoveOffered>().Single();
 
+        Assert.Equal(0, asked.Slot);
+        Assert.Equal(TestRules.FieldMove, asked.MoveId);
+
+        // Nothing has happened to the four yet, and the machine has not been spent.
         Assert.Equal(4, player.Party[0].Moves.Count);
         Assert.DoesNotContain(TestRules.FieldMove, player.Party[0].Moves);
-        Assert.Contains("four moves", said.Message);
+        Assert.Equal(1, player.Bag.CountOf(TestRules.HiddenMachineItem));
+    }
+
+    [Fact]
+    public void AnsweringTheMachineReplacesTheMoveThatWasChosen()
+    {
+        (GameWorld world, ServerPlayer player) = Standing(1, 2, 3, 4);
+
+        player.Bag.Add(TestRules.HiddenMachineItem, 1);
+
+        world.UseItem(player.Id, TestRules.HiddenMachineItem, 0);
+        world.LearnMove(player.Id, TestRules.FieldMove, forget: 2);
+
+        Assert.Equal(new[] { 1, 2, TestRules.FieldMove, 4 }, player.Party[0].Moves);
+
+        // A hidden machine survives being used. The cartridge draws that line itself:
+        // the eight it marks too important to sell are the eight that are not spent.
+        Assert.Equal(1, player.Bag.CountOf(TestRules.HiddenMachineItem));
+    }
+
+    [Fact]
+    public void DecliningAMachineCostsNothingAtAll()
+    {
+        // The offer has to be spent even when the answer is no, or it stands for ever —
+        // and the machine has to survive, because declining is not using it.
+        (GameWorld world, ServerPlayer player) = Standing(1, 2, 3, 4);
+
+        player.Bag.Add(TestRules.DiscItem, 1);
+        player.Party[0] = player.Party[0] with { Moves = [1, 3, 4, 5] };
+
+        world.UseItem(player.Id, TestRules.DiscItem, 0);
+        world.LearnMove(player.Id, TestRules.TaughtMove, forget: -1);
+
+        Assert.Equal(new[] { 1, 3, 4, 5 }, player.Party[0].Moves);
+        Assert.Equal(1, player.Bag.CountOf(TestRules.DiscItem));
+        Assert.Empty(player.MovesOffered);
+    }
+
+    [Fact]
+    public void ADiscIsSpentOnlyOnceTheAnswerIsYes()
+    {
+        (GameWorld world, ServerPlayer player) = Standing(1, 3, 4, 5);
+
+        player.Bag.Add(TestRules.DiscItem, 1);
+
+        world.UseItem(player.Id, TestRules.DiscItem, 0);
+
+        Assert.Equal(1, player.Bag.CountOf(TestRules.DiscItem));
+
+        world.LearnMove(player.Id, TestRules.TaughtMove, forget: 0);
+
+        Assert.Equal(new[] { TestRules.TaughtMove, 3, 4, 5 }, player.Party[0].Moves);
+        Assert.Equal(0, player.Bag.CountOf(TestRules.DiscItem));
     }
 
     [Fact]

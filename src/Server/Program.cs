@@ -228,6 +228,49 @@ public static class Program
         Console.WriteLine(
             $"  {afloat.Maps.Count} with SURF alone, {both.Maps.Count} with SURF and those moves together");
 
+        // Everything at once, which is the number that names the next gate. Whatever is
+        // still out of reach with the water crossed, the obstacles shifted and nobody
+        // standing in a doorway is behind something this project has not modelled at all.
+        Reach everything = WorldWalker.Walk(world, startingMapId, field, throughPeople: true, surfing: true);
+
+        Console.WriteLine(
+            $"  {everything.Maps.Count} with all of it — so {world.Count - everything.Maps.Count} maps " +
+            "are behind something other than water, an obstacle or a person");
+
+        // And the question that turns a list into a direction: is there a door into it
+        // from somewhere already reached? A map with one is a map this walk failed to
+        // follow into. A map without one is genuinely somewhere else.
+        var doorsInto = new Dictionary<string, int>();
+
+        foreach (MapData from in world.Maps.Where(m => everything.Maps.Contains(m.Id)))
+        {
+            foreach (Warp warp in from.Warps)
+            {
+                if (everything.Maps.Contains(warp.TargetMapId)) continue;
+
+                doorsInto[warp.TargetMapId] = doorsInto.GetValueOrDefault(warp.TargetMapId) + 1;
+            }
+        }
+
+        Console.WriteLine(
+            $"    {doorsInto.Count} of them have a door leading in from somewhere already reached, " +
+            $"{world.Count - everything.Maps.Count - doorsInto.Count} have none at all");
+
+        // Only the ones with a door in are the frontier. A map reached only from another
+        // unreached map is behind those, not beside them, and listing it says nothing.
+        foreach (MapData missing in world.Maps
+                     .Where(m => !everything.Maps.Contains(m.Id) && doorsInto.ContainsKey(m.Id)))
+        {
+            (string from, GridPosition at) = world.Maps
+                .Where(m => everything.Maps.Contains(m.Id))
+                .SelectMany(m => m.Warps.Where(w => w.TargetMapId == missing.Id).Select(w => (m.Id, w.Square)))
+                .First();
+
+            Console.WriteLine(
+                $"    {missing.Id} {missing.Name} — {doorsInto[missing.Id]} doors in, " +
+                $"e.g. from {from} at {at}");
+        }
+
         if (reach.Beyond.Count > 0)
             Console.WriteLine($"    {reach.Beyond.Count} doors lead to maps this world file does not have");
     }

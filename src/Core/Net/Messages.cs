@@ -38,6 +38,7 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(LearnMoveRequest), "learnmove")]
 [JsonDerivedType(typeof(SurfRequest), "surf")]
 [JsonDerivedType(typeof(SurfingChanged), "surfing")]
+[JsonDerivedType(typeof(MoveOffered), "offered")]
 [JsonDerivedType(typeof(HealRequest), "healplease")]
 [JsonDerivedType(typeof(ConsoleCommand), "console")]
 [JsonDerivedType(typeof(ConsoleReply), "consolesaid")]
@@ -514,6 +515,17 @@ public sealed record BattleStarted(
 
     /// <summary>Which party slot is out, so a client can offer the other five.</summary>
     int Slot = 0) : NetMessage;
+
+/// <summary>
+/// A move somebody has been offered and cannot fit, outside a battle.
+/// <para>
+/// The battle screen learns about these from the events of the turn that produced them.
+/// A machine produces one with no turn around it, so it is said out loud — and the
+/// answer goes back the same way either one does, as a <see cref="LearnMoveRequest"/>
+/// the server checks against the list it is holding.
+/// </para>
+/// </summary>
+public sealed record MoveOffered(int Slot, int MoveId) : NetMessage;
 
 /// <summary>
 /// A player asking to get onto the water in front of them.

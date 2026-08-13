@@ -468,7 +468,11 @@ public static class Program
             {
                 carrying.Update();
 
-                if (carrying.TakePending() is UseItemRequest use) network.SendUseItem(use.ItemId, use.Slot);
+                switch (carrying.TakePending())
+                {
+                    case UseItemRequest use: network.SendUseItem(use.ItemId, use.Slot); break;
+                    case LearnMoveRequest answer: network.SendLearnMove(answer.MoveId, answer.Forget); break;
+                }
 
                 Raylib.BeginDrawing();
                 carrying.Draw();
@@ -1522,6 +1526,14 @@ public static class Program
                     // the script — but a client that removes its own obstacles is a
                     // client that can walk through walls by lying about its party.
                     view.Remove(shifted.LocalId);
+
+                    break;
+
+                case MoveOffered offered:
+                    // Only the bag can be holding this. A machine is used from the bag
+                    // and nowhere else, and a question with no screen to appear on would
+                    // be an offer the server holds for ever.
+                    carrying?.Apply(offered);
 
                     break;
 
