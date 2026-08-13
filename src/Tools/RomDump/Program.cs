@@ -1467,6 +1467,7 @@ public static class Program
                 $"  person {person.LocalId} at ({person.X}, {person.Y}), {away} away" +
                 (person.HasScript ? $", script 0x{person.ScriptAddress:X8}" : ", no script") +
                 (person.HiddenBy != 0 ? $", gone once flag 0x{person.HiddenBy:X4} is set" : "") +
+                (person.IsTrainer ? $", trainer {person.TrainerId} facing {person.Facing} seeing {person.SightRange}" : "") +
                 (person.Talks ? ", talks" : ""));
         }
 
