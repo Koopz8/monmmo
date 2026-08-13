@@ -848,6 +848,24 @@ public sealed class GameWorld
             List<Outgoing> given = [];
             string? gift = null;
 
+            // What they take, before what they give. Oak receiving the parcel is the
+            // other half of a delivery, and it only happens to somebody carrying one:
+            // the branch his script reaches it on turns on exactly that, so taking it
+            // only when it is there is the cartridge's own behaviour and needs nothing
+            // from the client.
+            if (person.Template.Takes && player.Bag.Has(person.Template.TakesItemId, person.Template.TakesCount))
+            {
+                player.Bag.Remove(person.Template.TakesItemId, person.Template.TakesCount);
+
+                gift = $"item {person.Template.TakesItemId} handed over to {person.LocalId}";
+
+                // And said out loud, because a bag the client is still drawing the
+                // parcel in is a bag that disagrees with the server about what happened
+                // in the conversation the player is reading.
+                given.Add(new Outgoing(
+                    new BagUpdated(player.Bag.Entries, [.. player.Party], ""), OnlyTo: playerId));
+            }
+
             if (person.Template.GivesItem && _rules is not null)
             {
                 string what = $"{player.MapId}:{person.LocalId}";

@@ -26,6 +26,19 @@ public sealed class ConsoleBox
 
     private readonly List<string> _said = [];
 
+    /// <summary>
+    /// How long the replies stay up once the line is closed.
+    /// <para>
+    /// They used to stay forever, and the first real use of the console — reading the
+    /// professor's thirty-two pages about the parcel — was done through a wall of
+    /// "0x4055 holds 5". A console is for getting somewhere, and what is on the screen
+    /// when you arrive should be the game.
+    /// </para>
+    /// </summary>
+    private const float FadeAfterSeconds = 6f;
+
+    private float _showFor;
+
     private string _line = "";
 
     public bool IsOpen { get; private set; }
@@ -44,6 +57,7 @@ public sealed class ConsoleBox
     public void Said(string line)
     {
         _said.Add(line);
+        _showFor = FadeAfterSeconds;
 
         while (_said.Count > Kept) _said.RemoveAt(0);
     }
@@ -59,12 +73,22 @@ public sealed class ConsoleBox
     public void Open()
     {
         IsOpen = true;
+        _showFor = FadeAfterSeconds;
         _line = "";
     }
 
-    public void Update()
+    public void Update(float deltaSeconds)
     {
+        if (!IsOpen && _showFor > 0f)
+        {
+            _showFor -= deltaSeconds;
+
+            if (_showFor <= 0f) _said.Clear();
+        }
+
         if (!IsOpen) return;
+
+        _showFor = FadeAfterSeconds;
 
         foreach (char typed in Typed())
         {
@@ -96,7 +120,7 @@ public sealed class ConsoleBox
     {
         // The replies stay up after the line closes, so a /help or a /where can be read
         // while walking around rather than only while the cursor is blinking.
-        if (_said.Count > 0)
+        if (_said.Count > 0 && (IsOpen || _showFor > 0f))
         {
             int top = height - 40 - (_said.Count * 18) - (IsOpen ? 34 : 0);
 

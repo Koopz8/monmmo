@@ -160,7 +160,7 @@ public sealed class WorldData
     /// <summary>Identifies the format, so a wrong or stale file fails loudly.</summary>
     private static readonly byte[] Magic = "MONWORLD"u8.ToArray();
 
-    private const int Version = 19;
+    private const int Version = 20;
 
     private readonly Dictionary<string, MapData> _maps;
 
@@ -315,6 +315,8 @@ public sealed class WorldData
             writer.Write(entry.Heals);
             writer.Write(entry.GivesItemId);
             writer.Write(entry.GivesCount);
+            writer.Write(entry.TakesItemId);
+            writer.Write(entry.TakesCount);
             writer.Write(entry.Talks);
             writer.Write(entry.ShiftedBy);
 
@@ -509,6 +511,8 @@ public sealed class WorldData
                 Heals = reader.ReadBoolean(),
                 GivesItemId = reader.ReadInt32(),
                 GivesCount = reader.ReadInt32(),
+                TakesItemId = reader.ReadInt32(),
+                TakesCount = reader.ReadInt32(),
                 Talks = reader.ReadBoolean(),
                 ShiftedBy = reader.ReadInt32(),
                 GivesSpecies = reader.ReadInt32(),

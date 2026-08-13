@@ -656,6 +656,12 @@ public static class ScriptCommands
         // followed by a loadpointer carrying a real address, which is a script about to
         // say something about whatever it just handed over.
         [0x44] = 4,
+        // Four, and the same shape as the two beside it: an item and a count. Oak takes
+        // the parcel with `45 5D 01 01 00` — item 0x015D, one of them — and the byte
+        // after those four is 0x0F, which is the first half of every text box in this
+        // game. A width that resumes on a loadpointer at the one site the whole story
+        // runs through is a width worth having.
+        [0x45] = 4,     // takes an item away
 
         // Two. Both sites read `94 00 00 | 6C 02` — an argument of zero, then release
         // and end.

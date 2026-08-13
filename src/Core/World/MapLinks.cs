@@ -277,6 +277,27 @@ public sealed record MapObject(
     /// whose script ran to a clean end and produced nothing at all.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// What talking to this one takes away, if it takes anything.
+    /// <para>
+    /// Oak taking the parcel is the one that needed it, and it is the other half of a
+    /// delivery: the shop hands it over and he receives it, and until he did the story
+    /// had nowhere to go.
+    /// </para>
+    /// <para>
+    /// Taken only from somebody who has it. The script reaches this on a branch the
+    /// server cannot evaluate — it has no cartridge — but the condition that branch
+    /// turns on is "you have the parcel", so removing it only when it is there
+    /// reproduces the cartridge's own behaviour without taking a client's word for
+    /// anything.
+    /// </para>
+    /// </summary>
+    public int TakesItemId { get; init; }
+
+    public int TakesCount { get; init; }
+
+    public bool Takes => TakesItemId != 0;
+
     public int GivesItemId { get; init; }
 
     public int GivesCount { get; init; }

@@ -128,6 +128,14 @@ public static class WorldExporter
                             // fact about a save, not about a cartridge.
                             GivesSpecies = handover?.Word() ?? 0,
                             GivesLevel = handover?.Word(2) ?? 0,
+
+                            // What they take, on the same terms and for the same reason:
+                            // read rather than run, because the branch Oak takes the
+                            // parcel on is one a fresh save never reaches.
+                            TakesItemId = Scripts.ScriptReader.ReadAll(rom, o.ScriptAddress)
+                                .FirstOrDefault(c => c.Code == 0x45)?.Word() ?? 0,
+                            TakesCount = Math.Max(1, Scripts.ScriptReader.ReadAll(rom, o.ScriptAddress)
+                                .FirstOrDefault(c => c.Code == 0x45)?.Word(2) ?? 1),
                         };
 
                         return run.GivesItem is { } item

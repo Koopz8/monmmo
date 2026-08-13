@@ -802,6 +802,45 @@ public class PickingThingsUpTests
     private static MapObject Giver(int localId, int itemId, int count = 1) =>
         Ball(localId, itemId, count) with { Talks = true };
 
+    /// <summary>Somebody expecting a delivery.</summary>
+    private static MapObject Receiver(int localId, int itemId) =>
+        new(localId, 5, 3, 3, Direction.Down, 0, false)
+        {
+            Talks = true,
+            TakesItemId = itemId,
+            TakesCount = 1,
+        };
+
+    [Fact]
+    public void DeliveringSomethingHandsItOver()
+    {
+        // Oak receiving the parcel is the other half of a delivery, and until he did the
+        // story had nowhere to go.
+        (GameWorld world, ServerPlayer player) = Standing(Receiver(1, TestRules.PotionItem));
+
+        player.Bag.Add(TestRules.PotionItem, 1);
+
+        world.StartTalking(player.Id, 1);
+
+        Assert.Equal(0, player.Bag.CountOf(TestRules.PotionItem));
+        Assert.Contains("handed over", world.LastTalkOutcome ?? "");
+    }
+
+    [Fact]
+    public void NothingIsTakenFromSomebodyWhoHasNotGotIt()
+    {
+        // The branch a script reaches this on turns on having the thing, and the server
+        // has no cartridge to evaluate that branch with — so taking it only when it is
+        // there is how the cartridge's own behaviour is reproduced without taking a
+        // client's word for anything.
+        (GameWorld world, ServerPlayer player) = Standing(Receiver(1, TestRules.PotionItem));
+
+        world.StartTalking(player.Id, 1);
+
+        Assert.Equal(0, player.Bag.CountOf(TestRules.PotionItem));
+        Assert.DoesNotContain("handed over", world.LastTalkOutcome ?? "");
+    }
+
     private static (GameWorld World, ServerPlayer Player) Standing(params MapObject[] people)
     {
         MapData map = new(Town, "PALLET TOWN", 8, 8, new byte[64]) { Objects = people };

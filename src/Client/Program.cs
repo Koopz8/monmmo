@@ -481,7 +481,7 @@ public static class Program
             // Ahead of the naming screen even, because it is the same kind of thing and
             // opening one on top of the other would leave two fields taking the same
             // letters.
-            console.Update();
+            console.Update(delta);
 
             if (console.TakePending() is { } typed) network.SendConsole(typed);
 
