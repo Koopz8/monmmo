@@ -150,6 +150,8 @@ public static class Program
 
         if (options.NameRuns) WriteNameRuns(rom, extractor);
 
+        if (!string.IsNullOrEmpty(options.Walkable)) WriteWalkable(rom, options.Walkable);
+
         if (options.Specials) WriteSpecials(rom);
 
         if (options.Special is { } routine) WriteSpecial(rom, routine);
@@ -1704,6 +1706,59 @@ public static class Program
     /// than confirmed.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// One map's walkability as text, which is the fastest way to answer "how do I get
+    /// from here to there" without walking it.
+    /// <para>
+    /// Written after an hour of finding out that Route 1's ledges cannot be read off a
+    /// rendered picture: a ledge and a path are the same colour at that size, and the
+    /// only way to tell was to walk into them. The collision data has known the answer
+    /// all along.
+    /// </para>
+    /// </summary>
+    private static void WriteWalkable(Rom rom, string mapId)
+    {
+        MapLibrary library = MapLibrary.Open(rom);
+
+        if (library.TryLoad(mapId) is not { } map)
+        {
+            Console.WriteLine($"No map {mapId}.");
+            return;
+        }
+
+        Console.WriteLine();
+        Console.WriteLine($"{mapId} {map.Name} — {map.Collision.Width}x{map.Collision.Height}");
+        Console.WriteLine("  . walkable   # solid   \" grass   o warp   P person   T trigger");
+        Console.WriteLine();
+
+        var warps = map.Warps.Select(w => w.Square).ToHashSet();
+        var people = map.Objects.Select(o => new GridPosition(o.X, o.Y)).ToHashSet();
+        var triggers = map.Triggers.Select(t => t.Square).ToHashSet();
+
+        Console.Write("     ");
+        for (int x = 0; x < map.Collision.Width; x++) Console.Write(x % 10);
+        Console.WriteLine();
+
+        for (int y = 0; y < map.Collision.Height; y++)
+        {
+            Console.Write($"  {y,3} ");
+
+            for (int x = 0; x < map.Collision.Width; x++)
+            {
+                var square = new GridPosition(x, y);
+
+                Console.Write(
+                    warps.Contains(square) ? 'o'
+                    : people.Contains(square) ? 'P'
+                    : triggers.Contains(square) ? 'T'
+                    : !map.Collision.IsWalkable(square) ? '#'
+                    : '.');
+            }
+
+            Console.WriteLine();
+        }
+    }
+
     private static void WriteNameRuns(Rom rom, RomExtractor extractor)
     {
         Console.WriteLine();
@@ -3737,6 +3792,8 @@ public static class Program
 
         public bool NameRuns { get; private init; }
 
+        public string Walkable { get; private init; } = "";
+
         /// <summary>Count which special routines get called, and on which maps.</summary>
         public bool Specials { get; private init; }
 
@@ -3808,6 +3865,7 @@ public static class Program
             bool substitutions = false;
             bool hideFlags = false;
             bool nameRuns = false;
+            string walkable = "";
             bool specials = false;
             int? special = null;
             byte? answers = null;
@@ -3914,6 +3972,9 @@ public static class Program
                         break;
                     case "--name-runs":
                         nameRuns = true;
+                        break;
+                    case "--walkable":
+                        walkable = Next(args, ref i, "--walkable");
                         break;
                     case "--specials-on":
                         specialsOn = Next(args, ref i, "--specials-on");
@@ -4055,6 +4116,7 @@ public static class Program
                 Substitutions = substitutions,
                 HideFlags = hideFlags,
                 NameRuns = nameRuns,
+                Walkable = walkable,
                 Specials = specials,
                 Special = special,
                 Answers = answers,

@@ -375,7 +375,11 @@ public static class Program
 
                 if (battle.IsDismissed)
                 {
-                    money = battle.Money;
+                    // The money is not taken off the screen here. It arrives twice —
+                    // BattleFinished carries the prize, and a loss is followed by
+                    // BlackedOut carrying half of what is left — and reading it back off
+                    // the screen at the end replayed the first over the second. Losing
+                    // cost nothing until the next thing that mentioned money.
                     battle.Unload();
                     battle = null;
 
