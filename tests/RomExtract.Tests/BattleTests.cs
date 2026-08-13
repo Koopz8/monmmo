@@ -40,7 +40,20 @@ internal static class TestMons
     public static readonly MoveData Tackle = Move("TACKLE", PokemonType.Normal, power: 35);
     public static readonly MoveData Ember = Move("EMBER", PokemonType.Fire, power: 40);
     public static readonly MoveData QuickAttack = Move("QUICK ATTACK", PokemonType.Normal, power: 40, priority: 1);
-    public static readonly MoveData Growl = new(1, "GROWL", 0, 0, PokemonType.Normal, 100, 40, 0, 0, 0);
+    public static readonly MoveData Growl = new(1, "GROWL", 0x12, 0, PokemonType.Normal, 100, 40, 0, 0, 0);
+
+    /// <summary>Effect 0x01, which on a real image is the six sleep moves and nothing else.</summary>
+    public static readonly MoveData SleepPowder = new(2, "SLEEP POWDER", 0x01, 0, PokemonType.Grass, 100, 15, 0, 0, 0);
+
+    /// <summary>Effect 0x3B: SCREECH, alone in its group, two stages off the target's defence.</summary>
+    public static readonly MoveData Screech = new(3, "SCREECH", 0x3B, 0, PokemonType.Normal, 100, 40, 0, 0, 0);
+
+    /// <summary>Effect 0x32: SWORDS DANCE, two stages onto the user's own attack.</summary>
+    public static readonly MoveData SwordsDance = new(4, "SWORDS DANCE", 0x32, 0, PokemonType.Normal, 0, 30, 0, 0, 0);
+
+    /// <summary>Effect 0x06 with a secondary chance: a hit that may paralyse, like THUNDERBOLT.</summary>
+    public static readonly MoveData Thunderbolt =
+        new(5, "THUNDERBOLT", 0x06, 95, PokemonType.Electric, 100, 15, 100, 0, 0);
     public static readonly MoveData NeverMisses = Move("SWIFT", PokemonType.Normal, power: 60, accuracy: 0);
 }
 
@@ -424,6 +437,117 @@ public class BattleTurnTests
         Assert.NotNull(battle.Winner);
         Assert.InRange(turns, 1, 199);
     }
+
+    [Fact]
+    public void AStatusMoveDoesWhatItsEffectByteSays()
+    {
+        // The line this replaces was `if (move.Category == DamageCategory.Status) return;`
+        // — 138 of this cartridge's 354 moves, doing nothing at all. A level 30 BULBASAUR
+        // could spend a whole fight announcing "used POISONPOWDER!" at a level 9 PIDGEY
+        // and never touch it.
+        var battle = new Battle(Fast(TestMons.SleepPowder), Slow(TestMons.Tackle), seed: 1);
+
+        List<BattleEvent> events = battle.ResolveTurn(FirstMove, FirstMove);
+
+        BattleEvent.StatusInflicted put = events.OfType<BattleEvent.StatusInflicted>().Single();
+
+        Assert.Equal(Side.Opponent, put.Side);
+        Assert.Equal(StatusCondition.Sleep, put.Status);
+        Assert.Equal(StatusCondition.Sleep, battle.Opponent.Status);
+    }
+
+    [Fact]
+    public void SomebodyAsleepLosesTheTurn()
+    {
+        // The half that already worked. Sleep counts down, paralysis skips a quarter of
+        // turns, poison takes a sixteenth — all of it was there, and nothing on the
+        // cartridge could ever bring any of it about.
+        var battle = new Battle(Fast(TestMons.SleepPowder), Slow(TestMons.Tackle), seed: 1);
+
+        battle.ResolveTurn(FirstMove, FirstMove);
+
+        // Either still asleep or waking, and both cost the turn: a sleep that runs one
+        // turn used to cost nothing, which made SLEEP POWDER do nothing a third of the
+        // time it landed. Nobody had ever seen that, because nothing could inflict it.
+        List<BattleEvent> next = battle.ResolveTurn(FirstMove, FirstMove);
+
+        Assert.True(
+            next.OfType<BattleEvent.Immobilised>().Any(e => e.Side == Side.Opponent) ||
+            next.OfType<BattleEvent.WokeUp>().Any(e => e.Side == Side.Opponent));
+
+        Assert.DoesNotContain(next.OfType<BattleEvent.MoveUsed>(), e => e.Side == Side.Opponent);
+    }
+
+    [Fact]
+    public void LoweringAStatMovesItTwiceForTheTwoStageMoves()
+    {
+        // SCREECH is in effect group 0x3B, which is 0x3A plus one — and 0x3A is CHARM,
+        // which lowers attack. One run of seven, in the order the stats are already in.
+        var battle = new Battle(Fast(TestMons.Screech), Slow(TestMons.Tackle), seed: 1);
+
+        battle.ResolveTurn(FirstMove, FirstMove);
+
+        Assert.Equal(-2, battle.Opponent.StageOf(Stat.Defense));
+    }
+
+    [Fact]
+    public void RaisingOnesOwnStatIsRaisingOnesOwn()
+    {
+        // The difference between the two runs is who it happens to, and it is not written
+        // anywhere in the record: 0x32 SWORDS DANCE raises the user, 0x3A CHARM lowers
+        // the other one. That is read off the members and nowhere else.
+        var battle = new Battle(Fast(TestMons.SwordsDance), Slow(TestMons.Tackle), seed: 1);
+
+        battle.ResolveTurn(FirstMove, FirstMove);
+
+        Assert.Equal(2, battle.Player.StageOf(Stat.Attack));
+        Assert.Equal(0, battle.Opponent.StageOf(Stat.Attack));
+    }
+
+    [Fact]
+    public void AStatAtItsLimitSaysSoRatherThanMovingAgain()
+    {
+        var battle = new Battle(Fast(TestMons.SwordsDance), Slow(TestMons.Tackle), seed: 1);
+
+        for (int turn = 0; turn < 5; turn++) battle.ResolveTurn(FirstMove, FirstMove);
+
+        Assert.Equal(Stats.MaxStage, battle.Player.StageOf(Stat.Attack));
+
+        List<BattleEvent> again = battle.ResolveTurn(FirstMove, FirstMove);
+
+        Assert.False(again.OfType<BattleEvent.StageChanged>().First().Moved);
+    }
+
+    [Fact]
+    public void ARiderOnAHitStillDoesDamage()
+    {
+        // THUNDERBOLT and THUNDER WAVE carry the same paralysis and are not the same
+        // promise: one is the move, the other rolls against the move's own secondary
+        // chance. This one is set to a hundred so the roll is not what is under test.
+        var battle = new Battle(Fast(TestMons.Thunderbolt), Slow(TestMons.Tackle), seed: 7);
+
+        List<BattleEvent> events = battle.ResolveTurn(FirstMove, FirstMove);
+
+        Assert.Contains(events.OfType<BattleEvent.DamageDealt>(), e => e.Side == Side.Opponent);
+        Assert.Equal(StatusCondition.Paralysis, battle.Opponent.Status);
+    }
+
+    [Fact]
+    public void NothingRidesOnAKnockout()
+    {
+        // A creature that has fainted cannot be paralysed, and saying it was would put a
+        // line on the screen about somebody who is no longer standing.
+        var battle = new Battle(
+            Fast(TestMons.Thunderbolt),
+            new Battler(TestMons.Species("FRAIL", PokemonType.Water, hp: 1, defense: 1, spDefense: 1), level: 2)
+                .Knowing(TestMons.Tackle),
+            seed: 7);
+
+        List<BattleEvent> events = battle.ResolveTurn(FirstMove, FirstMove);
+
+        Assert.Contains(events.OfType<BattleEvent.Fainted>(), e => e.Side == Side.Opponent);
+        Assert.Empty(events.OfType<BattleEvent.StatusInflicted>());
+    }
 }
 
 public class BattleNarratorTests
@@ -548,5 +672,91 @@ public class BattleNarratorTests
 
         Assert.NotEmpty(lines);
         Assert.Contains(lines, l => l.Contains("used TACKLE"));
+    }
+
+}
+
+/// <summary>
+/// The effect table itself, apart from any battle.
+/// <para>
+/// What each number means was read off the members of its group on a real image, and the
+/// shape is what makes it more than a list of special cases: four runs of exactly seven,
+/// in the order attack, defence, speed, special attack, special defence, accuracy,
+/// evasion.
+/// </para>
+/// </summary>
+public class MoveEffectTests
+{
+    [Theory]
+    [InlineData(0x0A, Stat.Attack, 1)]      // MEDITATE, SHARPEN, HOWL
+    [InlineData(0x0B, Stat.Defense, 1)]     // HARDEN, WITHDRAW
+    [InlineData(0x0D, Stat.SpAttack, 1)]    // GROWTH
+    [InlineData(0x10, Stat.Evasion, 1)]     // DOUBLE TEAM
+    [InlineData(0x32, Stat.Attack, 2)]      // SWORDS DANCE
+    [InlineData(0x33, Stat.Defense, 2)]     // BARRIER, ACID ARMOR, IRON DEFENSE
+    [InlineData(0x34, Stat.Speed, 2)]       // AGILITY
+    [InlineData(0x35, Stat.SpAttack, 2)]    // TAIL GLOW
+    [InlineData(0x36, Stat.SpDefense, 2)]   // AMNESIA
+    public void TheRunsThatRaiseTheUsersOwnStat(byte effect, Stat stat, int stages)
+    {
+        MoveEffect read = MoveEffects.Of(effect);
+
+        Assert.Equal(EffectKind.Stage, read.Kind);
+        Assert.True(read.OnUser);
+        Assert.Equal(stat, read.Stat);
+        Assert.Equal(stages, read.Stages);
+    }
+
+    [Theory]
+    [InlineData(0x12, Stat.Attack, -1)]     // GROWL
+    [InlineData(0x13, Stat.Defense, -1)]    // TAIL WHIP, LEER
+    [InlineData(0x14, Stat.Speed, -1)]      // STRING SHOT
+    [InlineData(0x17, Stat.Accuracy, -1)]   // SAND-ATTACK, SMOKESCREEN, KINESIS, FLASH
+    [InlineData(0x18, Stat.Evasion, -1)]    // SWEET SCENT
+    [InlineData(0x3A, Stat.Attack, -2)]     // CHARM, FEATHERDANCE
+    [InlineData(0x3B, Stat.Defense, -2)]    // SCREECH
+    [InlineData(0x3C, Stat.Speed, -2)]      // COTTON SPORE, SCARY FACE
+    [InlineData(0x3E, Stat.SpDefense, -2)]  // FAKE TEARS, METAL SOUND
+    [InlineData(0x44, Stat.Attack, -1)]     // AURORA BEAM
+    [InlineData(0x45, Stat.Defense, -1)]    // ACID, IRON TAIL, ROCK SMASH, CRUSH CLAW
+    [InlineData(0x46, Stat.Speed, -1)]      // BUBBLEBEAM, ICY WIND, ROCK TOMB, MUD SHOT
+    public void TheRunsThatLowerTheOtherOnes(byte effect, Stat stat, int stages)
+    {
+        MoveEffect read = MoveEffects.Of(effect);
+
+        Assert.Equal(EffectKind.Stage, read.Kind);
+        Assert.False(read.OnUser);
+        Assert.Equal(stat, read.Stat);
+        Assert.Equal(stages, read.Stages);
+    }
+
+    [Theory]
+    [InlineData(0x01, StatusCondition.Sleep)]        // SING, SLEEP POWDER, HYPNOSIS, SPORE
+    [InlineData(0x42, StatusCondition.Poison)]       // POISONPOWDER, POISON GAS
+    [InlineData(0x43, StatusCondition.Paralysis)]    // STUN SPORE, THUNDER WAVE, GLARE
+    [InlineData(0x02, StatusCondition.Poison)]       // POISON STING, SLUDGE
+    [InlineData(0x04, StatusCondition.Burn)]         // EMBER, FLAMETHROWER
+    [InlineData(0x05, StatusCondition.Freeze)]       // ICE BEAM, BLIZZARD
+    [InlineData(0x06, StatusCondition.Paralysis)]    // THUNDERBOLT, BODY SLAM
+    public void TheGroupsThatAreOneConditionEach(byte effect, StatusCondition status)
+    {
+        MoveEffect read = MoveEffects.Of(effect);
+
+        Assert.Equal(EffectKind.Status, read.Kind);
+        Assert.False(read.OnUser);
+        Assert.Equal(status, read.Status);
+    }
+
+    [Theory]
+    [InlineData(0x11)]  // SWIFT, FAINT ATTACK, AERIAL ACE — never misses
+    [InlineData(0x39)]  // TRANSFORM
+    [InlineData(0x41)]  // REFLECT
+    [InlineData(0x53)]  // METRONOME
+    public void ARunIsSevenWideAndWhatFollowsItIsSomethingElse(byte effect)
+    {
+        // The runs would each be one longer if the slot after them were claimed, and the
+        // move sitting in that slot is the check: SWIFT is not "raise evasion by one" and
+        // TRANSFORM is not "raise accuracy by two".
+        Assert.Equal(EffectKind.None, MoveEffects.Of(effect).Kind);
     }
 }

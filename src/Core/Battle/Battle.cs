@@ -28,6 +28,9 @@ public enum Side
 [JsonDerivedType(typeof(WokeUp), "woke")]
 [JsonDerivedType(typeof(DamageDealt), "damage")]
 [JsonDerivedType(typeof(StatusHurt), "statushurt")]
+[JsonDerivedType(typeof(StatusInflicted), "status")]
+[JsonDerivedType(typeof(StageChanged), "stage")]
+[JsonDerivedType(typeof(NothingHappened), "nothing")]
 [JsonDerivedType(typeof(Fainted), "fainted")]
 [JsonDerivedType(typeof(HealthRestored), "healed")]
 [JsonDerivedType(typeof(BallThrown), "ball")]
@@ -59,6 +62,25 @@ public abstract record BattleEvent
         StatusCondition Status,
         int Damage,
         int RemainingHp) : BattleEvent;
+
+    /// <summary>Somebody was put to sleep, poisoned, paralysed, burned or frozen.</summary>
+    public sealed record StatusInflicted(Side Side, StatusCondition Status) : BattleEvent;
+
+    /// <summary>
+    /// A stat moved, or refused to. <paramref name="Stages"/> is what was asked for and
+    /// <paramref name="Moved"/> is whether it went anywhere — a stat already at its limit
+    /// has its own line in the games, and without it "SCREECH" twice reads as working
+    /// twice.
+    /// </summary>
+    public sealed record StageChanged(Side Side, Stat Stat, int Stages, bool Moved) : BattleEvent;
+
+    /// <summary>
+    /// A move that did nothing, because nothing was left to do or because it was already
+    /// done. Not the same as a move this engine has never heard of, which says only that
+    /// it was used — pretending an unimplemented move failed would be a lie about the
+    /// cartridge rather than about the battle.
+    /// </summary>
+    public sealed record NothingHappened(Side Side) : BattleEvent;
 
     public sealed record Fainted(Side Side) : BattleEvent;
 
@@ -270,7 +292,14 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             return;
         }
 
-        if (move.Category == DamageCategory.Status) return;
+        // A move with no power is its effect, and for two years of this project's life
+        // that was a line that read `return`. See MoveEffects: 138 of this cartridge's
+        // 354 moves land here, and every one of them did nothing at all.
+        if (move.Category == DamageCategory.Status)
+        {
+            Apply(side, attacker, defender, move, events, rolled: false);
+            return;
+        }
 
         bool critical = DamageCalculator.RollCritical(_rng, criticalStage: 0);
         DamageResult result = DamageCalculator.Calculate(_rng, attacker, defender, move, critical);
@@ -285,7 +314,57 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         events.Add(new BattleEvent.DamageDealt(Other(side), dealt, defender.CurrentHp, result));
 
         if (defender.HasFainted)
+        {
             events.Add(new BattleEvent.Fainted(Other(side)));
+            return;
+        }
+
+        // And whatever rides on the hit. Nothing rides on a knockout, which is why this
+        // is after the faint rather than beside the damage.
+        Apply(side, attacker, defender, move, events, rolled: true);
+    }
+
+    /// <summary>
+    /// Does whatever the move's effect byte says, to whichever side it says.
+    /// <para>
+    /// <paramref name="rolled"/> separates the two ways an effect arrives: a status move
+    /// <em>is</em> its effect and happens whenever it lands, while the same effect on a
+    /// move that also does damage is a rider and rolls against the move's own secondary
+    /// chance. THUNDERBOLT and THUNDER WAVE carry the same paralysis and are not the same
+    /// promise.
+    /// </para>
+    /// </summary>
+    private void Apply(
+        Side side, Battler attacker, Battler defender, MoveData move, List<BattleEvent> events, bool rolled)
+    {
+        MoveEffect effect = MoveEffects.Of(move.Effect);
+
+        if (effect.Kind == EffectKind.None) return;
+        if (rolled && !_rng.Chance(move.SecondaryChance)) return;
+
+        Side at = effect.OnUser ? side : Other(side);
+        Battler target = effect.OnUser ? attacker : defender;
+
+        if (effect.Kind == EffectKind.Status)
+        {
+            // Sleep runs one to three turns. Chosen here rather than in the battler
+            // because how long anything lasts is a rule of the battle, and the battler is
+            // only the thing it happens to.
+            if (target.TryApplyStatus(effect.Status, sleepTurns: _rng.Next(3) + 1))
+                events.Add(new BattleEvent.StatusInflicted(at, effect.Status));
+            else if (!rolled)
+                events.Add(new BattleEvent.NothingHappened(at));
+
+            return;
+        }
+
+        int before = target.StageOf(effect.Stat);
+
+        target.ChangeStage(effect.Stat, effect.Stages);
+
+        bool moved = target.StageOf(effect.Stat) != before;
+
+        events.Add(new BattleEvent.StageChanged(at, effect.Stat, effect.Stages, moved));
     }
 
     private void ThrowAt(Side thrower, Battler target, BallKind ball, List<BattleEvent> events)
@@ -310,9 +389,14 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
 
                 if (battler.SleepTurns <= 0)
                 {
+                    // Waking costs the turn. This used to return true, which made a
+                    // one-turn sleep cost nothing at all — and a field whose smallest
+                    // value does nothing is a field that means something else. Nothing
+                    // could inflict sleep until now, so nobody had ever seen it: SLEEP
+                    // POWDER would have done nothing a third of the time it landed.
                     battler.Status = StatusCondition.None;
                     events.Add(new BattleEvent.WokeUp(side));
-                    return true;
+                    return false;
                 }
 
                 events.Add(new BattleEvent.Immobilised(side, StatusCondition.Sleep));

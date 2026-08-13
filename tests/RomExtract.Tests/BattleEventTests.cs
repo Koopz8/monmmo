@@ -135,7 +135,9 @@ public class NarrationWithoutACartridgeTests
         List<string> lines = BattleNarrator.Describe(events, names).ToList();
 
         Assert.Equal("BULBASAUR used TACKLE!", lines[0]);
-        Assert.Equal("the wild PIDGEY took 7 damage.", lines[1]);
-        Assert.Equal("the wild PIDGEY fainted!", lines[2]);
+        // Capitalised, and that is the point of doing it in one place: half these lines
+        // begin with a name, and the name a wild creature goes by begins with "the".
+        Assert.Equal("The wild PIDGEY took 7 damage.", lines[1]);
+        Assert.Equal("The wild PIDGEY fainted!", lines[2]);
     }
 }

@@ -158,6 +158,8 @@ public static class Program
 
         if (options.DoorSteps) WriteDoorSteps(rom);
 
+        if (options.MoveEffects) WriteMoveEffects(rom);
+
         if (!string.IsNullOrEmpty(options.Walkable)) WriteWalkable(rom, options.Walkable);
 
         if (options.Specials) WriteSpecials(rom);
@@ -518,6 +520,92 @@ public static class Program
         foreach (int id in new[] { 1, 2, 57, 63, 85 })
         {
             if (id < moves.Count) Console.WriteLine($"  #{id,3} {moves[id]} [{moves[id].Category}]");
+        }
+    }
+
+    /// <summary>
+    /// Every move grouped by the effect byte in its own record.
+    /// <para>
+    /// The battle engine does nothing at all with a move whose power is zero — one line
+    /// says so: <c>if (move.Category == DamageCategory.Status) return;</c>. That is a
+    /// third of the moves in the game, and it is why a level 30 BULBASAUR can spend a
+    /// whole fight saying "used POISONPOWDER!" at a level 9 PIDGEY without touching it.
+    /// </para>
+    /// <para>
+    /// What each effect number means is read off the members rather than remembered: the
+    /// group containing POISONPOWDER and POISON GAS is the one that poisons, the group
+    /// containing GROWL and TAIL WHIP lowers something. That is the same method the
+    /// script widths were derived by, applied to a table this project already extracts.
+    /// </para>
+    /// </summary>
+    private static void WriteMoveEffects(Rom rom)
+    {
+        List<MoveData> moves = MoveExtractor.Extract(rom);
+
+        Console.WriteLine();
+        Console.WriteLine("Moves by the effect byte in their record");
+
+        var byEffect = moves
+            .Where(m => m.Id > 0)
+            .GroupBy(m => m.Effect)
+            .OrderByDescending(g => g.Count())
+            .ToList();
+
+        int status = moves.Count(m => m.Id > 0 && m.Category == DamageCategory.Status);
+
+        Console.WriteLine();
+        List<MoveData> real = [.. moves.Where(m => m.Id > 0)];
+
+        Console.WriteLine(
+            $"  {real.Count} moves, {status} of them status moves, across {byEffect.Count} different effects");
+
+        // The one number that says how much of a battle is actually happening. Everything
+        // outside it is a move that announces itself and does nothing, which is the
+        // battle engine's own version of a script that finishes saying nothing.
+        Console.WriteLine(
+            $"  {MoveEffects.Known(real)} of {real.Count} have an effect this engine knows how to do, " +
+            $"{MoveEffects.Known(real.Where(m => m.Category == DamageCategory.Status))} of the {status} status moves");
+
+        Console.WriteLine();
+        Console.WriteLine("  The effects with the most status moves in them");
+
+        foreach (var group in byEffect
+                     .Where(g => g.Any(m => m.Category == DamageCategory.Status))
+                     .OrderByDescending(g => g.Count(m => m.Category == DamageCategory.Status)))
+        {
+            List<MoveData> silent = [.. group.Where(m => m.Category == DamageCategory.Status)];
+
+            Console.WriteLine(
+                $"    0x{group.Key:X2}  {silent.Count,3} status of {group.Count(),3}   " +
+                string.Join(", ", silent.Select(m => m.Name)));
+        }
+
+        // And the other half of the same question: an effect that also has damaging moves
+        // in it is an effect that already fires, and whatever it does is being skipped
+        // only for the powerless ones.
+        // The two runs the numbering falls into, printed whole. A table with a shape
+        // is worth more than a table of special cases, and the shape is only visible
+        // when the empty-looking slots between the famous moves are printed too.
+        Console.WriteLine();
+        Console.WriteLine("  0x00-0x18 and 0x32-0x46, every member");
+
+        foreach (var group in byEffect
+                     .Where(g => g.Key is (<= 0x18) or (>= 0x32 and <= 0x46))
+                     .OrderBy(g => g.Key))
+        {
+            Console.WriteLine($"    0x{group.Key:X2}  " + string.Join(", ", group.Select(m => m.Name)));
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("  The effects with no status move in them at all, by size");
+
+        foreach (var group in byEffect
+                     .Where(g => g.All(m => m.Category != DamageCategory.Status))
+                     .Take(8))
+        {
+            Console.WriteLine(
+                $"    0x{group.Key:X2}  {group.Count(),3} moves   " +
+                string.Join(", ", group.Take(6).Select(m => m.Name)));
         }
     }
 
@@ -4346,6 +4434,9 @@ public static class Program
         /// <summary>Where a door puts you, and which way there is room to step.</summary>
         public bool DoorSteps { get; private init; }
 
+        /// <summary>Every move grouped by the effect byte in its record.</summary>
+        public bool MoveEffects { get; private init; }
+
         /// <summary>Count which special routines get called, and on which maps.</summary>
         public bool Specials { get; private init; }
 
@@ -4423,6 +4514,7 @@ public static class Program
             string gapLike = "";
             bool fightKinds = false;
             bool doorSteps = false;
+            bool moveEffects = false;
             bool specials = false;
             int? special = null;
             byte? answers = null;
@@ -4532,6 +4624,9 @@ public static class Program
                         break;
                     case "--walkable":
                         walkable = Next(args, ref i, "--walkable");
+                        break;
+                    case "--move-effects":
+                        moveEffects = true;
                         break;
                     case "--door-steps":
                         doorSteps = true;
@@ -4698,6 +4793,7 @@ public static class Program
                 GapLike = gapLike,
                 FightKinds = fightKinds,
                 DoorSteps = doorSteps,
+                MoveEffects = moveEffects,
                 Specials = specials,
                 Special = special,
                 Answers = answers,
