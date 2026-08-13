@@ -304,6 +304,42 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
         return await forget.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    public async Task<bool> GiveAsync(
+        string username, int species, int level, CancellationToken cancellationToken = default)
+    {
+        await using SqliteConnection connection = Open();
+
+        await using SqliteCommand find = connection.CreateCommand();
+        find.CommandText = "SELECT id FROM accounts WHERE username_folded = $folded;";
+        find.Parameters.AddWithValue("$folded", UsernameRules.Fold(username));
+
+        if (await find.ExecuteScalarAsync(cancellationToken) is not long accountId) return false;
+
+        await using SqliteCommand slots = connection.CreateCommand();
+        slots.CommandText = "SELECT COALESCE(MAX(slot) + 1, 0) FROM party_members WHERE account_id = $id;";
+        slots.Parameters.AddWithValue("$id", accountId);
+
+        int slot = Convert.ToInt32(await slots.ExecuteScalarAsync(cancellationToken) ?? 0);
+
+        // Health, nature and moves are left for the server to work out when it loads
+        // this, the same as any other party member — a shortcut that produces a creature
+        // the rest of the game could not have made would test the wrong thing. Zero
+        // health here means "as much as it has", which is what a fresh one gets.
+        await using SqliteCommand insert = connection.CreateCommand();
+        insert.CommandText =
+            "INSERT INTO party_members (account_id, slot, species, level, nickname, current_hp, status, nature, experience) " +
+            "VALUES ($id, $slot, $species, $level, NULL, 0, 0, 0, 0);";
+
+        insert.Parameters.AddWithValue("$id", accountId);
+        insert.Parameters.AddWithValue("$slot", slot);
+        insert.Parameters.AddWithValue("$species", species);
+        insert.Parameters.AddWithValue("$level", level);
+
+        await insert.ExecuteNonQueryAsync(cancellationToken);
+
+        return true;
+    }
+
     public async Task<bool> WipeAsync(
         string username, SavedCharacter fresh, CancellationToken cancellationToken = default)
     {

@@ -106,4 +106,26 @@ public sealed class InMemoryPlayerStore : IPlayerStore
             return Task.FromResult(forgotten);
         }
     }
+
+    public Task<bool> GiveAsync(
+        string username, int species, int level, CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            if (!_byFoldedName.TryGetValue(UsernameRules.Fold(username), out Row? row))
+                return Task.FromResult(false);
+
+            // Zero health means "as much as it has", the same as the database's does.
+            row.Character = row.Character with
+            {
+                Party =
+                [
+                    .. row.Character.Party,
+                    new SavedMon(species, level, null, 0, Core.Battle.StatusCondition.None, Core.Battle.Nature.Hardy, []),
+                ],
+            };
+
+            return Task.FromResult(true);
+        }
+    }
 }

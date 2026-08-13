@@ -98,6 +98,28 @@ public static class Program
                     : $"  no character called {wiping} — nothing wiped");
         }
 
+        // An operator's shortcut past the first hour, and it earned its keep the
+        // afternoon it was written: every check on a battle, a move menu or a story beat
+        // past the lab meant driving the whole opening again to get a party, and the
+        // opening takes a quarter of an hour to play. It hands something over; it does
+        // not decide anything a player could not have reached honestly.
+        if (ArgumentValue(args, "--give") is { } giving)
+        {
+            if (Gift(giving) is not { } gift)
+            {
+                Console.WriteLine($"  --give wants name,species,level — \"{giving}\" is not that");
+            }
+            else
+            {
+                bool given = await store.GiveAsync(gift.Name, gift.Species, gift.Level);
+
+                Console.WriteLine(
+                    given
+                        ? $"  {gift.Name} has been given species {gift.Species} at level {gift.Level}"
+                        : $"  no character called {gift.Name} — nothing given");
+            }
+        }
+
         // Before anybody connects, because the state being thrown away is state a
         // connected character is holding in memory and would write straight back.
         if (ArgumentValue(args, "--forget") is { } forgetting)
@@ -113,6 +135,15 @@ public static class Program
         await new GameServer(game, store, verbose).RunAsync(port);
         return 0;
     }
+
+    /// <summary>Reads a <c>name,species,level</c> argument, or nothing when it is not one.</summary>
+    private static (string Name, int Species, int Level)? Gift(string text) =>
+        text.Split(',', StringSplitOptions.TrimEntries) is [string name, string species, string level] &&
+        name.Length > 0 &&
+        int.TryParse(species, out int which) && which > 0 &&
+        int.TryParse(level, out int at) && at is > 0 and <= 100
+            ? (name, which, at)
+            : null;
 
     /// <summary>Reads an <c>x,y</c> argument, or nothing when it was not given or is not one.</summary>
     private static GridPosition? Square(string? text) =>

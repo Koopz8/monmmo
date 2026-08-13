@@ -10,6 +10,43 @@ namespace PokeMmo.RomExtract.Tests;
 public class PasswordHasherTests
 {
     [Fact]
+    public async Task SomethingGivenTurnsUpInTheParty()
+    {
+        // An operator's shortcut past the first hour. Every check on a battle or a move
+        // menu used to mean driving the whole opening again to get a party.
+        using SqlitePlayerStore store = SqlitePlayerStore.InMemory();
+
+        SavedCharacter fresh = SavedCharacter.Fresh("3.0", 1, 1);
+
+        AuthOutcome.Success made = Assert.IsType<AuthOutcome.Success>(
+            await store.RegisterAsync("Mason", "a-good-password", fresh));
+
+        Assert.True(await store.GiveAsync("Mason", species: 1, level: 12));
+
+        // Read back the way the server reads it: by signing in again.
+        AuthOutcome.Success back = Assert.IsType<AuthOutcome.Success>(
+            await store.LoginAsync("Mason", "a-good-password"));
+
+        SavedMon given = Assert.Single(back.Character.Party);
+
+        Assert.Equal(1, given.Species);
+        Assert.Equal(12, given.Level);
+
+        // Nothing else decided here. Health, nature and moves are worked out where every
+        // other party member's are — a shortcut that made a creature the rest of the game
+        // could not have would be testing the wrong thing.
+        Assert.Null(given.Nickname);
+    }
+
+    [Fact]
+    public async Task GivingToNobodyGivesNothing()
+    {
+        using SqlitePlayerStore store = SqlitePlayerStore.InMemory();
+
+        Assert.False(await store.GiveAsync("Nobody", species: 1, level: 12));
+    }
+
+    [Fact]
     public async Task WipingLeavesTheLoginAndNothingElse()
     {
         using SqlitePlayerStore store = SqlitePlayerStore.InMemory();

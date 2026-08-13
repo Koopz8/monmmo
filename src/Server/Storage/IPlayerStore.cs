@@ -50,6 +50,18 @@ public interface IPlayerStore
     Task<int> ForgetStoryAsync(string username, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Puts one more creature in a character's party, for an operator who needs a party
+    /// without playing the first hour of the game to get one.
+    /// <para>
+    /// Level and species only. Everything else about it — its health, its nature, what it
+    /// knows — is worked out the same way a wild one's is, because a shortcut that
+    /// produces a creature the rest of the game would never have made is a shortcut that
+    /// tests the wrong thing.
+    /// </para>
+    /// </summary>
+    Task<bool> GiveAsync(string username, int species, int level, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Throws away everything a character has ever done, keeping the account.
     /// <para>
     /// The bigger hammer beside <see cref="ForgetStoryAsync"/>, and it exists for the
