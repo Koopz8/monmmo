@@ -127,6 +127,12 @@ public static class Program
         Raylib.InitWindow(WindowWidth, WindowHeight, $"MonMMO — {map.Name}");
         Raylib.SetTargetFPS(60);
 
+        // Escape does not quit. It is raylib's default and it is wrong for a game: the
+        // naming screen offers Escape to leave a name alone, and the first time that was
+        // played the whole client shut down to the desktop instead. The window's own
+        // close button still works, which is where people look for it anyway.
+        Raylib.SetExitKey(KeyboardKey.Null);
+
         // Who the cartridge's dialogue means when it leaves a gap for the player. The
         // signed-in name, because that is the only name this game ever asked anybody for.
         string signedInAs = settings.PlayerName;

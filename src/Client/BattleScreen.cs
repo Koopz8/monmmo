@@ -81,6 +81,13 @@ public sealed class BattleScreen
             : $"A wild {SpeciesNameOf(start.Opponent)} appeared!");
 
         if (IsTrainerBattle) Say($"{_trainerName} sent out {SpeciesNameOf(start.Opponent)}!");
+
+        // And then read the first of them, rather than waiting for something to happen.
+        // Every other place that queues a line follows it with this; the constructor did
+        // not, so a battle opened on an empty box with "Press Z" under it and stayed
+        // that way until the first turn resolved. The lines were all there — nothing was
+        // showing them.
+        AdvanceMessage();
     }
 
     /// <summary>True when a person started this, rather than something in the grass.</summary>
