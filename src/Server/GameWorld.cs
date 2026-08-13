@@ -996,7 +996,8 @@ public sealed class GameWorld
                     BattleFactory.View(party[0]),
                     BallsOf(player),
                     MedicineOf(player),
-                    trainer.TrainerId),
+                    trainer.TrainerId,
+                    lead.Slot),
                 OnlyTo: player.Id),
         ];
     }
@@ -2615,7 +2616,9 @@ public sealed class GameWorld
         player.Battle = new Encounter(lead.Slot, lead.Battler, [wild], _rng.State);
 
         send.Add(new Outgoing(
-            new BattleStarted(BattleFactory.View(lead.Battler), BattleFactory.View(wild), BallsOf(player), MedicineOf(player)),
+            new BattleStarted(
+                BattleFactory.View(lead.Battler), BattleFactory.View(wild),
+                BallsOf(player), MedicineOf(player), Slot: lead.Slot),
             OnlyTo: player.Id));
     }
 
@@ -2642,6 +2645,34 @@ public sealed class GameWorld
         // would be over before the first turn, and the player would be left pressing
         // buttons at a screen that has nothing left to say.
         return null;
+    }
+
+    /// <summary>
+    /// Sends out one of the party by choice rather than because somebody fainted.
+    /// <para>
+    /// Refused for a slot that is not in the party, for the one already out, and for
+    /// anybody who cannot fight — all three are things a client could ask for and none
+    /// of them is something a player could do, which is the whole reason this is decided
+    /// here.
+    /// </para>
+    /// <para>
+    /// Whoever was out is written back first. A switch that forgot to do that would heal
+    /// the one leaving, because what the party holds is the health they went in with.
+    /// </para>
+    /// </summary>
+    private BattlerView? SwapIn(ServerPlayer player, Encounter encounter, int slot)
+    {
+        if (_battles is null) return null;
+        if (slot < 0 || slot >= player.Party.Count) return null;
+        if (slot == encounter.PlayerSlot) return null;
+
+        if (_battles.Restore(player.Party[slot]) is not { HasFainted: false } coming) return null;
+
+        WriteBackActive(player, encounter);
+
+        encounter.SendPlayer(slot, coming);
+
+        return BattleFactory.View(coming);
     }
 
     /// <summary>
@@ -2789,6 +2820,23 @@ public sealed class GameWorld
             if (!_players.TryGetValue(playerId, out ServerPlayer? player) || player.Battle is not { } encounter)
                 return [new Outgoing(new Rejected("You are not in a battle."), OnlyTo: playerId)];
 
+            // Somebody else, before anything else. A switch is not a move and the engine
+            // has no idea a party exists — so it happens here, and what reaches the
+            // engine is a side that does nothing this turn, which is exactly what a
+            // switch costs.
+            List<Outgoing> swapped = [];
+
+            if (action is BattleAction.SwitchTo going)
+            {
+                if (SwapIn(player, encounter, going.Slot) is not { } sent)
+                {
+                    return [new Outgoing(new Rejected("Nobody there can fight."), OnlyTo: playerId)];
+                }
+
+                swapped.Add(new Outgoing(
+                    new BattlerSentOut(Side.Player, sent, encounter.PlayerSlot), OnlyTo: playerId));
+            }
+
             Battle battle = encounter.Current;
 
             // Three ways a throw turns into an attack instead: nothing of that kind in
@@ -2823,10 +2871,12 @@ public sealed class GameWorld
             // is about to be handed a fresh opponent.
             if (!finished) events.RemoveAll(e => e is BattleEvent.Ended);
 
-            var send = new List<Outgoing>
+            var send = new List<Outgoing>(swapped)
             {
                 new(
-                    new BattleUpdate(events, battle.Player.CurrentHp, battle.Opponent.CurrentHp, BallsOf(player), MedicineOf(player)),
+                    new BattleUpdate(
+                        events, battle.Player.CurrentHp, battle.Opponent.CurrentHp,
+                        BallsOf(player), MedicineOf(player), [.. player.Party]),
                     OnlyTo: playerId),
             };
 
@@ -2864,7 +2914,8 @@ public sealed class GameWorld
                 encounter.SendPlayer(replacement.Slot, replacement.Battler);
 
                 send.Add(new Outgoing(
-                    new BattlerSentOut(Side.Player, BattleFactory.View(replacement.Battler)), OnlyTo: playerId));
+                    new BattlerSentOut(Side.Player, BattleFactory.View(replacement.Battler), replacement.Slot),
+                    OnlyTo: playerId));
             }
 
             return send;

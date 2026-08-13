@@ -357,6 +357,66 @@ public class TrainerBattleTests
     }
 
     [Fact]
+    public void SomebodyElseCanBeSentOutByChoice()
+    {
+        // The last thing a battle could not do. Everything else about a party was
+        // already here — the next one comes out when somebody faints — but nobody could
+        // choose, so a fight was whichever creature happened to be first.
+        GameWorld world = World(Trainer(1, 4, 1, Direction.Down, TestRules.OneAlone));
+        ServerPlayer player = Join(world, party: 2);
+
+        StepTo(world, player, new GridPosition(4, 3), Direction.Down);
+
+        List<NetMessage> said = [.. world.TakeBattleTurn(player.Id, new BattleAction.SwitchTo(1))
+            .Select(o => o.Message)];
+
+        Assert.Single(said.OfType<BattlerSentOut>().Where(s => s.Side == Side.Player));
+
+        // And it cost the turn: the other side moved and this one did not.
+        List<BattleEvent> events = said.OfType<BattleUpdate>().SelectMany(u => u.Events).ToList();
+
+        Assert.Contains(events.OfType<BattleEvent.MoveUsed>(), e => e.Side == Side.Opponent);
+        Assert.DoesNotContain(events.OfType<BattleEvent.MoveUsed>(), e => e.Side == Side.Player);
+    }
+
+    [Fact]
+    public void SwitchingToNobodyIsRefused()
+    {
+        // Three things a client could ask for and a player could not do: a slot that is
+        // not in the party, the one already out, and somebody who has fainted.
+        GameWorld world = World(Trainer(1, 4, 1, Direction.Down, TestRules.OneAlone));
+        ServerPlayer player = Join(world, party: 2);
+
+        StepTo(world, player, new GridPosition(4, 3), Direction.Down);
+
+        Assert.Single(world.TakeBattleTurn(player.Id, new BattleAction.SwitchTo(9))
+            .Select(o => o.Message).OfType<Rejected>());
+
+        Assert.Single(world.TakeBattleTurn(player.Id, new BattleAction.SwitchTo(0))
+            .Select(o => o.Message).OfType<Rejected>());
+    }
+
+    [Fact]
+    public void WhoeverLeavesTakesTheirDamageWithThem()
+    {
+        // The one going out has to be written back before the one coming in replaces
+        // them, or a switch is a free heal.
+        GameWorld world = World(Trainer(1, 4, 1, Direction.Down, TestRules.OneAlone));
+        ServerPlayer player = Join(world, party: 2);
+
+        StepTo(world, player, new GridPosition(4, 3), Direction.Down);
+
+        // A turn of being hit, then out.
+        world.TakeBattleTurn(player.Id, new BattleAction.UseMove(0));
+
+        int hurt = player.Party[0].CurrentHp;
+
+        world.TakeBattleTurn(player.Id, new BattleAction.SwitchTo(1));
+
+        Assert.Equal(hurt, player.Party[0].CurrentHp);
+    }
+
+    [Fact]
     public void BeatingAGymLeaderHandsOverWhatTheFightPaysOut()
     {
         // Eight fights in this cartridge pay out more than money, and every one is a

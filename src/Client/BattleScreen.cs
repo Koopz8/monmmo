@@ -12,6 +12,10 @@ public enum BattlePhase
 {
     ReadingMessages,
     ChoosingMove,
+
+    /// <summary>Picking somebody else to send out.</summary>
+    ChoosingWho,
+
     WaitingForServer,
     Finished,
 }
@@ -55,6 +59,23 @@ public sealed class BattleScreen
 
     private BattlerView _you;
     private BattlerView _opponent;
+
+    /// <summary>
+    /// Everybody who could come out instead, and which one is out now.
+    /// <para>
+    /// Held rather than asked for, because a battle screen that had to reach back into
+    /// the world for a party would be a battle screen that knows about the world. What it
+    /// needs is a list of names, levels and health, and the slot each one sits in — the
+    /// slot is what travels, because two of the same species in one party are otherwise
+    /// the same request.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<SavedMon> Party { get; set; } = [];
+
+    /// <summary>Which of them is out, so the list can refuse to send out the one already there.</summary>
+    public int Active { get; set; }
+
+    private int _selectedMon;
 
     public BattleScreen(
         BattleStarted start, GameData data, TrainerNames? trainers = null, ItemNames? items = null,
@@ -299,6 +320,10 @@ public sealed class BattleScreen
                 ChooseMove();
                 break;
 
+            case BattlePhase.ChoosingWho:
+                ChooseWho();
+                break;
+
             case BattlePhase.WaitingForServer:
                 break;
 
@@ -386,7 +411,58 @@ public sealed class BattleScreen
         if (Balls.Count > 1 && Raylib.IsKeyPressed(KeyboardKey.Left))
             _selectedBall = (_selectedBall - 1 + Balls.Count) % Balls.Count;
 
+        // Somebody else. The last thing a battle here could not do: the next one came
+        // out when somebody fainted and never by choice, so a fight was whoever happened
+        // to be first in the party.
+        if (Raylib.IsKeyPressed(KeyboardKey.V) && Party.Count > 1)
+        {
+            _selectedMon = Active;
+            Phase = BattlePhase.ChoosingWho;
+
+            return;
+        }
+
         if (Confirmed()) Choose(new BattleAction.UseMove(_selectedMove));
+    }
+
+    private void ChooseWho()
+    {
+        if (Raylib.IsKeyPressed(KeyboardKey.Down) || Raylib.IsKeyPressed(KeyboardKey.S))
+            _selectedMon = (_selectedMon + 1) % Party.Count;
+
+        if (Raylib.IsKeyPressed(KeyboardKey.Up) || Raylib.IsKeyPressed(KeyboardKey.W))
+            _selectedMon = (_selectedMon - 1 + Party.Count) % Party.Count;
+
+        if (Raylib.IsKeyPressed(KeyboardKey.X) || Raylib.IsKeyPressed(KeyboardKey.V))
+        {
+            Phase = BattlePhase.ChoosingMove;
+            return;
+        }
+
+        if (!Confirmed()) return;
+
+        // Refused here as well as on the server, which is the usual arrangement: this is
+        // what stops a player spending a turn finding out, and the server is what makes
+        // it true.
+        if (_selectedMon == Active)
+        {
+            Say("They're already out!");
+            Phase = BattlePhase.ReadingMessages;
+            AdvanceMessage();
+
+            return;
+        }
+
+        if (Party[_selectedMon].CurrentHp <= 0)
+        {
+            Say("They have no energy left to fight!");
+            Phase = BattlePhase.ReadingMessages;
+            AdvanceMessage();
+
+            return;
+        }
+
+        Choose(new BattleAction.SwitchTo(_selectedMon));
     }
 
     /// <summary>
@@ -472,6 +548,12 @@ public sealed class BattleScreen
         Raylib.DrawRectangle(30, boxY, Width - 60, boxHeight, new Color(255, 255, 255, 240));
         Raylib.DrawRectangleLines(30, boxY, Width - 60, boxHeight, new Color(64, 64, 64, 255));
 
+        if (Phase == BattlePhase.ChoosingWho)
+        {
+            DrawPartyMenu(boxY);
+            return;
+        }
+
         if (Phase == BattlePhase.ChoosingMove)
         {
             DrawMoveMenu(boxY);
@@ -490,9 +572,57 @@ public sealed class BattleScreen
         Raylib.DrawText(prompt, Width - 220, boxY + boxHeight - 34, 18, new Color(120, 120, 120, 255));
     }
 
+    /// <summary>
+    /// The party, for choosing who comes out.
+    /// <para>
+    /// Names, levels and health and nothing else. There is no picture of anybody here on
+    /// purpose: a battle screen that loaded six sprites to answer one question would cost
+    /// a fight's worth of decompression at the moment a player is deciding something.
+    /// </para>
+    /// </summary>
+    private void DrawPartyMenu(int boxY)
+    {
+        Raylib.DrawText("Send out who?", 52, boxY + 18, 20, new Color(96, 96, 96, 255));
+        Raylib.DrawText("V or X: back", Width - 400, boxY + 18, 20, new Color(96, 96, 96, 255));
+
+        for (int i = 0; i < Party.Count; i++)
+        {
+            SavedMon member = Party[i];
+            int y = boxY + 48 + i * 24;
+            bool selected = i == _selectedMon;
+
+            if (selected) Raylib.DrawText(">", 52, y, 20, Color.Black);
+
+            // Out already, or unable — both drawn differently, because the difference is
+            // the whole of what a player is looking at this list to find out.
+            Color colour = member.CurrentHp <= 0
+                ? new Color(180, 120, 120, 255)
+                : i == Active ? new Color(150, 150, 150, 255) : Color.Black;
+
+            string name = member.Nickname ?? _data.SpeciesAt(member.Species)?.Name ?? $"species {member.Species}";
+
+            Raylib.DrawText($"{name}", 76, y, 20, colour);
+            Raylib.DrawText($"L{member.Level}", 300, y, 20, colour);
+
+            Raylib.DrawText(
+                member.CurrentHp <= 0 ? "fainted" : $"{member.CurrentHp} HP",
+                380, y, 20, colour);
+
+            if (i == Active) Raylib.DrawText("out", 500, y, 20, colour);
+        }
+    }
+
     private void DrawMoveMenu(int boxY)
     {
         Raylib.DrawText("Choose a move:", 52, boxY + 18, 20, new Color(96, 96, 96, 255));
+
+        // Advertised rather than left to be discovered. A key nobody knows about is a
+        // feature nobody has.
+        if (Party.Count > 1)
+        {
+            Raylib.DrawText(
+                "V: send out somebody else", Width - 400, boxY + 70, 20, new Color(96, 96, 96, 255));
+        }
 
         string medicineLine = ChosenMedicine is { } potion
             ? $"C: use {NameOf(potion.ItemId)} ({potion.Count})"

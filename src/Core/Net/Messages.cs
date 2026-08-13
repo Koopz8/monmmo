@@ -493,7 +493,10 @@ public sealed record BattleStarted(
     BattlerView Opponent,
     IReadOnlyList<BagEntry> Balls,
     IReadOnlyList<BagEntry> Medicine,
-    int? TrainerId = null) : NetMessage;
+    int? TrainerId = null,
+
+    /// <summary>Which party slot is out, so a client can offer the other five.</summary>
+    int Slot = 0) : NetMessage;
 
 /// <summary>
 /// One side has sent out somebody new.
@@ -503,7 +506,7 @@ public sealed record BattleStarted(
 /// turn just reported, and this is what comes next.
 /// </para>
 /// </summary>
-public sealed record BattlerSentOut(Side Side, BattlerView Battler) : NetMessage;
+public sealed record BattlerSentOut(Side Side, BattlerView Battler, int Slot = 0) : NetMessage;
 
 /// <summary>
 /// What happened this turn, and where both sides now stand.
@@ -519,7 +522,17 @@ public sealed record BattleUpdate(
     int YourHp,
     int OpponentHp,
     IReadOnlyList<BagEntry> Balls,
-    IReadOnlyList<BagEntry> Medicine) : NetMessage;
+    IReadOnlyList<BagEntry> Medicine,
+
+    /// <summary>
+    /// The party as it stands, because a battle is where it changes.
+    /// <para>
+    /// Sent every turn rather than at the end, now that a player can choose who comes
+    /// out: a list built from the party as it was at the start of the fight would offer
+    /// somebody who fainted two turns ago.
+    /// </para>
+    /// </summary>
+    IReadOnlyList<SavedMon>? Party = null) : NetMessage;
 
 /// <summary>
 /// The battle is over. Carries the party back because it may have just grown.

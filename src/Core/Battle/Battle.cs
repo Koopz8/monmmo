@@ -118,9 +118,27 @@ public abstract record BattleEvent
 [JsonDerivedType(typeof(Struggle), "struggle")]
 [JsonDerivedType(typeof(ThrowBall), "ball")]
 [JsonDerivedType(typeof(UseItem), "item")]
+[JsonDerivedType(typeof(SwitchTo), "switch")]
 public abstract record BattleAction
 {
     public sealed record UseMove(int Slot) : BattleAction;
+
+    /// <summary>
+    /// Send out somebody else. The slot is a party index, and the party is the server's.
+    /// <para>
+    /// Costs the turn, like every other thing that is not a move — the one who comes out
+    /// arrives to whatever the other side had already decided to do. Nothing in the
+    /// engine acts on this: it is resolved before the turn by whoever owns the party, and
+    /// what reaches the engine is a side that does nothing, which is what a switch is
+    /// from the arithmetic's point of view.
+    /// </para>
+    /// <para>
+    /// Stat stages go with the one who left, which falls out of the arrangement rather
+    /// than needing a rule: a switch builds a fresh battle around the new pair, and a
+    /// fresh battle has no stages in it.
+    /// </para>
+    /// </summary>
+    public sealed record SwitchTo(int Slot) : BattleAction;
 
     public sealed record Struggle : BattleAction;
 

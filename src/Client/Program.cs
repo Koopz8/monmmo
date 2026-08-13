@@ -1347,6 +1347,7 @@ public static class Program
                     player.Place(view.Collision, new GridPosition(welcome.X, welcome.Y));
                     bag = welcome.Bag;
                     party = welcome.Party;
+                    if (battle is not null) battle.Party = party;
                     money = welcome.Money;
 
                     watching = null;
@@ -1396,6 +1397,7 @@ public static class Program
 
                 case PartyHealed healed:
                     party = healed.Party;
+                    if (battle is not null) battle.Party = party;
 
                     // The counter says it out loud, in a box dismissed like any other.
                     // There is nothing to choose, so there is nothing to open.
@@ -1442,6 +1444,7 @@ public static class Program
                 case BagUpdated updated:
                     bag = updated.Bag;
                     party = updated.Party;
+                    if (battle is not null) battle.Party = party;
                     carrying?.Apply(updated);
 
                     break;
@@ -1552,11 +1555,27 @@ public static class Program
                 case BattleStarted started:
                     battle = new BattleScreen(
                         started, data, trainers, items,
-                        calledInstead: rival.Take() ? script.RivalName : null);
+                        calledInstead: rival.Take() ? script.RivalName : null)
+                    {
+                        // Who else could come out. Kept up to date below, because a party
+                        // that goes stale mid-fight is a list offering somebody who
+                        // fainted two turns ago.
+                        Party = party,
+                        Active = started.Slot,
+                    };
 
                     // The walk is over the moment the fight begins, which is the ending
                     // almost every walk has.
                     watching = null;
+
+                    break;
+
+                case BattlerSentOut sent when sent.Side == Side.Player:
+                    battle?.Apply(sent);
+
+                    // And which slot, so the list offers the other five rather than the
+                    // one already standing there.
+                    if (battle is not null) battle.Active = sent.Slot;
 
                     break;
 
@@ -1576,6 +1595,15 @@ public static class Program
 
                 case BattleUpdate update:
                     battle?.Apply(update);
+
+                    // A fight is where health changes, and the list of who could come out
+                    // instead is the one thing that reads it every turn.
+                    if (update.Party is { } standing)
+                    {
+                        party = standing;
+                        if (battle is not null) battle.Party = standing;
+                    }
+
                     break;
 
                 case BattleFinished finished:
