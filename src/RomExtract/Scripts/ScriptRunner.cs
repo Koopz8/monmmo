@@ -666,10 +666,12 @@ public static class ScriptRunner
     /// cartridge's dialogue leaves.
     /// <para>
     /// Four codes, all derived by counting sites and reading sentences rather than by
-    /// remembering a table: 0x01 is the player at 109 sites, 0x06 is the rival at 33,
-    /// and 0x02 and 0x03 are species at 19 each. Only 0x02 is ever filled by anything
-    /// this project has read — 0x03 belongs to the in-game trades, which are a special
-    /// routine and so out of reach.
+    /// remembering a table: 0x01 is the player at 109 sites and 0x06 is the rival at 33.
+    /// 0x02 and 0x03 are gaps rather than species — at all 19 sites a fresh save can
+    /// reach they hold a species, which is what they were first called here, but the
+    /// professor says "{FD}{02} POKeMON seen" once the parcel is delivered and that is a
+    /// number. What goes in one depends on which command filled it, and only the command
+    /// that fills one with a species is known.
     /// </para>
     /// <para>
     /// A code with nothing behind it is left exactly as it was found. Substituting an

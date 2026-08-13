@@ -71,8 +71,17 @@ public sealed class ScriptState
     /// the boy who follows you around the game.
     /// </para>
     /// <para>
-    /// 0x02 and 0x03 are species, filled by a command rather than by the save, and only
-    /// 0x02 is ever filled by anything this project has read. See the runner.
+    /// 0x02 and 0x03 are not species. They are gaps, and what goes in one depends on
+    /// which command filled it — that correction came from the professor, who says
+    /// "{FD}{02} POKeMON seen and {FD}{03} POKeMON owned" once the parcel is delivered.
+    /// Every one of the nineteen sites reachable from a fresh save fills them with a
+    /// species, which is why they were called that; the sentence that proves otherwise
+    /// is behind the story.
+    /// </para>
+    /// <para>
+    /// 0x7D fills one with a species name. What fills one with a number has not been
+    /// identified — see the reader's note on 0x83 for a width that would have made that
+    /// sentence come out and cost five reads elsewhere.
     /// </para>
     /// <para>
     /// The rival's name is a placeholder and is meant to look like one. The cartridge

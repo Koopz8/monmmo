@@ -444,6 +444,21 @@ public static class ScriptCommands
         // in front of five consecutive returns is not something anything emits.
         //
         // The sixth site does not fit this shape and is not claimed by it.
+        // The sixth site does not fit this shape and is not claimed by it.
+        //
+        // Three was tried and is wrong, and the instrument said so rather than an
+        // argument. The professor's line about the POKeDEX — "{FD}{02} POKeMON seen and
+        // {FD}{03} POKeMON owned" — is preceded by `83 00 08 80 83 01 09 80`, which
+        // reads beautifully as two commands of three putting 0x8008 and 0x8009 into the
+        // two gaps the sentence leaves. It reads just as cleanly as one command of
+        // seven. What decided it was the count: at three, five more scripts across the
+        // cartridge derail inside a call and have to be rescued by returning from it,
+        // and clean endings and pages do not move at all. A width that costs five reads
+        // and buys nothing is not the width.
+        //
+        // So what fills a gap with a number is still unidentified. The 0x83 in the
+        // middle of those arguments is a coincidence this project cannot yet explain,
+        // and saying so is better than adopting a width to make one sentence come out.
         [0x83] = 7,
 
         // Four: two variables. One site only, and it needs no more than one:
