@@ -2539,6 +2539,18 @@ public sealed class GameWorld
 
         player.Battle = null;
 
+        // A fight is a warrant for a scene, and the fights that most need to be are the
+        // ones a story square started. The rival's script has him walk off after losing,
+        // and that walk was refused every time: the window his challenge opened is two
+        // minutes long and the fight outlasted it.
+        //
+        // Reopened here rather than made longer, because a longer window is a worse
+        // answer to "how long is a fight" than no window at all. This is the same rule
+        // as a conversation and a trigger — the server arbitrates fights one at a time,
+        // so a fight it just finished is something it can vouch for.
+        player.SceneUntil = LastTickAt + SceneSeconds;
+        player.SceneOn = player.MapId;
+
         // A wiped party can never start another battle, so waking up healthy is the one
         // state that is always recoverable. Where that happens is BlackOut's business.
         if (winner == Side.Opponent) HealParty(player);

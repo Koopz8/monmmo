@@ -226,6 +226,12 @@ public static class Program
         BattleScreen? battle = null;
         DialogueBox? talking = null;
 
+        // The script that picked a fight, so it can be run again once the fight is over.
+        // Running it again is the whole trick: a trainerbattle whose trainer has already
+        // been beaten does nothing at all and the script carries straight on into what
+        // they say afterwards — which for the rival is losing gracefully and leaving.
+        uint? afterTheFight = null;
+
         // A scene, when a script turns out to be one. Kept beside the text box rather
         // than inside it: a box is one thing being said and a scene is an order of
         // things happening, and most scripts are the first kind.
@@ -343,7 +349,8 @@ public static class Program
             ApplyServerMessages(
                 network, others, player, view, data, trainers, items, script, carrying,
                 ref talking, ref battle, ref shop, ref bag, ref party, ref money,
-                ref correction, ref watching, ref exclaimFor, ref scene, ref arrived, ref fadingIn, ref holdInput);
+                ref correction, ref watching, ref exclaimFor, ref scene, ref arrived, ref fadingIn, ref holdInput,
+                ref afterTheFight);
 
             // A battle suspends the overworld entirely: the server is running it, and
             // walking on meanwhile would put the two sides out of step.
@@ -371,6 +378,22 @@ public static class Program
                     money = battle.Money;
                     battle.Unload();
                     battle = null;
+
+                    // Now, rather than when the server said the fight was over: the
+                    // words that come after a fight belong on the map, and a scene
+                    // played behind the battle screen is a scene nobody sees.
+                    if (afterTheFight is { } again)
+                    {
+                        afterTheFight = null;
+
+                        ScriptRun rest = ScriptRunner.Run(
+                            data.Rom, again, script.WithParty(party.Select(m => m.Moves)));
+
+                        Note($"after the fight, 0x{again:X8} ran again: " +
+                             $"{rest.Pages.Count} pages, {rest.Beats.Count} beats");
+
+                        (talking, scene) = Present(data, view, network, script, rest);
+                    }
                 }
 
                 continue;
@@ -1142,7 +1165,8 @@ public static class Program
         ref Cutscene? scene,
         ref bool arrived,
         ref float fadingIn,
-        ref float holdInput)
+        ref float holdInput,
+        ref uint? afterTheFight)
     {
         foreach (NetMessage message in network.Drain())
         {
@@ -1255,6 +1279,19 @@ public static class Program
                     // trainer's script gives their opening line — because what the script
                     // asks is whether the fight has already happened.
                     script.MarkBeaten(beaten.TrainerId);
+
+                    // And which script that was, so it can be run again once the screen
+                    // closes. Looked up rather than remembered: the world already knows
+                    // which square and which person on this map field this trainer, and
+                    // a note kept across a fight is a note that can be wrong.
+                    //
+                    // This arrives only on a win, which is the only case that has an
+                    // afterwards — a script does not carry on past a fight you lost.
+                    afterTheFight =
+                        view.Map.Triggers.FirstOrDefault(t => t.HasScript && t.Fields(beaten.TrainerId))
+                            ?.ScriptAddress
+                        ?? view.Map.Objects.FirstOrDefault(o => o.HasScript && o.TrainerId == beaten.TrainerId)
+                            ?.ScriptAddress;
 
                     break;
 

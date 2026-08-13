@@ -1509,6 +1509,36 @@ public class TriggerTests
         send.Select(o => o.Message).OfType<ObjectsPlaced>().SelectMany(p => p.Objects).ToList();
 
     [Fact]
+    public void AFinishedFightIsAsGoodAWarrantForASceneAsATrigger()
+    {
+        // The rival's script has him walk off after losing, and that walk was refused
+        // every time: the window his challenge opened is two minutes long and the fight
+        // outlasted it. A fight is something this server arbitrates one at a time, so a
+        // fight it has just finished is something it can vouch for.
+        (GameWorld world, ServerPlayer player) = Standing(Rival(3, 4));
+
+        world.FireTrigger(player.Id, 3, 4, TestRules.OneAlone, nowSeconds: 1);
+
+        // Long enough after that the trigger's own window is spent.
+        // Long enough after that the window his challenge opened is spent. Two minutes
+        // is generous for a scene and short for a fight, which is the whole problem.
+        world.HoldSceneCast(player.Id, [1], 1000);
+        Assert.Contains("no scene is running", world.LastSceneCast);
+
+        // The clock has to have moved for the server to know it has: the window is
+        // opened from the last tick, the same as a conversation's is.
+        world.Tick(1000);
+
+        // Fought to the end, whoever wins. The walk away is the next thing his script
+        // does either way.
+        for (int turn = 0; turn < 200 && player.InBattle; turn++)
+            world.TakeBattleTurn(player.Id, new BattleAction.UseMove(0));
+
+        world.HoldSceneCast(player.Id, [1], 1000);
+        Assert.Contains("holding", world.LastSceneCast);
+    }
+
+    [Fact]
     public void AConversationIsAsGoodAWarrantForASceneAsATrigger()
     {
         // Scenes do not only start on squares. Saying yes to the ball on the professor's

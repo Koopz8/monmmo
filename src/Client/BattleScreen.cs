@@ -394,10 +394,13 @@ public sealed class BattleScreen
     {
         Raylib.ClearBackground(new Color(248, 248, 232, 255));
 
-        DrawCombatant(_opponent, _names.Of(Side.Opponent), _wildSprite, _hasWildSprite,
+        // The plain name on the plate, not the one narration uses. "A wild PIDGEY
+        // appeared!" is a sentence and wants the article; a label above a health bar is
+        // not a sentence, and "the wild PIDGEY" written on one reads as a mistake.
+        DrawCombatant(_opponent, SpeciesNameOf(_opponent), _wildSprite, _hasWildSprite,
             spriteX: Width - 260, spriteY: 60, boxX: 40, boxY: 60, showHp: false);
 
-        DrawCombatant(_you, _names.Of(Side.Player), _playerSprite, _hasPlayerSprite,
+        DrawCombatant(_you, SpeciesNameOf(_you), _playerSprite, _hasPlayerSprite,
             spriteX: 90, spriteY: 250, boxX: Width - 380, boxY: 250, showHp: true);
 
         DrawMessageBox();
