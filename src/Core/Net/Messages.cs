@@ -34,6 +34,7 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(WentInside), "wentinside")]
 [JsonDerivedType(typeof(TriggerFired), "triggered")]
 [JsonDerivedType(typeof(NameMonRequest), "namemon")]
+[JsonDerivedType(typeof(HealRequest), "healplease")]
 [JsonDerivedType(typeof(ConsoleCommand), "console")]
 [JsonDerivedType(typeof(ConsoleReply), "consolesaid")]
 [JsonDerivedType(typeof(ScenePlaced), "sceneplaced")]
@@ -132,6 +133,17 @@ public sealed record NameMonRequest(int Slot, string Name) : NetMessage;
 /// command line.
 /// </para>
 /// </summary>
+/// <summary>
+/// Yes, please heal them.
+/// <para>
+/// Asked for rather than done on arrival at the counter, because the counter asks. The
+/// yes and the no live inside a standard routine — code this project cannot follow — so
+/// the box is the client's and the answer has to travel. The server still decides: it
+/// checks there is somebody who heals within reach before it does anything.
+/// </para>
+/// </summary>
+public sealed record HealRequest : NetMessage;
+
 public sealed record ConsoleCommand(string Text) : NetMessage;
 
 /// <summary>What the console said back. One line, for the client to show.</summary>
@@ -396,7 +408,23 @@ public sealed record AuthFailed(string Reason) : NetMessage;
 /// disagree within seconds.
 /// </para>
 /// </summary>
-public sealed record ObjectView(int LocalId, int GraphicsId, int X, int Y, Direction Facing);
+/// <summary>
+/// Somebody standing on a map, as the server sees them.
+/// <para>
+/// <c>Heals</c> is the odd one out and it is here for a reason. Every other thing the
+/// client knows about a person it reads off the cartridge itself — but who heals is not
+/// written on any person; it is worked out by noticing that twenty scripts across twenty
+/// maps all hand off to one address, and that scan wants the whole world at once. The
+/// export does it, so the export is what says so.
+/// </para>
+/// <para>
+/// The standing rule again, in the direction that is easy to miss: the server refuses to
+/// heal where nobody heals, and this is the client's half of that same fact — without it
+/// the counter asks nothing and the refusal never comes up, because the question is never
+/// put.
+/// </para>
+/// </summary>
+public sealed record ObjectView(int LocalId, int GraphicsId, int X, int Y, Direction Facing, bool Heals = false);
 
 /// <summary>Everyone standing on the map a player has just arrived on.</summary>
 public sealed record ObjectsPlaced(IReadOnlyList<ObjectView> Objects) : NetMessage;

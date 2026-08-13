@@ -157,6 +157,8 @@ public sealed class NetworkClient : IDisposable
 
     public void SendNameMon(int slot, string name) => Send(new NameMonRequest(slot, name));
 
+    public void SendHeal() => Send(new HealRequest());
+
     public void SendConsole(string text) => Send(new ConsoleCommand(text));
 
     public void SendBuy(int itemId, int count) => Send(new BuyRequest(itemId, count));

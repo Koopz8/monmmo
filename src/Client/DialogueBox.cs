@@ -23,11 +23,24 @@ public sealed class DialogueBox
 
     private int _page;
 
-    public DialogueBox(IEnumerable<string> pages, uint? resume = null)
+    public DialogueBox(IEnumerable<string> pages, uint? resume = null, bool asks = false)
     {
         _pages = pages.Select(GameText.ToAscii).ToList();
         Resume = resume;
+        Asks = asks;
     }
+
+    /// <summary>
+    /// A question with no script behind it.
+    /// <para>
+    /// The counter in a POKeMON CENTER is the one that needed this. She asks "Would you
+    /// like me to heal your POKeMON back to perfect health?" and the yes and the no are
+    /// inside a standard routine — code, not script, and this project has never followed
+    /// one. So the question is real, the words are the cartridge's, and only the box is
+    /// ours.
+    /// </para>
+    /// </summary>
+    public bool Asks { get; }
 
     /// <summary>
     /// Where the script carries on once this has been answered, when it is a question.
@@ -39,7 +52,7 @@ public sealed class DialogueBox
     /// </summary>
     public uint? Resume { get; }
 
-    public bool IsQuestion => Resume is not null;
+    public bool IsQuestion => Resume is not null || Asks;
 
     /// <summary>Which way the cursor is pointing. Yes first, as the games have it.</summary>
     public bool Answer { get; private set; } = true;

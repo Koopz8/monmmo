@@ -508,11 +508,17 @@ public class HealingTests
         new(3, 30, null, 1, StatusCondition.None, Nature.Hardy, [TestRules.FirstMove]);
 
     [Fact]
-    public void TalkingToOneStandsThePartyBackUp()
+    public void SayingYesStandsThePartyBackUp()
     {
+        // Talking to her used to do it. She asks — "Would you like me to heal your
+        // POKeMON back to perfect health?" — and the yes and the no are inside a
+        // standard routine this project has never been able to follow, so the answer
+        // comes back from the client as a request of its own.
         (GameWorld world, ServerPlayer player) = AtTheCounter(Wounded);
 
-        PartyHealed healed = world.StartTalking(player.Id, 1)
+        world.StartTalking(player.Id, 1);
+
+        PartyHealed healed = world.Heal(player.Id)
             .Select(o => o.Message)
             .OfType<PartyHealed>()
             .Single();
@@ -530,9 +536,12 @@ public class HealingTests
         (GameWorld world, ServerPlayer player) = AtTheCounter(Wounded);
 
         world.StartTalking(player.Id, 1);
+        world.Heal(player.Id);
         world.StopTalking(player.Id);
 
-        PartyHealed again = world.StartTalking(player.Id, 1)
+        world.StartTalking(player.Id, 1);
+
+        PartyHealed again = world.Heal(player.Id)
             .Select(o => o.Message)
             .OfType<PartyHealed>()
             .Single();
@@ -557,13 +566,44 @@ public class HealingTests
 
         player.Facing = Direction.Up;
 
-        PartyHealed healed = world.StartTalking(player.Id, 1)
+        world.StartTalking(player.Id, 1);
+
+        PartyHealed healed = world.Heal(player.Id)
             .Select(o => o.Message)
             .OfType<PartyHealed>()
             .Single();
 
         Assert.True(healed.Needed);
         Assert.Equal(StatusCondition.None, player.Party[0].Status);
+    }
+
+    [Fact]
+    public void SayingNoLeavesThemAsTheyAre()
+    {
+        // The other arm, and the reason the question is worth honouring at all. She asks,
+        // and until now this project said yes on the player's behalf every time.
+        (GameWorld world, ServerPlayer player) = AtTheCounter(Wounded);
+
+        world.StartTalking(player.Id, 1);
+
+        Assert.Equal(1, player.Party[0].CurrentHp);
+    }
+
+    [Fact]
+    public void NobodyIsHealedInTheMiddleOfARoute()
+    {
+        // The answer travels from the client, so the check has to be here: somebody who
+        // heals has to actually be within reach.
+        GameWorld world = World(Nurse(1));
+
+        (ServerPlayer player, _) = world.Join(
+            1, "Koop", SavedCharacter.Fresh(Town, 6, 6) with { Party = [Wounded] });
+
+        // Standing nowhere near the counter, facing nothing.
+        player.Facing = Direction.Down;
+
+        Assert.Empty(world.Heal(player.Id));
+        Assert.Contains("nobody here heals", world.LastHeal ?? "");
     }
 
     [Fact]
@@ -579,6 +619,65 @@ public class HealingTests
         Assert.Empty(world.StartTalking(player.Id, 1).Select(o => o.Message).OfType<PartyHealed>());
         Assert.Equal(1, player.Party[0].CurrentHp);
     }
+
+    [Fact]
+    public void ThePeopleTheServerPlacesSayWhichOfThemHeals()
+    {
+        // The other half of the rule, and the half that was missing: the server refuses
+        // to heal where nobody heals, and the client has to know the same thing or the
+        // question never gets asked. It cannot read it off the cartridge — who heals is
+        // worked out at export by scanning every map at once — so the only place it can
+        // come from is here.
+        //
+        // Without this the counter in every POKeMON CENTER in the game asked "Would you
+        // like me to heal your POKeMON back to perfect health?" over a "Z to close".
+        GameWorld world = World(Nurse(1), new MapObject(2, 5, 5, 3, Direction.Down, 0, false));
+
+        (_, List<Outgoing> send) = world.Join(1, "Koop", SavedCharacter.Fresh(Town, 3, 4));
+
+        IReadOnlyList<ObjectView> placed = Placed(send);
+
+        Assert.True(placed.Single(o => o.LocalId == 1).Heals);
+        Assert.False(placed.Single(o => o.LocalId == 2).Heals);
+    }
+
+    [Fact]
+    public void TheConsoleCanHurtAPartySoThatHealingItShows()
+    {
+        // Nothing else in this game hurts a party on demand, so every check of the
+        // counter was run on a party in perfect health and every one of them came back
+        // "nobody needed it" — which proves the box opened and nothing more.
+        (GameWorld world, ServerPlayer player) = AtTheCounter(
+            new SavedMon(3, 30, null, 500, StatusCondition.None, Nature.Hardy, [TestRules.FirstMove]));
+
+        world.Operators.Add(player.Name);
+        world.RunConsole(player.Id, "/hurt 1");
+
+        Assert.Equal(1, player.Party[0].CurrentHp);
+
+        world.StartTalking(player.Id, 1);
+        world.Heal(player.Id);
+
+        Assert.Contains("back on their feet", world.LastHeal ?? "");
+        Assert.True(player.Party[0].CurrentHp > 1);
+    }
+
+    [Fact]
+    public void NobodyIsHurtPastWhatTheyHave()
+    {
+        // The other direction. A console that can write 900 into a level 5's health
+        // would make every number in the next battle a lie, and the battle is what
+        // would get blamed for it.
+        (GameWorld world, ServerPlayer player) = AtTheCounter(Wounded);
+
+        world.Operators.Add(player.Name);
+        world.RunConsole(player.Id, "/hurt 9000");
+
+        Assert.True(player.Party[0].CurrentHp < 9000);
+    }
+
+    private static IReadOnlyList<ObjectView> Placed(IEnumerable<Outgoing> send) =>
+        send.Select(o => o.Message).OfType<ObjectsPlaced>().SelectMany(p => p.Objects).ToList();
 }
 
 /// <summary>

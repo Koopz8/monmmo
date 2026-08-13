@@ -95,7 +95,7 @@ public sealed class MapView : IDisposable
         foreach (ObjectView person in people)
         {
             People[person.LocalId] = new WalkingPerson(
-                person.GraphicsId, new GridPosition(person.X, person.Y), person.Facing);
+                person.GraphicsId, new GridPosition(person.X, person.Y), person.Facing, person.Heals);
         }
 
         Rebuild();

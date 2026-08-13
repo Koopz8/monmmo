@@ -735,6 +735,13 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                                 .ConfigureAwait(false);
                             break;
 
+                        case HealRequest when playerId != 0:
+                            await DispatchAsync(world.Heal(playerId), playerId, cancellationToken)
+                                .ConfigureAwait(false);
+
+                            if (world.LastHeal is { } rested) Console.WriteLine($"+ #{playerId} {rested}");
+                            break;
+
                         case ConsoleCommand typed when playerId != 0:
                             await DispatchAsync(
                                     world.RunConsole(playerId, typed.Text, Now), playerId, cancellationToken)

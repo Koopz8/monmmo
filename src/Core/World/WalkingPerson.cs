@@ -13,9 +13,20 @@ namespace PokeMmo.Core.World;
 /// and must not look the same.
 /// </para>
 /// </summary>
-public sealed class WalkingPerson(int graphicsId, GridPosition square, Direction facing)
+public sealed class WalkingPerson(int graphicsId, GridPosition square, Direction facing, bool heals = false)
 {
     public int GraphicsId { get; } = graphicsId;
+
+    /// <summary>
+    /// Whether this one is a counter that puts a party back on its feet.
+    /// <para>
+    /// Told rather than read. It is the one thing about a person the cartridge does not
+    /// say in the person's own record — see <c>ObjectView</c> for why — and it lives here
+    /// because the living population is already what the client asks "who is in front of
+    /// me", and the answer to "does she ask me anything" belongs beside it.
+    /// </para>
+    /// </summary>
+    public bool Heals { get; } = heals;
 
     public RemoteCharacter Body { get; } = new(0, "", square, facing);
 

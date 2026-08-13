@@ -58,6 +58,7 @@ public static class ConsoleHelp
         "/var <id> <value>          write a story variable, e.g. /var 0x4055 3",
         "/read <id>                 what a variable holds",
         "/heal                      everybody back on their feet",
+        "/hurt [hp]                 everybody down to that much, 1 by default",
         "/money <amount>            set it",
         "/forget                    every flag and variable, gone",
         "/help                      this",

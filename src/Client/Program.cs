@@ -829,7 +829,19 @@ public static class Program
         if (run.FlagsSet.Count + run.FlagsCleared.Count + run.VariablesWritten.Count > 0)
             network.SendScriptRan(run);
 
-        DialogueBox? box = person.HasScript ? new DialogueBox(run.Pages, run.Question) : null;
+        // A counter that heals asks, and until now this project answered for the player.
+        // The yes and the no are inside a standard routine — code, never followed here —
+        // so the words stay hers and only the box is ours.
+        //
+        // Asked of the living population rather than of the cartridge's own record. The
+        // record's Heals is filled in by the export, from a scan of every map at once,
+        // and the client never runs that scan — so reading it here got false for every
+        // nurse in the game, and she asked her question with a "Z to close" under it.
+        bool heals = view.People.TryGetValue(person.LocalId, out WalkingPerson? standing) && standing.Heals;
+
+        DialogueBox? box = person.HasScript
+            ? new DialogueBox(run.Pages, run.Question, asks: heals && party.Count > 0)
+            : null;
 
         Note(
             !person.HasScript
@@ -1003,6 +1015,15 @@ public static class Program
         GameData data, MapView view, NetworkClient network, ScriptState script,
         IReadOnlyList<SavedMon> party, DialogueBox asked)
     {
+        // A question with no script behind it, which is the counter in a POKeMON
+        // CENTER. Nothing to carry on from; there is only the answer to send.
+        if (asked.Resume is null)
+        {
+            if (asked.Asks && asked.Answer) network.SendHeal();
+
+            return (null, null, null);
+        }
+
         if (asked.Resume is not { } from) return (null, null, null);
 
         script.Write(0x800D, asked.Answer ? 1 : 0);

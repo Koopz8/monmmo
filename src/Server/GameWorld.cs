@@ -910,30 +910,19 @@ public sealed class GameWorld
                 // nobody is both, but the order says which this project would rather get
                 // wrong: a shop that healed you would be strange and a nurse that charged
                 // you would be worse.
-                if (person.Template.Heals && _battles is not null && player.Party.Count > 0)
+                // A counter that heals is not healed at here any more — it is asked at.
+                // She asks "Would you like me to heal your POKeMON back to perfect
+                // health?" and this used to answer for the player, because the yes and
+                // the no are inside a standard routine and this project cannot follow
+                // one. The words are hers; the box is the client's; the answer comes
+                // back as a HealRequest.
+                //
+                // Where somebody rests is still settled by standing at the counter,
+                // whatever they answer. Finding the place is what makes it yours.
+                if (person.Template.Heals && player.Party.Count > 0)
                 {
-                    bool needed = player.Party.Any(m => !_battles.IsWell(m));
-
-                    HealParty(player);
-
-                    // Remembered here rather than on arriving at the map: what makes a
-                    // centre yours is having stood at the counter, and a player who walked
-                    // through one on the way somewhere has not.
                     player.RestingAt = player.MapId;
                     player.RestingSquare = player.Square;
-
-                    person.HeldBy = playerId;
-
-                    LastTalkOutcome = needed
-                        ? $"a centre: {player.Party.Count} back on their feet"
-                        : "a centre, though nobody needed it";
-
-                    return
-                    [
-                        new Outgoing(
-                            new PartyHealed([.. player.Party], needed),
-                            OnlyTo: playerId),
-                    ];
                 }
 
                 // A shop opens on top of the hold rather than instead of it: the shopkeeper
@@ -2276,6 +2265,52 @@ public sealed class GameWorld
             Beaten = [.. player.DefeatedTrainers],
         };
 
+    /// <summary>
+    /// Heals a party, if there is somebody within reach who does that.
+    /// <para>
+    /// Asked for rather than done at the counter, because the counter asks. What this
+    /// side keeps is the check: somebody who heals has to actually be there, so a client
+    /// sending this in the middle of a route gets nothing.
+    /// </para>
+    /// </summary>
+    public List<Outgoing> Heal(int playerId)
+    {
+        lock (_gate)
+        {
+            LastHeal = null;
+
+            if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
+            if (_battles is null || player.Party.Count == 0) return [];
+
+            if (!_populated.TryGetValue(player.MapId, out MapPopulation? people)) return [];
+
+            // In front of them, by the same rule a conversation uses — a counter two
+            // rooms away is not a counter you are standing at.
+            var reachable = Interaction
+                .Reachable(player.Square, player.Facing, square => !GridFor(player.MapId).IsWalkable(square))
+                .ToHashSet();
+
+            if (!people.Objects.Any(o => o.Template.Heals && reachable.Contains(o.Square)))
+            {
+                LastHeal = "refused: nobody here heals anybody";
+                return [];
+            }
+
+            bool needed = player.Party.Any(m => !_battles.IsWell(m));
+
+            HealParty(player);
+
+            LastHeal = needed
+                ? $"{player.Party.Count} back on their feet"
+                : "nobody needed it";
+
+            return [new Outgoing(new PartyHealed([.. player.Party], needed), OnlyTo: playerId)];
+        }
+    }
+
+    /// <summary>What the last visit to a counter came to.</summary>
+    public string? LastHeal { get; private set; }
+
     /// <summary>What the console was last asked to do, and by whom.</summary>
     public string? LastConsole { get; private set; }
 
@@ -2380,6 +2415,36 @@ public sealed class GameWorld
             case "heal":
                 HealParty(player);
                 return [Said(player, $"{player.Party.Count} back on their feet"), .. Resend(player)];
+
+            // The counterpart, and it exists for one reason: nothing else in this game
+            // hurts a party on demand. Testing that a counter heals meant walking into
+            // grass until something hit back, and the answer that came out the far end
+            // of that was always "nobody needed it" — a heal that heals nobody proves
+            // the box opened and nothing else.
+            case "hurt":
+            {
+                if (player.Party.Count == 0) return [Said(player, "nobody to hurt")];
+
+                int left = Math.Max(0, line.Number(0) ?? 1);
+
+                // Capped at what each one actually has, because a console that can write
+                // 900 into a level 5's health would make every other number in a battle
+                // a lie, and the first thing anybody would blame is the battle.
+                for (int i = 0; i < player.Party.Count; i++)
+                {
+                    int most = _battles?.Restore(player.Party[i])?.MaxHp ?? left;
+
+                    player.Party[i] = player.Party[i] with { CurrentHp = Math.Min(left, most) };
+                }
+
+                return
+                [
+                    Said(player, left == 0
+                        ? $"{player.Party.Count} down"
+                        : $"{player.Party.Count} on {left} HP"),
+                    .. Resend(player),
+                ];
+            }
 
             case "money":
             {

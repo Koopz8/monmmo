@@ -150,6 +150,8 @@ public static class Program
 
         if (options.NameRuns) WriteNameRuns(rom, extractor);
 
+        if (options.SightLines) WriteSightLines(rom);
+
         if (!string.IsNullOrEmpty(options.Walkable)) WriteWalkable(rom, options.Walkable);
 
         if (options.Specials) WriteSpecials(rom);
@@ -1717,6 +1719,105 @@ public static class Program
     /// all along.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Whether the way trainers are facing is the way they are facing.
+    /// <para>
+    /// A bug catcher in Viridian Forest reads as facing Up with a sight range of one,
+    /// and the row above him is solid across the whole map — a trainer who can never see
+    /// anybody. One of those is a curiosity; a direction's worth of them is a mapping
+    /// read the wrong way round.
+    /// </para>
+    /// <para>
+    /// The test is the square in front. A trainer exists to catch somebody standing in
+    /// their line of sight, so a facing that points at a wall on most of the trainers
+    /// that carry it is a facing this project has misread.
+    /// </para>
+    /// </summary>
+    private static void WriteSightLines(Rom rom)
+    {
+        MapLibrary library = MapLibrary.Open(rom);
+
+        var open = new Dictionary<Direction, int>();
+        var walled = new Dictionary<Direction, int>();
+
+        Console.WriteLine();
+        Console.WriteLine("Which way trainers are looking, and whether anything is there");
+
+        foreach (LoadedMap map in library.All())
+        {
+            foreach (MapObject person in map.Objects.Where(o => o.IsTrainer && o.SightRange > 0))
+            {
+                GridPosition front = new GridPosition(person.X, person.Y).Step(person.Facing);
+
+                if (map.Collision.IsWalkable(front)) open[person.Facing] = open.GetValueOrDefault(person.Facing) + 1;
+                else walled[person.Facing] = walled.GetValueOrDefault(person.Facing) + 1;
+            }
+        }
+
+        // Down is also what an unrecognised movement type falls back to, so a healthy
+        // figure for Down could be the fallback flattering itself. Counting the types
+        // separates the two: a trainer whose type is one of the four this project knows
+        // is a trainer whose facing was read, not guessed.
+        var types = new Dictionary<int, int>();
+
+        foreach (LoadedMap map in library.All())
+        {
+            foreach (MapObject person in map.Objects.Where(o => o.IsTrainer && o.SightRange > 0))
+                types[person.MovementType] = types.GetValueOrDefault(person.MovementType) + 1;
+        }
+
+        Console.WriteLine(
+            "  movement types: " +
+            string.Join(", ", types.OrderByDescending(t => t.Value).Take(8).Select(t => $"{t.Key}x{t.Value}")));
+
+        // And the decisive split. A movement type this project recognises gives a facing
+        // that was read; anything else gives Down because Down is the fallback. If the
+        // fallback is a good guess the two rates will look alike, and if it is not, the
+        // guessed ones will look like chance.
+        int knownOpen = 0, knownAll = 0, guessedOpen = 0, guessedAll = 0;
+
+        foreach (LoadedMap map in library.All())
+        {
+            foreach (MapObject person in map.Objects.Where(o => o.IsTrainer && o.SightRange > 0))
+            {
+                bool read = person.MovementType is >= 3 and <= 10;
+                bool clear = map.Collision.IsWalkable(new GridPosition(person.X, person.Y).Step(person.Facing));
+
+                if (read)
+                {
+                    knownAll++;
+                    if (clear) knownOpen++;
+                }
+                else
+                {
+                    guessedAll++;
+                    if (clear) guessedOpen++;
+                }
+            }
+        }
+
+        Console.WriteLine(
+            $"  facing read from the type: {knownOpen}/{knownAll} " +
+            $"({(knownAll == 0 ? 0 : 100.0 * knownOpen / knownAll):F0} %)");
+
+        Console.WriteLine(
+            $"  facing guessed as Down:    {guessedOpen}/{guessedAll} " +
+            $"({(guessedAll == 0 ? 0 : 100.0 * guessedOpen / guessedAll):F0} %)");
+
+        Console.WriteLine();
+
+        foreach (Direction facing in (Direction[])[Direction.Up, Direction.Down, Direction.Left, Direction.Right])
+        {
+            int clear = open.GetValueOrDefault(facing);
+            int blocked = walled.GetValueOrDefault(facing);
+            int all = clear + blocked;
+
+            Console.WriteLine(
+                $"  {facing,-6} {all,4} trainers, {clear,4} can see the square in front " +
+                $"({(all == 0 ? 0 : 100.0 * clear / all):F0} %)");
+        }
+    }
+
     private static void WriteWalkable(Rom rom, string mapId)
     {
         MapLibrary library = MapLibrary.Open(rom);
@@ -3843,6 +3944,8 @@ public static class Program
 
         public string Walkable { get; private init; } = "";
 
+        public bool SightLines { get; private init; }
+
         /// <summary>Count which special routines get called, and on which maps.</summary>
         public bool Specials { get; private init; }
 
@@ -3915,6 +4018,7 @@ public static class Program
             bool hideFlags = false;
             bool nameRuns = false;
             string walkable = "";
+            bool sightLines = false;
             bool specials = false;
             int? special = null;
             byte? answers = null;
@@ -4024,6 +4128,9 @@ public static class Program
                         break;
                     case "--walkable":
                         walkable = Next(args, ref i, "--walkable");
+                        break;
+                    case "--sight-lines":
+                        sightLines = true;
                         break;
                     case "--specials-on":
                         specialsOn = Next(args, ref i, "--specials-on");
@@ -4166,6 +4273,7 @@ public static class Program
                 HideFlags = hideFlags,
                 NameRuns = nameRuns,
                 Walkable = walkable,
+                SightLines = sightLines,
                 Specials = specials,
                 Special = special,
                 Answers = answers,
