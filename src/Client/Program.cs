@@ -397,6 +397,11 @@ public static class Program
 
                 battle.Update();
 
+                // The answer to "forget which?", once there is one. Sent from the loop
+                // rather than from the screen, for the same reason every other request
+                // is: the screen draws and reads keys, and the socket is not its business.
+                if (battle.TakeAnswer() is { } answer) network.SendLearnMove(answer.MoveId, answer.Forget);
+
                 if (battle.TakePendingAction() is { } action) network.SendBattleAction(action);
 
                 Raylib.BeginDrawing();

@@ -727,6 +727,14 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                             await DispatchAsync(fromScript, playerId, cancellationToken).ConfigureAwait(false);
                             break;
 
+                        case LearnMoveRequest learning when playerId != 0:
+                            List<Outgoing> taught = world.LearnMove(playerId, learning.MoveId, learning.Forget);
+
+                            if (world.LastLearned is { } taught2) Console.WriteLine($"+ #{playerId} {taught2}");
+
+                            await DispatchAsync(taught, playerId, cancellationToken).ConfigureAwait(false);
+                            break;
+
                         case ScriptRan ran when playerId != 0:
                             List<Outgoing> handed = world.RunScript(playerId, ran);
 

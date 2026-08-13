@@ -159,6 +159,7 @@ public static class Program
         if (options.DoorSteps) WriteDoorSteps(rom);
 
         if (options.MoveEffects) WriteMoveEffects(rom);
+        if (options.FifthMove) WriteFifthMove(rom);
 
         if (options.RivalFights) WriteRivalFights(rom);
 
@@ -647,6 +648,75 @@ public static class Program
 
         foreach (int id in others.Order().Take(6))
             Console.WriteLine($"    trainer {id,4}  {named.GetValueOrDefault(id, "?")}");
+    }
+
+    /// <summary>
+    /// Where in the game a fifth move first has to be turned away.
+    /// <para>
+    /// Asked because the question "which of your four do you want to lose" is
+    /// unreachable by ordinary play until somebody knows four, and finding a creature
+    /// that gets there in one win is otherwise a matter of remembering a learnset. It
+    /// is not: every species that knows four at some level and learns another at the
+    /// very next one is right here in the table, and the cheapest of them is the one
+    /// worth walking into grass with.
+    /// </para>
+    /// </summary>
+    private static void WriteFifthMove(Rom rom)
+    {
+        Dictionary<int, Learnset> learnsets = LearnsetExtractor.Extract(rom);
+        List<MoveData> moves = MoveExtractor.Extract(rom);
+
+        var moveNames = moves.ToDictionary(m => m.Id, m => m.Name);
+        var names = new Dictionary<int, string>();
+
+        if (TableLocator.Locate(rom).SpeciesNames is { } table)
+        {
+            for (int i = 1; i <= 411; i++)
+            {
+                int at = table.Offset + i * GameText.SpeciesNameLength;
+                if (at + GameText.SpeciesNameLength > rom.Length) break;
+
+                names[i] = GameText.Decode(rom.Slice(at, GameText.SpeciesNameLength));
+            }
+        }
+
+        var found = new List<(int Level, int Species, int MoveId)>();
+
+        foreach ((int species, Learnset learnset) in learnsets)
+        {
+            foreach (LevelUpMove entry in learnset.Moves)
+            {
+                // Four already known the level before, and this one arriving with
+                // nowhere to go. Counted distinctly, because a move learned twice
+                // occupies one slot and would otherwise look like two.
+                int known = learnset.Moves
+                    .Where(m => m.Level < entry.Level)
+                    .Select(m => m.MoveId)
+                    .Distinct()
+                    .TakeLast(5)
+                    .Count();
+
+                if (known < 4) continue;
+                if (learnset.Moves.Any(m => m.Level < entry.Level && m.MoveId == entry.MoveId)) continue;
+
+                found.Add((entry.Level, species, entry.MoveId));
+                break;
+            }
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("The first level at which each species has to turn a move away");
+        Console.WriteLine();
+        Console.WriteLine($"  {found.Count} of {learnsets.Count} species reach five moves at all");
+        Console.WriteLine();
+        Console.WriteLine("  The earliest, which are the ones a test can reach in one win");
+
+        foreach ((int level, int species, int moveId) in found.OrderBy(f => f.Level).Take(20))
+        {
+            Console.WriteLine(
+                $"    L{level,-3} {names.GetValueOrDefault(species, "?"),-12} species {species,3}   " +
+                $"offered {moveNames.GetValueOrDefault(moveId, "?")}");
+        }
     }
 
     /// <summary>
@@ -4563,6 +4633,8 @@ public static class Program
         /// <summary>Every move grouped by the effect byte in its record.</summary>
         public bool MoveEffects { get; private init; }
 
+        public bool FifthMove { get; private init; }
+
         /// <summary>Which trainers are fought by a script that names the rival.</summary>
         public bool RivalFights { get; private init; }
 
@@ -4644,6 +4716,7 @@ public static class Program
             bool fightKinds = false;
             bool doorSteps = false;
             bool moveEffects = false;
+            bool fifthMove = false;
             bool rivalFights = false;
             bool specials = false;
             int? special = null;
@@ -4758,6 +4831,10 @@ public static class Program
                     case "--rival-fights":
                         rivalFights = true;
                         break;
+                    case "--fifth-move":
+                        fifthMove = true;
+                        break;
+
                     case "--move-effects":
                         moveEffects = true;
                         break;
@@ -4927,6 +5004,7 @@ public static class Program
                 FightKinds = fightKinds,
                 DoorSteps = doorSteps,
                 MoveEffects = moveEffects,
+                FifthMove = fifthMove,
                 RivalFights = rivalFights,
                 Specials = specials,
                 Special = special,

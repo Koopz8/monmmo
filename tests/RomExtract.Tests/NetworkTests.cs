@@ -54,6 +54,7 @@ public class MessageChannelTests
             new RegisterRequest("Mason", "a-good-password"),
             new LoginRequest("Mason", "a-good-password"),
             new ScriptGave(1, 358),
+            new LearnMoveRequest(33, 2),
             new BattleTurn(new BattleAction.UseMove(2)),
             new BattleTurn(new BattleAction.ThrowBall(4) { Kind = BallKind.Great }),
             new BattleStarted(

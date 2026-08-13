@@ -77,6 +77,21 @@ public sealed record ServerPlayer(int Id, long AccountId, string Name)
     public HashSet<string> ItemsTaken { get; } = [];
 
     /// <summary>
+    /// Moves a level-up offered and could not fit, and who to.
+    /// <para>
+    /// The question the games ask and this project has always shrugged at: four are
+    /// known, a fifth is learned, and something has to go. It is kept here rather than
+    /// answered on the spot because the answer is a person's, and a person is reading a
+    /// battle screen — the fight may be over by the time they get to it.
+    /// </para>
+    /// <para>
+    /// It is also what makes the answer safe: a client cannot teach anybody anything, it
+    /// can only reply to something already on this list.
+    /// </para>
+    /// </summary>
+    public List<(int Slot, int MoveId)> MovesOffered { get; } = [];
+
+    /// <summary>
     /// How long a scene may go on walking this player about.
     /// <para>
     /// Ordinary movement is rate limited and a scripted walk cannot be — the games step
@@ -2339,6 +2354,66 @@ public sealed class GameWorld
         }
     }
 
+    /// <summary>
+    /// Takes a move that was offered and could not fit, in place of one already known.
+    /// <para>
+    /// Offered, not asked for: the server put it on a list when a level-up produced a
+    /// fifth move, and nothing a client sends can put anything on that list. So this is
+    /// not a way to teach anybody anything — it can only answer a question this side
+    /// asked, and the answer is which of the four to drop.
+    /// </para>
+    /// <para>
+    /// Declining is an answer too, and a real one: the games let you keep what you have.
+    /// </para>
+    /// </summary>
+    public List<Outgoing> LearnMove(int playerId, int moveId, int forget)
+    {
+        lock (_gate)
+        {
+            LastLearned = null;
+
+            if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
+
+            int at = player.MovesOffered.FindIndex(o => o.MoveId == moveId);
+
+            if (at < 0)
+            {
+                LastLearned = $"refused: nobody was offered move {moveId}";
+                return [];
+            }
+
+            (int slot, int _) = player.MovesOffered[at];
+
+            player.MovesOffered.RemoveAt(at);
+
+            if (slot < 0 || slot >= player.Party.Count) return [];
+
+            SavedMon member = player.Party[slot];
+
+            // Out of range is "keep what you have", which the games allow and which is
+            // one of the two answers rather than a mistake.
+            if (forget < 0 || forget >= member.Moves.Count)
+            {
+                LastLearned = $"move {moveId} was not learned";
+                return [];
+            }
+
+            var moves = member.Moves.ToList();
+            int dropped = moves[forget];
+
+            moves[forget] = moveId;
+
+            player.Party[slot] = member with { Moves = moves };
+
+            LastLearned = $"forgot move {dropped} and learned {moveId}";
+
+            return [new Outgoing(new BagUpdated(player.Bag.Entries, [.. player.Party], ""), OnlyTo: playerId)];
+        }
+    }
+
+    /// <summary>What the last answer about a move came to.</summary>
+    public string? LastLearned { get; private set; }
+
     public List<Outgoing> RunConsole(int playerId, string text, double nowSeconds = 0)
     {
         lock (_gate)
@@ -3037,6 +3112,12 @@ public sealed class GameWorld
             player.Party[slot], encounter.Opponent.Species.Index, encounter.Opponent.Level);
 
         player.Party[slot] = grown;
+
+        // A move that could not fit is a question, not a shrug. The games ask which one
+        // to drop; this remembers what was offered so the asking can happen once the
+        // player has finished reading, and the answer can arrive after the fight is over.
+        foreach (BattleEvent.MoveNotLearned offered in events.OfType<BattleEvent.MoveNotLearned>())
+            player.MovesOffered.Add((slot, offered.MoveId));
 
         return events;
     }

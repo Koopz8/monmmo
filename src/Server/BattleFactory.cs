@@ -98,7 +98,15 @@ public sealed class BattleFactory(GameRules rules)
         battler.Status,
         battler.Moves.Select(m => m.Id).ToList());
 
-    /// <summary>What to write down for a battler.</summary>
+    /// <summary>
+    /// What to write down for a battler.
+    /// <para>
+    /// Experience is not among the things a battler carries, so what comes back here has
+    /// none. That is right for something just caught, whose experience is its level and
+    /// nothing more — and wrong for anything that already had a save, which is why every
+    /// caller starting from one puts its experience back afterwards.
+    /// </para>
+    /// </summary>
     public static SavedMon Save(Battler battler) => new(
         battler.Species.Index,
         battler.Level,
@@ -114,6 +122,14 @@ public sealed class BattleFactory(GameRules rules)
     /// Rebuilt rather than patched, because maximum health is computed from base stats
     /// — the stored number is not something to raise to a value worked out elsewhere.
     /// </para>
+    /// <para>
+    /// The experience is carried across by hand, and that line is the whole reason this
+    /// method is worth reading twice. Rebuilding loses whatever the record does not
+    /// hold, and a battler holds no experience — so a visit to a counter used to hand
+    /// back a creature at the bottom of its level with everything since the last one
+    /// gone. Nothing announced it. Levelling simply never happened twice, and the fights
+    /// in between looked like they had counted.
+    /// </para>
     /// </summary>
     public SavedMon Healed(SavedMon saved)
     {
@@ -123,7 +139,7 @@ public sealed class BattleFactory(GameRules rules)
         battler.Status = StatusCondition.None;
         battler.SleepTurns = 0;
 
-        return Save(battler);
+        return Save(battler) with { Experience = saved.Experience };
     }
 
     /// <summary>
@@ -144,7 +160,7 @@ public sealed class BattleFactory(GameRules rules)
 
         battler.Heal(medicine.RestoreFor(battler.MaxHp));
 
-        return (Save(battler), battler.CurrentHp - before);
+        return (Save(battler) with { Experience = saved.Experience }, battler.CurrentHp - before);
     }
 
     /// <summary>

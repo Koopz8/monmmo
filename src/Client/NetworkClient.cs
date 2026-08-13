@@ -136,6 +136,9 @@ public sealed class NetworkClient : IDisposable
     /// <summary>Names the item a script just handed over, for the server to check.</summary>
     public void SendScriptGave(int localId, int itemId) => Send(new ScriptGave(localId, itemId));
 
+    /// <summary>Answers which of the four to drop, or that none of them should go.</summary>
+    public void SendLearnMove(int moveId, int forget) => Send(new LearnMoveRequest(moveId, forget));
+
     /// <summary>Says where a scene left somebody, for the server to accept or refuse.</summary>
     /// <summary>Asks for a scene's cast to stand still, wherever they are.</summary>
     public void SendSceneCast(IReadOnlyList<int> localIds) => Send(new SceneCast(localIds));

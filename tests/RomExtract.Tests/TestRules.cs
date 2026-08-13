@@ -110,6 +110,15 @@ internal static class TestRules
             new(0, string.Empty, 0, 0, PokemonType.Normal, 0, 0, 0, 0, 0),
             new(FirstMove, string.Empty, 0, 35, PokemonType.Normal, 95, 35, 0, 0, 0),
             new(2, string.Empty, 0, 40, PokemonType.Normal, 100, 30, 0, 0, 0),
+
+            // Three more that do nothing interesting, so a test can hand somebody four
+            // moves that are told apart by their ids. A move id nothing knows about is
+            // dropped on the way into a battle, which turns "which slot changed" into
+            // "everything was rebuilt from the learnset" — and that reads as a passing
+            // test right up until it is looked at.
+            new(3, string.Empty, 0, 40, PokemonType.Normal, 100, 30, 0, 0, 0),
+            new(4, string.Empty, 0, 40, PokemonType.Normal, 100, 30, 0, 0, 0),
+            new(5, string.Empty, 0, 40, PokemonType.Normal, 100, 30, 0, 0, 0),
         };
 
         var learnsets = new List<Learnset>();

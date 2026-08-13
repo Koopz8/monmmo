@@ -16,6 +16,9 @@ public enum BattlePhase
     /// <summary>Picking somebody else to send out.</summary>
     ChoosingWho,
 
+    /// <summary>Picking which of four moves to drop for a fifth.</summary>
+    ChoosingForget,
+
     WaitingForServer,
     Finished,
 }
@@ -76,6 +79,32 @@ public sealed class BattleScreen
     public int Active { get; set; }
 
     private int _selectedMon;
+
+    /// <summary>
+    /// Moves a level-up offered and could not fit, oldest first.
+    /// <para>
+    /// The games ask straight away; this asks once the reading is done, because the
+    /// reading is what tells a player it happened at all. More than one can be waiting —
+    /// two levels in a fight is ordinary — so it is a queue rather than a flag.
+    /// </para>
+    /// </summary>
+    private readonly Queue<int> _offered = new();
+
+    private int _selectedForget;
+
+    /// <summary>The move being offered right now, for whoever is drawing the question.</summary>
+    public int? Offered => _offered.Count > 0 ? _offered.Peek() : null;
+
+    /// <summary>Which of the four to drop, and for which move. Taken rather than read.</summary>
+    public (int MoveId, int Forget)? Answered { get; private set; }
+
+    public (int MoveId, int Forget)? TakeAnswer()
+    {
+        (int MoveId, int Forget)? answer = Answered;
+        Answered = null;
+
+        return answer;
+    }
 
     public BattleScreen(
         BattleStarted start, GameData data, TrainerNames? trainers = null, ItemNames? items = null,
@@ -148,13 +177,15 @@ public sealed class BattleScreen
             id => _data.MoveAt(id)?.Name ?? $"move {id}");
     }
 
+    private string MoveNamed(int moveId) => _data.MoveAt(moveId)?.Name ?? $"move {moveId}";
+
     private void RefreshMoveNames()
     {
         _moveNames.Clear();
         _selectedMove = 0;
 
         foreach (int moveId in _you.Moves)
-            _moveNames.Add(_data.MoveAt(moveId)?.Name ?? $"move {moveId}");
+            _moveNames.Add(MoveNamed(moveId));
     }
 
     /// <summary>
@@ -256,6 +287,10 @@ public sealed class BattleScreen
         foreach (string line in BattleNarrator.Describe(update.Events, _names))
             _pending.Enqueue(line);
 
+        // Queued before the reading starts, so the question is waiting when it ends.
+        foreach (BattleEvent.MoveNotLearned offered in update.Events.OfType<BattleEvent.MoveNotLearned>())
+            _offered.Enqueue(offered.MoveId);
+
         _you = _you with { CurrentHp = update.YourHp };
         _opponent = _opponent with { CurrentHp = update.OpponentHp };
         Balls = update.Balls;
@@ -324,6 +359,10 @@ public sealed class BattleScreen
                 ChooseWho();
                 break;
 
+            case BattlePhase.ChoosingForget:
+                ChooseForget();
+                break;
+
             case BattlePhase.WaitingForServer:
                 break;
 
@@ -343,6 +382,17 @@ public sealed class BattleScreen
         if (_pending.Count > 0)
         {
             _message = _pending.Dequeue();
+            return;
+        }
+
+        // A move that would not fit is asked about before anything else, including
+        // before the fight is allowed to end — the offer is the last thing that happened
+        // and a player who has just read about it is the one who should answer.
+        if (_offered.Count > 0)
+        {
+            _selectedForget = 0;
+            Phase = BattlePhase.ChoosingForget;
+
             return;
         }
 
@@ -423,6 +473,36 @@ public sealed class BattleScreen
         }
 
         if (Confirmed()) Choose(new BattleAction.UseMove(_selectedMove));
+    }
+
+    /// <summary>
+    /// Which of the four to drop. The fifth option is keeping them all, which the games
+    /// allow and which this project used to do silently and without asking.
+    /// </summary>
+    private void ChooseForget()
+    {
+        if (_offered.Count == 0)
+        {
+            Phase = IsOver ? BattlePhase.Finished : BattlePhase.ChoosingMove;
+            return;
+        }
+
+        int options = _moveNames.Count + 1;
+
+        if (Raylib.IsKeyPressed(KeyboardKey.Down) || Raylib.IsKeyPressed(KeyboardKey.S))
+            _selectedForget = (_selectedForget + 1) % options;
+
+        if (Raylib.IsKeyPressed(KeyboardKey.Up) || Raylib.IsKeyPressed(KeyboardKey.W))
+            _selectedForget = (_selectedForget - 1 + options) % options;
+
+        if (!Confirmed()) return;
+
+        // Anything past the four is "keep them", and it travels as such rather than as
+        // silence — the server is holding the offer and has to be told either way.
+        Answered = (_offered.Dequeue(), _selectedForget < _moveNames.Count ? _selectedForget : -1);
+
+        Phase = BattlePhase.ReadingMessages;
+        AdvanceMessage();
     }
 
     private void ChooseWho()
@@ -548,6 +628,12 @@ public sealed class BattleScreen
         Raylib.DrawRectangle(30, boxY, Width - 60, boxHeight, new Color(255, 255, 255, 240));
         Raylib.DrawRectangleLines(30, boxY, Width - 60, boxHeight, new Color(64, 64, 64, 255));
 
+        if (Phase == BattlePhase.ChoosingForget)
+        {
+            DrawForgetMenu(boxY);
+            return;
+        }
+
         if (Phase == BattlePhase.ChoosingWho)
         {
             DrawPartyMenu(boxY);
@@ -580,6 +666,29 @@ public sealed class BattleScreen
     /// a fight's worth of decompression at the moment a player is deciding something.
     /// </para>
     /// </summary>
+    /// <summary>The four already known, and the option of keeping all of them.</summary>
+    private void DrawForgetMenu(int boxY)
+    {
+        string coming = _offered.Count > 0 ? MoveNamed(_offered.Peek()) : "?";
+
+        Raylib.DrawText($"Forget which, to learn {coming}?", 52, boxY + 14, 20, new Color(96, 96, 96, 255));
+
+        for (int i = 0; i < _moveNames.Count; i++)
+        {
+            int y = boxY + 44 + i * 22;
+
+            if (i == _selectedForget) Raylib.DrawText(">", 52, y, 20, Color.Black);
+
+            Raylib.DrawText(_moveNames[i], 76, y, 20, Color.Black);
+        }
+
+        int keep = boxY + 44 + _moveNames.Count * 22;
+
+        if (_selectedForget >= _moveNames.Count) Raylib.DrawText(">", 52, keep, 20, Color.Black);
+
+        Raylib.DrawText($"Keep all four — don't learn {coming}", 76, keep, 20, new Color(120, 120, 140, 255));
+    }
+
     private void DrawPartyMenu(int boxY)
     {
         Raylib.DrawText("Send out who?", 52, boxY + 18, 20, new Color(96, 96, 96, 255));

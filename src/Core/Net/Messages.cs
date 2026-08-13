@@ -35,6 +35,7 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(TriggerFired), "triggered")]
 [JsonDerivedType(typeof(ScriptGave), "scriptgave")]
 [JsonDerivedType(typeof(NameMonRequest), "namemon")]
+[JsonDerivedType(typeof(LearnMoveRequest), "learnmove")]
 [JsonDerivedType(typeof(HealRequest), "healplease")]
 [JsonDerivedType(typeof(ConsoleCommand), "console")]
 [JsonDerivedType(typeof(ConsoleReply), "consolesaid")]
@@ -138,6 +139,20 @@ public sealed record ScriptGave(int LocalId, int ItemId) : NetMessage;
 /// </para>
 /// </summary>
 public sealed record NameMonRequest(int Slot, string Name) : NetMessage;
+
+/// <summary>
+/// Which of the four to drop for a move a level-up offered.
+/// <para>
+/// An answer rather than a request, which is the whole of its safety: the server put the
+/// offer on a list when a level-up produced a fifth move, and nothing a client sends can
+/// put anything on that list. Naming a move nobody was offered is refused.
+/// </para>
+/// <para>
+/// <paramref name="Forget"/> outside the four means "keep what you have", which the games
+/// allow and which is an answer rather than an error.
+/// </para>
+/// </summary>
+public sealed record LearnMoveRequest(int MoveId, int Forget) : NetMessage;
 
 /// <summary>
 /// A line typed into the operator console.
