@@ -54,11 +54,31 @@ public sealed class Cutscene
     /// <summary>Who this scene has moved, so they can be reported and let go afterwards.</summary>
     private readonly Dictionary<int, WalkingPerson> _walking = [];
 
-    public Cutscene(IEnumerable<SceneBeat> beats, MapView view)
+    public Cutscene(IEnumerable<SceneBeat> beats, MapView view, IEnumerable<ScriptRun>? aftermath = null)
     {
         _beats = [.. beats];
         _view = view;
+        Aftermath = [.. aftermath ?? []];
     }
+
+    /// <summary>
+    /// What the scripts behind this scene wrote down, held until the scene is over.
+    /// <para>
+    /// A script is a list of commands in an order, and a scene is that order played out
+    /// over several seconds. Everything else this project runs can apply a script's
+    /// bookkeeping the moment the run finishes, because nothing else takes time — but a
+    /// scene does, and its bookkeeping is about the world <em>after</em> it.
+    /// </para>
+    /// <para>
+    /// The professor's own scene proves it. Its last act is <c>setflag 0x2C</c>, and
+    /// 0x2C is the flag on object 3, which is the professor: it means he has gone
+    /// inside. Applied at the start it took him off the map before he had taken a step,
+    /// so every beat that walked him found nobody to walk and returned at once. He said
+    /// all four of his lines standing in one place and never moved, and the scene ended
+    /// having moved nobody at all.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<ScriptRun> Aftermath { get; }
 
     /// <summary>The box for whatever is being said right now, if anything is.</summary>
     public DialogueBox? Saying { get; private set; }

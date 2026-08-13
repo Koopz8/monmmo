@@ -412,6 +412,10 @@ public static class Program
                     foreach ((int localId, GridPosition left, Direction facing) in scene.Moved)
                         network.SendScenePlaced(localId, left, facing);
 
+                    // And only now what the scripts wrote. A scene's bookkeeping is about
+                    // the world after it, and the professor's says he is indoors.
+                    foreach (ScriptRun ran in scene.Aftermath) Remember(ran, script, network);
+
                     scene = null;
                     network.SendTalkFinished();
                 }
@@ -762,27 +766,33 @@ public static class Program
         // carries the story was second in the list.
         var beats = new List<SceneBeat>();
         var pages = new List<string>();
+        var later = new List<ScriptRun>();
 
         foreach (uint address in addresses)
         {
             ScriptRun run = ScriptRunner.Run(data.Rom, address, script.WithParty(party.Select(m => m.Moves)));
 
-            foreach (int flag in run.FlagsSet) script.Set(flag);
-            foreach (int flag in run.FlagsCleared) script.Clear(flag);
-            foreach ((int id, int value) in run.VariablesWritten) script.Write(id, value);
+            // A scene's writes wait for the scene. See Cutscene.Aftermath: the last thing
+            // the professor's script does is set the flag that means he has gone inside,
+            // and applied before he walks it takes him off the map for the whole of his
+            // own scene.
+            if (run.IsScene)
+            {
+                later.Add(run);
+                beats.AddRange(run.Beats);
 
-            if (run.FlagsSet.Count + run.FlagsCleared.Count + run.VariablesWritten.Count > 0)
-                network.SendScriptRan(run);
+                continue;
+            }
 
-            if (run.IsScene) beats.AddRange(run.Beats);
-            else pages.AddRange(run.Pages);
+            Remember(run, script, network);
+            pages.AddRange(run.Pages);
         }
 
         Note($"ran {addresses.Count}: {beats.Count} beats, {pages.Count} pages");
 
         if (beats.Count > 0)
         {
-            var playing = new Cutscene(beats, view);
+            var playing = new Cutscene(beats, view, later);
 
             // Held before a foot is moved, and not by talking to them. Talking checks
             // that somebody is within reach — rightly, since a conversation across a town
@@ -796,6 +806,24 @@ public static class Program
         var box = new DialogueBox(pages);
 
         return (box.IsEmpty ? talking : box, null);
+    }
+
+    /// <summary>
+    /// Applies what a script wrote down, here and on the server.
+    /// <para>
+    /// On both sides rather than waiting to be told. The server is where these live, but
+    /// the next line somebody reads is decided here and it would be decided from
+    /// yesterday's flags for as long as the round trip takes.
+    /// </para>
+    /// </summary>
+    private static void Remember(ScriptRun run, ScriptState script, NetworkClient network)
+    {
+        foreach (int flag in run.FlagsSet) script.Set(flag);
+        foreach (int flag in run.FlagsCleared) script.Clear(flag);
+        foreach ((int id, int value) in run.VariablesWritten) script.Write(id, value);
+
+        if (run.FlagsSet.Count + run.FlagsCleared.Count + run.VariablesWritten.Count > 0)
+            network.SendScriptRan(run);
     }
 
     /// <summary>

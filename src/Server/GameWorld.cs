@@ -99,17 +99,6 @@ public sealed record ServerPlayer(int Id, long AccountId, string Name)
     /// </summary>
     public string SceneOn { get; set; } = "";
 
-    /// <summary>
-    /// Who the running scene asked to be held.
-    /// <para>
-    /// Kept so that a release can be reported when it is one worth reporting. Any release
-    /// inside the window used to be called mid-scene, which meant every ordinary
-    /// conversation within two minutes of a trigger was announced as a scene falling
-    /// apart. A diagnostic that fires when nothing is wrong is one nobody reads.
-    /// </para>
-    /// </summary>
-    public HashSet<int> SceneCast { get; } = [];
-
     /// <summary>Who this player has been told is on their map, so a change can be sent.</summary>
     public HashSet<int> Seeing { get; } = [];
 
@@ -709,11 +698,8 @@ public sealed class GameWorld
                 // A conversation ends when the client says so, and also when it cannot:
                 // a player who disconnected or walked through a door is not talking to
                 // anybody, whatever the last thing they sent was.
-                NoteRelease(
-                    people.Release(holder =>
-                        !_players.TryGetValue(holder, out ServerPlayer? talker) || talker.MapId != mapId),
-                    "the clock, because they are no longer on this map",
-                    nowSeconds);
+                people.Release(holder =>
+                    !_players.TryGetValue(holder, out ServerPlayer? talker) || talker.MapId != mapId);
 
                 foreach (ObjectView moved in people.Step(_objectRng, nowSeconds, square => IsFree(mapId, square)))
                     send.Add(new Outgoing(new ObjectMoved(moved.LocalId, moved.X, moved.Y, moved.Facing), OnMap: mapId));
@@ -784,10 +770,7 @@ public sealed class GameWorld
 
             // Anyone this player was already holding is let go first, so a client that
             // loses a "finished" message cannot accumulate frozen people behind it.
-            NoteRelease(
-                people.Release(holder => holder == playerId),
-                "starting a conversation, which lets go of everyone first",
-                LastTickAt);
+            people.Release(holder => holder == playerId);
 
             // The square in front, or the one past it when a counter is in the way.
             CollisionGrid grid = GridFor(player.MapId);
@@ -1602,40 +1585,6 @@ public sealed class GameWorld
     private static bool InScene(ServerPlayer player, double nowSeconds) =>
         nowSeconds <= player.SceneUntil && player.MapId == player.SceneOn;
 
-    /// <summary>
-    /// Who let go of somebody a scene was holding, and where from.
-    /// <para>
-    /// Written because a scene lost its cast in play and three rounds of reading the code
-    /// did not say which of the three release sites did it — and the server side
-    /// reproduced perfectly under test, which means the answer was never going to come
-    /// from reasoning about it. A hold that ends unexpectedly should say so at the moment
-    /// it ends rather than be inferred from a refusal much later.
-    /// </para>
-    /// </summary>
-    public string? LastRelease { get; private set; }
-
-    /// <summary>Notes a release, but only for somebody who is in the middle of a scene.</summary>
-    private void NoteRelease(IEnumerable<(int LocalId, int Holder)> let, string where, double nowSeconds)
-    {
-        foreach ((int localId, int holder) in let)
-        {
-            if (!_players.TryGetValue(holder, out ServerPlayer? player)) continue;
-            if (nowSeconds > player.SceneUntil) continue;
-
-            // Only somebody the scene actually asked for. Everyone this player talks to
-            // for the next two minutes is released the same way, and reporting those as
-            // interruptions buried the one release that mattered in a page of ordinary
-            // conversations ending normally.
-            if (!player.SceneCast.Remove(localId)) continue;
-
-            // Removed as it is reported, not merely tested for. The scene lets its own
-            // cast go when it ends, and after that every conversation the player has for
-            // the rest of the two-minute window releases the same person again — which
-            // is how one real interruption came back as nine identical lines.
-            LastRelease = $"object {localId} let go of #{holder} by {where}, mid-scene";
-        }
-    }
-
     /// <summary>What the last attempt to hold a scene's cast came to.</summary>
     public string? LastSceneCast { get; private set; }
 
@@ -1678,8 +1627,7 @@ public sealed class GameWorld
                 if (people.ById(localId) is not { } person) continue;
 
                 person.HeldBy = playerId;
-                player.SceneCast.Add(localId);
-                held++;
+                    held++;
             }
 
             LastSceneCast = $"holding {held} of {localIds.Count} still for the scene";
@@ -1722,13 +1670,6 @@ public sealed class GameWorld
                 LastScenePlacement = $"no object {localId} on {player.MapId}";
                 return [];
             }
-
-            // Off the cast list, whatever comes of the placement. This message is the
-            // scene saying where it left somebody, which is the last thing a scene does
-            // with them — so a release afterwards is the scene ending, not the scene
-            // coming apart. Reporting those was five identical lines per visit to one
-            // room, and the whole value of that diagnostic is that it is rare.
-            player.SceneCast.Remove(localId);
 
             // The scene window, not the hold. The hold was only ever a proxy for "there
             // is a scene going on", and it is a bad one: it depends on two messages
@@ -1825,10 +1766,7 @@ public sealed class GameWorld
             if (_players.TryGetValue(playerId, out ServerPlayer? shopper)) shopper.Shopping = [];
 
             foreach (MapPopulation people in _populated.Values)
-                NoteRelease(
-                    people.Release(holder => holder == playerId),
-                    "the text box closing",
-                    LastTickAt);
+                people.Release(holder => holder == playerId);
         }
     }
 
@@ -1898,7 +1836,6 @@ public sealed class GameWorld
             // that needs it.
             player.SceneUntil = nowSeconds + SceneSeconds;
             player.SceneOn = player.MapId;
-            player.SceneCast.Clear();
 
             if (!trigger.CanBeFought)
             {
@@ -2122,7 +2059,6 @@ public sealed class GameWorld
 
         player.SceneUntil = nowSeconds + SceneSeconds;
         player.SceneOn = player.MapId;
-        player.SceneCast.Clear();
 
         LastArrivalScript = $"arriving runs something here: 0x{entry.Variable:X4} holds {entry.Value}";
     }

@@ -1609,22 +1609,6 @@ public class ScenePlacementTests
     }
 
     [Fact]
-    public void OnlyASceneSCastCountsAsASceneComingApart()
-    {
-        // The window is two minutes wide, so every conversation a player has shortly
-        // after a trigger ends with somebody being released inside it. Reporting those
-        // as interruptions is how the one release that mattered got buried.
-        (GameWorld world, ServerPlayer player) = Standing(Somebody(1, 3, 3));
-
-        world.FireTrigger(player.Id, 3, 4, 10);
-
-        world.StartTalking(player.Id, 1);
-        world.StopTalking(player.Id);
-
-        Assert.Null(world.LastRelease);
-    }
-
-    [Fact]
     public void SomebodyWalkedOntoADoorHasGoneThroughIt()
     {
         // The mirror of the rule below it. The professor walks to his lab at the end of

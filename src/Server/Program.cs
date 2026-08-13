@@ -114,6 +114,13 @@ public static class Program
         return 0;
     }
 
+    /// <summary>Reads an <c>x,y</c> argument, or nothing when it was not given or is not one.</summary>
+    private static GridPosition? Square(string? text) =>
+        text?.Split(',', StringSplitOptions.TrimEntries) is [string x, string y] &&
+        int.TryParse(x, out int atX) && int.TryParse(y, out int atY)
+            ? new GridPosition(atX, atY)
+            : null;
+
     /// <summary>
     /// How much of the world a new character can actually walk to.
     /// <para>
@@ -127,13 +134,6 @@ public static class Program
     /// and the real one is never nearer.
     /// </para>
     /// </summary>
-    /// <summary>Reads an <c>x,y</c> argument, or nothing when it was not given or is not one.</summary>
-    private static GridPosition? Square(string? text) =>
-        text?.Split(',', StringSplitOptions.TrimEntries) is [string x, string y] &&
-        int.TryParse(x, out int atX) && int.TryParse(y, out int atY)
-            ? new GridPosition(atX, atY)
-            : null;
-
     private static void ReportReach(WorldData world, string startingMapId)
     {
         Reach reach = WorldWalker.Walk(world, startingMapId);
@@ -628,18 +628,11 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                             if (world.LastTalkOutcome is { } talkOutcome)
                                 Console.WriteLine($"* #{playerId} talked to {talk.LocalId}: {talkOutcome}");
 
-                            if (world.LastRelease is { } interrupted)
-                                Console.WriteLine($"! {interrupted}");
-
                             await DispatchAsync(talked, playerId, cancellationToken).ConfigureAwait(false);
                             break;
 
                         case TalkFinished when playerId != 0:
                             world.StopTalking(playerId);
-
-                            if (world.LastRelease is { } letGo)
-                                Console.WriteLine($"! {letGo}");
-
                             break;
 
                         case SceneCast cast when playerId != 0:
