@@ -152,6 +152,8 @@ public static class Program
 
         if (options.SightLines) WriteSightLines(rom);
 
+        if (options.Gaps) WriteGaps(rom, options.GapLike);
+
         if (!string.IsNullOrEmpty(options.Walkable)) WriteWalkable(rom, options.Walkable);
 
         if (options.Specials) WriteSpecials(rom);
@@ -1733,6 +1735,193 @@ public static class Program
     /// that carry it is a facing this project has misread.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// What runs in front of a line of dialogue with a gap in it.
+    /// <para>
+    /// Two gaps in this cartridge's text are still gaps: <c>{FD}{02}</c> and
+    /// <c>{FD}{03}</c>. One command is known to fill one — 0x7D writes a species name —
+    /// and it accounts for a minority of the sites. The rest are filled by something
+    /// this reader steps over, and the professor's "{FD}{02} POKéMON seen" says at least
+    /// one of them puts a number there rather than a name.
+    /// </para>
+    /// <para>
+    /// So: for every line with a gap, tally what ran in front of it, and for every line
+    /// without one, tally the same. A command that fills gaps sits in front of gap lines
+    /// and nowhere else; lock, faceplayer and the rest sit in front of everything and
+    /// the second column is what says so. The instrument decides, not the argument.
+    /// </para>
+    /// </summary>
+    private static void WriteGaps(Rom rom, string like)
+    {
+        // Far enough back to cover a run-up of several buffers, short enough that the
+        // command belongs to this line rather than the conversation.
+        const int Window = 12;
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        var beforeGaps = new Dictionary<byte, int>();
+        var beforeRest = new Dictionary<byte, int>();
+        var examples = new Dictionary<byte, List<string>>();
+        var sentences = new SortedSet<string>(StringComparer.Ordinal);
+
+        int gapLines = 0;
+        int restLines = 0;
+
+        Console.WriteLine();
+        Console.WriteLine("What runs in front of a line with a gap in it");
+
+        foreach (LoadedMap map in library.All())
+        {
+            IEnumerable<uint> addresses =
+            [
+                .. map.Objects.Where(o => o.HasScript).Select(o => o.ScriptAddress),
+                .. map.OnEntry.Where(e => e.HasScript).Select(e => e.ScriptAddress),
+                .. map.Triggers.Where(t => t.HasScript).Select(t => t.ScriptAddress),
+            ];
+
+            foreach (uint address in addresses.Distinct())
+            {
+                List<ScriptCommand> read = ScriptReader.ReadAll(rom, address);
+
+                for (int i = 0; i < read.Count; i++)
+                {
+                    // Both ways this cartridge says something: a message with the text
+                    // in its own argument, and a pointer loaded for a standard routine
+                    // to say a command or two later.
+                    if (read[i].Code is not (ScriptCommands.Message or ScriptCommands.LoadPointer)) continue;
+
+                    uint text = read[i].Code == ScriptCommands.Message ? read[i].Pointer() : read[i].Pointer(1);
+
+                    if (rom.ToOffsetOrNull(text) is not { } at) continue;
+
+                    ReadOnlySpan<byte> bytes = rom.Span[at..];
+
+                    if (!GameText.LooksLikeDialogue(bytes)) continue;
+
+                    string said = string.Join(" ", GameText.DecodeDialogue(bytes));
+                    bool hasGap = said.Contains("{FD}{02}", StringComparison.Ordinal)
+                        || said.Contains("{FD}{03}", StringComparison.Ordinal);
+
+                    if (hasGap)
+                    {
+                        gapLines++;
+                        sentences.Add(said.Replace("\n", " "));
+                    }
+                    else
+                    {
+                        restLines++;
+                    }
+
+                    // Once per line, not once per repetition — a loop that locks twice
+                    // would otherwise vote twice.
+                    var ran = new HashSet<byte>();
+
+                    for (int j = Math.Max(0, i - Window); j < i; j++) ran.Add(read[j].Code);
+
+                    foreach (byte code in ran)
+                    {
+                        if (hasGap) beforeGaps[code] = beforeGaps.GetValueOrDefault(code) + 1;
+                        else beforeRest[code] = beforeRest.GetValueOrDefault(code) + 1;
+                    }
+
+                    if (!hasGap) continue;
+
+                    foreach (byte code in ran)
+                    {
+                        List<string> seen = examples.TryGetValue(code, out List<string>? had) ? had : examples[code] = [];
+
+                        if (seen.Count < 3) seen.Add($"0x{address:X8}  {said.Replace("\n", " ")}");
+                    }
+                }
+            }
+        }
+
+        Console.WriteLine();
+        Console.WriteLine($"  {gapLines} lines with a gap, {restLines} without, {sentences.Count} of them different");
+        Console.WriteLine();
+        Console.WriteLine("  Every different one, because what goes in a gap is legible from the sentence");
+
+        foreach (string line in sentences) Console.WriteLine($"    \"{line}\"");
+        Console.WriteLine();
+        Console.WriteLine("  code   in front of a gap   in front of the rest   share of its sites");
+
+        foreach ((byte code, int gaps) in beforeGaps.OrderByDescending(e => e.Value).Take(14))
+        {
+            int rest = beforeRest.GetValueOrDefault(code);
+
+            Console.WriteLine(
+                $"  0x{code:X2}   {gaps,5} / {gapLines}          {rest,5} / {restLines}" +
+                $"           {100.0 * gaps / (gaps + rest),5:F1} %");
+        }
+
+        // No summary line, and that is a finding rather than a gap in the tool. The
+        // three commands that fill gaps sit in front of a minority of them each; the
+        // rest are filled by the game's own code, and a tally cannot see a command that
+        // was never written down. What settles one of these is the run-up below.
+
+        // The tally says which codes are near gaps; this says what the run-up actually
+        // looks like, which is the part a person has to read.
+        Console.WriteLine();
+        Console.WriteLine("  The last few commands in front of some of them");
+
+        int shown = 0;
+
+        foreach (LoadedMap map in library.All())
+        {
+            if (shown >= 8) break;
+
+            IEnumerable<uint> addresses =
+            [
+                .. map.Objects.Where(o => o.HasScript).Select(o => o.ScriptAddress),
+                .. map.OnEntry.Where(e => e.HasScript).Select(e => e.ScriptAddress),
+                .. map.Triggers.Where(t => t.HasScript).Select(t => t.ScriptAddress),
+            ];
+
+            foreach (uint address in addresses.Distinct())
+            {
+                if (shown >= 8) break;
+
+                List<ScriptCommand> read = ScriptReader.ReadAll(rom, address);
+
+                for (int i = 0; i < read.Count && shown < 8; i++)
+                {
+                    if (read[i].Code is not (ScriptCommands.Message or ScriptCommands.LoadPointer)) continue;
+
+                    uint text = read[i].Code == ScriptCommands.Message ? read[i].Pointer() : read[i].Pointer(1);
+
+                    if (rom.ToOffsetOrNull(text) is not { } at) continue;
+
+                    ReadOnlySpan<byte> bytes = rom.Span[at..];
+
+                    if (!GameText.LooksLikeDialogue(bytes)) continue;
+
+                    string said = string.Join(" ", GameText.DecodeDialogue(bytes));
+
+                    if (!said.Contains("{FD}{02}", StringComparison.Ordinal)
+                        && !said.Contains("{FD}{03}", StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    if (like.Length > 0 && !said.Contains(like, StringComparison.OrdinalIgnoreCase)) continue;
+
+                    shown++;
+
+                    Console.WriteLine();
+                    Console.WriteLine($"    0x{address:X8}  \"{said.Replace("\n", " ")}\"");
+
+                    for (int j = Math.Max(0, i - 6); j <= i; j++)
+                    {
+                        string args = string.Join(" ", read[j].Arguments.ToArray().Select(b => $"{b:X2}"));
+
+                        Console.WriteLine($"      0x{read[j].Code:X2}  {args}");
+                    }
+                }
+            }
+        }
+
+    }
+
     private static void WriteSightLines(Rom rom)
     {
         MapLibrary library = MapLibrary.Open(rom);
@@ -2264,6 +2453,7 @@ public static class Program
         int shops = 0;
         int fights = 0;
         int returned = 0;
+        var derailed = new SortedSet<string>(StringComparer.Ordinal);
         int truncated = 0;
 
         foreach (LoadedMap map in library.All())
@@ -2299,7 +2489,15 @@ public static class Program
 
                 finished++;
                 if (run.IsEmpty) silent++;
-                if (run.CodeCalled.Count > 0) returned++;
+                if (run.CodeCalled.Count > 0)
+                {
+                    returned++;
+
+                    // Named rather than counted. A width being weighed is judged on how
+                    // many of these it costs, and "five more" is only an argument if the
+                    // five can be looked at.
+                    foreach (uint derail in run.CodeCalled) derailed.Add($"0x{address:X8} at 0x{derail:X8}");
+                }
                 if (ScriptReader.ReadAllTruncated(rom, address)) truncated++;
 
                 pages += run.Pages.Count;
@@ -2323,6 +2521,8 @@ public static class Program
         // what a stop is not. Counting them together would let a width we have not
         // adopted hide inside a routine we can never adopt.
         Console.WriteLine($"  {returned} of those finish by returning from code they cannot read");
+
+        foreach (string one in derailed) Console.WriteLine($"    {one}");
         Console.WriteLine($"  {truncated} read more blocks than the traversal limit allows");
 
         foreach ((byte code, int count) in counts.OrderByDescending(e => e.Value))
@@ -3946,6 +4146,12 @@ public static class Program
 
         public bool SightLines { get; private init; }
 
+        /// <summary>Which commands run in front of a line of dialogue that has a gap in it.</summary>
+        public bool Gaps { get; private init; }
+
+        /// <summary>Narrows the run-ups printed to lines containing this.</summary>
+        public string GapLike { get; private init; } = "";
+
         /// <summary>Count which special routines get called, and on which maps.</summary>
         public bool Specials { get; private init; }
 
@@ -4019,6 +4225,8 @@ public static class Program
             bool nameRuns = false;
             string walkable = "";
             bool sightLines = false;
+            bool gaps = false;
+            string gapLike = "";
             bool specials = false;
             int? special = null;
             byte? answers = null;
@@ -4131,6 +4339,16 @@ public static class Program
                         break;
                     case "--sight-lines":
                         sightLines = true;
+                        break;
+                    case "--gaps":
+                        gaps = true;
+
+                        // Optionally narrowed to one sentence, because the run-up in
+                        // front of "{FD}{03} inches" is the one worth reading and it is
+                        // the fiftieth of sixty-six.
+                        if (i + 1 < args.Length && !args[i + 1].StartsWith("--", StringComparison.Ordinal))
+                            gapLike = args[++i];
+
                         break;
                     case "--specials-on":
                         specialsOn = Next(args, ref i, "--specials-on");
@@ -4274,6 +4492,8 @@ public static class Program
                 NameRuns = nameRuns,
                 Walkable = walkable,
                 SightLines = sightLines,
+                Gaps = gaps,
+                GapLike = gapLike,
                 Specials = specials,
                 Special = special,
                 Answers = answers,

@@ -259,10 +259,10 @@ public static class ScriptRunner
         var stack = new Stack<uint>();
         var codeCalled = new List<uint>();
 
-        // What a script has put where its dialogue leaves a gap. Two are ever written
-        // to in this cartridge and only the first by anything read so far; the array is
-        // sized for the codes the text actually uses.
-        var buffers = new string?[4];
+        // What a script has put where its dialogue leaves a gap. Sized for the codes the
+        // text actually uses: {FD}{02}, {FD}{03} and {FD}{04}, which the commands name as
+        // gaps zero, one and two.
+        var buffers = new string?[5];
         var hides = new List<int>();
 
         int? trainerId = null;
@@ -561,6 +561,39 @@ public static class ScriptRunner
 
                     break;
 
+                case 0x83:                              // puts a number in a gap
+                    // The professor's aides: "complete data on {FD}{02} species" in front
+                    // of `83 00 0A 00`, which is gap 0 and the number ten. The same
+                    // command takes a variable instead at the professor's own rating,
+                    // where the two gaps hold how many species have been seen and owned.
+                    //
+                    // Written out here rather than left to the client, because a number
+                    // is a number in every language and there is no table to consult.
+                    {
+                        int which = command.Arguments[0] + 2;
+                        int held = command.Word(1);
+
+                        if (which >= 0 && which < buffers.Length)
+                            buffers[which] = (held >= 0x4000 ? save.Read(held) : held).ToString();
+                    }
+
+                    break;
+
+                case 0x80:                              // puts an item's name in a gap
+                    // Five sites, all of them the aide again, and each names the item its
+                    // own script hands over a few commands later. That is what identifies
+                    // it — not the shape, which is the same three bytes as the number.
+                    {
+                        int which = command.Arguments[0] + 2;
+                        int named = command.Word(1);
+                        int item = named >= 0x4000 ? save.Read(named) : named;
+
+                        if (which >= 0 && which < buffers.Length && item > 0)
+                            buffers[which] = save.NameOfItem?.Invoke(item);
+                    }
+
+                    break;
+
                 case 0x7C:                              // findmove
                     // The command every cut tree, boulder and heap of rubble opens with.
                     // It names a move and answers with the party slot that knows it, or
@@ -665,13 +698,13 @@ public static class ScriptRunner
     /// Puts the player, the rival and whatever a script has named into the gaps the
     /// cartridge's dialogue leaves.
     /// <para>
-    /// Four codes, all derived by counting sites and reading sentences rather than by
+    /// The codes were all derived by counting sites and reading sentences rather than by
     /// remembering a table: 0x01 is the player at 109 sites and 0x06 is the rival at 33.
-    /// 0x02 and 0x03 are gaps rather than species — at all 19 sites a fresh save can
-    /// reach they hold a species, which is what they were first called here, but the
+    /// 0x02, 0x03 and 0x04 are gaps rather than species — at all 19 sites a fresh save
+    /// can reach they hold a species, which is what they were first called here, but the
     /// professor says "{FD}{02} POKeMON seen" once the parcel is delivered and that is a
-    /// number. What goes in one depends on which command filled it, and only the command
-    /// that fills one with a species is known.
+    /// number. What goes in one depends on which command filled it: 0x7D a species, 0x83
+    /// a number, 0x80 an item.
     /// </para>
     /// <para>
     /// A code with nothing behind it is left exactly as it was found. Substituting an

@@ -268,6 +268,7 @@ public static class Program
             // list, but it is one of them — and "RIVAL" was none of them.
             RivalName = NameSuggestions.FirstName(data.SuggestedNames) ?? "RIVAL",
             NameOfSpecies = species => data.SpeciesAt(species)?.Name ?? "",
+            NameOfItem = items.Of,
         };
 
         // The party, out of a fight. Held because the bag has to say who a potion would

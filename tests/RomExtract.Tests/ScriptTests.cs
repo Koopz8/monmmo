@@ -697,6 +697,53 @@ public class ScriptRunnerTests
     }
 
     [Fact]
+    public void ANumberGoesIntoAGapToo()
+    {
+        // The professor's aides. Five of them across five maps, each running
+        // `83 00 <n> | 80 01 <item>` in front of "complete data on {FD}{02} species...
+        // entrusted me with the {FD}{03} for you", with n running ten, twenty, thirty,
+        // forty, fifty and the item being the one that same script hands over.
+        //
+        // This was read as one command of seven for two rounds, and the reason it
+        // survived is that at three these five scripts derailed on the 0x80 behind it —
+        // one unknown standing behind another.
+        byte[] text = Gap(0x02, 0x03);
+
+        Rom rom = Image(
+            (Start,
+            [
+                0x83, 0x00, .. Word(10),
+                0x80, 0x01, .. Word(0x0157),
+                ScriptCommands.Message, .. At(SaysA),
+                ScriptCommands.End,
+            ]),
+            (SaysA, text));
+
+        ScriptRun run = ScriptRunner.Run(
+            rom, Start, new ScriptState { NameOfItem = item => item == 0x0157 ? "HM05" : "?" });
+
+        Assert.Equal("AAAAAAAAAAAA10HM05", Assert.Single(run.Pages));
+    }
+
+    [Fact]
+    public void ANumberCanComeOutOfAVariable()
+    {
+        // The professor's own rating: the two commands in front of "{FD}{02} POKeMON
+        // seen and {FD}{03} POKeMON owned" copy the counts into 0x8008 and 0x8009, and
+        // the two after that name those variables into the two gaps.
+        byte[] text = Gap(0x02);
+
+        Rom rom = Image(
+            (Start, [0x83, 0x00, .. Word(0x8008), ScriptCommands.Message, .. At(SaysA), ScriptCommands.End]),
+            (SaysA, text));
+
+        var save = new ScriptState();
+        save.Write(0x8008, 42);
+
+        Assert.Equal("AAAAAA42", Assert.Single(ScriptRunner.Run(rom, Start, save).Pages));
+    }
+
+    [Fact]
     public void ASpeciesNamedFromAVariableIsResolvedFirst()
     {
         // The starters are one script. The species is not written down anywhere in it —

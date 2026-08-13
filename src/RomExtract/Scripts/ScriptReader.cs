@@ -432,34 +432,44 @@ public static class ScriptCommands
         // takes no arguments; anything swallowed here would eat the compare.
         [0xA0] = 0,
 
-        // Seven, on the same argument the fifth byte of 0x30 made. Five of six sites:
+        // Three: a gap and a number to put in it. This was read as seven for two rounds
+        // and the reason it survived one of them is worth keeping, because the way it
+        // fell is the whole method.
         //
-        //   00 0A 00 80 01 57 01 | 03 ...    return
-        //   00 14 00 80 01 C3 00 | 03 ...    return
-        //   00 1E 00 80 01 05 01 | 03 ...    return
+        // Seven fitted five sites exactly — `00 0A 00 80 01 57 01` and then `return`,
+        // three times over with only the middle bytes changing — and three was tried
+        // and rejected, because at three those same five scripts derailed on a 0x80 and
+        // had to be rescued by returning from a call. A width that costs five reads and
+        // buys nothing is not the width, and that was the right call on what was known.
         //
-        // Byte seven is `return` at every one of them, and bytes zero, two, three and
-        // four never change. Read as six, byte six would be a separate instruction — and
-        // it is 0x00 or 0x01 at every site, both of which do nothing. A no-op standing
-        // in front of five consecutive returns is not something anything emits.
+        // What was missing is that 0x80 is also three, and the five derails were one
+        // unknown standing behind another. Read with both:
         //
-        // The sixth site does not fit this shape and is not claimed by it.
-        // The sixth site does not fit this shape and is not claimed by it.
+        //   83 00 0A 00 | 80 01 57 01 | 03      gap 0 <- 10,  gap 1 <- item 0x157
+        //   83 00 14 00 | 80 01 C3 00 | 03      gap 0 <- 20,  gap 1 <- item 0x0C3
+        //   83 00 1E 00 | 80 01 05 01 | 03      gap 0 <- 30,  gap 1 <- item 0x105
+        //   83 00 28 00 | 80 01 BD 00 | 03      gap 0 <- 40,  gap 1 <- item 0x0BD
+        //   83 00 32 00 | 80 01 B6 00 | 03      gap 0 <- 50,  gap 1 <- item 0x0B6
         //
-        // Three was tried and is wrong, and the instrument said so rather than an
-        // argument. The professor's line about the POKeDEX — "{FD}{02} POKeMON seen and
-        // {FD}{03} POKeMON owned" — is preceded by `83 00 08 80 83 01 09 80`, which
-        // reads beautifully as two commands of three putting 0x8008 and 0x8009 into the
-        // two gaps the sentence leaves. It reads just as cleanly as one command of
-        // seven. What decided it was the count: at three, five more scripts across the
-        // cartridge derail inside a call and have to be rescued by returning from it,
-        // and clean endings and pages do not move at all. A width that costs five reads
-        // and buys nothing is not the width.
+        // Ten, twenty, thirty, forty, fifty, on five different maps, each paired with a
+        // different item — and each of those five scripts hands over that exact item a
+        // few commands later. The line they run in front of is the professor's aides:
+        // "If your POKeDEX has complete data on {FD}{02} species... PROF. OAK entrusted
+        // me with the {FD}{03} for you."
         //
-        // So what fills a gap with a number is still unidentified. The 0x83 in the
-        // middle of those arguments is a coincidence this project cannot yet explain,
-        // and saying so is better than adopting a width to make one sentence come out.
-        [0x83] = 7,
+        // The professor's own rating says the same thing about a variable rather than a
+        // number: `83 00 08 80 83 01 09 80` in front of "{FD}{02} POKeMON seen and
+        // {FD}{03} POKeMON owned", where the two commands before it copy the seen and
+        // owned counts into 0x8008 and 0x8009.
+        //
+        // So 0x83 fills a gap with a number, from a literal or from a variable, and the
+        // gap it names is off by two exactly as 0x7D's is.
+        [0x83] = 3,
+
+        // Three, and the same shape: a gap and an item to name into it. Every site is
+        // the aide pair above, and what identifies it is not the shape but the argument
+        // — the item named is the item that same script gives, at all five.
+        [0x80] = 3,
 
         // Four: two variables. One site only, and it needs no more than one:
         //

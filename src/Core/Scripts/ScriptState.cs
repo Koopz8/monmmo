@@ -71,17 +71,19 @@ public sealed class ScriptState
     /// the boy who follows you around the game.
     /// </para>
     /// <para>
-    /// 0x02 and 0x03 are not species. They are gaps, and what goes in one depends on
-    /// which command filled it — that correction came from the professor, who says
+    /// 0x02, 0x03 and 0x04 are not species. They are gaps, and what goes in one depends
+    /// on which command filled it — that correction came from the professor, who says
     /// "{FD}{02} POKeMON seen and {FD}{03} POKeMON owned" once the parcel is delivered.
     /// Every one of the nineteen sites reachable from a fresh save fills them with a
     /// species, which is why they were called that; the sentence that proves otherwise
     /// is behind the story.
     /// </para>
     /// <para>
-    /// 0x7D fills one with a species name. What fills one with a number has not been
-    /// identified — see the reader's note on 0x83 for a width that would have made that
-    /// sentence come out and cost five reads elsewhere.
+    /// Three commands fill them, and all three name the gap off by two: 0x7D a species,
+    /// 0x83 a number — from a literal or a variable — and 0x80 an item. The rest are
+    /// filled by the game's own code, which this project does not follow: the fishing
+    /// guru's "{FD}{03} inches" is measured by a special routine, and no width would
+    /// ever have produced it.
     /// </para>
     /// <para>
     /// The rival's name is a placeholder and is meant to look like one. The cartridge
@@ -103,6 +105,16 @@ public sealed class ScriptState
     /// </para>
     /// </summary>
     public Func<int, string>? NameOfSpecies { get; set; }
+
+    /// <summary>
+    /// What to call an item, on the same terms.
+    /// <para>
+    /// The professor's aides are the ones who need it: "PROF. OAK entrusted me with the
+    /// {FD}{03} for you" leaves the gap and the script names the item into it, three
+    /// commands before the sentence and five different items across five maps.
+    /// </para>
+    /// </summary>
+    public Func<int, string>? NameOfItem { get; set; }
 
     private readonly HashSet<int> _flags;
     private readonly Dictionary<int, int> _variables;
@@ -244,6 +256,7 @@ public sealed class ScriptState
         PlayerName = other.PlayerName;
         RivalName = other.RivalName;
         NameOfSpecies = other.NameOfSpecies;
+        NameOfItem = other.NameOfItem;
 
         return this;
     }
