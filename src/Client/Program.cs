@@ -1445,6 +1445,16 @@ public static class Program
                         ? ScriptReader.AfterTheFight(data.Rom, start, beaten.TrainerId) ?? start
                         : null;
 
+                    // And who the afterwards is about, because a fight is a conversation
+                    // with an interruption in it. MISTY's TM was refused by the server as
+                    // coming from object 8 — the number left in 0x800F by whatever was
+                    // talked to before the fight screen opened.
+                    if (view.Map.Objects.FirstOrDefault(o => o.HasScript && o.TrainerId == beaten.TrainerId)
+                        is { } fought)
+                    {
+                        script.Write(TalkingTo, fought.LocalId);
+                    }
+
                     break;
 
                 case PlayerAppeared appeared when appeared.PlayerId != network.PlayerId:

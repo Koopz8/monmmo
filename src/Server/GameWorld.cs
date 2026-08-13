@@ -2324,7 +2324,7 @@ public sealed class GameWorld
                 return [];
             }
 
-            if (!player.ItemsTaken.Add($"{player.MapId}:{localId}:script"))
+            if (!player.ItemsTaken.Add($"{player.MapId}:{localId}:gift"))
             {
                 LastGift = "an item that has already been handed over";
                 return [];
@@ -2897,7 +2897,11 @@ public sealed class GameWorld
 
         if (map.Objects.FirstOrDefault(o => o.TrainerId == trainerId && o.WinsItem) is not { } leader) return [];
 
-        if (!player.ItemsTaken.Add($"{player.MapId}:{leader.LocalId}:won")) return [];
+        // The same ledger entry the script route uses, because they are two views of one
+        // handover: the export reads the won-fight script for its giveitem, and the client
+        // runs that same script and names what came out of it. Whichever arrives first
+        // takes it, and MISTY handed over TM03 twice before this said so.
+        if (!player.ItemsTaken.Add($"{player.MapId}:{leader.LocalId}:gift")) return [];
 
         int count = Math.Max(1, leader.WinsCount);
 

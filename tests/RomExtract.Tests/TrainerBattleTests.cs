@@ -389,6 +389,37 @@ public class TrainerBattleTests
     }
 
     [Fact]
+    public void AFightsPrizeAndItsScriptAreOneHandover()
+    {
+        // Two views of the same thing: the export reads the won-fight script for its
+        // giveitem and the server pays it out, and the client runs that same script and
+        // names what came out. Both are wanted — one covers a script this reader cannot
+        // follow, the other covers a prize the export cannot see — but they share a
+        // ledger entry, because MISTY handed over TM03 twice before they did.
+        var leader = new MapObject(
+            1, 5, 4, 1, Direction.Down, 0, IsTrainer: false, TrainerId: TestRules.OneAlone, SightRange: 0)
+        {
+            WinsItemId = TestRules.PotionItem,
+            WinsCount = 1,
+            CanGive = [TestRules.PotionItem],
+        };
+
+        GameWorld world = World(leader);
+        ServerPlayer player = Join(world);
+
+        player.Square = new GridPosition(4, 2);
+        player.Facing = Direction.Up;
+
+        world.StartTalking(player.Id, 1);
+        FightToTheEnd(world, player);
+
+        // And now the client, having played the same script out, says what it handed over.
+        world.ScriptGave(player.Id, 1, TestRules.PotionItem);
+
+        Assert.Equal(1, player.Bag.CountOf(TestRules.PotionItem));
+    }
+
+    [Fact]
     public void AGymLeaderPaysOutOnce()
     {
         // The same ledger a ball on the ground uses. Without it, a client that could get

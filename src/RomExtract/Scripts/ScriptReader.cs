@@ -331,6 +331,20 @@ public static class ScriptCommands
         [0xC7] = 1,
         [0xCF] = 0,
 
+        // Two, on one site and the site says so twice. MISTY's badge script:
+        //
+        //   29 B1 04     setflag 0x04B1
+        //   29 21 08     setflag 0x0821
+        //   9F 04 00     <- this
+        //   16 08 80 02 00   setvar 0x8008, 2
+        //   04 18 6B 1A 08   call the routine every gym shares
+        //
+        // At two, what follows is a setvar putting *two* into the variable the shared
+        // badge routine compares — and CERULEAN is the second gym. At any other width
+        // that setvar is eaten and the badge number is nonsense. BROCK's script has an
+        // ordinary setvar in the same slot, which is the same shape from the other side.
+        [0x9F] = 2,
+
         // Two: one word, and small numbers in it. Six sites, and three of them are read
         // by what comes next rather than by what comes before:
         //
