@@ -55,6 +55,24 @@ public sealed record ScriptRun
     /// </summary>
     public IReadOnlyList<int> SpecialsCalled { get; init; } = [];
 
+    /// <summary>
+    /// True when this run put the rival's name into something it said.
+    /// <para>
+    /// The battle screen called him TERRY while his own script called him GREEN: the
+    /// first is the name in the cartridge's trainer table and the second is the name the
+    /// player chose off the cartridge's own list, and one of them has to be a
+    /// placeholder. It is the table's — see <c>--rival-fights</c>, which finds thirty
+    /// fights picked by scripts that say <c>{FD}{06}</c>, twenty-seven of them wearing
+    /// one name and not one trainer anywhere else in the game wearing it.
+    /// </para>
+    /// <para>
+    /// Carried on the run rather than worked out from the id, because this is the cheap
+    /// half of that instrument and it is exact: the fight and the sentence that names him
+    /// are the same script.
+    /// </para>
+    /// </summary>
+    public bool NamesRival { get; init; }
+
     /// <summary>True when this run is a scene rather than a conversation.</summary>
     public bool IsScene => Beats.OfType<SceneBeat.Walk>().Any();
 
@@ -263,6 +281,7 @@ public static class ScriptRunner
         // text actually uses: {FD}{02}, {FD}{03} and {FD}{04}, which the commands name as
         // gaps zero, one and two.
         var buffers = new string?[5];
+        var namedRival = new bool[1];
         var hides = new List<int>();
 
         int? trainerId = null;
@@ -428,7 +447,7 @@ public static class ScriptRunner
                     break;
 
                 case ScriptCommands.Message:
-                    Say(rom, command.Pointer(), pages, beats, maxPages, save, buffers);
+                    Say(rom, command.Pointer(), pages, beats, maxPages, save, buffers, namedRival);
                     pending = 0;
                     break;
 
@@ -484,7 +503,7 @@ public static class ScriptRunner
                     // pointer is the thing to say and the routine number is not read.
                     if (pending != 0)
                     {
-                        Say(rom, pending, pages, beats, maxPages, save, buffers);
+                        Say(rom, pending, pages, beats, maxPages, save, buffers, namedRival);
                         pending = 0;
                     }
 
@@ -653,7 +672,7 @@ public static class ScriptRunner
                     // Every variant but one opens with the line they say on sight, and
                     // that line belongs to the fight rather than to what comes after it.
                     if (command.Arguments[0] != 3)
-                        Say(rom, command.Pointer(5), pages, beats, maxPages, save, buffers);
+                        Say(rom, command.Pointer(5), pages, beats, maxPages, save, buffers, namedRival);
 
                     stop = true;
                     break;
@@ -676,6 +695,7 @@ public static class ScriptRunner
             Pages = pages,
             Beats = beats,
             SpecialsCalled = specials,
+            NamesRival = namedRival[0],
             CodeCalled = codeCalled,
             Hides = hides,
             Stock = stock,
@@ -695,7 +715,7 @@ public static class ScriptRunner
 
     private static void Say(
         Rom rom, uint address, List<string> pages, List<SceneBeat> beats, int maxPages,
-        ScriptState save, string?[] buffers)
+        ScriptState save, string?[] buffers, bool[]? named = null)
     {
         if (address == 0) return;
         if (rom.ToOffsetOrNull(address) is not { } at) return;
@@ -708,7 +728,7 @@ public static class ScriptRunner
         {
             if (pages.Count >= maxPages) return;
 
-            string page = Fill(raw, save, buffers);
+            string page = Fill(raw, save, buffers, named);
 
             pages.Add(page);
             beats.Add(new SceneBeat.Say(page));
@@ -734,9 +754,11 @@ public static class ScriptRunner
     /// which is the one failure this whole project is arranged against.
     /// </para>
     /// </summary>
-    private static string Fill(string page, ScriptState save, string?[] buffers)
+    private static string Fill(string page, ScriptState save, string?[] buffers, bool[]? named = null)
     {
         if (!page.Contains("{FD}", StringComparison.Ordinal)) return page;
+
+        if (named is not null && page.Contains("{FD}{06}", StringComparison.Ordinal)) named[0] = true;
 
         page = Replace(page, 0x01, save.PlayerName);
         page = Replace(page, 0x06, save.RivalName);

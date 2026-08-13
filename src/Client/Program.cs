@@ -157,6 +157,28 @@ public static class Program
         return 0;
     }
 
+    /// <summary>
+    /// Whether the fight about to start is with the boy who follows you around.
+    /// <para>
+    /// A box rather than a flag because the two places that know are static and the place
+    /// that needs to know is a message handler thirty lines away. What it carries is one
+    /// bit and it is set by the only thing that can tell: the script that picked the
+    /// fight is the same script that says his name.
+    /// </para>
+    /// </summary>
+    private sealed class RivalFight
+    {
+        public bool Next { get; set; }
+
+        public bool Take()
+        {
+            bool was = Next;
+            Next = false;
+
+            return was;
+        }
+    }
+
     /// <summary>How long the mark stays up. About as long as the games leave it.</summary>
     private const float ExclaimSeconds = 0.9f;
 
@@ -231,6 +253,9 @@ public static class Program
         // been beaten does nothing at all and the script carries straight on into what
         // they say afterwards — which for the rival is losing gracefully and leaving.
         uint? afterTheFight = null;
+
+        // Which of the fights ahead is with him, set by whichever script picks one.
+        var rival = new RivalFight();
 
         // A scene, when a script turns out to be one. Kept beside the text box rather
         // than inside it: a box is one thing being said and a scene is an order of
@@ -355,7 +380,7 @@ public static class Program
                 network, others, player, view, data, trainers, items, script, carrying,
                 ref talking, ref battle, ref shop, ref bag, ref party, ref money,
                 ref correction, ref watching, ref exclaimFor, ref scene, ref arrived, ref fadingIn, ref holdInput,
-                ref afterTheFight, console);
+                ref afterTheFight, rival, console);
 
             // A battle suspends the overworld entirely: the server is running it, and
             // walking on meanwhile would put the two sides out of step.
@@ -582,7 +607,7 @@ public static class Program
             }
             else if (DialogueBox.Pressed() && !player.IsStepping)
             {
-                talking = Talk(data, view, player, network, script, party);
+                talking = Talk(data, view, player, network, script, party, rival);
             }
 
             exclaimFor = Math.Max(0f, exclaimFor - delta);
@@ -650,13 +675,13 @@ public static class Program
                 // square somebody stands on can be a trigger — and standing somewhere is
                 // standing somewhere however you came to be there.
                 if (scene is null && ReferenceEquals(talking, before))
-                    (talking, scene) = Arrive(data, view, player, network, script, party, talking);
+                    (talking, scene) = Arrive(data, view, player, network, script, party, talking, rival);
             }
             else if (!player.IsStepping && player.Square != standingOn && scene is null)
             {
                 standingOn = player.Square;
 
-                (talking, scene) = Arrive(data, view, player, network, script, party, talking);
+                (talking, scene) = Arrive(data, view, player, network, script, party, talking, rival);
             }
 
             foreach (RemoteCharacter other in others.Values) other.Update(delta);
@@ -781,7 +806,7 @@ public static class Program
 
     private static DialogueBox? Talk(
         GameData data, MapView view, WalkingCharacter player, NetworkClient network, ScriptState script,
-        IReadOnlyList<SavedMon> party)
+        IReadOnlyList<SavedMon> party, RivalFight rival)
     {
         // Where the server says people are, which after a few seconds of wandering is
         // nowhere near where the cartridge put them.
@@ -842,6 +867,9 @@ public static class Program
         // Applied on both sides rather than waiting to be told. The server is where
         // these live, but the next line this person reads is decided here and it would
         // be decided from yesterday's flags for as long as the round trip takes.
+        // Whether the fight this just picked, if it picked one, is with him.
+        if (run.TrainerId is not null && run.NamesRival) rival.Next = true;
+
         foreach (int flag in run.FlagsSet) script.Set(flag);
         foreach (int flag in run.FlagsCleared) script.Clear(flag);
         foreach ((int id, int value) in run.VariablesWritten) script.Write(id, value);
@@ -900,7 +928,7 @@ public static class Program
     /// </summary>
     private static (DialogueBox? Talking, Cutscene? Scene) Arrive(
         GameData data, MapView view, WalkingCharacter player, NetworkClient network, ScriptState script,
-        IReadOnlyList<SavedMon> party, DialogueBox? talking)
+        IReadOnlyList<SavedMon> party, DialogueBox? talking, RivalFight rival)
     {
         if (view.Map.Triggers.FirstOrDefault(t =>
                 t.Square == player.Square && t.HasScript && t.Armed(script.Read(t.Variable))) is not { } trigger)
@@ -915,9 +943,12 @@ public static class Program
         // It has to be looked for rather than read off the trigger, because the rival at
         // the lab door is three trainers and the script picks between them on which
         // starter was taken. The server holds the set and checks this against it.
-        int? fight = ScriptRunner
-            .Run(data.Rom, trigger.ScriptAddress, script.Copy().WithParty(party.Select(m => m.Moves)))
-            .TrainerId;
+        ScriptRun peek = ScriptRunner
+            .Run(data.Rom, trigger.ScriptAddress, script.Copy().WithParty(party.Select(m => m.Moves)));
+
+        int? fight = peek.TrainerId;
+
+        if (fight is not null && peek.NamesRival) rival.Next = true;
 
         // Sent whether or not there is anything to read, for the same reason talking is:
         // what happens next is not this side's decision. Nineteen of these squares start
@@ -1297,6 +1328,7 @@ public static class Program
         ref float fadingIn,
         ref float holdInput,
         ref uint? afterTheFight,
+        RivalFight rival,
         ConsoleBox console)
     {
         foreach (NetMessage message in network.Drain())
@@ -1518,7 +1550,9 @@ public static class Program
                     break;
 
                 case BattleStarted started:
-                    battle = new BattleScreen(started, data, trainers, items);
+                    battle = new BattleScreen(
+                        started, data, trainers, items,
+                        calledInstead: rival.Take() ? script.RivalName : null);
 
                     // The walk is over the moment the fight begins, which is the ending
                     // almost every walk has.

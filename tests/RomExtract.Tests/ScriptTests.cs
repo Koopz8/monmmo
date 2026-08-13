@@ -697,6 +697,31 @@ public class ScriptRunnerTests
     }
 
     [Fact]
+    public void AScriptThatNamesTheRivalSaysSo()
+    {
+        // The battle screen called him TERRY and his own script called him GREEN. One of
+        // those is a placeholder and it is the trainer table's: --rival-fights finds
+        // thirty fights picked by scripts that say {FD}{06}, twenty-seven of them wearing
+        // that one name, and not one trainer anywhere else in the game wearing it.
+        //
+        // So the fight and the sentence that names him are the same script, which makes
+        // this the cheap half of that instrument and exact.
+        Rom rom = Image(
+            (Start, [ScriptCommands.Message, .. At(SaysA), ScriptCommands.End]),
+            (SaysA, Gap(0x06)));
+
+        Assert.True(ScriptRunner.Run(rom, Start, new ScriptState { RivalName = "GREEN" }).NamesRival);
+    }
+
+    [Fact]
+    public void AScriptThatNamesNobodyDoesNot()
+    {
+        Rom rom = Image((Start, Says(SaysA)), (SaysA, Speech('A')));
+
+        Assert.False(ScriptRunner.Run(rom, Start).NamesRival);
+    }
+
+    [Fact]
     public void ANumberGoesIntoAGapToo()
     {
         // The professor's aides. Five of them across five maps, each running

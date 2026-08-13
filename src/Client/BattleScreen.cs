@@ -56,7 +56,9 @@ public sealed class BattleScreen
     private BattlerView _you;
     private BattlerView _opponent;
 
-    public BattleScreen(BattleStarted start, GameData data, TrainerNames? trainers = null, ItemNames? items = null)
+    public BattleScreen(
+        BattleStarted start, GameData data, TrainerNames? trainers = null, ItemNames? items = null,
+        string? calledInstead = null)
     {
         _data = data;
         _items = items;
@@ -66,7 +68,15 @@ public sealed class BattleScreen
         Medicine = start.Medicine;
 
         // Resolved here, on the machine that has a cartridge. The server sent a number.
-        _trainerName = start.TrainerId is { } id ? trainers?.Of(id) ?? "TRAINER" : null;
+        //
+        // Except for one boy. The trainer table calls him TERRY at all twenty-seven of
+        // his entries and his own scripts call him whatever the player chose, and one of
+        // those has to be a placeholder — it is the table's, and nothing else in the game
+        // wears that name. Whoever opened this screen says so, because the fight and the
+        // sentence that names him are the same script.
+        _trainerName = start.TrainerId is { } id
+            ? calledInstead ?? trainers?.Of(id) ?? "TRAINER"
+            : null;
 
         _names = BattleNames.Unknown;
         Rename();

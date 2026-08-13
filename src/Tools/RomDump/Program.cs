@@ -160,6 +160,8 @@ public static class Program
 
         if (options.MoveEffects) WriteMoveEffects(rom);
 
+        if (options.RivalFights) WriteRivalFights(rom);
+
         if (!string.IsNullOrEmpty(options.Walkable)) WriteWalkable(rom, options.Walkable);
 
         if (options.Specials) WriteSpecials(rom);
@@ -521,6 +523,130 @@ public static class Program
         {
             if (id < moves.Count) Console.WriteLine($"  #{id,3} {moves[id]} [{moves[id].Category}]");
         }
+    }
+
+    /// <summary>
+    /// Which trainers are the boy who follows you around the game.
+    /// <para>
+    /// The battle screen calls him TERRY and his own script calls him GREEN, because the
+    /// first is the name in the cartridge's trainer table and the second is the name the
+    /// player chose from the cartridge's own list. Both are the cartridge's and they
+    /// disagree, so one of them is a placeholder — and which is decided here rather than
+    /// remembered.
+    /// </para>
+    /// <para>
+    /// 0x06 in a run of text is already known to be the rival: 33 sites, always a
+    /// speaker's label before a colon, always in the mouth of the boy. So a fight picked
+    /// by a script that also says <c>{FD}{06}</c> is a fight with him, and this counts
+    /// how many trainers that finds and what the table calls each of them.
+    /// </para>
+    /// </summary>
+    private static void WriteRivalFights(Rom rom)
+    {
+        MapLibrary library = MapLibrary.Open(rom);
+        int speciesCount = RomExtractor.Open(rom).ExtractSpecies().Count;
+
+        List<TrainerRecord> table = TrainerTable.Locate(rom, speciesCount) is { } located
+            ? TrainerTable.Read(rom, located, speciesCount)
+            : [];
+
+        Dictionary<int, string> trainers = table.ToDictionary(t => t.Id, t => t.Name);
+
+        var named = new Dictionary<int, string>();
+        var his = new HashSet<int>();
+        var others = new HashSet<int>();
+
+        Console.WriteLine();
+        Console.WriteLine("Fights picked by a script that says {FD}{06}");
+
+        foreach (LoadedMap map in library.All())
+        {
+            IEnumerable<uint> addresses =
+            [
+                .. map.Objects.Where(o => o.HasScript).Select(o => o.ScriptAddress),
+                .. map.OnEntry.Where(e => e.HasScript).Select(e => e.ScriptAddress),
+                .. map.Triggers.Where(t => t.HasScript).Select(t => t.ScriptAddress),
+            ];
+
+            foreach (uint address in addresses.Distinct())
+            {
+                List<ScriptCommand> read = ScriptReader.ReadAll(rom, address);
+
+                var fights = read
+                    .Where(c => c.Code == ScriptCommands.TrainerBattle)
+                    .Select(c => c.Word(1))
+                    .Where(id => id > 0)
+                    .Distinct()
+                    .ToList();
+
+                if (fights.Count == 0) continue;
+
+                bool saysHim = false;
+
+                foreach (ScriptCommand command in read)
+                {
+                    if (command.Code is not (ScriptCommands.Message or ScriptCommands.LoadPointer)) continue;
+
+                    uint text = command.Code == ScriptCommands.Message ? command.Pointer() : command.Pointer(1);
+
+                    if (rom.ToOffsetOrNull(text) is not { } at) continue;
+                    if (!GameText.LooksLikeDialogue(rom.Span[at..])) continue;
+
+                    if (string.Join(" ", GameText.DecodeDialogue(rom.Span[at..])).Contains("{FD}{06}"))
+                        saysHim = true;
+                }
+
+                foreach (int id in fights)
+                {
+                    if (saysHim) his.Add(id);
+                    else others.Add(id);
+
+                    if (trainers.TryGetValue(id, out string? was)) named[id] = was;
+                }
+            }
+        }
+
+        Console.WriteLine();
+        Console.WriteLine($"  {his.Count} trainers, and {his.Intersect(others).Count()} of them also fought by somebody else");
+        Console.WriteLine();
+
+        foreach (int id in his.Order())
+            Console.WriteLine($"    trainer {id,4}  {named.GetValueOrDefault(id, "?")}");
+
+        // The name most of them share is the placeholder, and the question that settles
+        // whether it can be used as the rule is how many others wear it.
+        string placeholder = his
+            .Select(id => named.GetValueOrDefault(id, ""))
+            .Where(name => name.Length > 0)
+            .GroupBy(name => name)
+            .OrderByDescending(g => g.Count())
+            .Select(g => g.Key)
+            .FirstOrDefault() ?? "";
+
+        int wearing = table.Count(t => t.Name == placeholder);
+        int wearingAndHis = his.Count(id => named.GetValueOrDefault(id) == placeholder);
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  \"{placeholder}\" is on {wearing} trainers in the table, {wearingAndHis} of them here — " +
+            $"{wearing - wearingAndHis} wear it and are picked by no script that says {{FD}}{{06}}");
+
+        Console.WriteLine();
+        Console.WriteLine("  The names the table repeats most");
+
+        foreach (var group in table.Where(t => t.Name.Length > 0)
+                     .GroupBy(t => t.Name)
+                     .OrderByDescending(g => g.Count())
+                     .Take(6))
+        {
+            Console.WriteLine($"    {group.Key,-12} {group.Count(),3}");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine($"  and {others.Count} trainers picked by scripts that never say it, e.g.");
+
+        foreach (int id in others.Order().Take(6))
+            Console.WriteLine($"    trainer {id,4}  {named.GetValueOrDefault(id, "?")}");
     }
 
     /// <summary>
@@ -4437,6 +4563,9 @@ public static class Program
         /// <summary>Every move grouped by the effect byte in its record.</summary>
         public bool MoveEffects { get; private init; }
 
+        /// <summary>Which trainers are fought by a script that names the rival.</summary>
+        public bool RivalFights { get; private init; }
+
         /// <summary>Count which special routines get called, and on which maps.</summary>
         public bool Specials { get; private init; }
 
@@ -4515,6 +4644,7 @@ public static class Program
             bool fightKinds = false;
             bool doorSteps = false;
             bool moveEffects = false;
+            bool rivalFights = false;
             bool specials = false;
             int? special = null;
             byte? answers = null;
@@ -4624,6 +4754,9 @@ public static class Program
                         break;
                     case "--walkable":
                         walkable = Next(args, ref i, "--walkable");
+                        break;
+                    case "--rival-fights":
+                        rivalFights = true;
                         break;
                     case "--move-effects":
                         moveEffects = true;
@@ -4794,6 +4927,7 @@ public static class Program
                 FightKinds = fightKinds,
                 DoorSteps = doorSteps,
                 MoveEffects = moveEffects,
+                RivalFights = rivalFights,
                 Specials = specials,
                 Special = special,
                 Answers = answers,
