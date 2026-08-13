@@ -132,6 +132,20 @@ public static class WorldExporter
                             // What they take, on the same terms and for the same reason:
                             // read rather than run, because the branch Oak takes the
                             // parcel on is one a fresh save never reaches.
+                            // Everything this script could ever hand over, read rather
+                            // than run. Not the answer — which item, if any, depends on a
+                            // save this has never seen — but the list of answers a client
+                            // is allowed to give, which is exactly what a trigger's
+                            // trainer ids already are.
+                            CanGive =
+                            [
+                                .. Scripts.ScriptReader.ReadAll(rom, o.ScriptAddress)
+                                    .Where(c => c.Code is 0x44 or 0x46)
+                                    .Select(c => c.Word())
+                                    .Where(id => id > 0)
+                                    .Distinct(),
+                            ],
+
                             TakesItemId = Scripts.ScriptReader.ReadAll(rom, o.ScriptAddress)
                                 .FirstOrDefault(c => c.Code == 0x45)?.Word() ?? 0,
                             TakesCount = Math.Max(1, Scripts.ScriptReader.ReadAll(rom, o.ScriptAddress)
@@ -215,6 +229,25 @@ public static class WorldExporter
                 : $"  {lying} items lying on the ground across {maps.Count(m => m.Objects.Any(o => o.GivesItem))} maps");
 
         int chatty = maps.Sum(m => m.Objects.Count(o => o.GivesItem && o.Talks));
+
+        // A ball on the ground hands something over and says nothing, and every one of
+        // them carries a flag in its own record — which is the only way it can be gone
+        // when you come back, because its script does not set one. Four commands: two
+        // arguments and a call into a standard routine.
+        int balls = maps.Sum(m => m.Objects.Count(o => o.GivesItem && !o.Talks));
+        int remembered = maps.Sum(m => m.Objects.Count(o => o.GivesItem && !o.Talks && o.HiddenBy > 0));
+
+        log?.Invoke($"  {remembered} of those {balls} carry a flag to be gone by");
+
+        // And the ones a fresh run never reaches. An item behind a yes/no or behind a
+        // flag is written in the script in plain sight and handed over on a branch this
+        // export does not walk — the two fossils in MT. MOON are the first of them, and
+        // "Obtained the DOME FOSSIL!" on screen with nothing in the bag is what that
+        // looks like from the player's side.
+        int hidden = maps.Sum(m => m.Objects.Count(o =>
+            o.HasScript && !o.GivesItem && o.CanGive.Count > 0));
+
+        log?.Invoke($"  {hidden} more hand something over on a branch a fresh save does not take");
 
         if (chatty > 0)
             log?.Invoke($"  {chatty} of those are people who say something as they hand it over");

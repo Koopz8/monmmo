@@ -719,6 +719,14 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                             await DispatchAsync(fired, playerId, cancellationToken).ConfigureAwait(false);
                             break;
 
+                        case ScriptGave gave when playerId != 0:
+                            List<Outgoing> fromScript = world.ScriptGave(playerId, gave.LocalId, gave.ItemId);
+
+                            if (world.LastGift is { } scripted) Console.WriteLine($"+ #{playerId} {scripted}");
+
+                            await DispatchAsync(fromScript, playerId, cancellationToken).ConfigureAwait(false);
+                            break;
+
                         case ScriptRan ran when playerId != 0:
                             List<Outgoing> handed = world.RunScript(playerId, ran);
 

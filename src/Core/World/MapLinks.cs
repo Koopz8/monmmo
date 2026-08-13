@@ -327,6 +327,18 @@ public sealed record MapObject(
     public bool WinsItem => WinsItemId != 0;
 
     /// <summary>
+    /// Every item this one's script could hand over, whichever branch it takes.
+    /// <para>
+    /// Not the answer but the list of answers, which is the same arrangement a trigger's
+    /// trainer ids already use: which fossil somebody ends up with depends on what they
+    /// said to a yes/no, and that is a fact about a save rather than about a cartridge.
+    /// The server cannot run the script and will not take a client's word for it, so it
+    /// holds the set and checks against it.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<int> CanGive { get; init; } = [];
+
+    /// <summary>
     /// The monster this one hands over, or zero. May be a variable id rather than a
     /// species, which is how the three balls on the professor's table are one script.
     /// <para>
@@ -423,6 +435,7 @@ public sealed record MapObject(
         GivesCount == other.GivesCount &&
         WinsItemId == other.WinsItemId &&
         WinsCount == other.WinsCount &&
+        CanGive.SequenceEqual(other.CanGive) &&
         Talks == other.Talks &&
         ShiftedBy == other.ShiftedBy &&
         Stock.SequenceEqual(other.Stock);

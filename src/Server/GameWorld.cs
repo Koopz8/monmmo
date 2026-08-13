@@ -2283,6 +2283,61 @@ public sealed class GameWorld
     /// exactly what went wrong.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Hands over what a script says it handed over, once the world agrees it could have.
+    /// <para>
+    /// The client runs the script and knows which branch was taken; this side has never
+    /// seen a script and never will. So the claim travels and is checked against the set
+    /// the world file carries for that person — every item id that appears in a give
+    /// command anywhere in their script. Naming an item they could not produce is
+    /// refused, which is what stops this being a way to ask for anything in the game.
+    /// </para>
+    /// <para>
+    /// Three more checks, all the ordinary ones: they have to be in reach, it has to be
+    /// the first time, and there has to be a rules file to know an item is an item.
+    /// </para>
+    /// </summary>
+    public List<Outgoing> ScriptGave(int playerId, int localId, int itemId)
+    {
+        lock (_gate)
+        {
+            LastGift = null;
+
+            if (_rules is null) return [];
+            if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
+            if (!_populated.TryGetValue(player.MapId, out MapPopulation? people)) return [];
+            if (people.ById(localId) is not { } person) return [];
+
+            if (!person.Template.CanGive.Contains(itemId))
+            {
+                LastGift = $"refused: object {localId} never hands over item {itemId}";
+                return [];
+            }
+
+            var reachable = Interaction
+                .Reachable(player.Square, player.Facing, square => !GridFor(player.MapId).IsWalkable(square))
+                .ToHashSet();
+
+            if (!reachable.Contains(person.Square))
+            {
+                LastGift = $"refused: object {localId} is not within reach";
+                return [];
+            }
+
+            if (!player.ItemsTaken.Add($"{player.MapId}:{localId}:script"))
+            {
+                LastGift = "an item that has already been handed over";
+                return [];
+            }
+
+            player.Bag.Add(itemId, 1);
+
+            LastGift = $"item {itemId} from object {localId}";
+
+            return [new Outgoing(new ItemFound(itemId, 1, player.Bag.Entries), OnlyTo: playerId)];
+        }
+    }
+
     public List<Outgoing> RunConsole(int playerId, string text, double nowSeconds = 0)
     {
         lock (_gate)

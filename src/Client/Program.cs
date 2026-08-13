@@ -551,6 +551,14 @@ public static class Program
                         // being there, and taking him off the map before he has walked
                         // is how a scene ends up with nobody in it.
                         TakeAway(ran, view, script, network);
+
+                        // And what it handed over, which for a scene is here rather than
+                        // where a conversation does it. Taking a fossil in MT. MOON is a
+                        // scene — the man who wanted the other one walks over to take it
+                        // — so the whole exchange went through this branch, and the
+                        // fossil went nowhere: "Obtained the DOME FOSSIL!" on screen and
+                        // nothing in the bag.
+                        Handed(ran, script, network);
                     }
 
                     scene = null;
@@ -841,6 +849,9 @@ public static class Program
         if (run.FlagsSet.Count + run.FlagsCleared.Count + run.VariablesWritten.Count > 0)
             network.SendScriptRan(run);
 
+        // And off the map, if what was just talked to was a ball on the ground.
+        PickedUp(run, person, view, script, network);
+
         // A counter that heals asks, and until now this project answered for the player.
         // The yes and the no are inside a standard routine — code, never followed here —
         // so the words stay hers and only the box is ours.
@@ -1098,6 +1109,8 @@ public static class Program
         Remember(run, script, network);
         TakeAway(run, view, script, network);
 
+        Handed(run, script, network);
+
         var box = new DialogueBox(run.Pages, run.Question);
 
         return (box.IsEmpty && !box.IsQuestion ? null : box, null);
@@ -1122,6 +1135,30 @@ public static class Program
     }
 
     /// <summary>
+    /// Names whatever a run handed over, for the server to check.
+    /// <para>
+    /// Which item, if any, depends on the branch taken — "Do you want the DOME FOSSIL?"
+    /// — and a branch is a fact about a save. So the client says which and the server
+    /// checks it against the set that person's script could ever produce, which is the
+    /// arrangement a trigger's trainer id already uses.
+    /// </para>
+    /// <para>
+    /// 0x800F holds who the conversation is about. It is seeded when one starts, which is
+    /// what makes this possible without threading a local id through every scene.
+    /// </para>
+    /// </summary>
+    private static void Handed(ScriptRun run, ScriptState script, NetworkClient network)
+    {
+        if (run.GivesItem is not { } given) return;
+
+        int who = script.Read(TalkingTo);
+
+        if (who is <= 0 or >= 64) return;
+
+        network.SendScriptGave(who, given);
+    }
+
+    /// <summary>
     /// Takes the people a script removed off the map, on both sides.
     /// <para>
     /// Through the flag the object already carries rather than through a message of its
@@ -1137,11 +1174,42 @@ public static class Program
     /// </summary>
     private static void TakeAway(ScriptRun run, MapView view, ScriptState script, NetworkClient network)
     {
-        if (run.Hides.Count == 0) return;
+        TakeAway(run.Hides, view, script, network);
+    }
+
+    /// <summary>
+    /// A ball on the ground, once it has been picked up.
+    /// <para>
+    /// Nothing in its script says so. All four commands of one are two arguments and a
+    /// call into a standard routine — no <c>setflag</c> anywhere, which is why TM09 in
+    /// MT. MOON went into the bag and stayed lying on the floor. The vanishing is the
+    /// game's own code, and the only thing this side can read is the flag in the object's
+    /// record: 170 of the cartridge's 170 balls carry one, which is a rule rather than a
+    /// coincidence.
+    /// </para>
+    /// <para>
+    /// Told apart from a person by the cartridge's own difference: a thing that hands
+    /// something over and says nothing at all is a ball, and the fifteen people who hand
+    /// something over <em>while</em> talking stay exactly where they are. The president of
+    /// SILPH does not disappear on handing over a MASTER BALL.
+    /// </para>
+    /// </summary>
+    private static void PickedUp(
+        ScriptRun run, MapObject person, MapView view, ScriptState script, NetworkClient network)
+    {
+        if (run.GivesItem is null || run.Pages.Count > 0) return;
+
+        TakeAway([person.LocalId], view, script, network);
+    }
+
+    private static void TakeAway(
+        IReadOnlyList<int> hides, MapView view, ScriptState script, NetworkClient network)
+    {
+        if (hides.Count == 0) return;
 
         var gone = new List<int>();
 
-        foreach (int localId in run.Hides)
+        foreach (int localId in hides)
         {
             if (view.Map.Objects.FirstOrDefault(o => o.LocalId == localId) is not { HiddenBy: > 0 } person)
             {

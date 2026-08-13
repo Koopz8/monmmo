@@ -160,7 +160,7 @@ public sealed class WorldData
     /// <summary>Identifies the format, so a wrong or stale file fails loudly.</summary>
     private static readonly byte[] Magic = "MONWORLD"u8.ToArray();
 
-    private const int Version = 21;
+    private const int Version = 22;
 
     private readonly Dictionary<string, MapData> _maps;
 
@@ -321,6 +321,13 @@ public sealed class WorldData
             // fight runs on being won, and nothing reaches it by talking.
             writer.Write(entry.WinsItemId);
             writer.Write(entry.WinsCount);
+
+            // Not what it gives but what it could ever give. Twenty-nine objects hand
+            // something over on a branch a fresh run does not walk — both fossils in MT.
+            // MOON among them — so the server holds the set and checks a client's claim
+            // against it, exactly as it already does for a trigger's trainer ids.
+            writer.Write(entry.CanGive.Count);
+            foreach (int itemId in entry.CanGive) writer.Write(itemId);
             writer.Write(entry.TakesItemId);
             writer.Write(entry.TakesCount);
             writer.Write(entry.Talks);
@@ -519,6 +526,7 @@ public sealed class WorldData
                 GivesCount = reader.ReadInt32(),
                 WinsItemId = reader.ReadInt32(),
                 WinsCount = reader.ReadInt32(),
+                CanGive = ReadStock(reader, mapId),
                 TakesItemId = reader.ReadInt32(),
                 TakesCount = reader.ReadInt32(),
                 Talks = reader.ReadBoolean(),

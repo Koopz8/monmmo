@@ -330,6 +330,20 @@ public static class ScriptCommands
         [0x87] = 4,     // the decoration shop
         [0xC7] = 1,
         [0xCF] = 0,
+
+        // Two: one word, and small numbers in it. Six sites, and three of them are read
+        // by what comes next rather than by what comes before:
+        //
+        //   64 | 01 00 | 29 02 00 ...      setflag
+        //   64 | 01 00 | 4F FF 00 ...      applymovement
+        //   64 | 02 00 | 0F 00 8E 45 ...   loadpointer
+        //
+        // The other three run into commands that are themselves known, which is the same
+        // agreement from the other direction. This is what stopped both fossils in MT.
+        // MOON: the two of them are one script each, and each of those stopped four
+        // commands after handing the fossil over — so the words the cartridge has for
+        // taking one were never read.
+        [0x64] = 2,
         [0x88] = 4,     // and the other decoration shop
 
         // Six: a word and then a pointer. Derived twice and the two agree.

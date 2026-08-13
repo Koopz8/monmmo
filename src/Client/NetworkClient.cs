@@ -133,6 +133,9 @@ public sealed class NetworkClient : IDisposable
     public void SendTriggerFired(int x, int y, int? trainerId = null) =>
         Send(new TriggerFired(x, y, trainerId));
 
+    /// <summary>Names the item a script just handed over, for the server to check.</summary>
+    public void SendScriptGave(int localId, int itemId) => Send(new ScriptGave(localId, itemId));
+
     /// <summary>Says where a scene left somebody, for the server to accept or refuse.</summary>
     /// <summary>Asks for a scene's cast to stand still, wherever they are.</summary>
     public void SendSceneCast(IReadOnlyList<int> localIds) => Send(new SceneCast(localIds));

@@ -33,6 +33,7 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(ObstacleShifted), "shifted")]
 [JsonDerivedType(typeof(WentInside), "wentinside")]
 [JsonDerivedType(typeof(TriggerFired), "triggered")]
+[JsonDerivedType(typeof(ScriptGave), "scriptgave")]
 [JsonDerivedType(typeof(NameMonRequest), "namemon")]
 [JsonDerivedType(typeof(HealRequest), "healplease")]
 [JsonDerivedType(typeof(ConsoleCommand), "console")]
@@ -111,6 +112,20 @@ public sealed record TalkFinished : NetMessage;
 /// </para>
 /// </summary>
 public sealed record TriggerFired(int X, int Y, int? TrainerId = null) : NetMessage;
+
+/// <summary>
+/// A script just handed something over, and which one.
+/// <para>
+/// The same shape as a trigger naming a trainer, and for the same reason: which item, if
+/// any, depends on what was said to a yes/no, and that is a fact about a save rather than
+/// about a cartridge. So the client names it and the server checks the name against the
+/// set the world file carries for that person — twenty-nine objects in this game hand
+/// something over on a branch no fresh run ever walks, and both fossils in MT. MOON are
+/// among them. Before this, "Obtained the DOME FOSSIL!" was on screen with nothing in
+/// the bag.
+/// </para>
+/// </summary>
+public sealed record ScriptGave(int LocalId, int ItemId) : NetMessage;
 
 /// <summary>
 /// A name for one of the party, given by the player on a screen this project had to

@@ -1764,6 +1764,76 @@ public class TriggerTests
     }
 
     [Fact]
+    public void AnItemFromABranchIsHandedOverWhenTheClientNamesIt()
+    {
+        // Twenty-nine objects in this game hand something over on a branch a fresh run
+        // never walks — both fossils in MT. MOON among them, behind "Do you want the
+        // DOME FOSSIL?". The export cannot know which branch a save takes, so it carries
+        // the set and the client names one of it.
+        MapData map = new(Town, "MT. MOON", 8, 8, new byte[64])
+        {
+            Objects =
+            [
+                new MapObject(1, 5, 3, 3, Direction.Down, 0, false) { CanGive = [TestRules.PotionItem] },
+            ],
+        };
+
+        var world = new GameWorld(new WorldData([map]), Town, TestRules.All);
+
+        (ServerPlayer player, _) = world.Join(1, "Koop", SavedCharacter.Fresh(Town, 3, 4));
+
+        player.Facing = Direction.Up;
+
+        Assert.Single(world.ScriptGave(player.Id, 1, TestRules.PotionItem)
+            .Select(o => o.Message).OfType<ItemFound>());
+
+        Assert.Equal(1, player.Bag.CountOf(TestRules.PotionItem));
+
+        // Once. The ledger is the same one a ball on the ground uses.
+        world.ScriptGave(player.Id, 1, TestRules.PotionItem);
+
+        Assert.Equal(1, player.Bag.CountOf(TestRules.PotionItem));
+    }
+
+    [Fact]
+    public void AnItemThatPersonCouldNeverGiveIsRefused()
+    {
+        // The whole point of carrying the set. Without the check this message is a way
+        // to ask the server for any item in the game.
+        MapData map = new(Town, "MT. MOON", 8, 8, new byte[64])
+        {
+            Objects = [new MapObject(1, 5, 3, 3, Direction.Down, 0, false) { CanGive = [TestRules.PotionItem] }],
+        };
+
+        var world = new GameWorld(new WorldData([map]), Town, TestRules.All);
+
+        (ServerPlayer player, _) = world.Join(1, "Koop", SavedCharacter.Fresh(Town, 3, 4));
+
+        player.Facing = Direction.Up;
+
+        Assert.Empty(world.ScriptGave(player.Id, 1, TestRules.PotionItem + 1));
+        Assert.Contains("never hands over", world.LastGift ?? "");
+    }
+
+    [Fact]
+    public void AnItemFromSomebodyOutOfReachIsRefusedToo()
+    {
+        MapData map = new(Town, "MT. MOON", 8, 8, new byte[64])
+        {
+            Objects = [new MapObject(1, 5, 3, 3, Direction.Down, 0, false) { CanGive = [TestRules.PotionItem] }],
+        };
+
+        var world = new GameWorld(new WorldData([map]), Town, TestRules.All);
+
+        (ServerPlayer player, _) = world.Join(1, "Koop", SavedCharacter.Fresh(Town, 6, 6));
+
+        player.Facing = Direction.Down;
+
+        Assert.Empty(world.ScriptGave(player.Id, 1, TestRules.PotionItem));
+        Assert.Contains("not within reach", world.LastGift ?? "");
+    }
+
+    [Fact]
     public void ThereIsNoConsoleForSomebodyWhoWasNotNamed()
     {
         // The account allowed to run one is named on the server's own command line,
