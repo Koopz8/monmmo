@@ -631,6 +631,46 @@ public class ScriptRunnerTests
     }
 
     [Fact]
+    public void ACallIntoSomethingUnreadableComesBackToo()
+    {
+        // The naming screen found this. Answering yes to "give a nickname to
+        // BULBASAUR?" runs `call 0x081A74EB`, and that address is not script — it is
+        // the game's own code, unreadable by anything that decodes bytes as commands.
+        // Giving up there threw away the return address, and the return address is
+        // where the rival walks over to take his own.
+        //
+        // 0xEE is a byte with no width, standing in for that code here.
+        Rom rom = Image(
+            (Start, [ScriptCommands.Call, .. At(Elsewhere), ScriptCommands.Message, .. At(SaysB), ScriptCommands.End]),
+            (Elsewhere, [0xEE, 0xEE, 0xEE]),
+            (SaysB, Speech('B')));
+
+        ScriptRun run = ScriptRunner.Run(rom, Start);
+
+        Assert.Equal(["BBBBBB"], run.Pages);
+        Assert.Equal(Elsewhere, Assert.Single(run.CodeCalled));
+
+        // And it is not a stop. The two findings stay apart, because a width we have
+        // not adopted and a routine we can never adopt need different answers.
+        Assert.Null(run.StoppedAt);
+    }
+
+    [Fact]
+    public void DerailingWithNothingOnTheStackIsStillAStop()
+    {
+        // The other half, and the important one. If an unreadable byte at the top level
+        // were also forgiven, every width still missing would go quiet — and the whole
+        // method of this project is that a script which finishes saying nothing is how
+        // a missing width announces itself.
+        Rom rom = Image((Start, [ScriptCommands.Message, .. At(SaysA), 0xEE, 0xEE]), (SaysA, Speech('A')));
+
+        ScriptRun run = ScriptRunner.Run(rom, Start);
+
+        Assert.Equal((byte)0xEE, run.StoppedAt);
+        Assert.Empty(run.CodeCalled);
+    }
+
+    [Fact]
     public void ABeatenTrainerSaysWhatComesAfterTheFightInstead()
     {
         // The command is its own conditional. Having beaten them does not skip a branch

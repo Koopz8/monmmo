@@ -1673,6 +1673,7 @@ public static class Program
         int pages = 0;
         int shops = 0;
         int fights = 0;
+        int returned = 0;
 
         foreach (LoadedMap map in library.All())
         {
@@ -1707,6 +1708,7 @@ public static class Program
 
                 finished++;
                 if (run.IsEmpty) silent++;
+                if (run.CodeCalled.Count > 0) returned++;
 
                 pages += run.Pages.Count;
                 shops += run.Stock.Count > 0 ? 1 : 0;
@@ -1723,6 +1725,12 @@ public static class Program
         // after it is invented, so the pages it produces change even when the count of
         // clean endings does not.
         Console.WriteLine($"  {pages} pages of dialogue, {shops} shops, {fights} fights");
+
+        // Kept apart from the stops on purpose. These are runs that were called into
+        // something unreadable and returned from it, which is what the console does and
+        // what a stop is not. Counting them together would let a width we have not
+        // adopted hide inside a routine we can never adopt.
+        Console.WriteLine($"  {returned} of those finish by returning from code they cannot read");
 
         foreach ((byte code, int count) in counts.OrderByDescending(e => e.Value))
         {

@@ -154,6 +154,26 @@ public sealed record ScriptRun
     /// </summary>
     public int? StoppedAtOffset { get; init; }
 
+    /// <summary>
+    /// Addresses this run was <c>call</c>ed into and could not read as script.
+    /// <para>
+    /// The naming screen is the one that found this. "Do you want to give a nickname
+    /// to BULBASAUR?" answers yes into <c>call 0x081A74EB</c>, and that address is not
+    /// script at all — it is ARM code, the same kind of thing a <c>special</c> is, and
+    /// no amount of adopting widths will ever decode it. The script that called it
+    /// expects to carry on: the <c>goto</c> that leads to the rival taking his own is
+    /// the very next command after the call returns.
+    /// </para>
+    /// <para>
+    /// So these are not stops, and they are kept apart from <see cref="StoppedAt"/> for
+    /// the reason the mid-scene release diagnostic was eventually deleted: a check that
+    /// fires on something normal stops meaning anything. A width we have not adopted
+    /// yet and a routine we can never adopt are different findings, and lumping them
+    /// together would make the first invisible.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<uint> CodeCalled { get; init; } = [];
+
     public bool IsEmpty =>
         Pages.Count == 0 && Stock.Count == 0 && TrainerId is null && GivesItem is null &&
         FlagsSet.Count == 0 && FlagsCleared.Count == 0 && VariablesWritten.Count == 0;
@@ -214,6 +234,7 @@ public static class ScriptRunner
         var cleared = new List<int>();
         var written = new Dictionary<int, int>();
         var stack = new Stack<uint>();
+        var codeCalled = new List<uint>();
 
         int? trainerId = null;
         int? gives = null;
@@ -238,6 +259,23 @@ public static class ScriptRunner
 
             if (ScriptCommands.ArgumentLength(code, first) is not { } length)
             {
+                // Inside a call, an unreadable byte is not the end of the story. The
+                // cartridge calls out to its own code all the time — the naming screen,
+                // the trade screen, the slot machines — and every one of those calls has
+                // a return address sitting on this stack because the script means to
+                // carry on afterwards. Reading them is impossible; returning from them
+                // is exactly right, and it is what the console does.
+                //
+                // Only inside a call. A run that derails with nothing on the stack has
+                // genuinely stopped, and saying otherwise would quietly hide every width
+                // still missing — the one thing this reader must never do.
+                if (stack.Count > 0 && rom.ToOffsetOrNull(stack.Pop()) is { } back)
+                {
+                    codeCalled.Add(Rom.BaseAddress + (uint)offset);
+                    offset = back;
+                    continue;
+                }
+
                 stoppedAt = code;
                 stoppedAtOffset = offset;
                 break;
@@ -507,6 +545,7 @@ public static class ScriptRunner
             Pages = pages,
             Beats = beats,
             SpecialsCalled = specials,
+            CodeCalled = codeCalled,
             Stock = stock,
             TrainerId = trainerId,
             GivesItem = gives,
