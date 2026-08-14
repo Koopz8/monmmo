@@ -161,6 +161,10 @@ public static class BattleNarrator
 
         BattleEvent.BrokeFree e => $"{names.Of(e.Side)} got free of {names.MoveNamed(e.MoveId)}!",
 
+        BattleEvent.OneHitKnockout e => $"It was a one-hit knockout on {names.Of(e.Side)}!",
+
+        BattleEvent.Unaffected e => $"It had no effect on {names.Of(e.Side)}.",
+
         BattleEvent.MoveNotLearned e =>
             $"{names.Of(e.Side)} wants to learn {names.MoveNamed(e.MoveId)}, but already knows four moves.",
 

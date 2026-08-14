@@ -1334,6 +1334,32 @@ public static class Program
                 string.Join(", ", group.Select(m => m.Name).Take(6)) + mark);
         }
 
+        // The other marker in a record, and the sharper of the two. Printed in full
+        // because the claim is a strong one — no group mixes it — and a claim like that
+        // is worth being able to check at a glance.
+        var one = byEffect.Where(g => g.All(m => m.Power == 1)).ToList();
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  A power of one is not a power. {one.Sum(g => g.Count())} moves in {one.Count} groups carry it,");
+        Console.WriteLine(
+            "  and not one group mixes it with a real power — so it is the record saying");
+        Console.WriteLine(
+            "  the number is somewhere else. Answered where somewhere else is inside the");
+        Console.WriteLine(
+            "  fight; left alone where it is in the game's code, because a constant written");
+        Console.WriteLine(
+            "  here from memory of another game is the mistake this project rules out.");
+
+        foreach (var group in one.OrderBy(g => g.Key))
+        {
+            bool answered = Core.Battle.MoveEffects.Of(group.Key).Kind != Core.Battle.EffectKind.None;
+
+            Console.WriteLine(
+                $"    0x{group.Key:X2}  {group.Count(),2}  {(answered ? "->" : "  ")} " +
+                string.Join(", ", group.Select(m => m.Name)));
+        }
+
         Console.WriteLine();
         Console.WriteLine("  The effects with the most status moves in them");
 

@@ -44,6 +44,18 @@ public enum EffectKind
 
     /// <summary>Holds the target for a few turns, hurting it at the end of each.</summary>
     Trap,
+
+    /// <summary>Ends it outright, however much was left.</summary>
+    Knockout,
+
+    /// <summary>Deals as much as the user's level.</summary>
+    LevelDamage,
+
+    /// <summary>Takes half of what the target has left.</summary>
+    HalfTheirHealth,
+
+    /// <summary>Brings the target down to whatever the user has left.</summary>
+    DownToMine,
 }
 
 /// <summary>
@@ -204,6 +216,33 @@ public static class MoveEffects
         0x9B => new MoveEffect(EffectKind.TwoTurn, OnUser: true),
         0x1B => new MoveEffect(EffectKind.LockedIn, OnUser: true),
         0x2A => new MoveEffect(EffectKind.Trap, OnUser: false),
+
+        // The moves whose record says one power. One is not a power — it is the record
+        // saying the number is somewhere else, and it says it about twenty-one moves in
+        // seventeen groups, every one of them entirely: not a single group on this
+        // cartridge mixes a power of one with a real one.
+        //
+        //   BIDE, GUILLOTINE, SUPER FANG, DRAGON RAGE, SEISMIC TOSS, PSYWAVE, COUNTER,
+        //   FLAIL, RETURN, PRESENT, FRUSTRATION, MAGNITUDE, SONICBOOM, HIDDEN POWER,
+        //   MIRROR COAT, ENDEAVOR, LOW KICK
+        //
+        // Four of them can be answered without inventing anything, because "somewhere
+        // else" turns out to be inside the fight: nothing at all, the user's level, the
+        // target's health, the user's health.
+        //
+        //   0x26   4 moves  GUILLOTINE, HORN DRILL, FISSURE, SHEER COLD
+        //   0x57   2 moves  SEISMIC TOSS, NIGHT SHADE
+        //   0x28   1 move   SUPER FANG
+        //   0xBD   1 move   ENDEAVOR
+        //
+        // The rest stay silent on purpose. DRAGON RAGE's forty and SONICBOOM's twenty
+        // are in the game's code and nowhere in its data; writing them here from memory
+        // of another game is the one thing this project keeps a standing rule against,
+        // and a wrong number that looks right is worse than a move that says so.
+        0x26 => new MoveEffect(EffectKind.Knockout, OnUser: false),
+        0x57 => new MoveEffect(EffectKind.LevelDamage, OnUser: false),
+        0x28 => new MoveEffect(EffectKind.HalfTheirHealth, OnUser: false),
+        0xBD => new MoveEffect(EffectKind.DownToMine, OnUser: false),
 
         _ => Stages(effect),
     };

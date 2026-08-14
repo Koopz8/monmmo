@@ -52,6 +52,8 @@ public enum Side
 [JsonDerivedType(typeof(Trapped), "trapped")]
 [JsonDerivedType(typeof(TrapHurt), "traphurt")]
 [JsonDerivedType(typeof(BrokeFree), "brokefree")]
+[JsonDerivedType(typeof(OneHitKnockout), "onehit")]
+[JsonDerivedType(typeof(Unaffected), "unaffected")]
 [JsonDerivedType(typeof(Ended), "ended")]
 public abstract record BattleEvent
 {
@@ -164,6 +166,18 @@ public abstract record BattleEvent
     public sealed record TrapHurt(Side Side, int MoveId, int Damage, int RemainingHp) : BattleEvent;
 
     public sealed record BrokeFree(Side Side, int MoveId) : BattleEvent;
+
+    /// <summary>Ended outright, however much was left.</summary>
+    public sealed record OneHitKnockout(Side Side) : BattleEvent;
+
+    /// <summary>
+    /// A move whose number came out at nothing to do.
+    /// <para>
+    /// Separate from missing and from having no effect, because it is neither: SUPER
+    /// FANG on something with one health left connects perfectly and takes nothing.
+    /// </para>
+    /// </summary>
+    public sealed record Unaffected(Side Side) : BattleEvent;
 
     /// <summary>
     /// A move was offered and could not be taken, because four are already known.
@@ -478,6 +492,46 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
 
         MoveEffect carried = kind;
 
+        // The moves whose damage is not worked out from their power. Before the ordinary
+        // loop because they do not go through it at all — no critical, no random factor,
+        // no same-type bonus, and the only thing the type chart still decides is whether
+        // the move can touch this defender at all. NIGHT SHADE is a ghost move and a
+        // PIDGEY is not somewhere it can reach.
+        if (WhateverElseSays(carried.Kind, attacker, defender) is { } elsewhere)
+        {
+            if (TypeChart.Effectiveness(move.Type, defender.Type1, defender.Type2) == 0)
+            {
+                events.Add(new BattleEvent.NoEffect(Other(side)));
+                return;
+            }
+
+            // Higher up than this one and it does not happen. Modelled, not read: the
+            // rule is in the game's code, and without it a level-two DIGLETT ends a
+            // level-seventy MEWTWO three times in ten.
+            if (carried.Kind == EffectKind.Knockout && defender.Level > attacker.Level)
+            {
+                events.Add(new BattleEvent.Unaffected(Other(side)));
+                return;
+            }
+
+            if (elsewhere <= 0)
+            {
+                events.Add(new BattleEvent.Unaffected(Other(side)));
+                return;
+            }
+
+            int taken = defender.TakeDamage(elsewhere);
+
+            events.Add(new BattleEvent.DamageDealt(
+                Other(side), taken, defender.CurrentHp, new DamageResult(taken, false, 100, false)));
+
+            if (carried.Kind == EffectKind.Knockout) events.Add(new BattleEvent.OneHitKnockout(Other(side)));
+
+            if (defender.HasFainted) events.Add(new BattleEvent.Fainted(Other(side)));
+
+            return;
+        }
+
         // How many times, and how likely a critical. Both are read off the move's group
         // rather than off its record — see MoveEffects — and the numbers here are
         // modelled rather than read: nothing in a move's record says how many times
@@ -568,6 +622,26 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
     }
 
     /// <summary>
+    /// What a move with no power of its own takes, when the number is somewhere the
+    /// fight already knows.
+    /// <para>
+    /// Nothing invented. Four groups, four numbers already on the table: everything the
+    /// target has, the user's own level, half of what the target has left, and the gap
+    /// between them. The other thirteen groups that carry a power of one keep their
+    /// number in the game's code, and this returns nothing for them so that they stay
+    /// visibly unfinished rather than quietly wrong.
+    /// </para>
+    /// </summary>
+    private static int? WhateverElseSays(EffectKind kind, Battler attacker, Battler defender) => kind switch
+    {
+        EffectKind.Knockout => defender.CurrentHp,
+        EffectKind.LevelDamage => attacker.Level,
+        EffectKind.HalfTheirHealth => defender.CurrentHp / 2,
+        EffectKind.DownToMine => defender.CurrentHp - attacker.CurrentHp,
+        _ => null,
+    };
+
+    /// <summary>
     /// Counts a locked-in move down, and ends it the way it ends.
     /// <para>
     /// THRASH's price is not the turns — it is what is left standing there afterwards.
@@ -632,8 +706,11 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         // where the turn was taken, and falling through to here gave them the default
         // effect — a stage change of nothing, to a stat that has no stages — so WRAP
         // landed and then said "The wild PIDGEY's HP won't go any lower!"
-        if (effect.Kind is EffectKind.Recharge or EffectKind.TwoTurn or EffectKind.LockedIn or EffectKind.Trap)
+        if (effect.Kind is EffectKind.Recharge or EffectKind.TwoTurn or EffectKind.LockedIn or EffectKind.Trap
+            or EffectKind.Knockout or EffectKind.LevelDamage or EffectKind.HalfTheirHealth or EffectKind.DownToMine)
+        {
             return;
+        }
 
         if (rolled && !_rng.Chance(move.SecondaryChance)) return;
 
