@@ -1002,6 +1002,18 @@ public static class ScriptReader
             {
                 all.Add(command);
 
+                // A fight carries scripts of its own, and until now nothing followed
+                // them. Two of the three flags hiding the middle of this game — the LIFT
+                // KEY and the SILPH SCOPE — are cleared inside one, which is why a walk
+                // over every person in the world could not reach either.
+                if (command.Code == ScriptCommands.TrainerBattle)
+                {
+                    foreach (uint after in ScriptsAfterAFight(rom, command))
+                        if (seen.Add(after)) queue.Enqueue(after);
+
+                    continue;
+                }
+
                 uint target = command.Code switch
                 {
                     ScriptCommands.Call or ScriptCommands.Goto => command.Pointer(),
@@ -1021,6 +1033,64 @@ public static class ScriptReader
         }
 
         return all;
+    }
+
+    /// <summary>
+    /// The pointers in a <c>trainerbattle</c> that are scripts rather than text.
+    /// <para>
+    /// Every variant carries a type, a trainer id and one more word, and then between
+    /// one and four pointers. Some of those are lines the trainer says and some are
+    /// scripts to run once the fight is over, and <b>nothing in the command says
+    /// which</b> — the variant does, and the variants are the thing this project has
+    /// been least sure of.
+    /// </para>
+    /// <para>
+    /// So it is not asked. Each pointer is read as a script and kept only if it reads
+    /// like one: a run of commands that ends the way a script ends, at an <c>end</c>, a
+    /// <c>return</c> or a <c>goto</c>. A page of text decoded as commands runs into a
+    /// byte with no length and stops, which is exactly the test — and the same test this
+    /// project already uses to tell a script that finished from one that fell over.
+    /// </para>
+    /// </summary>
+    public static IEnumerable<uint> ScriptsAfterAFight(Rom rom, ScriptCommand command)
+    {
+        if (command.Code != ScriptCommands.TrainerBattle) yield break;
+
+        // Type, trainer id, and one more word: five bytes before the first pointer.
+        for (int at = 5; at + 4 <= command.Arguments.Length; at += 4)
+        {
+            uint target = command.Pointer(at);
+
+            if (target == 0 || !rom.IsRomAddress(target)) continue;
+            if (!EndsLikeAScript(rom, target)) continue;
+
+            yield return target;
+        }
+    }
+
+    /// <summary>
+    /// Whether reading from here runs to a proper end rather than into a byte that is
+    /// not a command.
+    /// </summary>
+    private static bool EndsLikeAScript(Rom rom, uint address)
+    {
+        if (rom.ToOffsetOrNull(address) is not { } offset) return false;
+
+        for (int read = 0; read < MaxCommands; read++)
+        {
+            if (offset >= rom.Length) return false;
+
+            byte code = rom.ReadU8(offset);
+            byte first = offset + 1 < rom.Length ? rom.ReadU8(offset + 1) : (byte)0;
+
+            if (ScriptCommands.ArgumentLength(code, first) is not { } length) return false;
+
+            if (code is ScriptCommands.End or ScriptCommands.Return or ScriptCommands.Goto) return true;
+
+            offset += 1 + length;
+        }
+
+        return false;
     }
 
     /// <summary>Where in the image a read stopped, for printing the bytes around it.</summary>
