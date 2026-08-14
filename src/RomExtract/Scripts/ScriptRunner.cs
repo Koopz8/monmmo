@@ -120,6 +120,17 @@ public sealed record ScriptRun
     /// </summary>
     public (int Species, int Level)? WildBattle { get; init; }
 
+    /// <summary>
+    /// Where this run stopped to let a fight happen, so that it can be picked up again.
+    /// <para>
+    /// Exact rather than searched for: it is the address the run had actually reached,
+    /// down whichever branch it actually took. A reader looking for the command by eye
+    /// would find the sleeper's fight on ROUTE 12 whether or not the player has the
+    /// flute, and only one of those is where this script is.
+    /// </para>
+    /// </summary>
+    public uint? ResumesAfterTheFight { get; init; }
+
     public int? GivesItem { get; init; }
 
     public int GivesCount { get; init; }
@@ -306,6 +317,9 @@ public static class ScriptRunner
         return pages;
     }
 
+    /// <summary>The command that hands the screen to the game's own code and waits.</summary>
+    private const byte WaitState = 0x27;
+
     public static ScriptRun Run(Rom rom, uint address, ScriptState? state = null, int maxPages = 32)
     {
         ScriptState save = (state ?? new ScriptState()).Copy();
@@ -336,6 +350,7 @@ public static class ScriptRunner
         // What a scripted fight was set up with, and what actually got started.
         (int Species, int Level)? setUp = null;
         (int Species, int Level)? wild = null;
+        uint? resumes = null;
         int? shifts = null;
         uint? question = null;
         byte? stoppedAt = null;
@@ -514,6 +529,20 @@ public static class ScriptRunner
                     // this cannot execute. Recorded, because the alternative is a script
                     // that quietly does less and looks like a script that does less.
                     specials.Add(code == SpecialCalls.Special ? command.Word() : command.Word(2));
+
+                    // Unless it is standing exactly where a `dowildbattle` stands. The
+                    // sleepers use the command; the five creatures there is only one of
+                    // use a code routine and then wait for it — `setwildbattle MEWTWO at
+                    // 70`, a flag, a special, `waitstate`. Whichever way it is started, a
+                    // script that has just set a creature up and then stops the world is
+                    // starting a fight, and this run has no business reading on past it.
+                    if (setUp is not null && offset < rom.Length && rom.ReadU8(offset) == WaitState)
+                    {
+                        wild ??= setUp;
+                        resumes ??= Rom.BaseAddress + (uint)offset + 1;
+                        stop = true;
+                    }
+
                     break;
 
                 case MovementLists.ApplyMovement:
@@ -610,7 +639,13 @@ public static class ScriptRunner
                     break;
 
                 case 0xB7:
+                    // The script yields to the fight, the way it does for a trainer. What
+                    // comes after belongs after — the sleeper's "SNORLAX calmed down. It
+                    // gave a huge yawn... And returned to the mountains." was read here,
+                    // with the fight's outcome still unasked, and thrown away.
                     wild ??= setUp;
+                    resumes ??= Rom.BaseAddress + (uint)offset;
+                    stop = true;
                     break;
 
                 case 0x79:                              // gives a monster
@@ -770,6 +805,7 @@ public static class ScriptRunner
             GivesCount = givesCount,
             GivesMon = givesMon,
             WildBattle = wild,
+            ResumesAfterTheFight = resumes,
             ShiftedBy = shifts,
             Question = question,
             FlagsSet = set,

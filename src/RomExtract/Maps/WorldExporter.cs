@@ -138,14 +138,16 @@ public static class WorldExporter
                             // save this has never seen — but the list of answers a client
                             // is allowed to give, which is exactly what a trigger's
                             // trainer ids already are.
-                            CanGive =
-                            [
-                                .. Scripts.ScriptReader.ReadAll(rom, o.ScriptAddress)
-                                    .Where(c => c.Code is 0x44 or 0x46)
-                                    .Select(c => c.Word())
-                                    .Where(id => id > 0)
-                                    .Distinct(),
-                            ],
+                            //
+                            // Both ways of handing something over, because there are two
+                            // and this list knew one. `giveitem` names the item in its
+                            // own arguments; the other writes the item and the count into
+                            // 0x8000 and 0x8001 and calls a standard routine to do the
+                            // rest. LOSTELLE in the BERRY FOREST hands over her father's
+                            // parcel the second way, and the server refused it — "object
+                            // 1 never hands over item 147" — with the item sitting in
+                            // plain sight two commands above the call.
+                            CanGive = [.. Scripts.ScriptReader.EverythingItCouldGive(rom, o.ScriptAddress)],
 
                             // Every fight this script could ever set up. Ten scripts in
                             // the game do, and two of them are the sleepers across the

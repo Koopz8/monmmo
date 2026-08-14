@@ -194,6 +194,8 @@ public static class Program
 
         if (options.NewGame) WriteNewGame(rom);
 
+        if (options.AfterFights) WriteAfterFights(rom);
+
         if (options.BytesAfter is { } after) WriteBytesAfter(rom, after);
 
         if (options.Glyphs) WriteGlyphCandidates(rom, options.OutputDirectory);
@@ -4577,6 +4579,83 @@ public static class Program
         }
     }
 
+    /// <summary>
+    /// What a script says once the fight it started is over, per outcome.
+    /// <para>
+    /// The instrument for words nobody ever heard. A script that starts a fight with
+    /// nobody in it stops there and picks up afterwards on a number the fight leaves
+    /// behind; until this beat there was no afterwards, so everything below was read past
+    /// and thrown away in the same frame.
+    /// </para>
+    /// </summary>
+    private static void WriteAfterFights(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("What a script says once its own fight is over");
+
+        BattleOutcomes? outcomes = BattleOutcomeLocator.Locate(rom, Console.WriteLine);
+
+        if (outcomes is null) return;
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        int fights = 0;
+        int speaking = 0;
+
+        foreach (LoadedMap map in library.All())
+        {
+            foreach (MapObject person in map.Objects.Where(o => o.HasScript))
+            {
+                // Every one of them, not only the one today's save would reach. The
+                // sleepers and the one-of-a-kind creatures all keep their fight behind a
+                // flag, so a run from a fresh save finds three of the nine.
+                foreach (uint resumes in ScriptReader.AfterTheWildFights(rom, person.ScriptAddress))
+                {
+                fights++;
+
+                Console.WriteLine();
+                Console.WriteLine(
+                    $"  {WorldExporter.MapId(map.Bank, map.Number)} person {person.LocalId} at " +
+                    $"({person.X}, {person.Y}): picks up at 0x{resumes:X8}");
+
+                bool said = false;
+
+                foreach ((string label, int outcome) in new[]
+                         {
+                             ("won", outcomes.Won),
+                             ("walked away", outcomes.Ran),
+                             ("caught", outcomes.Caught),
+                         })
+                {
+                    var state = new ScriptState();
+                    state.Write(0x800D, outcome);
+
+                    ScriptRun rest = ScriptRunner.Run(rom, resumes, state);
+
+                    if (rest.Pages.Count == 0)
+                    {
+                        Console.WriteLine($"    {label,-12} ({outcome}): nothing");
+                        continue;
+                    }
+
+                    said = true;
+
+                    Console.WriteLine(
+                        $"    {label,-12} ({outcome}): \"{GameText.ToAscii(rest.Pages[0]).Replace("\n", " ")}\"" +
+                        (rest.Pages.Count > 1 ? $" (+{rest.Pages.Count - 1} more)" : ""));
+                }
+
+                if (said) speaking++;
+                }
+            }
+        }
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  {fights} scripts stop for a fight with nobody in it, and {speaking} of them " +
+            "have something to say once it is over");
+    }
+
     private static void WriteSilentPeople(Rom rom)
     {
         Console.WriteLine();
@@ -5975,6 +6054,8 @@ public static class Program
                                      commands stop them
               --new-game             report the flags and variables a new save already
                                      holds, and who they keep off the map
+              --after-fights         report what every script that starts a fight with
+                                     nobody in it says once the fight is over
               --script-map <b.m>     dump every script on one map, decoded and as bytes
               --export-rules <path>  write the rules file the server resolves battles
                                      against: base stats, move power, catch rates and
@@ -6110,6 +6191,9 @@ public static class Program
         /// <summary>Report the flags and variables a brand new save already holds.</summary>
         public bool NewGame { get; private init; }
 
+        /// <summary>Report what a script says once the fight it started is over.</summary>
+        public bool AfterFights { get; private init; }
+
         /// <summary>Print what follows one unknown command, everywhere it appears.</summary>
         public byte? BytesAfter { get; private init; }
 
@@ -6187,6 +6271,7 @@ public static class Program
             bool audit = false;
             bool ledges = false;
             bool newGame = false;
+            bool afterFights = false;
             byte? bytesAfter = null;
             bool glyphs = false;
             uint font = 0;
@@ -6379,6 +6464,9 @@ public static class Program
                     case "--new-game":
                         newGame = true;
                         break;
+                    case "--after-fights":
+                        afterFights = true;
+                        break;
                     case "--bytes-after":
                         string which = Next(args, ref i, "--bytes-after");
                         bytesAfter = Convert.ToByte(
@@ -6516,6 +6604,7 @@ public static class Program
                 Audit = audit,
                 Ledges = ledges,
                 NewGame = newGame,
+                AfterFights = afterFights,
                 BytesAfter = bytesAfter,
                 Glyphs = glyphs,
                 Font = font,

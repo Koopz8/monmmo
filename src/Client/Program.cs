@@ -46,6 +46,12 @@ public static class Program
     /// </summary>
     private const int NamingSlot = 0x8004;
 
+    /// <summary>
+    /// Where a script leaves and looks for an answer: a question's yes or no, and how a
+    /// fight came out. One variable for both, which is the cartridge's own arrangement.
+    /// </summary>
+    private const int Result = 0x800D;
+
     public static int Main(string[] args)
     {
         // The working directory, not the build output, so the file sits alongside the
@@ -170,6 +176,30 @@ public static class Program
     /// fight is the same script that says his name.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Where a script stopped for a fight with nobody in it, kept until the fight is over.
+    /// <para>
+    /// A mutable note rather than a return value because a script can start a fight from
+    /// six different places — talking, arriving, answering a question — and every one of
+    /// them already hands back what the player should be looking at. What is wanted here
+    /// is what they should be looking at <em>next</em>, and only one thing knows when
+    /// that is: the battle screen closing.
+    /// </para>
+    /// </summary>
+    private sealed class ScriptedFight
+    {
+        /// <summary>The address the run stopped at, or nothing when no script is waiting.</summary>
+        public uint? ResumesAt { get; set; }
+
+        public uint? Take()
+        {
+            uint? was = ResumesAt;
+            ResumesAt = null;
+
+            return was;
+        }
+    }
+
     private sealed class RivalFight
     {
         public bool Next { get; set; }
@@ -240,6 +270,11 @@ public static class Program
     {
         using var view = new MapView(library, first);
 
+        // What the number a finished fight leaves behind means, read off this cartridge
+        // rather than remembered. Nothing breaks without it: a script that stopped for a
+        // fight simply does not pick up again, which is what happened until now.
+        BattleOutcomes? outcomes = BattleOutcomeLocator.Locate(data.Rom, Note);
+
         // The cartridge's own walking figures, if they can be read. A rectangle is the
         // fallback rather than a failure: a client that will not start because it could
         // not find a sprite table is worse than one that draws a box.
@@ -271,8 +306,15 @@ public static class Program
         // they say afterwards — which for the rival is losing gracefully and leaving.
         uint? afterTheFight = null;
 
+        // And the same for a fight with nobody in it. A wild fight a script started stops
+        // that script where it stands; what comes after is behind the question "how did
+        // it go", which is a question only the server can answer.
+        uint? afterTheWildFight = null;
+        int? cameOut = null;
+
         // Which of the fights ahead is with him, set by whichever script picks one.
         var rival = new RivalFight();
+        var waiting = new ScriptedFight();
 
         // A scene, when a script turns out to be one. Kept beside the text box rather
         // than inside it: a box is one thing being said and a scene is an order of
@@ -397,7 +439,7 @@ public static class Program
                 network, others, player, view, data, trainers, items, script, carrying,
                 ref talking, ref battle, ref shop, ref bag, ref party, ref money,
                 ref correction, ref watching, ref exclaimFor, ref scene, ref arrived, ref fadingIn, ref holdInput,
-                ref afterTheFight, rival, console);
+                ref afterTheFight, ref cameOut, outcomes, rival, console);
 
             // A battle suspends the overworld entirely: the server is running it, and
             // walking on meanwhile would put the two sides out of step.
@@ -449,8 +491,27 @@ public static class Program
                         Note($"after the fight, 0x{again:X8} ran again: " +
                              $"{rest.Pages.Count} pages, {rest.Beats.Count} beats");
 
-                        (talking, scene) = Present(data, view, network, script, rest);
+                        (talking, scene) = Present(data, view, network, script, rest, waiting);
                     }
+
+                    // And the other kind of afterwards: a fight with nobody in it, which
+                    // a script started and then stood still for. It picks up where it
+                    // stopped, with how the fight went written where the script looks —
+                    // and the sleeper on ROUTE 12 finally says what it has always said.
+                    else if (waiting.Take() is { } carryOn && cameOut is { } howItWent)
+                    {
+                        script.Write(Result, howItWent);
+
+                        ScriptRun rest = ScriptRunner.Run(
+                            data.Rom, carryOn, script.WithParty(party.Select(m => m.Moves)));
+
+                        Note($"after the wild fight, 0x{carryOn:X8} carried on with {Result:X} = " +
+                             $"{howItWent}: {rest.Pages.Count} pages, {rest.Beats.Count} beats");
+
+                        (talking, scene) = Present(data, view, network, script, rest, waiting);
+                    }
+
+                    cameOut = null;
                 }
 
                 continue;
@@ -572,7 +633,7 @@ public static class Program
                     // And then whatever the script was going to do next, which for the
                     // ball on the professor's table is the rival taking his own.
                     if (named.Rest is { } rest)
-                        (talking, scene) = Present(data, view, network, script, rest);
+                        (talking, scene) = Present(data, view, network, script, rest, waiting);
 
                     if (talking is null && scene is null) network.SendTalkFinished();
                 }
@@ -627,14 +688,14 @@ public static class Program
                     // run stopped where it was asked because nothing in a save can answer
                     // it; now somebody has, so the rest of it runs with the answer in
                     // place — which is how a starter gets taken rather than declined.
-                    (talking, scene, naming) = Answered(data, view, network, script, party, answered);
+                    (talking, scene, naming) = Answered(data, view, network, script, party, answered, waiting);
 
                     if (talking is null && scene is null && naming is null) network.SendTalkFinished();
                 }
             }
             else if (DialogueBox.Pressed() && !player.IsStepping)
             {
-                talking = Talk(data, view, player, network, script, party, rival);
+                talking = Talk(data, view, player, network, script, party, rival, waiting);
             }
 
             exclaimFor = Math.Max(0f, exclaimFor - delta);
@@ -693,7 +754,7 @@ public static class Program
 
                 DialogueBox? before = talking;
 
-                (talking, scene) = OnArrival(data, view, network, script, party, talking);
+                (talking, scene) = OnArrival(data, view, network, script, party, talking, waiting);
 
                 // And whatever is waiting on the square, if the map itself had nothing.
                 // This used to be unreachable: arriving through a door landed you on the
@@ -702,13 +763,13 @@ public static class Program
                 // square somebody stands on can be a trigger — and standing somewhere is
                 // standing somewhere however you came to be there.
                 if (scene is null && ReferenceEquals(talking, before))
-                    (talking, scene) = Arrive(data, view, player, network, script, party, talking, rival);
+                    (talking, scene) = Arrive(data, view, player, network, script, party, talking, rival, waiting);
             }
             else if (!player.IsStepping && player.Square != standingOn && scene is null)
             {
                 standingOn = player.Square;
 
-                (talking, scene) = Arrive(data, view, player, network, script, party, talking, rival);
+                (talking, scene) = Arrive(data, view, player, network, script, party, talking, rival, waiting);
             }
 
             foreach (RemoteCharacter other in others.Values) other.Update(delta);
@@ -840,7 +901,7 @@ public static class Program
 
     private static DialogueBox? Talk(
         GameData data, MapView view, WalkingCharacter player, NetworkClient network, ScriptState script,
-        IReadOnlyList<SavedMon> party, RivalFight rival)
+        IReadOnlyList<SavedMon> party, RivalFight rival, ScriptedFight waiting)
     {
         // Where the server says people are, which after a few seconds of wandering is
         // nowhere near where the cartridge put them.
@@ -958,7 +1019,7 @@ public static class Program
         // said "tester received a NUGGET from the mystery TRAINER!" to a bag with a
         // POKe BALL in it and nothing else, and nothing anywhere reported a problem.
         Handed(run, script, network);
-        Fought(run, script, network);
+        Fought(run, script, network, waiting);
 
         // A counter that heals asks, and until now this project answered for the player.
         // The yes and the no are inside a standard routine — code, never followed here —
@@ -1008,7 +1069,7 @@ public static class Program
     /// </summary>
     private static (DialogueBox? Talking, Cutscene? Scene) Arrive(
         GameData data, MapView view, WalkingCharacter player, NetworkClient network, ScriptState script,
-        IReadOnlyList<SavedMon> party, DialogueBox? talking, RivalFight rival)
+        IReadOnlyList<SavedMon> party, DialogueBox? talking, RivalFight rival, ScriptedFight waiting)
     {
         if (view.Map.Triggers.FirstOrDefault(t =>
                 t.Square == player.Square && t.HasScript && t.Armed(script.Read(t.Variable))) is not { } trigger)
@@ -1041,7 +1102,7 @@ public static class Program
         // already spent.
         network.SendTriggerFired(player.Square.X, player.Square.Y, fight);
 
-        return Play(data, view, network, script, party, talking, [trigger.ScriptAddress]);
+        return Play(data, view, network, script, party, talking, [trigger.ScriptAddress], waiting);
     }
 
     /// <summary>
@@ -1061,7 +1122,7 @@ public static class Program
     /// </summary>
     private static (DialogueBox? Talking, Cutscene? Scene) OnArrival(
         GameData data, MapView view, NetworkClient network, ScriptState script,
-        IReadOnlyList<SavedMon> party, DialogueBox? talking)
+        IReadOnlyList<SavedMon> party, DialogueBox? talking, ScriptedFight waiting)
     {
         List<uint> armed = MapEntryScript.ArmedIn(view.Map.OnEntry, script.Read);
 
@@ -1070,7 +1131,7 @@ public static class Program
         Note($"arriving on {view.MapId} runs {armed.Count}: " +
              string.Join(", ", armed.Select(a => $"0x{a:X8}")));
 
-        return Play(data, view, network, script, party, talking, armed);
+        return Play(data, view, network, script, party, talking, armed, waiting);
     }
 
     /// <summary>
@@ -1083,7 +1144,8 @@ public static class Program
     /// </summary>
     private static (DialogueBox? Talking, Cutscene? Scene) Play(
         GameData data, MapView view, NetworkClient network, ScriptState script,
-        IReadOnlyList<SavedMon> party, DialogueBox? talking, IReadOnlyList<uint> addresses)
+        IReadOnlyList<SavedMon> party, DialogueBox? talking, IReadOnlyList<uint> addresses,
+        ScriptedFight waiting)
     {
         // All of them, in the order the cartridge wrote them, rather than the first.
         // A doorway can have more than one thing armed at once — the professor's lab has
@@ -1147,7 +1209,7 @@ public static class Program
     /// </summary>
     private static (DialogueBox? Talking, Cutscene? Scene, NamingScreen? Naming) Answered(
         GameData data, MapView view, NetworkClient network, ScriptState script,
-        IReadOnlyList<SavedMon> party, DialogueBox asked)
+        IReadOnlyList<SavedMon> party, DialogueBox asked, ScriptedFight waiting)
     {
         // A question with no script behind it, which is the counter in a POKeMON
         // CENTER. Nothing to carry on from; there is only the answer to send.
@@ -1188,7 +1250,7 @@ public static class Program
             return (null, null, new NamingScreen(slot, species, data.SuggestedNames) { Rest = run });
         }
 
-        (DialogueBox? box, Cutscene? scene) = Present(data, view, network, script, run);
+        (DialogueBox? box, Cutscene? scene) = Present(data, view, network, script, run, waiting);
 
         return (box, scene, null);
     }
@@ -1202,7 +1264,8 @@ public static class Program
     /// </para>
     /// </summary>
     private static (DialogueBox? Talking, Cutscene? Scene) Present(
-        GameData data, MapView view, NetworkClient network, ScriptState script, ScriptRun run)
+        GameData data, MapView view, NetworkClient network, ScriptState script, ScriptRun run,
+        ScriptedFight waiting)
     {
         // What comes after an answer is not always more talking. Saying yes to the ball
         // on the professor's table runs on into the rival taking his and walking over,
@@ -1221,7 +1284,7 @@ public static class Program
         TakeAway(run, view, script, network);
 
         Handed(run, script, network);
-        Fought(run, script, network);
+        Fought(run, script, network, waiting);
 
         var box = new DialogueBox(run.Pages, run.Question);
 
@@ -1279,13 +1342,19 @@ public static class Program
     /// before it fields anything.
     /// </para>
     /// </summary>
-    private static void Fought(ScriptRun run, ScriptState script, NetworkClient network)
+    private static void Fought(
+        ScriptRun run, ScriptState script, NetworkClient network, ScriptedFight waiting)
     {
         if (run.WildBattle is not { } fight) return;
 
         int who = script.Read(TalkingTo);
 
         if (who is <= 0 or >= 64) return;
+
+        // Where to pick the script up once the fight is over. Kept even though the server
+        // may yet refuse the fight: a note nobody reads costs nothing, and the next thing
+        // that starts a fight overwrites it.
+        waiting.ResumesAt = run.ResumesAfterTheFight;
 
         network.SendScriptFought(who, fight.Species, fight.Level);
     }
@@ -1486,6 +1555,8 @@ public static class Program
         ref float fadingIn,
         ref float holdInput,
         ref uint? afterTheFight,
+        ref int? cameOut,
+        BattleOutcomes? outcomes,
         RivalFight rival,
         ConsoleBox console)
     {
@@ -1808,6 +1879,16 @@ public static class Program
                 case BattleFinished finished:
                     battle?.Apply(finished);
                     money = finished.Money;
+
+                    // How it went, in the cartridge's numbering rather than in ours. A
+                    // loss is left out on purpose: the script does not carry on past a
+                    // fight that ended with the player face down in a POKeMON CENTER,
+                    // and neither does this.
+                    cameOut = outcomes is null || finished.Winner == Side.Opponent
+                        ? null
+                        : finished.Caught ? outcomes.Caught
+                        : finished.Winner == Side.Player ? outcomes.Won
+                        : outcomes.Ran;
 
                     // A fight is where health actually changes. Without this the bag
                     // would open on a party that was last accurate at login and offer

@@ -1147,6 +1147,92 @@ public static class ScriptReader
     /// reached by talking are the eight gym leaders.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Every item a script could ever hand over, whichever way it does it.
+    /// <para>
+    /// Read rather than run, and for the usual reason: which item, if any, depends on a
+    /// save this has never seen. What travels is the list of answers a client is allowed
+    /// to give, and the server checks a handover against it.
+    /// </para>
+    /// <para>
+    /// Two shapes, because this cartridge has two. <c>giveitem</c> names the item in its
+    /// own arguments. The other writes the item into 0x8000 and the count into 0x8001 and
+    /// calls a standard routine to say the sentence and put it in the bag — which is how
+    /// the girl lost in the BERRY FOREST hands over what she was sent for, and how the
+    /// list came to be missing it.
+    /// </para>
+    /// <para>
+    /// The second shape is only counted when the script actually calls a routine. A write
+    /// to 0x8000 on its own is a script passing a number to something, and a number is
+    /// not an item until somebody is asked to hand it over.
+    /// </para>
+    /// </summary>
+    public static IEnumerable<int> EverythingItCouldGive(Rom rom, uint address)
+    {
+        List<ScriptCommand> all = [.. ReadAll(rom, address)];
+
+        IEnumerable<int> named = all
+            .Where(c => c.Code is 0x44 or 0x46)
+            .Select(c => c.Word());
+
+        bool calls = all.Any(c => c.Code is ScriptCommands.CallStandard or 0x08);
+
+        IEnumerable<int> buffered = calls
+            ? all.Where(c => c.Code == 0x1A && c.Word() == 0x8000).Select(c => c.Word(2))
+            : [];
+
+        return named.Concat(buffered).Where(id => id > 0).Distinct();
+    }
+
+    /// <summary>
+    /// Where every fight this script could ever start would pick up again.
+    /// <para>
+    /// Read rather than run, and only for asking the question in bulk: a run walks the
+    /// branch today's save takes, and every sleeper and every one-of-a-kind creature in
+    /// the game keeps its fight behind a flag a fresh save has not set. At runtime the
+    /// run's own answer is the right one — it is where the script actually was.
+    /// </para>
+    /// </summary>
+    public static IEnumerable<uint> AfterTheWildFights(Rom rom, uint address)
+    {
+        var after = new List<uint>();
+
+        foreach (uint block in Reachable(rom, address))
+        {
+            List<ScriptCommand> commands = [.. Read(rom, block)];
+
+            bool setUp = false;
+
+            for (int i = 0; i < commands.Count; i++)
+            {
+                ScriptCommand command = commands[i];
+
+                if (command.Code == 0xB6) setUp = true;
+
+                // The command, and the code routine that stands where it stands. A
+                // special followed by a waitstate is the script handing the screen over
+                // and stopping — which is what a naming screen, a trade and a slot
+                // machine all look like too, so it only counts as a fight when a creature
+                // has just been set up for one. Without that it is a hundred and eighty-
+                // eight scripts, most of them the CABLE CLUB.
+                bool fights =
+                    command.Code == 0xB7 ||
+                    (setUp &&
+                     command.Code == SpecialCalls.Special &&
+                     i + 1 < commands.Count &&
+                     commands[i + 1].Code == 0x27);
+
+                if (!fights) continue;
+
+                int end = command.Offset + 1 + command.Arguments.Length;
+
+                after.Add(Rom.BaseAddress + (uint)(command.Code == 0xB7 ? end : end + 1));
+            }
+        }
+
+        return after.Distinct();
+    }
+
     public static uint? AfterTheFight(Rom rom, uint address, int trainerId)
     {
         foreach (ScriptCommand command in ReadAll(rom, address))
