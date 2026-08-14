@@ -1300,18 +1300,38 @@ public static class Program
         // know, heaviest first. Everything else in this report is context.
         Console.WriteLine();
         Console.WriteLine("  What is still silent, by how many moves it costs (effect 0 is not silent,");
-        Console.WriteLine("  it is a move with nothing to do beyond hitting). A group can be silent");
-        Console.WriteLine("  here and still work: 0x11 is SWIFT and AERIAL ACE, which never miss because");
-        Console.WriteLine("  their records carry no accuracy, and that is read where accuracy is read.");
+        Console.WriteLine("  it is a move with nothing to do beyond hitting).");
+        Console.WriteLine();
+        Console.WriteLine("  Marked groups already have part of what they do in the record rather than");
+        Console.WriteLine("  in the effect byte, and that part is applied where the field is read: a");
+        Console.WriteLine("  damaging group whose records carry no accuracy never misses, and one whose");
+        Console.WriteLine("  records carry a priority moves out of turn. For 0x11 and 0x67 that is the");
+        Console.WriteLine("  whole of it and they are not silent at all, which this report used to deny.");
+
+        // A group of damaging moves every one of which carries the field is a group that
+        // field explains — at least in part. Damaging on purpose: every status move on
+        // this cartridge carries no accuracy, because that is what "always hits" looks
+        // like in a record, so without that clause the rule swallows sixty-three groups
+        // and says nothing.
+        var inTheRecord = byEffect
+            .Where(g => g.Key != 0)
+            .Where(g => g.All(m => m.Power > 0))
+            .Where(g => g.All(m => m.Accuracy == 0) || g.All(m => m.Priority != 0))
+            .Select(g => g.Key)
+            .ToHashSet();
 
         foreach (var group in byEffect
                      .Where(g => g.Key != 0 && Core.Battle.MoveEffects.Of(g.Key).Kind == Core.Battle.EffectKind.None)
                      .OrderByDescending(g => g.Count())
                      .Take(16))
         {
+            string mark = inTheRecord.Contains(group.Key)
+                ? group.All(m => m.Accuracy == 0) ? "  <- never misses, off the record" : "  <- moves out of turn, off the record"
+                : "";
+
             Console.WriteLine(
                 $"    0x{group.Key:X2}  {group.Count(),3} moves   " +
-                string.Join(", ", group.Select(m => m.Name).Take(6)));
+                string.Join(", ", group.Select(m => m.Name).Take(6)) + mark);
         }
 
         Console.WriteLine();

@@ -146,6 +146,21 @@ public static class BattleNarrator
         // names are said: "evolved!" on its own leaves the player looking at a list.
         BattleEvent.Evolved e => $"{names.SpeciesNamed(e.From)} evolved into {names.SpeciesNamed(e.Into)}!",
 
+        // The four that take more than one turn. Each says what is owed rather than what
+        // it looks like: the games have a different picture for FLY and DIG and this
+        // project has no animation for either, so the honest line is the one about the
+        // turn.
+        BattleEvent.WentAway e =>
+            $"{names.Of(e.Side)} vanished with {names.MoveNamed(e.MoveId)} — it lands next turn!",
+
+        BattleEvent.Recharging e => $"{names.Of(e.Side)} must recharge after {names.MoveNamed(e.MoveId)}!",
+
+        BattleEvent.Trapped e => $"{names.Of(e.Side)} was caught in {names.MoveNamed(e.MoveId)}!",
+
+        BattleEvent.TrapHurt e => $"{names.Of(e.Side)} is hurt by {names.MoveNamed(e.MoveId)}!",
+
+        BattleEvent.BrokeFree e => $"{names.Of(e.Side)} got free of {names.MoveNamed(e.MoveId)}!",
+
         BattleEvent.MoveNotLearned e =>
             $"{names.Of(e.Side)} wants to learn {names.MoveNamed(e.MoveId)}, but already knows four moves.",
 

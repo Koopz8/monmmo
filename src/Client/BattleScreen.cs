@@ -323,6 +323,8 @@ public sealed class BattleScreen
         foreach (BattleEvent.MoveNotLearned offered in update.Events.OfType<BattleEvent.MoveNotLearned>())
             _offered.Enqueue(offered.MoveId);
 
+        _noChoiceBut = update.NoChoiceBut;
+
         _you = _you with { CurrentHp = update.YourHp };
         _opponent = _opponent with { CurrentHp = update.OpponentHp };
         Balls = update.Balls;
@@ -432,9 +434,31 @@ public sealed class BattleScreen
         Phase = IsOver ? BattlePhase.Finished : BattlePhase.ChoosingMove;
     }
 
+    /// <summary>
+    /// Which move the next turn is already spoken for, if it is.
+    /// <para>
+    /// The server's answer, not a guess: a client that worked out for itself when THRASH
+    /// ends would be a second copy of a rule, and the second copy is always the one that
+    /// is wrong.
+    /// </para>
+    /// </summary>
+    private int? _noChoiceBut;
+
     private void ChooseMove()
     {
         if (_moveNames.Count == 0) return;
+
+        // Halfway through a move that takes more than one turn. Nothing is asked, and
+        // the turn is sent the moment the reading finishes — the slot does not matter,
+        // because the engine takes the one it is holding whatever arrives.
+        if (_noChoiceBut is not null)
+        {
+            // Sent without a word. The next update opens with "used THRASH!", which says
+            // it better than a line explaining that nothing was asked would.
+            Choose(new BattleAction.UseMove(_selectedMove));
+
+            return;
+        }
 
         if (Raylib.IsKeyPressed(KeyboardKey.Down) || Raylib.IsKeyPressed(KeyboardKey.S))
             _selectedMove = (_selectedMove + 1) % _moveNames.Count;

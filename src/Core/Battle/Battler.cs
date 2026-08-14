@@ -90,6 +90,55 @@ public sealed class Battler
 
     public bool IsConfused => ConfusedTurns > 0;
 
+    /// <summary>
+    /// True while the next turn is owed to the last one.
+    /// <para>
+    /// HYPER BEAM's whole cost. On the battler beside confusion and for the same reason:
+    /// it belongs to the creature that did it, so switching out ends it — which is the
+    /// rule these games have, and it falls out of the arrangement rather than needing a
+    /// line.
+    /// </para>
+    /// </summary>
+    public bool MustRecharge { get; set; }
+
+    /// <summary>Which move the debt is owed to, so the sentence can name it.</summary>
+    public int RechargingAfter { get; set; }
+
+    /// <summary>
+    /// Which move slot this battler has no choice about, and for how many more turns.
+    /// <para>
+    /// One field for two things that look different and are the same: FLY has gone
+    /// somewhere and must come down, THRASH has started and must finish. Both mean the
+    /// player is not asked this turn, and the engine takes the move it is holding.
+    /// </para>
+    /// </summary>
+    public int? ForcedSlot { get; set; }
+
+    public int ForcedTurns { get; set; }
+
+    /// <summary>
+    /// True while this one is somewhere a move cannot reach.
+    /// <para>
+    /// The half of FLY that matters. Without it the move is a turn thrown away for a
+    /// slightly better hit, which is worse than not having it.
+    /// </para>
+    /// </summary>
+    public bool IsAway { get; set; }
+
+    /// <summary>What is holding this one, and for how many more turns.</summary>
+    public int TrappedTurns { get; set; }
+
+    public int TrappedBy { get; set; }
+
+    /// <summary>Everything a turn can owe the next one, forgotten at once.</summary>
+    public void ForgetWhatWasStarted()
+    {
+        MustRecharge = false;
+        ForcedSlot = null;
+        ForcedTurns = 0;
+        IsAway = false;
+    }
+
     public PokemonType Type1 => Species.Type1;
     public PokemonType Type2 => Species.Type2;
 

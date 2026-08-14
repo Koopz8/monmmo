@@ -620,7 +620,20 @@ public sealed record BattleUpdate(
     /// somebody who fainted two turns ago.
     /// </para>
     /// </summary>
-    IReadOnlyList<SavedMon>? Party = null) : NetMessage;
+    IReadOnlyList<SavedMon>? Party = null) : NetMessage
+{
+    /// <summary>
+    /// Which move the next turn is already spoken for, or nothing when there is a choice.
+    /// <para>
+    /// Halfway through THRASH, or in the air with FLY, there is no decision to make: the
+    /// engine takes the move it is holding whatever arrives. The server was already doing
+    /// that and the client was still drawing four lit options and taking a keypress, which
+    /// is the shape of every client/server disagreement this project has had — one side
+    /// enforcing a rule and the other not knowing there is one.
+    /// </para>
+    /// </summary>
+    public int? NoChoiceBut { get; init; }
+}
 
 /// <summary>
 /// The battle is over. Carries the party back because it may have just grown.

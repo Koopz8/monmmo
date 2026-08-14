@@ -47,6 +47,11 @@ public enum Side
 [JsonDerivedType(typeof(MoveLearned), "learned")]
 [JsonDerivedType(typeof(MoveNotLearned), "notlearned")]
 [JsonDerivedType(typeof(Evolved), "evolved")]
+[JsonDerivedType(typeof(WentAway), "wentaway")]
+[JsonDerivedType(typeof(Recharging), "recharging")]
+[JsonDerivedType(typeof(Trapped), "trapped")]
+[JsonDerivedType(typeof(TrapHurt), "traphurt")]
+[JsonDerivedType(typeof(BrokeFree), "brokefree")]
 [JsonDerivedType(typeof(Ended), "ended")]
 public abstract record BattleEvent
 {
@@ -141,6 +146,24 @@ public abstract record BattleEvent
     /// </para>
     /// </summary>
     public sealed record Evolved(Side Side, int From, int Into) : BattleEvent;
+
+    /// <summary>
+    /// Went somewhere a move cannot reach, and will land next turn.
+    /// <para>
+    /// The move id travels because the sentence is about the move — FLY and DIG are the
+    /// same rule and not the same picture — and because only the client can name it.
+    /// </para>
+    /// </summary>
+    public sealed record WentAway(Side Side, int MoveId) : BattleEvent;
+
+    /// <summary>The turn the last one cost.</summary>
+    public sealed record Recharging(Side Side, int MoveId) : BattleEvent;
+
+    public sealed record Trapped(Side Side, int MoveId) : BattleEvent;
+
+    public sealed record TrapHurt(Side Side, int MoveId, int Damage, int RemainingHp) : BattleEvent;
+
+    public sealed record BrokeFree(Side Side, int MoveId) : BattleEvent;
 
     /// <summary>
     /// A move was offered and could not be taken, because four are already known.
@@ -300,6 +323,12 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
 
         TurnNumber++;
 
+        // Before the order is decided, because a forced move is the move whose priority
+        // counts. A QUICK ATTACK against somebody halfway through THRASH is still first,
+        // and it is first against the move they are actually about to make.
+        playerAction = Forced(Player) ?? playerAction;
+        opponentAction = Forced(Opponent) ?? opponentAction;
+
         foreach (Side side in DecideOrder(playerAction, opponentAction))
         {
             if (IsOver) break;
@@ -335,6 +364,17 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         return _rng.OneIn(2) ? [Side.Player, Side.Opponent] : [Side.Opponent, Side.Player];
     }
 
+    /// <summary>
+    /// The move this one has no choice about, when it has none.
+    /// <para>
+    /// Whatever the player pressed is discarded, which is the point: a creature in the
+    /// middle of THRASH or halfway through FLY is not being asked. The client is not
+    /// stopped from asking — it does not know — and the answer is simply not used.
+    /// </para>
+    /// </summary>
+    private static BattleAction? Forced(Battler battler) =>
+        battler.ForcedSlot is { } slot && !battler.HasFainted ? new BattleAction.UseMove(slot) : null;
+
     private static int PriorityOf(Battler battler, BattleAction action) =>
         action is BattleAction.UseMove use && battler.MoveAt(use.Slot) is { } move ? move.Priority : 0;
 
@@ -366,11 +406,64 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         MoveData? move = action is BattleAction.UseMove use ? attacker.MoveAt(use.Slot) : null;
         if (move is null) return;
 
+        MoveEffect kind = MoveEffects.Of(move.Effect);
+
+        // The first half of FLY. Nothing is announced as used yet — what happened is
+        // that something left — and the slot is held so the next turn takes it back.
+        if (kind.Kind == EffectKind.TwoTurn && attacker.ForcedSlot is null)
+        {
+            attacker.ForcedSlot = (action as BattleAction.UseMove)!.Slot;
+            attacker.ForcedTurns = 1;
+            attacker.IsAway = true;
+
+            events.Add(new BattleEvent.WentAway(side, move.Id));
+
+            return;
+        }
+
+        // And the landing: it is here, it is hittable again, and it is not forced any
+        // more. Cleared before the move resolves so that a knockout leaves nothing owed.
+        if (kind.Kind == EffectKind.TwoTurn)
+        {
+            attacker.IsAway = false;
+            attacker.ForcedSlot = null;
+            attacker.ForcedTurns = 0;
+        }
+
         events.Add(new BattleEvent.MoveUsed(side, move.Id));
+
+        // The lock starts when the move is used, not when it lands. A THRASH that misses
+        // is still a THRASH: the games do not let go because the swing went wide, and
+        // starting the count on the hit would have made a miss on the first turn a way
+        // out of it.
+        if (kind.Kind == EffectKind.LockedIn && attacker.ForcedSlot is null && action is BattleAction.UseMove chosen)
+        {
+            // Two turns or three. Modelled, not read: nothing in THRASH's record says
+            // how long it goes on for.
+            attacker.ForcedSlot = chosen.Slot;
+            attacker.ForcedTurns = _rng.OneIn(2) ? 2 : 3;
+        }
+
+        // Somewhere a move cannot reach. Checked before accuracy rather than folded into
+        // it, because a move that would never have missed still cannot hit what is not
+        // there — and SWIFT never misses.
+        if (defender.IsAway)
+        {
+            events.Add(new BattleEvent.MoveMissed(side, move.Id));
+
+            EndLockedIn(side, attacker, events);
+
+            return;
+        }
 
         if (!DamageCalculator.RollAccuracy(_rng, move, attacker, defender))
         {
             events.Add(new BattleEvent.MoveMissed(side, move.Id));
+
+            // A thrash that misses is still a thrash. It goes on, and it still ends in
+            // the same place.
+            EndLockedIn(side, attacker, events);
+
             return;
         }
 
@@ -383,7 +476,7 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             return;
         }
 
-        MoveEffect carried = MoveEffects.Of(move.Effect);
+        MoveEffect carried = kind;
 
         // How many times, and how likely a critical. Both are read off the move's group
         // rather than off its record — see MoveEffects — and the numbers here are
@@ -442,6 +535,27 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             if (attacker.HasFainted) events.Add(new BattleEvent.Fainted(side));
         }
 
+        // What the turn owes. All three are settled here rather than in Apply, because
+        // they are not riders on a hit — they do not roll against the move's secondary
+        // chance, and two of them are about the user rather than the target.
+        if (carried.Kind == EffectKind.Recharge && landed > 0)
+        {
+            attacker.MustRecharge = true;
+            attacker.RechargingAfter = move.Id;
+        }
+
+        if (carried.Kind == EffectKind.LockedIn) EndLockedIn(side, attacker, events);
+
+        if (carried.Kind == EffectKind.Trap && total > 0 && !defender.HasFainted && defender.TrappedTurns == 0)
+        {
+            // Two to five turns, weighted low, like the multi-hit count and marked the
+            // same way: what is read is that the group holds on at all.
+            defender.TrappedTurns = _rng.Next(8) switch { < 3 => 2, < 6 => 3, < 7 => 4, _ => 5 };
+            defender.TrappedBy = move.Id;
+
+            events.Add(new BattleEvent.Trapped(Other(side), move.Id));
+        }
+
         if (defender.HasFainted)
         {
             events.Add(new BattleEvent.Fainted(Other(side)));
@@ -451,6 +565,33 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         // And whatever rides on the hit. Nothing rides on a knockout, which is why this
         // is after the faint rather than beside the damage.
         Apply(side, attacker, defender, move, events, rolled: true);
+    }
+
+    /// <summary>
+    /// Counts a locked-in move down, and ends it the way it ends.
+    /// <para>
+    /// THRASH's price is not the turns — it is what is left standing there afterwards.
+    /// Called on the miss as well as the hit, because a thrash that misses is still a
+    /// thrash and still tires the thing doing it.
+    /// </para>
+    /// </summary>
+    private void EndLockedIn(Side side, Battler attacker, List<BattleEvent> events)
+    {
+        if (attacker.ForcedSlot is null) return;
+
+        attacker.ForcedTurns--;
+
+        if (attacker.ForcedTurns > 0) return;
+
+        attacker.ForcedSlot = null;
+
+        if (attacker.HasFainted || attacker.IsConfused) return;
+
+        // Two to five turns of it, and the same numbers CONFUSE RAY uses, because it is
+        // the same confusion and there is only one of it to model.
+        attacker.ConfusedTurns = 2 + _rng.Next(4);
+
+        events.Add(new BattleEvent.Confused(side));
     }
 
     /// <summary>
@@ -486,6 +627,14 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         MoveEffect effect = MoveEffects.Of(move.Effect);
 
         if (effect.Kind == EffectKind.None) return;
+
+        // The ones that are about turns rather than about the hit. They were settled
+        // where the turn was taken, and falling through to here gave them the default
+        // effect — a stage change of nothing, to a stat that has no stages — so WRAP
+        // landed and then said "The wild PIDGEY's HP won't go any lower!"
+        if (effect.Kind is EffectKind.Recharge or EffectKind.TwoTurn or EffectKind.LockedIn or EffectKind.Trap)
+            return;
+
         if (rolled && !_rng.Chance(move.SecondaryChance)) return;
 
         Side at = effect.OnUser ? side : Other(side);
@@ -567,6 +716,17 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
     /// </summary>
     private bool CanAct(Side side, Battler battler, List<BattleEvent> events)
     {
+        // Before everything, because it is not a condition and not a flinch — it is a
+        // debt. Paralysis does not get a chance to also take a turn that is already gone.
+        if (battler.MustRecharge)
+        {
+            battler.MustRecharge = false;
+
+            events.Add(new BattleEvent.Recharging(side, battler.RechargingAfter));
+
+            return false;
+        }
+
         // Before the conditions, because a flinch is not one. It lasts exactly as long
         // as the turn it was caused in, and it only reaches somebody who had not moved
         // yet — which is why nothing has to clear it for the loser of the speed roll.
@@ -661,6 +821,30 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         {
             Battler battler = Of(side);
             if (battler.HasFainted) continue;
+
+            // What is holding on, before what is inside. Both take a sixteenth and both
+            // can finish somebody; the order between them is arbitrary and stated here
+            // so that it is at least the same every time.
+            if (battler.TrappedTurns > 0)
+            {
+                battler.TrappedTurns--;
+
+                int held = battler.TakeDamage(Math.Max(1, battler.MaxHp / 16));
+
+                events.Add(new BattleEvent.TrapHurt(side, battler.TrappedBy, held, battler.CurrentHp));
+
+                if (battler.HasFainted)
+                {
+                    events.Add(new BattleEvent.Fainted(side));
+                    continue;
+                }
+
+                if (battler.TrappedTurns == 0)
+                {
+                    events.Add(new BattleEvent.BrokeFree(side, battler.TrappedBy));
+                    battler.TrappedBy = 0;
+                }
+            }
 
             if (battler.Status is not (StatusCondition.Poison or StatusCondition.Burn)) continue;
 

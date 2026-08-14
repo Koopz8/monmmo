@@ -32,6 +32,18 @@ public enum EffectKind
 
     /// <summary>Muddles the target, which may then hurt itself instead of acting.</summary>
     Confuse,
+
+    /// <summary>Costs the user its next turn.</summary>
+    Recharge,
+
+    /// <summary>Spends one turn going somewhere unreachable and lands on the next.</summary>
+    TwoTurn,
+
+    /// <summary>Repeats itself for a few turns and leaves the user confused.</summary>
+    LockedIn,
+
+    /// <summary>Holds the target for a few turns, hurting it at the end of each.</summary>
+    Trap,
 }
 
 /// <summary>
@@ -156,7 +168,11 @@ public static class MoveEffects
         0x2B => new MoveEffect(EffectKind.HighCritical, OnUser: false),
         0x1F or 0x96 => new MoveEffect(EffectKind.Flinch, OnUser: false),
         0x03 => new MoveEffect(EffectKind.Drain, OnUser: true),
-        0x30 => new MoveEffect(EffectKind.Recoil, OnUser: true),
+        //
+        // 0xC6 is DOUBLE-EDGE and VOLT TACKLE, and it is the same idea as 0x30 with a
+        // steeper price. The group was sitting one line away from working for as long as
+        // recoil has existed, doing nothing, because nobody had read its two members.
+        0x30 or 0xC6 => new MoveEffect(EffectKind.Recoil, OnUser: true),
         0x20 or 0x9D => new MoveEffect(EffectKind.Heal, OnUser: true),
 
         // Confusion, and it arrives both ways — which is the distinction this table was
@@ -166,6 +182,28 @@ public static class MoveEffects
         //   0x31   3 moves  SUPERSONIC, CONFUSE RAY, SWEET KISS
         //   0x4C   6 moves  PSYBEAM, CONFUSION, DIZZY PUNCH, DYNAMICPUNCH, SIGNAL BEAM, WATER PULSE
         0x31 or 0x4C => new MoveEffect(EffectKind.Confuse, OnUser: false),
+
+        // The four that take more than one turn, and the reason a fight with HYPER BEAM
+        // in it played out exactly like a fight without one. Read off membership like
+        // everything above — each of these groups is a list of one idea:
+        //
+        //   0x50   4 moves  HYPER BEAM, BLAST BURN, HYDRO CANNON, FRENZY PLANT
+        //   0x9B   4 moves  FLY, DIG, DIVE, BOUNCE
+        //   0x1B   3 moves  THRASH, PETAL DANCE, OUTRAGE
+        //   0x2A   6 moves  BIND, WRAP, FIRE SPIN, CLAMP, WHIRLPOOL, SAND TOMB
+        //
+        // Two of them corroborate themselves out of the records. The 0x50 four are all
+        // 150 power with 5 PP and nothing else on the cartridge is; the 0x2A six all
+        // carry a secondary chance of 100, which on a move that inflicts no condition is
+        // the record saying "this always does its other thing".
+        //
+        // How long each lasts is not in any record and is modelled where it is applied,
+        // beside the multi-hit count and the drain share, which were arrived at the same
+        // way and are marked the same way.
+        0x50 => new MoveEffect(EffectKind.Recharge, OnUser: true),
+        0x9B => new MoveEffect(EffectKind.TwoTurn, OnUser: true),
+        0x1B => new MoveEffect(EffectKind.LockedIn, OnUser: true),
+        0x2A => new MoveEffect(EffectKind.Trap, OnUser: false),
 
         _ => Stages(effect),
     };

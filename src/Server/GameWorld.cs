@@ -3369,7 +3369,15 @@ public sealed class GameWorld
                 new(
                     new BattleUpdate(
                         events, battle.Player.CurrentHp, battle.Opponent.CurrentHp,
-                        BallsOf(player), MedicineOf(player), [.. player.Party]),
+                        BallsOf(player), MedicineOf(player), [.. player.Party])
+                    {
+                        // And whether there is anything to decide next turn. Read off the
+                        // battler rather than tracked here, because the engine is the one
+                        // that knows and this is the one place both sides meet.
+                        NoChoiceBut = battle.Player.ForcedSlot is { } held && !battle.Player.HasFainted
+                            ? battle.Player.MoveAt(held)?.Id
+                            : null,
+                    },
                     OnlyTo: playerId),
             };
 
