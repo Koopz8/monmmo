@@ -117,6 +117,70 @@ public class EvolutionTests
         Assert.Contains(table.Evolutions, e => e.Method == 2);
     }
 
+    /// <summary>
+    /// The stone method is the one whose items are exactly the items that share a
+    /// routine. Matching one way is not enough: the trade-with-an-item method's six all
+    /// share the do-nothing routine too, along with a hundred and fifty others.
+    /// </summary>
+    [Fact]
+    public void TheItemMethodIsTheOneWhoseItemsAreExactlyTheOnesThatShareARoutine()
+    {
+        const uint UsedOnSomething = 0x080A1751;
+        const uint DoesNothing = 0x080A2239;
+
+        var routines = new Dictionary<int, uint>();
+
+        // The stones, and nothing else, run one routine.
+        foreach (int stone in new[] { 93, 94, 95, 96, 97, 98 }) routines[stone] = UsedOnSomething;
+
+        // Everything else runs the one that says no — including the trade items, which
+        // is what makes them look like the answer until the set is checked both ways.
+        for (int id = 1; id <= 250; id++) routines.TryAdd(id, DoesNothing);
+
+        EvolutionTable table = EvolutionExtractor.Locate(WithStones(), Species(), routines)!;
+
+        Assert.Equal(7, table.ByItem);
+        Assert.Equal([93, 94, 95, 96, 97, 98], table.Stones);
+    }
+
+    [Fact]
+    public void WithNoItemsToLookAtNoMethodIsTheItemOne()
+    {
+        Assert.Equal(0, EvolutionExtractor.Locate(WithStones(), Species())!.ByItem);
+    }
+
+    /// <summary>
+    /// The same image with two item-shaped methods on it: six stones, and six trade
+    /// items whose numbers are just as valid.
+    /// </summary>
+    private static Rom WithStones()
+    {
+        var data = new byte[0xA580];
+
+        int table = 0x1000;
+
+        Put(data, table + 1 * Stride, 4, 16, 2);
+        Put(data, table + 2 * Stride, 4, 32, 3);
+        Put(data, table + 4 * Stride, 4, 16, 5);
+        Put(data, table + 5 * Stride, 4, 36, 6);
+
+        // Six stones across six species, and six trade items across six more.
+        int[] stones = [93, 94, 95, 96, 97, 98];
+        int[] traded = [187, 192, 193, 199, 201, 218];
+
+        for (int i = 0; i < 6; i++)
+        {
+            Put(data, table + (30 + i) * Stride, 7, stones[i], 31 + i);
+            Put(data, table + (50 + i) * Stride, 6, traded[i], 51 + i);
+        }
+
+        for (int i = 60; i < Count - 1; i += 2) Put(data, table + i * Stride, 4, 20 + (i % 60), i + 1);
+
+        for (int i = 100; i < Count - 1; i += 2) Put(data, table + i * Stride, 4, 20 + (i % 40), i + 1);
+
+        return new Rom(data);
+    }
+
     [Fact]
     public void AnImageWithNoTableOnItSaysSo()
     {

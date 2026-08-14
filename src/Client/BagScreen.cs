@@ -8,9 +8,9 @@ namespace PokeMmo.Client;
 /// <summary>
 /// The bag, out of a fight. Pick something, pick who it goes on.
 /// <para>
-/// Only what restores health is listed, because that is all anything does yet. A bag
-/// that showed every ball and every key item with no way to use any of them would be a
-/// longer list saying the same thing.
+/// Three things do something now — medicine restores, a machine teaches, and a stone
+/// turns one creature into another — and everything else says so and is not spent. The
+/// list has always shown the whole bag; what has changed is how much of it answers.
 /// </para>
 /// <para>
 /// Like the counter, this screen decides nothing. It sends an id and a slot; how much
@@ -76,7 +76,13 @@ public sealed class BagScreen
     {
         _bag = update.Bag;
         _party = update.Party;
-        _message = update.Message;
+
+        // The sentence is put together here rather than sent, because the server has
+        // never seen a name and this is the machine with the cartridge. Same words as
+        // the battle screen's, arrived at from the same two numbers.
+        _message = update.EvolvedInto != 0
+            ? $"{SpeciesNamed(update.EvolvedFrom)} evolved into {SpeciesNamed(update.EvolvedInto)}!"
+            : update.Message;
 
         // Back to the list. Drinking the last Potion while standing on it would
         // otherwise leave the cursor pointing at something that is no longer there.
@@ -93,6 +99,9 @@ public sealed class BagScreen
         _forget = 0;
         _message = "";
     }
+
+    private string SpeciesNamed(int species) =>
+        GameText.ToAscii(_data.SpeciesAt(species)?.Name ?? $"species {species}");
 
     private string MoveNamed(int moveId) =>
         GameText.ToAscii(_data.MoveAt(moveId)?.Name ?? $"move {moveId}");

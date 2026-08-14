@@ -17,6 +17,20 @@ public sealed record EvolutionTable(
 {
     /// <summary>How many entries turn something into something stronger.</summary>
     public int Stronger { get; init; }
+
+    /// <summary>
+    /// The method number that means "somebody used this item on it", or zero.
+    /// <para>
+    /// Kept apart from <see cref="ByLevel"/> because they are answered by different
+    /// evidence and either can be missing. A stone is the only kind of evolution a
+    /// player can bring about on purpose, which makes it the only one the bag has any
+    /// business in.
+    /// </para>
+    /// </summary>
+    public int ByItem { get; init; }
+
+    /// <summary>The items that method takes, for saying out loud what was found.</summary>
+    public IReadOnlyList<int> Stones { get; init; } = [];
 }
 
 /// <summary>
@@ -60,6 +74,7 @@ public static class EvolutionExtractor
     public static EvolutionTable? Locate(
         Rom rom,
         IReadOnlyList<SpeciesData> species,
+        IReadOnlyDictionary<int, uint>? itemRoutines = null,
         Action<string>? log = null)
     {
         if (species.Count == 0) return null;
@@ -168,7 +183,59 @@ public static class EvolutionExtractor
             $"method {byLevel} is the level one — {chains} of its {table.Evolutions.Count(e => e.Method == byLevel)} " +
             "follow themselves, every time at a higher number");
 
-        return table with { ByLevel = byLevel };
+        table = table with { ByLevel = byLevel };
+
+        if (ByItem(table.Evolutions, itemRoutines) is not { } used) return table;
+
+        List<int> stones = [.. table.Evolutions.Where(e => e.Method == used.Method).Select(e => e.Parameter).Distinct().Order()];
+
+        log?.Invoke(
+            $"  method {used.Method} is the item one — its {stones.Count} items are exactly the " +
+            $"{stones.Count} that share field routine 0x{used.Routine:X8}, and nothing else on the " +
+            "cartridge uses that routine");
+
+        return table with { ByItem = used.Method, Stones = stones };
+    }
+
+    /// <summary>
+    /// Which method means "somebody used this on it".
+    /// <para>
+    /// An item that can be used out of a bag has a routine to run when it is; an item
+    /// that is only ever held has the one that says no. So the method whose parameters
+    /// are items is not enough — six evolution methods on this cartridge take a number
+    /// that happens to be a valid item id, and one of them is the level method, whose
+    /// "items" are potions.
+    /// </para>
+    /// <para>
+    /// What settles it is that the set matches <em>both ways</em>: every item the method
+    /// names runs the same routine, and every item on the cartridge that runs that
+    /// routine is named by the method. The trade-with-an-item method fails the second
+    /// half — its six items share the do-nothing routine with a hundred and fifty others.
+    /// </para>
+    /// </summary>
+    private static (int Method, uint Routine)? ByItem(
+        IReadOnlyList<Evolution> evolutions,
+        IReadOnlyDictionary<int, uint>? routines)
+    {
+        if (routines is null || routines.Count == 0) return null;
+
+        foreach (int method in evolutions.Select(e => e.Method).Distinct())
+        {
+            HashSet<int> named = [.. evolutions.Where(e => e.Method == method).Select(e => e.Parameter)];
+
+            if (named.Count < 2) continue;
+            if (named.Any(id => !routines.TryGetValue(id, out uint routine) || routine == 0)) continue;
+
+            uint shared = routines[named.First()];
+
+            if (named.Any(id => routines[id] != shared)) continue;
+
+            HashSet<int> running = [.. routines.Where(p => p.Value == shared).Select(p => p.Key)];
+
+            if (running.SetEquals(named)) return (method, shared);
+        }
+
+        return null;
     }
 
     /// <summary>

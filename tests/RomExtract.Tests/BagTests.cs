@@ -512,6 +512,82 @@ public class UsingItemsOutOfBattleTests
     private static BagUpdated Use(GameWorld world, ServerPlayer player, int itemId, int slot) =>
         world.UseItem(player.Id, itemId, slot).Select(o => o.Message).OfType<BagUpdated>().Single();
 
+    /// <summary>
+    /// A stone in the bag, and something it works on beside something it does not.
+    /// <para>
+    /// Slot zero is species 3, which the table turns into species 6. Slot one is species
+    /// 1, which the same stone does nothing to — and the difference between those two is
+    /// the whole rule.
+    /// </para>
+    /// </summary>
+    private static (GameWorld World, ServerPlayer Player) Holding()
+    {
+        var map = new MapData(Town, "PALLET TOWN", 8, 8, new byte[64]);
+        var world = new GameWorld(new WorldData([map]), Town, TestRules.All);
+
+        (ServerPlayer player, _) = world.Join(
+            1,
+            "Koop",
+            SavedCharacter.Fresh(Town, 1, 1) with
+            {
+                Party =
+                [
+                    new SavedMon(3, 30, null, 20, StatusCondition.None, Nature.Hardy, [TestRules.FirstMove]),
+                    new SavedMon(1, 30, null, 20, StatusCondition.None, Nature.Hardy, [TestRules.FirstMove]),
+                ],
+                Items = [new BagEntry(TestRules.StoneItem, 2)],
+            });
+
+        return (world, player);
+    }
+
+    [Fact]
+    public void AStoneTurnsSomethingIntoSomethingElseAndIsSpent()
+    {
+        (GameWorld world, ServerPlayer player) = Holding();
+
+        BagUpdated update = Use(world, player, TestRules.StoneItem, 0);
+
+        Assert.Equal(6, update.Party[0].Species);
+        Assert.Equal(3, update.EvolvedFrom);
+        Assert.Equal(6, update.EvolvedInto);
+        Assert.Equal(1, update.Bag.Single(e => e.ItemId == TestRules.StoneItem).Count);
+    }
+
+    /// <summary>
+    /// And on the wrong creature it does nothing and costs nothing. A stone spent on
+    /// finding out is a player charged for the interface saying too little.
+    /// </summary>
+    [Fact]
+    public void AStoneOnSomethingItDoesNothingToIsNotSpent()
+    {
+        (GameWorld world, ServerPlayer player) = Holding();
+
+        BagUpdated update = Use(world, player, TestRules.StoneItem, 1);
+
+        Assert.Equal(1, update.Party[1].Species);
+        Assert.Equal(0, update.EvolvedInto);
+        Assert.Equal(2, update.Bag.Single(e => e.ItemId == TestRules.StoneItem).Count);
+    }
+
+    /// <summary>
+    /// Twice over is once. The second one finds a species the table says nothing about,
+    /// which is what stops a line running away with the whole bag.
+    /// </summary>
+    [Fact]
+    public void TheSameStoneAgainDoesNothing()
+    {
+        (GameWorld world, ServerPlayer player) = Holding();
+
+        Use(world, player, TestRules.StoneItem, 0);
+
+        BagUpdated again = Use(world, player, TestRules.StoneItem, 0);
+
+        Assert.Equal(6, again.Party[0].Species);
+        Assert.Equal(0, again.EvolvedInto);
+        Assert.Equal(1, again.Bag.Single(e => e.ItemId == TestRules.StoneItem).Count);
+    }
+
     [Fact]
     public void APotionPutsHealthBackOnAndIsSpent()
     {

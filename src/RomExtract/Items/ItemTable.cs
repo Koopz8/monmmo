@@ -27,6 +27,17 @@ public sealed record ItemRecord(
     int BattleUsage,
     int SecondaryId)
 {
+    /// <summary>
+    /// The routine this runs when it is used out of a bag, or zero for one that cannot be.
+    /// <para>
+    /// An address rather than a meaning, because what it does is code and this project
+    /// reads data. What it is good for is telling items apart: two items that run the
+    /// same routine are the same kind of thing, and that is enough to pick the stones
+    /// out of a table of three hundred.
+    /// </para>
+    /// </summary>
+    public uint FieldUse { get; init; }
+
     public const int RecordSizeBytes = 44;
 
     public const int NameLength = 14;
@@ -87,7 +98,10 @@ public sealed record ItemRecord(
             rom.ReadU8(offset + HoldEffectParamOffset),
             rom.ReadU8(offset + ImportanceOffset),
             rom.ReadU8(offset + BattleUsageOffset),
-            rom.ReadU8(offset + SecondaryIdOffset));
+            rom.ReadU8(offset + SecondaryIdOffset))
+        {
+            FieldUse = rom.ReadU32(offset + FieldUseOffset),
+        };
     }
 
     private static bool IsRoutineOrNothing(Rom rom, int at)

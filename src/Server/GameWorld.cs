@@ -1728,6 +1728,13 @@ public sealed class GameWorld
             if (_rules?.ItemAt(itemId) is { CanTeach: true } machine)
                 return Teach(player, slot, machine);
 
+            // A stone, which is the one kind of evolution a player brings about on
+            // purpose. Checked before the medicine branch because a stone restores
+            // nothing and would otherwise fall through to "it won't have any effect" —
+            // which would be true of the health and false of everything that matters.
+            if (_rules is { } rules && rules.IsEvolutionStone(itemId))
+                return UseStone(player, slot, itemId, rules);
+
             if (_battles is null || _rules?.ItemAt(itemId) is not { Restores: not null } medicine) return [];
 
             (SavedMon healed, int restored) = _battles.Restored(player.Party[slot], medicine);
@@ -1747,6 +1754,49 @@ public sealed class GameWorld
                 OnlyTo: playerId)];
         }
     }
+
+    /// <summary>
+    /// Turns something into something else with a stone, or says why not.
+    /// <para>
+    /// The whole rule is in the table: this species and this item, or nothing. A stone
+    /// used on the wrong creature is spent in some games and not in others; here it is
+    /// not, because out of a fight nothing else is being lost and charging a player for
+    /// finding out is charging them for the interface's silence.
+    /// </para>
+    /// <para>
+    /// The moves are not touched. A RAICHU that evolved knows what the PIKACHU knew,
+    /// which is what the games do, and the new form's level-up list is what it will
+    /// learn from next time — that half was already settled when levelling learned to
+    /// evolve.
+    /// </para>
+    /// </summary>
+    private List<Outgoing> UseStone(ServerPlayer player, int slot, int itemId, GameRules rules)
+    {
+        SavedMon member = player.Party[slot];
+
+        if (rules.EvolutionWith(member.Species, itemId) is not { } evolution)
+        {
+            return [new Outgoing(
+                new BagUpdated(player.Bag.Entries, [.. player.Party], "It won't have any effect."),
+                OnlyTo: player.Id)];
+        }
+
+        player.Bag.Remove(itemId);
+        player.Party[slot] = member with { Species = evolution.Into };
+
+        LastEvolution = (member.Species, evolution.Into);
+
+        return [new Outgoing(
+            new BagUpdated(player.Bag.Entries, [.. player.Party], "")
+            {
+                EvolvedFrom = member.Species,
+                EvolvedInto = evolution.Into,
+            },
+            OnlyTo: player.Id)];
+    }
+
+    /// <summary>What the last stone did, for a test to read without a socket.</summary>
+    public (int From, int Into)? LastEvolution { get; private set; }
 
     /// <summary>
     /// How many moves one of them can hold. Four, everywhere, forever.

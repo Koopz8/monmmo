@@ -60,13 +60,14 @@ public static class RulesExporter
         // What turns into what, which nothing in this game has ever done. Located here
         // rather than in the world export because it is arithmetic about creatures, and
         // this is the file the server decides fights with.
-        EvolutionTable? evolutions = EvolutionExtractor.Locate(rom, species, log);
+        EvolutionTable? evolutions = EvolutionExtractor.Locate(rom, species, FieldRoutines(rom), log);
 
         var rules = new GameRules(
             anonymousSpecies, anonymousMoves, learnsets.Values, trainers, items, evolutions?.Evolutions)
         {
             SurfMove = surf,
             EvolveByLevel = evolutions?.ByLevel ?? 0,
+            EvolveByItem = evolutions?.ByItem ?? 0,
         };
 
         log?.Invoke(surf > 0
@@ -116,6 +117,27 @@ public static class RulesExporter
     /// Everything else in the file still works and there is simply nothing to buy.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// What each item runs when it is used out of a bag, as an address, per item id.
+    /// <para>
+    /// Never written to the rules file — an address on a cartridge means nothing to a
+    /// server that has none. It exists for one question at export time: which evolution
+    /// method is the one a player brings about on purpose. The stones are the six items
+    /// that share a routine, and nothing else on the image runs it.
+    /// </para>
+    /// </summary>
+    private static Dictionary<int, uint> FieldRoutines(Rom rom)
+    {
+        if (ItemTable.Locate(rom) is not { } table) return [];
+
+        var routines = new Dictionary<int, uint>();
+
+        foreach (ItemRecord record in ItemTable.Read(rom, table))
+            routines[record.Id] = record.FieldUse;
+
+        return routines;
+    }
+
     private static List<ItemData> ExtractItems(Rom rom, int moveCount, Action<string>? log)
     {
         if (ItemTable.Locate(rom, log) is not { } table)

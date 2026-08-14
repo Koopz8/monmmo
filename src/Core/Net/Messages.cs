@@ -351,7 +351,22 @@ public sealed record UseItemRequest(int ItemId, int Slot) : NetMessage;
 public sealed record BagUpdated(
     IReadOnlyList<BagEntry> Bag,
     IReadOnlyList<SavedMon> Party,
-    string Message) : NetMessage;
+    string Message) : NetMessage
+{
+    /// <summary>
+    /// What just became what, when something did. Zero the rest of the time.
+    /// <para>
+    /// Two species numbers rather than a sentence, for the reason every message in this
+    /// project carries numbers: the server has never seen a name. The client already
+    /// says this line inside a battle and now says the same one out of it, off the same
+    /// two numbers, which is how both come to be phrased identically without either
+    /// half knowing the other exists.
+    /// </para>
+    /// </summary>
+    public int EvolvedFrom { get; init; }
+
+    public int EvolvedInto { get; init; }
+}
 
 /// <summary>
 /// The party, put back on its feet at a counter.

@@ -23,7 +23,7 @@ public sealed class GameRules
 {
     private static readonly byte[] Magic = "MONRULES"u8.ToArray();
 
-    private const int Version = 7;
+    private const int Version = 8;
 
     private readonly Dictionary<int, SpeciesData> _species;
     private readonly Dictionary<int, MoveData> _moves;
@@ -79,7 +79,36 @@ public sealed class GameRules
     /// </summary>
     public int EvolveByLevel { get; init; }
 
+    /// <summary>
+    /// Which method number means "somebody used this item on it", or zero.
+    /// <para>
+    /// The only kind of evolution a player brings about on purpose, and so the only one
+    /// the bag has anything to do with. Derived at export, like the level method, and
+    /// zero on an image where the reading did not come out.
+    /// </para>
+    /// </summary>
+    public int EvolveByItem { get; init; }
+
     public int EvolutionCount => _evolutions.Sum(e => e.Value.Count);
+
+    /// <summary>
+    /// What using this item on this species would turn it into, if anything.
+    /// <para>
+    /// Asked by the server when somebody uses something out of the bag, and answered
+    /// from the same table the level one comes from. Nothing here knows the item is a
+    /// stone or what a stone is; it knows the number matched.
+    /// </para>
+    /// </summary>
+    public Evolution? EvolutionWith(int species, int itemId) =>
+        EvolveByItem == 0 || itemId == 0
+            ? null
+            : EvolutionsOf(species).FirstOrDefault(e => e.Method == EvolveByItem && e.Parameter == itemId);
+
+    /// <summary>True when using this item on something could ever turn it into something.</summary>
+    public bool IsEvolutionStone(int itemId) =>
+        EvolveByItem != 0 &&
+        itemId != 0 &&
+        _evolutions.Values.Any(list => list.Any(e => e.Method == EvolveByItem && e.Parameter == itemId));
 
     /// <summary>Everything this species can turn into, by any means.</summary>
     public IReadOnlyList<Evolution> EvolutionsOf(int species) =>
@@ -251,6 +280,7 @@ public sealed class GameRules
         writer.Write(SurfMove);
 
         writer.Write(EvolveByLevel);
+        writer.Write(EvolveByItem);
         writer.Write(EvolutionCount);
 
         foreach (Evolution evolution in _evolutions.Values.SelectMany(e => e))
@@ -392,6 +422,7 @@ public sealed class GameRules
 
         int surf = reader.ReadInt32();
         int byLevel = reader.ReadInt32();
+        int byItem = reader.ReadInt32();
 
         var evolutions = new List<Evolution>();
 
@@ -408,6 +439,7 @@ public sealed class GameRules
         {
             SurfMove = surf,
             EvolveByLevel = byLevel,
+            EvolveByItem = byItem,
         };
     }
 

@@ -4608,7 +4608,14 @@ public static class Program
         RomExtractor extractor = RomExtractor.Open(rom);
         List<SpeciesData> species = extractor.ExtractSpecies();
 
-        if (EvolutionExtractor.Locate(rom, species, Console.WriteLine) is not { } table)
+        var routines = new Dictionary<int, uint>();
+
+        if (ItemTable.Locate(rom) is { } where)
+        {
+            foreach (ItemRecord record in ItemTable.Read(rom, where)) routines[record.Id] = record.FieldUse;
+        }
+
+        if (EvolutionExtractor.Locate(rom, species, routines, Console.WriteLine) is not { } table)
         {
             Console.WriteLine("  nothing on this cartridge reads as an evolution table");
             return;
@@ -4624,7 +4631,7 @@ public static class Program
         {
             Console.WriteLine(
                 $"  method {by.Key}: {by.Count()} of them" +
-                (by.Key == table.ByLevel ? "  <- the level one" : "") +
+                (by.Key == table.ByLevel ? "  <- the level one" : by.Key == table.ByItem ? "  <- the item one" : "") +
                 $", parameters {by.Min(e => e.Parameter)}..{by.Max(e => e.Parameter)}");
 
             foreach (Evolution one in by.Take(4))

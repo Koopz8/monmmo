@@ -51,6 +51,21 @@ internal static class TestRules
     /// <summary>A better one, so tests can tell a kind from a count.</summary>
     public const int UltraBallItem = 2;
 
+    /// <summary>A stone, so the bag has something in it that changes what a creature is.</summary>
+    public const int StoneItem = 93;
+
+    /// <summary>The two method numbers, chosen to be different so a mix-up shows.</summary>
+    public const int LevelMethod = 4;
+
+    public const int ItemMethod = 7;
+
+    /// <summary>Species 3 becomes species 6 with a stone, and species 1 at level 8.</summary>
+    public static readonly Evolution[] Evolutions =
+    [
+        new Evolution(1, LevelMethod, 8, 2),
+        new Evolution(3, ItemMethod, StoneItem, 6),
+    ];
+
     /// <summary>Something that is not a ball at all. Restores twenty.</summary>
     public const int PotionItem = 13;
 
@@ -161,8 +176,16 @@ internal static class TestRules
             // a price and no importance, the hidden machine has importance and no price.
             new(DiscItem, 3000, Pocket.Machines, 0, 0, 0, 0, 0) { Teaches = TaughtMove },
             new(HiddenMachineItem, 0, Pocket.Machines, 0, 0, 1, 0, 0) { Teaches = FieldMove },
+
+            // A stone, which restores nothing and teaches nothing and is the only thing
+            // in this bag that turns one creature into another.
+            new(StoneItem, 2100, Pocket.Items, 0, 0, 0, 0, 0),
         };
 
-        return new GameRules(species, moves, learnsets, trainers, items);
+        return new GameRules(species, moves, learnsets, trainers, items, Evolutions)
+        {
+            EvolveByLevel = LevelMethod,
+            EvolveByItem = ItemMethod,
+        };
     }
 }
