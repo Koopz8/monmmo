@@ -80,6 +80,9 @@ internal static class TestRules
 
     public const int HiddenMachineItem = 339;
 
+    /// <summary>The one species no machine works on, so a refusal can be asked for.</summary>
+    public const int LearnsNothing = 5;
+
     /// <summary>What each of them teaches. The second is the one that moves trees.</summary>
     public const int TaughtMove = 2;
 
@@ -189,7 +192,17 @@ internal static class TestRules
             new(StoneItem, 2100, Pocket.Items, 0, 0, 0, 0, 0),
         };
 
-        return new GameRules(species, moves, learnsets, trainers, items, Evolutions)
+        // One word per species, one bit per machine, in the order the machines sit in
+        // the pocket — the disc first, the hidden machine second. Everything can take
+        // both except one species that can take neither, so a test that expects a
+        // refusal has to name the species that gets refused rather than getting one by
+        // accident.
+        var machineSets = new List<ulong>();
+
+        for (int index = 0; index < species.Count; index++)
+            machineSets.Add(index == LearnsNothing ? 0UL : 0b11UL);
+
+        return new GameRules(species, moves, learnsets, trainers, items, Evolutions, machineSets)
         {
             EvolveByLevel = LevelMethod,
             EvolveByItem = ItemMethod,

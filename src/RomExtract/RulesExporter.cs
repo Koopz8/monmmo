@@ -49,7 +49,14 @@ public static class RulesExporter
 
         List<TrainerParty> trainers = ExtractTrainers(rom, species.Count, log);
 
-        List<ItemData> items = ExtractItems(rom, moves.Count, log);
+        (List<ItemData> items, List<int> machineMoves) = ExtractItems(rom, moves.Count, log);
+
+        // Who each machine is allowed to work on. Located last of everything, because it
+        // is found by agreeing with the level-up lists about the moves the machines
+        // teach — it needs both of those to have come out before it can be looked for.
+        MachineSets? machineSets = machineMoves.Count == 0
+            ? null
+            : MachineCompatibility.Locate(rom, species.Count, machineMoves, learnsets, log);
 
         // Read off the names while they are still here, and written to the file as a
         // number. This is the last moment anything knows what the moves are called: the
@@ -63,7 +70,8 @@ public static class RulesExporter
         EvolutionTable? evolutions = EvolutionExtractor.Locate(rom, species, FieldRoutines(rom), log);
 
         var rules = new GameRules(
-            anonymousSpecies, anonymousMoves, learnsets.Values, trainers, items, evolutions?.Evolutions)
+            anonymousSpecies, anonymousMoves, learnsets.Values, trainers, items, evolutions?.Evolutions,
+            machineSets?.Masks)
         {
             SurfMove = surf,
             EvolveByLevel = evolutions?.ByLevel ?? 0,
@@ -149,12 +157,13 @@ public static class RulesExporter
         return routines;
     }
 
-    private static List<ItemData> ExtractItems(Rom rom, int moveCount, Action<string>? log)
+    private static (List<ItemData> Items, List<int> MachineMoves) ExtractItems(
+        Rom rom, int moveCount, Action<string>? log)
     {
         if (ItemTable.Locate(rom, log) is not { } table)
         {
             log?.Invoke("  items: no table found — there will be nothing to buy or carry");
-            return [];
+            return ([], []);
         }
 
         List<ItemData> items =
@@ -177,11 +186,12 @@ public static class RulesExporter
     /// machine the move one along from its own is worse than teaching nothing.
     /// </para>
     /// </summary>
-    private static List<ItemData> Teach(Rom rom, List<ItemData> items, int moveCount, Action<string>? log)
+    private static (List<ItemData> Items, List<int> MachineMoves) Teach(
+        Rom rom, List<ItemData> items, int moveCount, Action<string>? log)
     {
         List<int> known = ObstacleMoves.Find(rom, log);
 
-        if (MachineMoves.Locate(rom, moveCount, known, log) is not { } at) return items;
+        if (MachineMoves.Locate(rom, moveCount, known, log) is not { } at) return (items, []);
 
         List<int> moves = MachineMoves.Read(rom, at);
 
@@ -193,7 +203,7 @@ public static class RulesExporter
                 $"  machines: {machines.Count} in the pocket but {moves.Count} in the list — " +
                 "not matching them up, since one of the two is located wrongly");
 
-            return items;
+            return (items, []);
         }
 
         var taught = machines
@@ -204,7 +214,7 @@ public static class RulesExporter
             $"  machines: {machines.Count} of them teach something, " +
             $"{machines.Count(m => m.IsKeyItem)} of those reusable");
 
-        return [.. items.Select(i => taught.TryGetValue(i.Id, out int move) ? i with { Teaches = move } : i)];
+        return ([.. items.Select(i => taught.TryGetValue(i.Id, out int move) ? i with { Teaches = move } : i)], moves);
     }
 
     /// <summary>

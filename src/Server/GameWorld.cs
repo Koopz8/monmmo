@@ -1806,11 +1806,16 @@ public sealed class GameWorld
     /// <summary>
     /// Teaches a party member what a machine teaches.
     /// <para>
-    /// Which move that is came off the cartridge and is in the rules file; whether this
-    /// particular species is allowed to learn it did not. The games keep a compatibility
-    /// bitfield per species and this project has not located it, so for now anybody can
-    /// learn anything. That is wrong in a way worth writing down rather than hiding: a
-    /// PIDGEY that knows STRENGTH is not what the cartridge says.
+    /// Which move that is came off the cartridge, and so does whether this species is
+    /// allowed to learn it — one eight-byte word per species, one bit per machine. This
+    /// used to say "for now anybody can learn anything", which was wrong in the way a
+    /// PIDGEY that knows STRENGTH is wrong.
+    /// </para>
+    /// <para>
+    /// Refused before anything else is checked. A machine the species cannot take should
+    /// say so whether or not the member happens to know the move already and whether or
+    /// not it has four — the other two answers are about this member, and this one is
+    /// about what it is.
     /// </para>
     /// <para>
     /// A full set of four is refused rather than overwritten. Choosing which move to
@@ -1822,6 +1827,13 @@ public sealed class GameWorld
     private List<Outgoing> Teach(ServerPlayer player, int slot, ItemData machine)
     {
         SavedMon member = player.Party[slot];
+
+        if (_rules is { } rules && !rules.CanBeTaught(member.Species, machine.Id))
+        {
+            return [new Outgoing(
+                new BagUpdated(player.Bag.Entries, [.. player.Party], "It can't learn that move."),
+                OnlyTo: player.Id)];
+        }
 
         if (member.Moves.Contains(machine.Teaches))
         {

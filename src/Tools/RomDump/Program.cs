@@ -197,6 +197,7 @@ public static class Program
         if (options.AfterFights) WriteAfterFights(rom);
 
         if (options.Evolutions) WriteEvolutions(rom);
+        if (options.Machines) WriteMachineCompatibility(rom);
 
         if (options.BytesAfter is { } after) WriteBytesAfter(rom, after);
 
@@ -4713,6 +4714,135 @@ public static class Program
         }
     }
 
+    /// <summary>
+    /// Who each machine works on, and how that table was told apart from the thousands
+    /// that look exactly like it.
+    /// <para>
+    /// The shape — four hundred and twelve eight-byte words with a quiet top byte —
+    /// matches seven thousand places in this image. What picks one of them is agreement
+    /// with a table located separately: a machine teaches a move, and something that
+    /// learns that move by growing up is something the machine can teach. Both scores
+    /// are printed, because "ninety-nine per cent against sixty-six" is evidence and
+    /// "found it" is not.
+    /// </para>
+    /// </summary>
+    private static void WriteMachineCompatibility(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("Who a machine works on");
+
+        RomExtractor extractor = RomExtractor.Open(rom);
+        List<SpeciesData> species = extractor.ExtractSpecies();
+
+        List<MoveData> moves;
+
+        try
+        {
+            moves = MoveExtractor.Extract(rom);
+        }
+        catch (InvalidDataException)
+        {
+            moves = [];
+        }
+
+        Dictionary<int, Learnset> learnsets = LearnsetExtractor.Extract(rom);
+
+        if (moves.Count == 0
+            || MachineMoves.Locate(rom, moves.Count, ObstacleMoves.Find(rom)) is not { } listAt)
+        {
+            Console.WriteLine("  no machine move list, so there is nothing to be compatible with");
+            return;
+        }
+
+        List<int> taught = MachineMoves.Read(rom, listAt);
+
+        if (MachineCompatibility.Locate(rom, species.Count, taught, learnsets, Console.WriteLine)
+            is not { } sets)
+        {
+            Console.WriteLine("  no table — every machine would work on everything");
+            return;
+        }
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  Table at 0x{Rom.BaseAddress + (uint)sets.Address:X8}, " +
+            $"{sets.Masks.Count} words of eight bytes, {MachineMoves.Count} bits used of sixty-four.");
+
+        string Named(int index) =>
+            index >= 0 && index < species.Count && !string.IsNullOrWhiteSpace(species[index].Name)
+                ? species[index].Name
+                : $"species {index}";
+
+        string MoveNamed(int id) => id >= 0 && id < moves.Count ? moves[id].Name : $"move {id}";
+
+        string Machine(int index) => index < 50 ? $"TM{index + 1:00}" : $"HM{index - 49:00}";
+
+        // How many species each machine reaches. A machine nobody can use, or one
+        // everybody can, would be the sign of a column read from the wrong place.
+        var reach = new int[MachineMoves.Count];
+
+        for (int s = 0; s < sets.Masks.Count; s++)
+            for (int m = 0; m < MachineMoves.Count; m++)
+                if (sets.Allows(s, m)) reach[m]++;
+
+        Console.WriteLine();
+        Console.WriteLine("  The narrowest and the widest:");
+
+        foreach (int m in Enumerable.Range(0, MachineMoves.Count).OrderBy(m => reach[m]).Take(4))
+            Console.WriteLine($"    {Machine(m)} {MoveNamed(taught[m]),-14} {reach[m],4} species");
+
+        foreach (int m in Enumerable.Range(0, MachineMoves.Count).OrderByDescending(m => reach[m]).Take(4))
+            Console.WriteLine($"    {Machine(m)} {MoveNamed(taught[m]),-14} {reach[m],4} species");
+
+        // The exceptions, in full. These are the three the score does not explain, and
+        // they are all one thing: something that knows the move from birth and still
+        // cannot be taught it. A table with no exceptions at all would be the more
+        // suspicious result, so they are printed rather than rounded away.
+        Console.WriteLine();
+        Console.WriteLine("  Knows it already and still cannot be taught it:");
+
+        var machineOf = new Dictionary<int, int>();
+
+        for (int i = 0; i < taught.Count; i++) machineOf[taught[i]] = i;
+
+        foreach ((int index, Learnset learnset) in learnsets.OrderBy(l => l.Key))
+        {
+            // Species zero is the empty slot every one of these tables begins with, and
+            // it has a learnset like everything else. Skipped here for the same reason
+            // the scoring skips it: it is not a creature and its word is not evidence.
+            if (index <= 0) continue;
+
+            foreach (LevelUpMove entry in learnset.Moves)
+            {
+                if (!machineOf.TryGetValue(entry.MoveId, out int machine)) continue;
+                if (sets.Allows(index, machine)) continue;
+
+                Console.WriteLine(
+                    $"    {Named(index),-12} learns {MoveNamed(entry.MoveId),-14} at level {entry.Level,3} " +
+                    $"but {Machine(machine)} says no");
+            }
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("  Spot check — compare these against the games:");
+
+        foreach (int index in Spread(Enumerable.Range(0, sets.Masks.Count).ToList(), 6))
+        {
+            List<string> can =
+            [
+                .. Enumerable.Range(0, MachineMoves.Count)
+                    .Where(m => sets.Allows(index, m))
+                    .Select(m => $"{Machine(m)} {MoveNamed(taught[m])}")
+            ];
+
+            Console.WriteLine();
+            Console.WriteLine($"    {Named(index)} — {can.Count}");
+
+            for (int at = 0; at < can.Count; at += 3)
+                Console.WriteLine("      " + string.Join(", ", can.Skip(at).Take(3)));
+        }
+    }
+
     private static void WriteAfterFights(Rom rom)
     {
         Console.WriteLine();
@@ -6183,6 +6313,9 @@ public static class Program
                                      nobody in it says once the fight is over
               --evolutions           report the evolution table: where it is, which
                                      method means a level, and what turns into what
+              --machines             report which machines work on which species, and
+                                     how the table was told apart from seven thousand
+                                     runs of bytes with the same shape
               --script-map <b.m>     dump every script on one map, decoded and as bytes
               --export-rules <path>  write the rules file the server resolves battles
                                      against: base stats, move power, catch rates and
@@ -6324,6 +6457,8 @@ public static class Program
         /// <summary>Report the evolution table and what it says.</summary>
         public bool Evolutions { get; private init; }
 
+        public bool Machines { get; private init; }
+
         /// <summary>Print what follows one unknown command, everywhere it appears.</summary>
         public byte? BytesAfter { get; private init; }
 
@@ -6403,6 +6538,7 @@ public static class Program
             bool newGame = false;
             bool afterFights = false;
             bool evolutions = false;
+            bool machines = false;
             byte? bytesAfter = null;
             bool glyphs = false;
             uint font = 0;
@@ -6601,6 +6737,9 @@ public static class Program
                     case "--evolutions":
                         evolutions = true;
                         break;
+                    case "--machines":
+                        machines = true;
+                        break;
                     case "--bytes-after":
                         string which = Next(args, ref i, "--bytes-after");
                         bytesAfter = Convert.ToByte(
@@ -6740,6 +6879,7 @@ public static class Program
                 NewGame = newGame,
                 AfterFights = afterFights,
                 Evolutions = evolutions,
+                Machines = machines,
                 BytesAfter = bytesAfter,
                 Glyphs = glyphs,
                 Font = font,

@@ -282,7 +282,20 @@ public sealed class BagScreen
             string name = GameText.ToAscii(
                 member.Nickname ?? _data.SpeciesAt(member.Species)?.Name ?? $"species {member.Species}");
 
-            Color ink = _choosingWho ? selected ? Skin.Ink : Skin.InkDim : Skin.InkFaint;
+            // Whether the highlighted machine works on this one, said while the player is
+            // choosing rather than after they have chosen. The server refuses it either
+            // way; this is the interface declining to offer something it already knows
+            // the answer to, which is the same reason a machine it cannot find is offered
+            // to everybody.
+            bool refused =
+                _choosingWho
+                && _row < lines.Count
+                && _data.IsMachine(lines[_row].ItemId)
+                && !_data.CanBeTaught(member.Species, lines[_row].ItemId);
+
+            Color ink = refused
+                ? Skin.InkFaint
+                : _choosingWho ? selected ? Skin.Ink : Skin.InkDim : Skin.InkFaint;
 
             Font.Draw(name, party.X + 24, y, 2, ink);
             Font.DrawRight($"Lv{member.Level}", party.X + party.Width - 20, y, 2, ink);
@@ -310,6 +323,10 @@ public sealed class BagScreen
                     GameText.ToAscii(_items.Of(member.HeldItem)),
                     party.X + 24, y + 34, 2, Skin.Accent);
             }
+
+            // Right-aligned on the same line, so it cannot run into a held item's name.
+            if (refused)
+                Font.DrawRight("can't learn it", party.X + party.Width - 20, y + 34, 2, Skin.HpPoor);
         }
 
         if (_message.Length > 0) Font.Draw(_message, 40, Height - 74, 2, Skin.HpGood);

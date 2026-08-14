@@ -23,7 +23,7 @@ public sealed class GameRules
 {
     private static readonly byte[] Magic = "MONRULES"u8.ToArray();
 
-    private const int Version = 8;
+    private const int Version = 9;
 
     private readonly Dictionary<int, SpeciesData> _species;
     private readonly Dictionary<int, MoveData> _moves;
@@ -31,6 +31,8 @@ public sealed class GameRules
     private readonly Dictionary<int, TrainerParty> _trainers;
     private readonly Dictionary<int, ItemData> _items;
     private readonly Dictionary<int, List<Evolution>> _evolutions;
+    private readonly List<ulong> _machineSets;
+    private readonly Dictionary<int, int> _machineAt;
 
     public GameRules(
         IEnumerable<SpeciesData> species,
@@ -38,7 +40,8 @@ public sealed class GameRules
         IEnumerable<Learnset> learnsets,
         IEnumerable<TrainerParty>? trainers = null,
         IEnumerable<ItemData>? items = null,
-        IEnumerable<Evolution>? evolutions = null)
+        IEnumerable<Evolution>? evolutions = null,
+        IEnumerable<ulong>? machineSets = null)
     {
         _species = species.ToDictionary(s => s.Index);
         _moves = moves.ToDictionary(m => m.Id);
@@ -55,6 +58,18 @@ public sealed class GameRules
         // reason: this file carries no text, so anything that has to be read off the
         // cartridge's own words has to be read on the machine that has the cartridge.
         SurfMove = MoveNamed("SURF")?.Id ?? 0;
+
+        _machineSets = [.. machineSets ?? []];
+
+        // Which bit belongs to which machine, matched by position — the machines in the
+        // pocket in id order against the bits in a species' word in order. The same
+        // matching the exporter used to tell each machine what it teaches, done here
+        // rather than written to the file, so the two cannot drift apart.
+        _machineAt = _items.Values
+            .Where(i => i.Pocket == Pocket.Machines)
+            .OrderBy(i => i.Id)
+            .Select((item, index) => (item.Id, index))
+            .ToDictionary(m => m.Id, m => m.index);
     }
 
     /// <summary>
@@ -129,6 +144,46 @@ public sealed class GameRules
                 .Where(e => e.Method == EvolveByLevel && e.Parameter <= level)
                 .OrderByDescending(e => e.Parameter)
                 .FirstOrDefault();
+
+    /// <summary>How many species this file has a machine word for, which may be none.</summary>
+    public int MachineSetCount => _machineSets.Count;
+
+    /// <summary>
+    /// Whether this machine may be used on this species.
+    /// <para>
+    /// True when there is nothing to go on. A file written before this table was located
+    /// carries no words, and on such a file every machine works on everything — which is
+    /// what this project did for its whole life until now, and is a better failure than
+    /// refusing every machine on the whole party because a table was not found.
+    /// </para>
+    /// <para>
+    /// The item is asked about rather than the move, because a machine is a thing in the
+    /// bag with a position in the pocket and the word's bits are in that same order. Two
+    /// machines teaching one move would be two bits, and asking by move could not tell
+    /// them apart.
+    /// </para>
+    /// </summary>
+    public bool CanBeTaught(int species, int itemId)
+    {
+        if (_machineSets.Count == 0) return true;
+        if (!_machineAt.TryGetValue(itemId, out int machine)) return false;
+        if (species < 0 || species >= _machineSets.Count) return false;
+
+        return (_machineSets[species] & (1UL << machine)) != 0;
+    }
+
+    /// <summary>
+    /// Everything in the bag's machine pocket this species could be taught by, in pocket
+    /// order. Used by the interface to say why a machine is greyed out before a player
+    /// spends a walk to the counter finding out.
+    /// </summary>
+    public IReadOnlyList<int> MachinesFor(int species) =>
+    [
+        .. _machineAt
+            .Where(m => CanBeTaught(species, m.Key))
+            .OrderBy(m => m.Value)
+            .Select(m => m.Key)
+    ];
 
     public int SpeciesCount => _species.Count;
 
@@ -290,6 +345,14 @@ public sealed class GameRules
             writer.Write(evolution.Parameter);
             writer.Write(evolution.Into);
         }
+
+        // One word per species, in species order, including the empty ones. A file that
+        // only listed the species that can learn something would have no way to say the
+        // difference between "this one learns nothing" and "this file predates the
+        // table" — and those two have to mean opposite things.
+        writer.Write(_machineSets.Count);
+
+        foreach (ulong word in _machineSets) writer.Write(word);
     }
 
     public void Save(string path)
@@ -435,7 +498,11 @@ public sealed class GameRules
                 reader.ReadInt32()));
         }
 
-        return new GameRules(species, moves, learnsets, trainers, items, evolutions)
+        var machineSets = new List<ulong>();
+
+        foreach (int _ in Counted(reader, "machine sets", 4096)) machineSets.Add(reader.ReadUInt64());
+
+        return new GameRules(species, moves, learnsets, trainers, items, evolutions, machineSets)
         {
             SurfMove = surf,
             EvolveByLevel = byLevel,
