@@ -2,6 +2,9 @@ using System.Text;
 
 namespace PokeMmo.Core.World;
 
+/// <summary>A script variable a new character starts holding.</summary>
+public sealed record StartingVariable(int Id, int Value);
+
 /// <summary>One map's identity, size, walkability and encounters. No graphics.</summary>
 public sealed record MapData(string Id, string Name, int Width, int Height, byte[] Collision)
 {
@@ -263,7 +266,7 @@ public sealed class WorldData
     /// <summary>Identifies the format, so a wrong or stale file fails loudly.</summary>
     private static readonly byte[] Magic = "MONWORLD"u8.ToArray();
 
-    private const int Version = 23;
+    private const int Version = 24;
 
     private readonly Dictionary<string, MapData> _maps;
 
@@ -271,6 +274,26 @@ public sealed class WorldData
         _maps = maps.ToDictionary(m => m.Id, StringComparer.OrdinalIgnoreCase);
 
     public IReadOnlyCollection<MapData> Maps => _maps.Values;
+
+    /// <summary>
+    /// Flags a brand new character already has, before anything has happened.
+    /// <para>
+    /// A fresh save is not an empty save. Almost every one of these hides somebody: the
+    /// old man in his front room who is supposed to still be up the tower, the shopkeeper
+    /// who arrives later, the rival standing where he will one day stand. Start a
+    /// character with none of them and every one of those people is on the map at once,
+    /// which is not the beginning of the story — it is all of its endings, together.
+    /// </para>
+    /// <para>
+    /// It belongs in the world file rather than in the server, for the ordinary reason:
+    /// they are the cartridge's numbers, an operator's image is the only thing that
+    /// knows them, and a server with no cartridge cannot invent them.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<int> FlagsAtStart { get; init; } = [];
+
+    /// <summary>Variables a new character starts holding, as (id, value).</summary>
+    public IReadOnlyList<StartingVariable> VariablesAtStart { get; init; } = [];
 
     public int Count => _maps.Count;
 
@@ -305,6 +328,17 @@ public sealed class WorldData
 
             WriteEncounters(writer, map.Encounters);
             WriteLinks(writer, map);
+        }
+
+        writer.Write(FlagsAtStart.Count);
+        foreach (int flag in FlagsAtStart) writer.Write(flag);
+
+        writer.Write(VariablesAtStart.Count);
+
+        foreach (StartingVariable variable in VariablesAtStart)
+        {
+            writer.Write(variable.Id);
+            writer.Write(variable.Value);
         }
     }
 
@@ -373,7 +407,26 @@ public sealed class WorldData
             });
         }
 
-        return new WorldData(maps);
+        int flagCount = reader.ReadInt32();
+
+        if (flagCount < 0)
+            throw new InvalidDataException($"World file claims {flagCount} starting flags.");
+
+        var flags = new List<int>(Math.Min(flagCount, 4096));
+
+        for (int i = 0; i < flagCount; i++) flags.Add(reader.ReadInt32());
+
+        int variableCount = reader.ReadInt32();
+
+        if (variableCount < 0)
+            throw new InvalidDataException($"World file claims {variableCount} starting variables.");
+
+        var variables = new List<StartingVariable>(Math.Min(variableCount, 4096));
+
+        for (int i = 0; i < variableCount; i++)
+            variables.Add(new StartingVariable(reader.ReadInt32(), reader.ReadInt32()));
+
+        return new WorldData(maps) { FlagsAtStart = flags, VariablesAtStart = variables };
     }
 
     private static void WriteLinks(BinaryWriter writer, MapData map)

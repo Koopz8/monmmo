@@ -1,3 +1,4 @@
+using PokeMmo.RomExtract.Scripts;
 using PokeMmo.Core.World;
 
 namespace PokeMmo.RomExtract.Maps;
@@ -331,7 +332,24 @@ public static class WorldExporter
 
         ReportDanglingLinks(maps, log);
 
-        return new WorldData(maps);
+        NewGameState? opening = NewGameLocator.Locate(rom, log);
+
+        if (opening is not null)
+        {
+            // Said out loud because it is the answer to a question this export used to
+            // get wrong silently: how many of those people a brand new character can see.
+            int hiddenAtStart = behindFlags.Count(o => opening.Flags.Contains(o.HiddenBy));
+
+            log?.Invoke(
+                $"  {hiddenAtStart} of those {behindFlags.Count} are hidden from the first frame " +
+                $"by the {opening.Flags.Count} flags a new game sets");
+        }
+
+        return new WorldData(maps)
+        {
+            FlagsAtStart = opening?.Flags ?? [],
+            VariablesAtStart = [.. (opening?.Variables ?? []).Select(v => new StartingVariable(v.Variable, v.Value))],
+        };
     }
 
     /// <summary>

@@ -46,8 +46,16 @@ public interface IPlayerStore
     /// standing are all kept, because none of those are the thing being tested and
     /// losing a party to re-watch a cutscene would make this the wrong tool.
     /// </para>
+    /// <para>
+    /// Back to the beginning rather than back to nothing, which is why <paramref
+    /// name="start"/> is here. A new game sets dozens of flags before the first frame
+    /// and almost every one of them hides somebody who arrives later; a character
+    /// forgetting the story into an empty set would find the whole cast on the map at
+    /// once, which is not a story that has not happened yet.
+    /// </para>
     /// </summary>
-    Task<int> ForgetStoryAsync(string username, CancellationToken cancellationToken = default);
+    Task<int> ForgetStoryAsync(
+        string username, SavedCharacter start, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Puts one more creature in a character's party, for an operator who needs a party

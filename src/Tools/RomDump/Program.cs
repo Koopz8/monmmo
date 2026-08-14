@@ -192,6 +192,8 @@ public static class Program
 
         if (options.Ledges) WriteLedges(rom);
 
+        if (options.NewGame) WriteNewGame(rom);
+
         if (options.BytesAfter is { } after) WriteBytesAfter(rom, after);
 
         if (options.Glyphs) WriteGlyphCandidates(rom, options.OutputDirectory);
@@ -4506,6 +4508,75 @@ public static class Program
     /// handoff to a standard script it has never been able to follow.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// What a new game already knows, and who that keeps off the map.
+    /// <para>
+    /// The instrument for the mistake that a fresh save is an empty save. It prints the
+    /// candidate runs so the choice can be checked, then the flags, then — the part that
+    /// matters — the people each one hides, because a flag number on its own cannot be
+    /// wrong in any visible way and a name standing in the wrong room can.
+    /// </para>
+    /// </summary>
+    private static void WriteNewGame(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("What a new game starts with");
+
+        if (NewGameLocator.Locate(rom, Console.WriteLine) is not { } opening)
+        {
+            Console.WriteLine("  nothing found");
+            return;
+        }
+
+        Console.WriteLine($"  the script is at 0x{opening.Address:X8}");
+        Console.WriteLine();
+        Console.WriteLine($"  {opening.Flags.Count} flags: {string.Join(", ", opening.Flags.Select(f => $"0x{f:X3}"))}");
+
+        foreach ((int variable, int value) in opening.Variables)
+            Console.WriteLine($"  variable 0x{variable:X4} = {value}");
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        var hides = new Dictionary<int, List<string>>();
+        int behind = 0;
+
+        foreach (LoadedMap map in library.All())
+        {
+            foreach (MapObject person in map.Objects.Where(o => o.HiddenBy != 0))
+            {
+                behind++;
+
+                if (!opening.Flags.Contains(person.HiddenBy)) continue;
+
+                if (!hides.TryGetValue(person.HiddenBy, out List<string>? who)) hides[person.HiddenBy] = who = [];
+
+                who.Add($"{WorldExporter.MapId(map.Bank, map.Number)} person {person.LocalId} at ({person.X}, {person.Y})");
+            }
+        }
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  {hides.Sum(p => p.Value.Count)} of the {behind} people who stand behind a flag are hidden " +
+            $"from the first frame, across {hides.Count} of these {opening.Flags.Count} flags");
+
+        foreach ((int flag, List<string> who) in hides.OrderBy(p => p.Key))
+        {
+            Console.WriteLine($"    0x{flag:X3}  {who.Count} {(who.Count == 1 ? "person" : "people")}");
+
+            foreach (string one in who.Take(3)) Console.WriteLine($"          {one}");
+        }
+
+        List<int> spare = [.. opening.Flags.Where(f => !hides.ContainsKey(f))];
+
+        if (spare.Count > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine(
+                $"  {spare.Count} of them hide nobody on any map — they are the ones scripts read " +
+                $"rather than the ones objects stand behind: {string.Join(", ", spare.Select(f => $"0x{f:X3}"))}");
+        }
+    }
+
     private static void WriteSilentPeople(Rom rom)
     {
         Console.WriteLine();
@@ -5902,6 +5973,8 @@ public static class Program
               --items                report the item table, its pockets and prices
               --scripts              report how far object scripts read, and which
                                      commands stop them
+              --new-game             report the flags and variables a new save already
+                                     holds, and who they keep off the map
               --script-map <b.m>     dump every script on one map, decoded and as bytes
               --export-rules <path>  write the rules file the server resolves battles
                                      against: base stats, move power, catch rates and
@@ -6034,6 +6107,9 @@ public static class Program
 
         public bool Ledges { get; private init; }
 
+        /// <summary>Report the flags and variables a brand new save already holds.</summary>
+        public bool NewGame { get; private init; }
+
         /// <summary>Print what follows one unknown command, everywhere it appears.</summary>
         public byte? BytesAfter { get; private init; }
 
@@ -6110,6 +6186,7 @@ public static class Program
             bool opcodes = false;
             bool audit = false;
             bool ledges = false;
+            bool newGame = false;
             byte? bytesAfter = null;
             bool glyphs = false;
             uint font = 0;
@@ -6299,6 +6376,9 @@ public static class Program
                     case "--ledges":
                         ledges = true;
                         break;
+                    case "--new-game":
+                        newGame = true;
+                        break;
                     case "--bytes-after":
                         string which = Next(args, ref i, "--bytes-after");
                         bytesAfter = Convert.ToByte(
@@ -6435,6 +6515,7 @@ public static class Program
                 Opcodes = opcodes,
                 Audit = audit,
                 Ledges = ledges,
+                NewGame = newGame,
                 BytesAfter = bytesAfter,
                 Glyphs = glyphs,
                 Font = font,

@@ -384,7 +384,17 @@ public sealed class GameWorld
             //
             // Nothing needs the party to be non-empty. Grass is already declined for
             // somebody with nobody able to fight, and so is being challenged.
-            return fresh with { Items = StartingItems() };
+            // And the flags a new game already has. A save with no flags in it is not
+            // the start of the story: every "hide this person until later" flag is
+            // unset, so everybody who arrives later is already standing there — MR.
+            // FUJI was in his own front room holding the POKé FLUTE while the tower he
+            // is supposed to be trapped in stood empty behind him.
+            return fresh with
+            {
+                Items = StartingItems(),
+                Flags = _world.FlagsAtStart,
+                Variables = [.. _world.VariablesAtStart.Select(v => new SavedVariable(v.Id, v.Value))],
+            };
         }
     }
 

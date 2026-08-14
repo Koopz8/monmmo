@@ -132,7 +132,7 @@ public static class Program
         // connected character is holding in memory and would write straight back.
         if (ArgumentValue(args, "--forget") is { } forgetting)
         {
-            int forgotten = await store.ForgetStoryAsync(forgetting);
+            int forgotten = await store.ForgetStoryAsync(forgetting, game.FreshCharacter());
 
             Console.WriteLine(
                 forgotten < 0
@@ -210,6 +210,20 @@ public static class Program
         Console.WriteLine(
             $"  {reach.People.Count} people are in the way somewhere, which is not the same as " +
             "being a gate — most of them are standing in the open");
+
+        // What the opening is worth, in the only unit that means anything here. A new
+        // game sets flags before the first frame and almost every one of them hides
+        // somebody; walked without them, everybody who arrives later is already standing
+        // there, and the difference is how much of the world that was quietly costing.
+        if (world.FlagsAtStart.Count > 0)
+        {
+            Reach crowded = WorldWalker.Walk(world, startingMapId, flagsSet: []);
+
+            Console.WriteLine(
+                $"  {world.FlagsAtStart.Count} flags are set before the first frame; without them " +
+                $"{crowded.People.Count - reach.People.Count} more people stand in the way " +
+                $"and {reach.Maps.Count - crowded.Maps.Count} maps close");
+        }
 
         // Who is actually costing something, asked properly: walk again as if each of
         // them were not there and see what opens. It is one walk per person, so it is

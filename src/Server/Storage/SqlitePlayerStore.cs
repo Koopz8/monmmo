@@ -285,7 +285,8 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
             : new AuthOutcome.Success(new Account(accountId, storedName), character);
     }
 
-    public async Task<int> ForgetStoryAsync(string username, CancellationToken cancellationToken = default)
+    public async Task<int> ForgetStoryAsync(
+        string username, SavedCharacter start, CancellationToken cancellationToken = default)
     {
         await using SqliteConnection connection = Open();
 
@@ -301,7 +302,36 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
             "DELETE FROM script_variables WHERE account_id = $id;";
         forget.Parameters.AddWithValue("$id", accountId);
 
-        return await forget.ExecuteNonQueryAsync(cancellationToken);
+        int forgotten = await forget.ExecuteNonQueryAsync(cancellationToken);
+
+        // And put back what a new game already knows. Deleting the flags and stopping
+        // there is what a character who had never played would look like, and no such
+        // character exists — the cartridge hands out forty-nine of them before anybody
+        // has taken a step.
+        foreach (int flag in start.Flags)
+        {
+            await using SqliteCommand set = connection.CreateCommand();
+            set.CommandText =
+                "INSERT OR IGNORE INTO script_flags (account_id, flag) VALUES ($id, $flag);";
+            set.Parameters.AddWithValue("$id", accountId);
+            set.Parameters.AddWithValue("$flag", flag);
+
+            await set.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        foreach (SavedVariable variable in start.Variables)
+        {
+            await using SqliteCommand write = connection.CreateCommand();
+            write.CommandText =
+                "INSERT OR REPLACE INTO script_variables (account_id, variable, value) VALUES ($id, $var, $value);";
+            write.Parameters.AddWithValue("$id", accountId);
+            write.Parameters.AddWithValue("$var", variable.Id);
+            write.Parameters.AddWithValue("$value", variable.Value);
+
+            await write.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        return forgotten;
     }
 
     public async Task<bool> GiveAsync(

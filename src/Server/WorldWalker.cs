@@ -87,9 +87,16 @@ public static class WorldWalker
         bool throughPeople = false,
         bool surfing = false,
         IReadOnlyDictionary<byte, Direction>? hops = null,
-        IReadOnlyCollection<(string MapId, int LocalId)>? asIfGone = null)
+        IReadOnlyCollection<(string MapId, int LocalId)>? asIfGone = null,
+        IReadOnlyCollection<int>? flagsSet = null)
     {
         IReadOnlyCollection<int> known = moves ?? [];
+
+        // Whose flags. A fresh character's, unless a caller says otherwise — because a
+        // world where no flag is set is not the beginning of the game, it is a world
+        // where seventy-six people who arrive later are already standing in the way.
+        // Pass an empty set to walk it that way on purpose.
+        HashSet<int> flags = [.. flagsSet ?? world.FlagsAtStart];
 
         var reached = new HashSet<string>();
         var blocked = new List<Frontier>();
@@ -120,7 +127,11 @@ public static class WorldWalker
             {
                 on = objects[map.Id] = [];
 
-                foreach (MapObject entry in map.Objects) on.TryAdd(entry.Square, entry);
+                // Only the ones who are there. Somebody hidden by a flag this character
+                // holds is not a wall, and counting them as one is how the tower and the
+                // house in LAVENDER both looked like doorways nobody was standing in.
+                foreach (MapObject entry in map.Objects.Where(o => o.IsHereFor(flags.Contains)))
+                    on.TryAdd(entry.Square, entry);
             }
 
             return on.GetValueOrDefault(square);

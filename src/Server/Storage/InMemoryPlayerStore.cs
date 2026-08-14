@@ -92,7 +92,8 @@ public sealed class InMemoryPlayerStore : IPlayerStore
         }
     }
 
-    public Task<int> ForgetStoryAsync(string username, CancellationToken cancellationToken = default)
+    public Task<int> ForgetStoryAsync(
+        string username, SavedCharacter start, CancellationToken cancellationToken = default)
     {
         lock (_gate)
         {
@@ -101,7 +102,7 @@ public sealed class InMemoryPlayerStore : IPlayerStore
 
             int forgotten = row.Character.Flags.Count + row.Character.Variables.Count;
 
-            row.Character = row.Character with { Flags = [], Variables = [] };
+            row.Character = row.Character with { Flags = start.Flags, Variables = start.Variables };
 
             return Task.FromResult(forgotten);
         }
