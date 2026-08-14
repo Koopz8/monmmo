@@ -83,7 +83,7 @@ public static class Program
         ReportStartingMapLinks(game);
         ReportEncounterReadiness(game.StartingMap);
         ReportTrainerReadiness(world, rules, game.StartingMap.Id);
-        ReportReach(world, game.StartingMap.Id);
+        ReportReach(world, game.StartingMap.Id, args.Contains("--gates"));
 
         using var store = new SqlitePlayerStore(databasePath);
         Console.WriteLine($"Accounts in {Path.GetFullPath(databasePath)}");
@@ -173,7 +173,7 @@ public static class Program
     /// and the real one is never nearer.
     /// </para>
     /// </summary>
-    private static void ReportReach(WorldData world, string startingMapId)
+    private static void ReportReach(WorldData world, string startingMapId, bool gates = false)
     {
         Reach reach = WorldWalker.Walk(world, startingMapId);
 
@@ -205,6 +205,40 @@ public static class Program
             Console.WriteLine(
                 $"  {shifted.Maps.Count} with moves {string.Join(", ", field.Order())} — " +
                 $"{shifted.Maps.Count - reach.Maps.Count} more maps, and {shifted.Blocked.Count} still in the way");
+        }
+
+        Console.WriteLine(
+            $"  {reach.People.Count} people are in the way somewhere, which is not the same as " +
+            "being a gate — most of them are standing in the open");
+
+        // Who is actually costing something, asked properly: walk again as if each of
+        // them were not there and see what opens. It is one walk per person, so it is
+        // behind a flag rather than in everybody's startup — but it is the question the
+        // roadmap keeps wanting an answer to, and the answer is rarely who you would
+        // guess. Two fossils lying in a corridor in MT. MOON were worth 137 maps each.
+        if (gates)
+        {
+            var worth = new List<(Standing Who, int Maps)>();
+
+            foreach (Standing who in reach.People)
+            {
+                Reach without = WorldWalker.Walk(world, startingMapId, asIfGone: [(who.MapId, who.LocalId)]);
+
+                if (without.Maps.Count > reach.Maps.Count)
+                    worth.Add((who, without.Maps.Count - reach.Maps.Count));
+            }
+
+            Console.WriteLine(
+                worth.Count == 0
+                    ? "    and none of them opens anything on their own"
+                    : $"    {worth.Count} of them open something on their own:");
+
+            foreach ((Standing who, int maps) in worth.OrderByDescending(w => w.Maps).Take(8))
+            {
+                Console.WriteLine(
+                    $"      {who.MapId,-6} {world.Find(who.MapId)?.Name,-16} {who.Square} " +
+                    $"object {who.LocalId}: {maps} more maps");
+            }
         }
 
         var byMove = reach.Blocked

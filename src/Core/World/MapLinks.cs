@@ -548,6 +548,45 @@ public sealed record MapObject(
     /// <summary>True when this one paces about rather than standing still.</summary>
     public bool Wanders => MovementType is 2 or 3 or 4 or 5 or 6;
 
+    /// <summary>
+    /// True when this one will eventually get out of the way on its own.
+    /// <para>
+    /// Wandering is not enough. The range is a box around where they started and it is
+    /// often nothing at all — a person whose movement type says "walks about" and whose
+    /// range is zero in both axes turns on the spot forever, which to anybody trying to
+    /// get past is the same as standing still.
+    /// </para>
+    /// <para>
+    /// This is what tells a wall from a wait. It is asked by the walker rather than by
+    /// the server: to the server everybody is solid, because at any instant they are.
+    /// </para>
+    /// </summary>
+    public bool CanStepAside => Wanders && (RangeX > 0 || RangeY > 0);
+
+    /// <summary>
+    /// True when this is a thing lying on the ground rather than somebody standing on it.
+    /// <para>
+    /// It hands something over and it can be hidden, which together is the shape of a
+    /// ball on the floor of a cave: you pick it up, a flag is set, and it is not there
+    /// any more. Somebody who hands something over <em>while talking</em> has no hiding
+    /// flag and stays exactly where they were.
+    /// </para>
+    /// <para>
+    /// "Hands something over" has to include what a script hands over, not only what the
+    /// object record says. The two fossils on the floor of MT. MOON give theirs from a
+    /// script — the record's own item field is empty — and between them they were worth
+    /// 137 maps: they sit side by side across the corridor to the east exit, so with
+    /// both of them counted as walls the road to CERULEAN was shut and the game was 36
+    /// maps large.
+    /// </para>
+    /// <para>
+    /// Like <see cref="CanStepAside"/>, this is a question about whether a square is
+    /// closed forever, and only a walker measuring the world has any use for it. Right
+    /// now the ball is solid, and the server treats it so.
+    /// </para>
+    /// </summary>
+    public bool CanBeTakenAway => (GivesItem || CanGive.Count > 0) && HiddenBy != 0;
+
     /// <summary>True when this one turns on the spot without going anywhere.</summary>
     public bool LooksAround => MovementType == 1;
 

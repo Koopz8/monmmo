@@ -9,12 +9,33 @@ public sealed record Frontier(string MapId, GridPosition Square, int ShiftedBy, 
         $"{MapId} {Square} needs move {ShiftedBy} (object {LocalId})";
 }
 
+/// <summary>Somebody standing where a walk wanted to go, who will never move on their own.</summary>
+public sealed record Standing(string MapId, GridPosition Square, int LocalId, int MovementType)
+{
+    public override string ToString() =>
+        $"{MapId} {Square} is somebody (object {LocalId}, movement {MovementType})";
+}
+
 /// <summary>What a walk of the world found.</summary>
 public sealed record Reach(
     IReadOnlyCollection<string> Maps,
     IReadOnlyList<Frontier> Blocked,
     IReadOnlyCollection<string> Beyond)
 {
+    /// <summary>
+    /// Everybody the walk could not walk through: rooted to the spot, and not a thing
+    /// that can be picked up.
+    /// <para>
+    /// This is "who was in the way", not "who is costing you the world". Most of them
+    /// are standing in the open and gate nothing. Which of them is a gate is a second
+    /// question with a second answer — walk again with <c>asIfGone</c> naming them and
+    /// see what opens — and that is how two fossils on the floor of MT. MOON turned out
+    /// to be worth 137 maps each.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<Standing> People { get; init; } = [];
+
+
     /// <summary>
     /// Every square actually stood on, not just every map arrived at.
     /// <para>
@@ -65,12 +86,14 @@ public static class WorldWalker
         IReadOnlyCollection<int>? moves = null,
         bool throughPeople = false,
         bool surfing = false,
-        IReadOnlyDictionary<byte, Direction>? hops = null)
+        IReadOnlyDictionary<byte, Direction>? hops = null,
+        IReadOnlyCollection<(string MapId, int LocalId)>? asIfGone = null)
     {
         IReadOnlyCollection<int> known = moves ?? [];
 
         var reached = new HashSet<string>();
         var blocked = new List<Frontier>();
+        var standing = new List<Standing>();
         var beyond = new HashSet<string>();
 
         // Built once each, not once per square. Rebuilding a map's grid inside the walk
@@ -159,19 +182,36 @@ public static class WorldWalker
 
                 if (!grid.IsWalkable(next)) continue;
 
-                if (ObjectOn(map, next) is { } standing)
+                if (ObjectOn(map, next) is { } person)
                 {
                     // A tree is a wall until somebody in the party can shift it, and that
                     // is exactly the kind of wall worth reporting rather than skipping.
-                    if (standing.IsObstacle && !known.Contains(standing.ShiftedBy))
+                    if (person.IsObstacle && !known.Contains(person.ShiftedBy))
                     {
-                        blocked.Add(new Frontier(map.Id, next, standing.ShiftedBy, standing.LocalId));
+                        blocked.Add(new Frontier(map.Id, next, person.ShiftedBy, person.LocalId));
                         continue;
                     }
 
-                    // Anybody else standing there is in the way too, and a script may well
-                    // move them — so this is not counted as a frontier, only not walked.
-                    if (!standing.IsObstacle && !throughPeople) continue;
+                    // Anybody else is in the way for as long as they are there, and how
+                    // long that is depends on what they are: somebody with a beat to
+                    // walk will step off this square by themselves, and somebody rooted
+                    // to it never will.
+                    //
+                    // Walking through the first kind is not optimism, it is what a
+                    // player does — you wait a second and go past. Nor is walking through
+                    // a ball on the floor: you pick it up and it is gone. Both were walls
+                    // here, and between them they are why this walker reported a world 34
+                    // maps large. What was standing between the player and CERULEAN was a
+                    // POKe BALL lying in a corridor in MT. MOON.
+                    bool gone = asIfGone?.Contains((map.Id, person.LocalId)) == true;
+
+                    if (!gone && !person.IsObstacle && !throughPeople && !person.CanStepAside && !person.CanBeTakenAway)
+                    {
+                        if (!standing.Any(s => s.MapId == map.Id && s.Square == next))
+                            standing.Add(new Standing(map.Id, next, person.LocalId, person.MovementType));
+
+                        continue;
+                    }
                 }
 
                 queue.Enqueue((map, next));
@@ -200,6 +240,11 @@ public static class WorldWalker
             beyond)
         {
             Stood = seen,
+
+            // Only the ones still standing at the end. A person the walk got past by
+            // another route is not a gate, and reporting them as one would bury the
+            // handful that are in a list of six hundred that are not.
+            People = [.. standing.Where(s => !seen.Contains((s.MapId, s.Square)))],
         };
     }
 
