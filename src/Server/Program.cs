@@ -261,14 +261,31 @@ public static class Program
         foreach (MapData missing in world.Maps
                      .Where(m => !everything.Maps.Contains(m.Id) && doorsInto.ContainsKey(m.Id)))
         {
-            (string from, GridPosition at) = world.Maps
-                .Where(m => everything.Maps.Contains(m.Id))
-                .SelectMany(m => m.Warps.Where(w => w.TargetMapId == missing.Id).Select(w => (m.Id, w.Square)))
-                .First();
+            Console.WriteLine($"    {missing.Id} {missing.Name} — {doorsInto[missing.Id]} doors in");
 
-            Console.WriteLine(
-                $"    {missing.Id} {missing.Name} — {doorsInto[missing.Id]} doors in, " +
-                $"e.g. from {from} at {at}");
+            // Every door into it, with where it lands and whether that is somewhere a
+            // person could be. A door the walker refused is either a door it never stood
+            // on or a door that puts you inside a wall, and those are different problems.
+            CollisionGrid inside = missing.ToGrid(surfing: true);
+
+            foreach ((MapData from, Warp warp) in world.Maps
+                         .Where(m => everything.Maps.Contains(m.Id))
+                         .SelectMany(m => m.Warps.Where(w => w.TargetMapId == missing.Id).Select(w => (m, w)))
+                         .Take(4))
+            {
+                GridPosition lands = WorldWalker.Arrival(missing, warp, inside);
+
+                CollisionGrid outside = from.ToGrid(surfing: true);
+
+                bool stoodOn = everything.Stood.Contains((from.Id, warp.Square));
+
+                Console.WriteLine(
+                    $"      from {from.Id} {from.Name} at {warp.Square} " +
+                    $"(warp {warp.TargetWarpId}) -> {lands}, " +
+                    $"{(inside.IsWalkable(lands) ? "standable" : "SOLID")}; " +
+                    $"door {(outside.IsWalkable(warp.Square) ? "standable" : "SOLID")}; " +
+                    $"{(stoodOn ? "and it was stood on" : "NEVER STOOD ON")}");
+            }
         }
 
         if (reach.Beyond.Count > 0)

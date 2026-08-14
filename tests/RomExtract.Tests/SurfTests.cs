@@ -267,3 +267,38 @@ public class SurfTests
         Assert.Equal(TestRules.SurfMove, World().SurfMove);
     }
 }
+
+/// <summary>
+/// Doors that lead back the way you came.
+/// <para>
+/// Nineteen warps on this cartridge name map 127.127, which no bank has. Every one is
+/// the exit of a room reached from many places — the CABLE CLUB above every POKeMON
+/// CENTER, the lifts in SILPH CO. and the ROCKET HIDEOUT — and a room reached from
+/// twelve places cannot write down which one it came from.
+/// </para>
+/// </summary>
+public class ReturnDoorTests
+{
+    [Fact]
+    public void TheSentinelIsADestinationRatherThanAMissingMap()
+    {
+        Assert.True(new Warp(5, 8, Warp.Dynamic, $"{Warp.Dynamic}.{Warp.Dynamic}").IsDynamic);
+        Assert.False(new Warp(5, 8, 0, "3.19").IsDynamic);
+    }
+
+    [Fact]
+    public void AWalkIsNotReportedAsHavingFoundAHole()
+    {
+        // The whole reason this exists. A walker counting these as maps the world file
+        // does not have is a walker reporting a hole where the cartridge has a door.
+        MapData room = new("1.1", "THE CABLE CLUB", 4, 4, new byte[16])
+        {
+            Warps = [new Warp(1, 1, Warp.Dynamic, $"{Warp.Dynamic}.{Warp.Dynamic}")],
+        };
+
+        Reach reach = WorldWalker.Walk(new WorldData([room]), "1.1");
+
+        Assert.Contains("1.1", reach.Maps);
+        Assert.Empty(reach.Beyond);
+    }
+}

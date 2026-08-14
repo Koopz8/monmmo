@@ -162,6 +162,7 @@ public static class Program
         if (options.MoveEffects) WriteMoveEffects(rom);
         if (options.FifthMove) WriteFifthMove(rom);
         if (options.Water) WriteWater(rom);
+        if (options.Doors2) WriteDoors(rom);
         if (!string.IsNullOrEmpty(options.WaterMap)) WriteWaterMap(rom, options.WaterMap);
 
         if (options.RivalFights) WriteRivalFights(rom);
@@ -664,6 +665,78 @@ public static class Program
     /// worth walking into grass with.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Doors that lead somewhere which does not lead back.
+    /// <para>
+    /// A door is two ways. Almost every warp on this cartridge has a partner on the map
+    /// it points at, pointing home — which makes the ones that do not a shape worth
+    /// counting rather than a curiosity. If the proportion is high, warps are being read
+    /// correctly and the odd ones out are real one-way passages; if it is low, something
+    /// about the reading is wrong and every conclusion drawn from where doors go is
+    /// drawn from noise.
+    /// </para>
+    /// <para>
+    /// Asked because five doors were found holding a hundred and seventy-four maps out of
+    /// reach, and four of the twelve leading to the same place turned out to sit under
+    /// the windows of a POKeMON CENTER.
+    /// </para>
+    /// </summary>
+    private static void WriteDoors(Rom rom)
+    {
+        Core.World.WorldData world = WorldExporter.Export(rom);
+
+        var byId = world.Maps.ToDictionary(m => m.Id);
+
+        int total = 0;
+        int reciprocal = 0;
+        int missingMap = 0;
+        int dynamic = 0;
+
+        var oneWay = new List<string>();
+
+        foreach (Core.World.MapData map in world.Maps)
+        {
+            foreach (Warp warp in map.Warps)
+            {
+                total++;
+
+                if (warp.IsDynamic)
+                {
+                    dynamic++;
+                    continue;
+                }
+
+                if (!byId.TryGetValue(warp.TargetMapId, out Core.World.MapData? target))
+                {
+                    missingMap++;
+                    continue;
+                }
+
+                if (target.Warps.Any(w => w.TargetMapId == map.Id))
+                {
+                    reciprocal++;
+                    continue;
+                }
+
+                if (oneWay.Count < 14)
+                    oneWay.Add($"{map.Id} {map.Name} at {warp.Square} -> {target.Id} {target.Name}");
+            }
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("Doors, and whether what they lead to leads back");
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  {total} warps, {reciprocal} lead somewhere that leads back " +
+            $"({(total == 0 ? 0 : 100 * reciprocal / total)}%)");
+        Console.WriteLine($"  {dynamic} lead back the way you came, which is a destination rather than a hole");
+        Console.WriteLine($"  {missingMap} point at a map this world file does not have");
+        Console.WriteLine($"  {total - reciprocal - missingMap - dynamic} lead somewhere with no way back");
+        Console.WriteLine();
+
+        foreach (string one in oneWay) Console.WriteLine($"    {one}");
+    }
+
     private static void WriteWater(Rom rom)
     {
         Core.World.WorldData world = WorldExporter.Export(rom);
@@ -973,8 +1046,10 @@ public static class Program
 
         Console.WriteLine();
         Console.WriteLine($"{map.Id} {map.Name}, {map.Width}x{map.Height}");
-        Console.WriteLine("  W = 0x15, w = 0x10, ~ = 0x21, . = walkable, # = solid");
+        Console.WriteLine("  D = door, W = 0x15, w = 0x10, ~ = 0x21, . = walkable, # = solid");
         Console.WriteLine();
+
+        var doors = map.Warps.Select(w => w.Square).ToHashSet();
 
         for (int y = 0; y < map.Height; y++)
         {
@@ -984,17 +1059,30 @@ public static class Program
             {
                 int at = y * map.Width + x;
                 byte behaviour = at < map.Behaviours.Length ? map.Behaviours[at] : (byte)0;
+                var square = new Core.World.GridPosition(x, y);
 
-                row.Append(behaviour switch
-                {
-                    0x15 => 'W',
-                    0x10 => 'w',
-                    0x21 => '~',
-                    _ => grid.IsWalkable(new Core.World.GridPosition(x, y)) ? '.' : '#',
-                });
+                row.Append(
+                    doors.Contains(square) ? 'D'
+                    : behaviour switch
+                    {
+                        0x15 => 'W',
+                        0x10 => 'w',
+                        0x21 => '~',
+                        _ => grid.IsWalkable(square) ? '.' : '#',
+                    });
             }
 
             Console.WriteLine(row.ToString());
+        }
+
+        Console.WriteLine();
+        Console.WriteLine($"  {map.Warps.Count} doors");
+
+        foreach (Warp warp in map.Warps)
+        {
+            Console.WriteLine(
+                $"    {warp.Square} -> {warp.TargetMapId} " +
+                $"{(world.Find(warp.TargetMapId)?.Name ?? "?")}, warp {warp.TargetWarpId}");
         }
     }
 
@@ -5045,6 +5133,8 @@ public static class Program
 
         public bool Water { get; private init; }
 
+        public bool Doors2 { get; private init; }
+
         public string WaterMap { get; private init; } = "";
 
         /// <summary>Which trainers are fought by a script that names the rival.</summary>
@@ -5131,6 +5221,7 @@ public static class Program
             bool fifthMove = false;
             bool challenges = false;
             bool water = false;
+            bool doors2 = false;
             string waterMap = "";
             bool rivalFights = false;
             bool specials = false;
@@ -5258,6 +5349,10 @@ public static class Program
                         break;
                     case "--water-map":
                         waterMap = Next(args, ref i, "--water-map");
+                        break;
+
+                    case "--two-way":
+                        doors2 = true;
                         break;
 
                     case "--water":
@@ -5434,6 +5529,7 @@ public static class Program
                 FifthMove = fifthMove,
                 Challenges = challenges,
                 Water = water,
+                Doors2 = doors2,
                 WaterMap = waterMap,
                 RivalFights = rivalFights,
                 Specials = specials,

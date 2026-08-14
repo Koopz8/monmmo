@@ -37,6 +37,26 @@ public sealed record Warp(int X, int Y, int TargetWarpId, string TargetMapId)
     /// </summary>
     public const int Unspecified = 0xFF;
 
+    /// <summary>
+    /// The bank and map number that mean "back the way you came".
+    /// <para>
+    /// Derived rather than remembered: nineteen warps on this cartridge name map 127.127,
+    /// which no map bank has, and every one of them is the exit of a room with a single
+    /// way in and many ways to it — the CABLE CLUB above every POKeMON CENTER, the lifts
+    /// in SILPH CO. and the ROCKET HIDEOUT. A room reached from twelve places cannot
+    /// write down which one it came from, so the games do not: they put a sentinel there
+    /// and remember at runtime.
+    /// </para>
+    /// <para>
+    /// It matters because a walker counting these as "a map this world file does not
+    /// have" is a walker reporting a hole where the cartridge has a door.
+    /// </para>
+    /// </summary>
+    public const int Dynamic = 127;
+
+    /// <summary>True when this door leads back wherever the player came from.</summary>
+    public bool IsDynamic => TargetMapId == $"{Dynamic}.{Dynamic}";
+
     public GridPosition Square => new(X, Y);
 }
 

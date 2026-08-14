@@ -13,7 +13,19 @@ public sealed record Frontier(string MapId, GridPosition Square, int ShiftedBy, 
 public sealed record Reach(
     IReadOnlyCollection<string> Maps,
     IReadOnlyList<Frontier> Blocked,
-    IReadOnlyCollection<string> Beyond);
+    IReadOnlyCollection<string> Beyond)
+{
+    /// <summary>
+    /// Every square actually stood on, not just every map arrived at.
+    /// <para>
+    /// A map counts as reached the moment one square of it is, and most of the awkward
+    /// questions are about the rest of it: a door on a map you have been to is not a
+    /// door you can get to. This is what makes "why did it not go through there" a
+    /// question with an answer.
+    /// </para>
+    /// </summary>
+    public IReadOnlyCollection<(string MapId, GridPosition Square)> Stood { get; init; } = [];
+}
 
 /// <summary>
 /// Walks the world from where a new character starts and reports how far it gets.
@@ -155,6 +167,12 @@ public static class WorldWalker
 
             // Doors, which are squares like any other once they have been stood on.
             if (map.WarpAt(from) is not { } warp) continue;
+
+            // A door that leads back the way you came leads nowhere new, and counting it
+            // as a map this world file does not have is how nineteen ordinary exits came
+            // to be reported as holes.
+            if (warp.IsDynamic) continue;
+
             if (!maps.TryGetValue(warp.TargetMapId, out MapData? target))
             {
                 beyond.Add(warp.TargetMapId);
@@ -167,7 +185,10 @@ public static class WorldWalker
         return new Reach(
             reached,
             [.. blocked.DistinctBy(b => (b.MapId, b.Square))],
-            beyond);
+            beyond)
+        {
+            Stood = seen,
+        };
     }
 
     /// <summary>
@@ -179,7 +200,7 @@ public static class WorldWalker
     /// own comment describes.
     /// </para>
     /// </summary>
-    private static GridPosition Arrival(MapData target, Warp warp, CollisionGrid grid)
+    public static GridPosition Arrival(MapData target, Warp warp, CollisionGrid grid)
     {
         if (warp.TargetWarpId != Warp.Unspecified &&
             warp.TargetWarpId >= 0 &&
