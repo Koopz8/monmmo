@@ -140,49 +140,64 @@ public sealed class LoginScreen
         });
     }
 
+    private static PixelFont Font => Skin.Font;
+
+    /// <summary>
+    /// The first thing anybody sees, and until now the one screen still drawn in the
+    /// engine's own default face.
+    /// <para>
+    /// The title is drawn twice, once dark and offset, because a flat pixel title on a
+    /// flat background is the one place this font looks like a debug overlay rather than
+    /// a game.
+    /// </para>
+    /// </summary>
     private void Draw()
     {
-        Raylib.ClearBackground(new Color(24, 24, 32, 255));
+        Raylib.ClearBackground(Skin.PanelDeep);
 
-        Raylib.DrawText("MonMMO", Width / 2 - 90, 120, 48, Color.White);
+        // A band behind the title, so the top of the screen is not empty space with a
+        // word floating in it.
+        Raylib.DrawRectangleGradientV(0, 60, Width, 200, Skin.Panel, Skin.PanelDeep);
 
-        Raylib.DrawText(
+        Font.DrawCentred("MonMMO", Width / 2f, 120, 6, Skin.Ink);
+
+        Font.DrawCentred(
             _registering ? "Create an account" : "Sign in",
-            Width / 2 - 90, 180, 20, new Color(150, 150, 170, 255));
+            Width / 2f, 190, 2, Skin.InkDim);
 
-        DrawField("Name", _username, top: 250, selected: _field == 0);
-        DrawField("Password", new string('*', _password.Length), top: 330, selected: _field == 1);
+        DrawField("NAME", _username, top: 250, selected: _field == 0);
+        DrawField("PASSWORD", new string('*', _password.Length), top: 330, selected: _field == 1);
 
-        if (_message.Length > 0)
-            Raylib.DrawText(_message, Width / 2 - 180, 410, 20, new Color(232, 150, 150, 255));
+        if (_message.Length > 0) Font.DrawCentred(_message, Width / 2f, 410, 2, Skin.HpPoor);
 
         string hint = _registering
             ? "Enter to create    F1 to sign in instead    Tab to switch"
             : "Enter to sign in    F1 to create an account    Tab to switch";
 
-        Raylib.DrawText(hint, Width / 2 - 250, Height - 90, 18, new Color(110, 110, 130, 255));
+        Font.DrawCentred(hint, Width / 2f, Height - 80, 2, Skin.InkFaint);
     }
 
-    private static void DrawField(string label, string value, int top, bool selected)
+    private void DrawField(string label, string value, int top, bool selected)
     {
         const int left = Width / 2 - 180;
         const int fieldWidth = 360;
 
-        Raylib.DrawText(label, left, top - 24, 18, new Color(150, 150, 170, 255));
+        var box = new Rectangle(left, top, fieldWidth, 44);
 
-        Raylib.DrawRectangle(left, top, fieldWidth, 44, new Color(40, 40, 52, 255));
+        Font.Draw(label, left, top - 22, 2, selected ? Skin.Accent : Skin.InkFaint);
 
-        Raylib.DrawRectangleLines(
-            left, top, fieldWidth, 44,
-            selected ? new Color(150, 200, 255, 255) : new Color(70, 70, 90, 255));
+        Skin.DrawPanel(box, raised: false);
 
-        Raylib.DrawText(value, left + 12, top + 12, 22, Color.White);
+        if (selected) Skin.DrawCutBorder(box, Skin.Accent);
 
-        // A caret only on the focused field, so it is obvious where typing goes.
-        if (selected)
+        Font.Draw(value, left + 14, top + 15, 2, Skin.Ink);
+
+        // A caret only on the focused field, so it is obvious where typing goes, and it
+        // blinks — a still caret on an empty field reads as a stray pixel.
+        if (selected && (float)Raylib.GetTime() % 1.0f < 0.6f)
         {
-            int caret = left + 14 + Raylib.MeasureText(value, 22);
-            Raylib.DrawRectangle(caret, top + 10, 2, 26, new Color(150, 200, 255, 255));
+            Raylib.DrawRectangle(
+                left + 16 + Font.Measure(value, 2), top + 13, 2, 18, Skin.Accent);
         }
     }
 }

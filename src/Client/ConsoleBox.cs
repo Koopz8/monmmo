@@ -116,30 +116,55 @@ public sealed class ConsoleBox
         }
     }
 
+    /// <summary>
+    /// The operator's line, and whatever it last said.
+    /// <para>
+    /// Drawn above the dialogue box rather than over it. It used to sit at the very
+    /// bottom of the screen, which is exactly where a text box is, so a console reply
+    /// and a person talking to you shared the same four inches — and the reply, being
+    /// drawn second, won.
+    /// </para>
+    /// </summary>
     public void Draw(int width, int height)
     {
+        PixelFont font = Skin.Font;
+
+        // Clear of the text box, which owns the bottom of the screen. The console is a
+        // tool and the box is the game; the tool gives way.
+        const int aboveTheBox = 190;
+
         // The replies stay up after the line closes, so a /help or a /where can be read
         // while walking around rather than only while the cursor is blinking.
         if (_said.Count > 0 && (IsOpen || _showFor > 0f))
         {
-            int top = height - 40 - (_said.Count * 18) - (IsOpen ? 34 : 0);
+            int top = height - aboveTheBox - (_said.Count * 20) - (IsOpen ? 36 : 0);
 
-            Raylib.DrawRectangle(0, top - 6, width, _said.Count * 18 + 12, new Color(0, 0, 0, 170));
+            Skin.DrawPanel(
+                new Rectangle(8, top - 8, width - 16, _said.Count * 20 + 16),
+                raised: false,
+                fill: new Color(12, 14, 22, 225));
 
             for (int i = 0; i < _said.Count; i++)
             {
-                Raylib.DrawText(
-                    _said[i], 12, top + (i * 18), 16,
-                    _said[i].StartsWith('>') ? new Color(150, 200, 255, 255) : new Color(225, 225, 235, 255));
+                font.Draw(
+                    _said[i], 20, top + (i * 20), 2,
+                    _said[i].StartsWith('>') ? Skin.Accent : Skin.Ink);
             }
         }
 
         if (!IsOpen) return;
 
-        var box = new Rectangle(0, height - 34, width, 34);
+        var box = new Rectangle(8, height - aboveTheBox - 36, width - 16, 32);
 
-        Raylib.DrawRectangleRec(box, new Color(0, 0, 0, 220));
-        Raylib.DrawText($"/{_line}|", 12, height - 27, 18, new Color(240, 240, 250, 255));
+        Skin.DrawPanel(box, raised: false, fill: new Color(12, 14, 22, 235));
+
+        font.Draw($"/{_line}", box.X + 12, box.Y + 8, 2, Skin.Ink);
+
+        if ((float)Raylib.GetTime() % 1.0f < 0.6f)
+        {
+            Raylib.DrawRectangle(
+                (int)box.X + 14 + font.Measure($"/{_line}", 2), (int)box.Y + 6, 2, 16, Skin.Accent);
+        }
     }
 
     private static IEnumerable<char> Typed()

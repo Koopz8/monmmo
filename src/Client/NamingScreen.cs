@@ -102,32 +102,46 @@ public sealed class NamingScreen
         }
     }
 
+    /// <summary>
+    /// The naming box, in the same skin as every other box.
+    /// <para>
+    /// It used to be white with black lettering — the only screen in the game drawn that
+    /// way, because it was written before there was a skin to draw it in. The field is
+    /// still the lightest thing on the screen, which is the one part of the old version
+    /// worth keeping: it is the one place a player is typing rather than choosing.
+    /// </para>
+    /// </summary>
     public void Draw(int width, int height)
     {
         const int boxHeight = 150;
 
-        var box = new Rectangle(20, height - boxHeight - 20, width - 40, boxHeight);
+        PixelFont font = Skin.Font;
 
-        Raylib.DrawRectangleRec(box, Color.White);
-        Raylib.DrawRectangleLinesEx(box, 3, new Color(40, 40, 48, 255));
+        var box = new Rectangle(24, height - boxHeight - 24, width - 48, boxHeight);
 
-        Raylib.DrawText(_prompt, (int)box.X + 24, (int)box.Y + 20, 24, new Color(40, 40, 48, 255));
+        Skin.DrawPanel(box);
 
-        var field = new Rectangle(box.X + 24, box.Y + 60, box.Width - 48, 40);
+        font.Draw(_prompt, box.X + 24, box.Y + 20, 3, Skin.Ink);
 
-        Raylib.DrawRectangleRec(field, new Color(238, 238, 242, 255));
-        Raylib.DrawRectangleLinesEx(field, 2, new Color(90, 90, 110, 255));
+        var field = new Rectangle(box.X + 24, box.Y + 62, box.Width - 48, 40);
+
+        Skin.DrawPanel(field, raised: false, fill: Skin.PanelHigh);
+        Skin.DrawCutBorder(field, Skin.Accent);
+
+        font.Draw(_name, field.X + 14, field.Y + 13, 3, Skin.Ink);
 
         // A caret, so an empty field looks like somewhere to type rather than like
-        // something that has gone wrong.
-        Raylib.DrawText($"{_name}|", (int)field.X + 10, (int)field.Y + 9, 24, new Color(20, 20, 28, 255));
+        // something that has gone wrong. It blinks for the same reason the login screen's
+        // does: a still one reads as a letter.
+        if ((float)Raylib.GetTime() % 1.0f < 0.6f)
+        {
+            Raylib.DrawRectangle(
+                (int)field.X + 16 + font.Measure(_name, 3), (int)field.Y + 10, 3, 24, Skin.Accent);
+        }
 
-        Raylib.DrawText(
+        font.Draw(
             "Enter to keep this name    Esc to leave it as it is",
-            (int)box.X + 24,
-            (int)box.Y + boxHeight - 30,
-            16,
-            new Color(120, 120, 140, 255));
+            box.X + 24, box.Y + boxHeight - 28, 2, Skin.InkFaint);
     }
 
     /// <summary>

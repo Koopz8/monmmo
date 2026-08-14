@@ -1,3 +1,4 @@
+using PokeMmo.RomExtract;
 using PokeMmo.Core.Net;
 using PokeMmo.Core.Save;
 using Raylib_cs;
@@ -131,20 +132,39 @@ public sealed class ShopScreen
         }
     }
 
+    private static PixelFont Font => Skin.Font;
+
+    /// <summary>
+    /// The counter, drawn the way the rest of the game is drawn.
+    /// <para>
+    /// The money is put where it cannot be missed, because it is the number every
+    /// decision on this screen is made against, and the quantity is a panel of its own
+    /// rather than a line of text: it is the only thing here that changes as you hold a
+    /// key, and something that changes under your thumb should look like a control.
+    /// </para>
+    /// </summary>
     public void Draw()
     {
-        Raylib.ClearBackground(new Color(28, 32, 44, 255));
+        Raylib.ClearBackground(Skin.PanelDeep);
 
-        Raylib.DrawText(_selling ? "SELLING" : "BUYING", 40, 32, 28, Color.White);
-        Raylib.DrawText($"Money: {Money}", Width - 300, 32, 28, new Color(240, 220, 140, 255));
+        Font.Draw(_selling ? "SELLING" : "BUYING", 40, 30, 3, Skin.Ink);
+
+        var purse = new Rectangle(Width - 300, 22, 268, 44);
+
+        Skin.DrawPanel(purse, raised: false);
+        Font.DrawRight($"${Money}", purse.X + purse.Width - 18, purse.Y + 15, 3, Skin.HpFair);
 
         List<(int ItemId, int Price, int Held)> lines = Lines();
 
+        var stock = new Rectangle(32, 84, Width - 64, Height - 220);
+
+        Skin.DrawPanel(stock);
+
         if (lines.Count == 0)
         {
-            Raylib.DrawText(
+            Font.Draw(
                 _selling ? "You have nothing to sell." : "There is nothing for sale here.",
-                40, 100, 24, new Color(180, 180, 190, 255));
+                stock.X + 24, stock.Y + 26, 2, Skin.InkDim);
         }
 
         int first = Math.Max(0, Math.Min(_row - Rows / 2, Math.Max(0, lines.Count - Rows)));
@@ -153,28 +173,44 @@ public sealed class ShopScreen
         {
             (int itemId, int price, int held) = lines[i];
 
-            int y = 96 + (i - first) * 34;
+            float y = stock.Y + 20 + (i - first) * 32;
             bool selected = i == _row;
 
-            if (selected) Raylib.DrawText(">", 40, y, 24, Color.White);
+            if (selected) Skin.DrawSelection(new Rectangle(stock.X + 12, y - 6, stock.Width - 24, 28));
 
-            Raylib.DrawText(
-                _names.Of(itemId),
-                72, y, 24,
-                selected ? Color.White : new Color(190, 190, 200, 255));
+            Font.Draw(GameText.ToAscii(_names.Of(itemId)), stock.X + 28, y, 2, selected ? Skin.Ink : Skin.InkDim);
 
-            string right = _selling ? $"x{held}" : $"{price}   (have {held})";
+            // What it costs and what you already have, kept apart: they are different
+            // questions and a player reading one should not have to find it inside the
+            // other.
+            if (!_selling) Font.DrawRight($"${price}", stock.X + stock.Width - 200, y, 2, Skin.HpFair);
 
-            Raylib.DrawText(right, Width - 320, y, 24, new Color(190, 190, 200, 255));
+            Font.DrawRight(
+                held > 0 ? $"have {held}" : "", stock.X + stock.Width - 24, y, 2, Skin.InkFaint);
         }
 
-        Raylib.DrawText($"How many: {_quantity}", 40, Height - 132, 24, Color.White);
+        var many = new Rectangle(32, Height - 124, 300, 48);
 
-        if (_message.Length > 0)
-            Raylib.DrawText(_message, 40, Height - 96, 22, new Color(160, 220, 160, 255));
+        Skin.DrawPanel(many, raised: false);
+        Font.Draw("HOW MANY", many.X + 18, many.Y + 8, 2, Skin.InkFaint);
+        Font.DrawRight($"{_quantity}", many.X + many.Width - 18, many.Y + 16, 3, Skin.Ink);
 
-        Raylib.DrawText(
+        // What this comes to, which is the number a player is actually deciding about
+        // and the one they were being asked to multiply in their head.
+        if (lines.Count > 0)
+        {
+            (int _, int price, int _) = lines[Math.Clamp(_row, 0, lines.Count - 1)];
+
+            Font.Draw(
+                _selling ? $"for ${price * _quantity}" : $"costs ${price * _quantity}",
+                many.X + many.Width + 24, many.Y + 16, 2,
+                !_selling && price * _quantity > Money ? Skin.HpPoor : Skin.InkDim);
+        }
+
+        if (_message.Length > 0) Font.Draw(_message, 40, Height - 68, 2, Skin.HpGood);
+
+        Font.Draw(
             "up/down choose   left/right how many   Z confirm   Tab buy/sell   X leave",
-            40, Height - 52, 18, new Color(130, 130, 145, 255));
+            40, Height - 40, 2, Skin.InkFaint);
     }
 }

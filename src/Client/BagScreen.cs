@@ -185,9 +185,20 @@ public sealed class BagScreen
         _offered = null;
     }
 
+    private static PixelFont Font => Skin.Font;
+
+    /// <summary>
+    /// The bag, drawn the way the battle screen is drawn.
+    /// <para>
+    /// Two columns, because the bag is two questions — what, and on whom — and the
+    /// second is only ever asked about the first. Which one is being asked is shown by
+    /// which column is lit rather than by moving anything about: a list that jumps
+    /// across the screen when you press a button is a list you have to find again.
+    /// </para>
+    /// </summary>
     public void Draw()
     {
-        Raylib.ClearBackground(new Color(28, 32, 44, 255));
+        Raylib.ClearBackground(Skin.PanelDeep);
 
         List<BagEntry> lines = Usable();
 
@@ -197,59 +208,96 @@ public sealed class BagScreen
             return;
         }
 
-        Raylib.DrawText(_choosingWho ? "USE ON WHO?" : "BAG", 40, 32, 28, Color.White);
+        Font.Draw(_choosingWho ? "USE ON WHO?" : "BAG", 40, 30, 3, Skin.Ink);
+
+        var carrying = new Rectangle(32, 76, Width / 2 - 56, Height - 168);
+        var party = new Rectangle(Width / 2 + 24, 76, Width / 2 - 56, Height - 168);
+
+        Skin.DrawPanel(carrying);
+        Skin.DrawPanel(party);
+
+        // The column being asked about is the lit one. Without this the two lists look
+        // equally live and the cursor is the only clue which one a key press reaches.
+        Skin.DrawCutBorder(_choosingWho ? party : carrying, Skin.Accent);
 
         if (lines.Count == 0)
         {
-            Raylib.DrawText("You are not carrying anything.", 40, 100, 24, new Color(180, 180, 190, 255));
+            Font.Draw("You are not carrying anything.", carrying.X + 22, carrying.Y + 26, 2, Skin.InkDim);
         }
 
         int first = Math.Max(0, Math.Min(_row - Rows / 2, Math.Max(0, lines.Count - Rows)));
 
         for (int i = first; i < lines.Count && i < first + Rows; i++)
         {
-            int y = 96 + (i - first) * 34;
+            float y = carrying.Y + 18 + (i - first) * 30;
             bool selected = i == _row;
 
-            if (selected && !_choosingWho) Raylib.DrawText(">", 40, y, 24, Color.White);
+            if (selected && !_choosingWho)
+                Skin.DrawSelection(new Rectangle(carrying.X + 10, y - 5, carrying.Width - 20, 26));
 
-            Raylib.DrawText(
-                _items.Of(lines[i].ItemId),
-                72, y, 24,
-                selected ? Color.White : new Color(190, 190, 200, 255));
+            Font.Draw(
+                GameText.ToAscii(_items.Of(lines[i].ItemId)),
+                carrying.X + 24, y, 2,
+                selected && !_choosingWho ? Skin.Ink : Skin.InkDim);
 
-            // Kept inside the left half. It used to be measured from the right edge of
-            // the window, which put "x20" on top of the first party member's name — a
-            // count of twenty Poke Balls reading as part of a CHARIZARD's level.
-            Raylib.DrawText($"x{lines[i].Count}", Width / 2 - 120, y, 24, new Color(190, 190, 200, 255));
+            // Right-aligned inside its own panel, which is the arrangement that cannot
+            // collide with the column beside it however long a name gets.
+            Font.DrawRight($"x{lines[i].Count}", carrying.X + carrying.Width - 20, y, 2, Skin.InkFaint);
+        }
+
+        // More than fits, said out loud. A list that silently ends at eight is a bag
+        // with things in it the player has no reason to believe are there.
+        if (lines.Count > Rows)
+        {
+            Font.DrawRight(
+                $"{_row + 1}/{lines.Count}", carrying.X + carrying.Width - 20,
+                carrying.Y + carrying.Height - 24, 2, Skin.InkFaint);
         }
 
         for (int i = 0; i < _party.Count; i++)
         {
             SavedMon member = _party[i];
 
-            int y = 96 + i * 34;
+            float y = party.Y + 18 + i * 46;
             bool selected = i == _member && _choosingWho;
 
-            if (selected) Raylib.DrawText(">", Width / 2 + 8, y, 24, Color.White);
+            if (selected)
+                Skin.DrawSelection(new Rectangle(party.X + 10, y - 5, party.Width - 20, 42));
 
-            Raylib.DrawText(
-                $"{member.Nickname ?? _data.SpeciesAt(member.Species)?.Name ?? $"species {member.Species}"}  Lv{member.Level}",
-                Width / 2 + 40, y, 24,
-                _choosingWho
-                    ? selected ? Color.White : new Color(190, 190, 200, 255)
-                    : new Color(120, 120, 130, 255));
+            string name = GameText.ToAscii(
+                member.Nickname ?? _data.SpeciesAt(member.Species)?.Name ?? $"species {member.Species}");
 
-            Raylib.DrawText($"{member.CurrentHp} HP", Width - 180, y, 24, new Color(160, 200, 160, 255));
+            Color ink = _choosingWho ? selected ? Skin.Ink : Skin.InkDim : Skin.InkFaint;
+
+            Font.Draw(name, party.X + 24, y, 2, ink);
+            Font.DrawRight($"Lv{member.Level}", party.X + party.Width - 20, y, 2, ink);
+
+            int most = Math.Max(1, MaxHpOf(member));
+
+            // The bar stops short of the numbers rather than running under them, which
+            // is what it did: a full green bar with "139/139" printed on top of it.
+            Skin.DrawMeter(
+                new Rectangle(party.X + 24, y + 22, party.Width - 190, 6),
+                member.CurrentHp / (float)most,
+                Skin.HealthColour(member.CurrentHp, most));
+
+            Font.DrawRight(
+                member.CurrentHp <= 0 ? "fainted" : $"{member.CurrentHp}/{most}",
+                party.X + party.Width - 20, y + 18, 2,
+                member.CurrentHp <= 0 ? Skin.HpPoor : Skin.InkFaint);
         }
 
-        if (_message.Length > 0)
-            Raylib.DrawText(_message, 40, Height - 96, 22, new Color(160, 220, 160, 255));
+        if (_message.Length > 0) Font.Draw(_message, 40, Height - 74, 2, Skin.HpGood);
 
-        Raylib.DrawText(
-            _choosingWho ? "Z use    X back" : "Z choose    X close",
-            40, Height - 56, 20, new Color(150, 150, 160, 255));
+        DrawKeys(_choosingWho ? "Z use    X back" : "Z choose    X close");
     }
+
+    /// <summary>The line along the bottom that says which keys do anything.</summary>
+    private static void DrawKeys(string keys) => Font.Draw(keys, 40, Height - 42, 2, Skin.InkFaint);
+
+    /// <summary>Maximum health, which the save does not carry and the rules can work out.</summary>
+    private int MaxHpOf(SavedMon member) =>
+        PartyBuilder.Restore(_data, member) is { } battler ? battler.MaxHp : Math.Max(1, member.CurrentHp);
 
     private void DrawForgetMenu((int Slot, int MoveId) asking)
     {
@@ -262,31 +310,29 @@ public sealed class BagScreen
                 ?? $"species {_party[asking.Slot].Species}")
             : "It";
 
-        Raylib.DrawText($"{who} already knows four moves.", 40, 32, 26, Color.White);
-        Raylib.DrawText($"Forget one to make room for {MoveNamed(asking.MoveId)}?", 40, 70, 24,
-            new Color(190, 190, 200, 255));
+        Raylib.ClearBackground(Skin.PanelDeep);
 
-        for (int i = 0; i < moves.Count; i++)
+        Font.Draw($"{who} already knows four moves.", 40, 30, 3, Skin.Ink);
+        Font.Draw($"Forget one to make room for {MoveNamed(asking.MoveId)}?", 40, 70, 2, Skin.InkDim);
+
+        var box = new Rectangle(32, 108, Width - 64, moves.Count * 34 + 60);
+
+        Skin.DrawPanel(box);
+
+        for (int i = 0; i <= moves.Count; i++)
         {
-            int y = 140 + i * 34;
-            bool selected = i == _forget;
+            float y = box.Y + 20 + i * 34;
+            bool selected = i == _forget || (i == moves.Count && _forget >= moves.Count);
 
-            if (selected) Raylib.DrawText(">", 40, y, 24, Color.White);
+            if (selected) Skin.DrawSelection(new Rectangle(box.X + 12, y - 6, box.Width - 24, 30));
 
-            Raylib.DrawText(
-                MoveNamed(moves[i]), 72, y, 24,
-                selected ? Color.White : new Color(190, 190, 200, 255));
+            string label = i < moves.Count
+                ? MoveNamed(moves[i])
+                : $"Keep all four, and do not learn {MoveNamed(asking.MoveId)}";
+
+            Font.Draw(label, box.X + 28, y, 2, i < moves.Count ? Skin.Ink : Skin.InkDim);
         }
 
-        int last = 140 + moves.Count * 34;
-
-        if (_forget >= moves.Count) Raylib.DrawText(">", 40, last, 24, Color.White);
-
-        Raylib.DrawText(
-            $"Keep all four, and do not learn {MoveNamed(asking.MoveId)}",
-            72, last, 24,
-            _forget >= moves.Count ? Color.White : new Color(190, 190, 200, 255));
-
-        Raylib.DrawText("Z choose    X keep all four", 40, Height - 56, 20, new Color(150, 150, 160, 255));
+        DrawKeys("Z choose    X keep all four");
     }
 }
