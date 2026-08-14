@@ -8,7 +8,11 @@ namespace PokeMmo.Core.Battle;
 /// machine that has an image to read them from.
 /// </para>
 /// </summary>
-public sealed class BattleNames(string player, string opponent, Func<int, string> moveNamed)
+public sealed class BattleNames(
+    string player,
+    string opponent,
+    Func<int, string> moveNamed,
+    Func<int, string>? speciesNamed = null)
 {
     /// <summary>Names for a battle nobody can put words to, so narration still works.</summary>
     public static readonly BattleNames Unknown = new("Your side", "The opponent", id => $"move {id}");
@@ -16,6 +20,13 @@ public sealed class BattleNames(string player, string opponent, Func<int, string
     public string Of(Side side) => side == Side.Player ? player : opponent;
 
     public string MoveNamed(int moveId) => moveNamed(moveId);
+
+    /// <summary>
+    /// What to call a species, for the one sentence that is about a species rather than
+    /// about whoever is standing there. Falls back to the number, which is what a
+    /// narrator with no cartridge has.
+    /// </summary>
+    public string SpeciesNamed(int species) => speciesNamed?.Invoke(species) ?? $"species {species}";
 }
 
 /// <summary>
@@ -129,6 +140,11 @@ public static class BattleNarrator
         BattleEvent.LevelledUp e => $"{names.Of(e.Side)} grew to level {e.Level}!",
 
         BattleEvent.MoveLearned e => $"{names.Of(e.Side)} learned {names.MoveNamed(e.MoveId)}!",
+
+        // Two sentences' worth in one line, because the pause between them in the games
+        // is a whole animation this project does not have. What matters is that both
+        // names are said: "evolved!" on its own leaves the player looking at a list.
+        BattleEvent.Evolved e => $"{names.SpeciesNamed(e.From)} evolved into {names.SpeciesNamed(e.Into)}!",
 
         BattleEvent.MoveNotLearned e =>
             $"{names.Of(e.Side)} wants to learn {names.MoveNamed(e.MoveId)}, but already knows four moves.",

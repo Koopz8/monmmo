@@ -46,6 +46,7 @@ public enum Side
 [JsonDerivedType(typeof(LevelledUp), "levelup")]
 [JsonDerivedType(typeof(MoveLearned), "learned")]
 [JsonDerivedType(typeof(MoveNotLearned), "notlearned")]
+[JsonDerivedType(typeof(Evolved), "evolved")]
 [JsonDerivedType(typeof(Ended), "ended")]
 public abstract record BattleEvent
 {
@@ -130,6 +131,16 @@ public abstract record BattleEvent
     public sealed record LevelledUp(Side Side, int Level) : BattleEvent;
 
     public sealed record MoveLearned(Side Side, int MoveId) : BattleEvent;
+
+    /// <summary>
+    /// Something became something else.
+    /// <para>
+    /// Both species travel, not just the new one. The sentence is about a change and a
+    /// change needs both ends of it — and the client is the only half that can turn
+    /// either number into a name.
+    /// </para>
+    /// </summary>
+    public sealed record Evolved(Side Side, int From, int Into) : BattleEvent;
 
     /// <summary>
     /// A move was offered and could not be taken, because four are already known.

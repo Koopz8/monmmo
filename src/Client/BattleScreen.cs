@@ -196,7 +196,8 @@ public sealed class BattleScreen
         _names = new BattleNames(
             mine,
             IsTrainerBattle ? theirs : $"the wild {theirs}",
-            id => _data.MoveAt(id)?.Name ?? $"move {id}");
+            id => _data.MoveAt(id)?.Name ?? $"move {id}",
+            id => _data.SpeciesAt(id)?.Name ?? $"species {id}");
     }
 
     private string MoveNamed(int moveId) => GameText.ToAscii(_data.MoveAt(moveId)?.Name ?? $"move {moveId}");

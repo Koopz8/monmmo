@@ -57,9 +57,16 @@ public static class RulesExporter
         // name at all.
         int surf = moves.FirstOrDefault(m => string.Equals(m.Name, "SURF", StringComparison.OrdinalIgnoreCase))?.Id ?? 0;
 
-        var rules = new GameRules(anonymousSpecies, anonymousMoves, learnsets.Values, trainers, items)
+        // What turns into what, which nothing in this game has ever done. Located here
+        // rather than in the world export because it is arithmetic about creatures, and
+        // this is the file the server decides fights with.
+        EvolutionTable? evolutions = EvolutionExtractor.Locate(rom, species, log);
+
+        var rules = new GameRules(
+            anonymousSpecies, anonymousMoves, learnsets.Values, trainers, items, evolutions?.Evolutions)
         {
             SurfMove = surf,
+            EvolveByLevel = evolutions?.ByLevel ?? 0,
         };
 
         log?.Invoke(surf > 0
@@ -69,7 +76,7 @@ public static class RulesExporter
         log?.Invoke(
             $"  rules: {rules.SpeciesCount} species, {rules.MoveCount} moves, " +
             $"{rules.LearnsetCount} learnsets, {rules.TrainerCount} trainers, " +
-            $"{rules.ItemCount} items (no names)");
+            $"{rules.ItemCount} items, {rules.EvolutionCount} evolutions (no names)");
 
         ReportUsableness(rules, log);
 

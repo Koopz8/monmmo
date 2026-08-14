@@ -18,6 +18,16 @@ public sealed class Progression(GameRules rules)
     private const int MaxLevelsPerBattle = 20;
 
     /// <summary>
+    /// How many times one level-up may turn something into something else.
+    /// <para>
+    /// Three would do on this cartridge and this is a guard rather than a rule: a table
+    /// with a loop in it — A becomes B becomes A — would otherwise spin here forever,
+    /// and a server that hangs on one party member is worse than one that stops early.
+    /// </para>
+    /// </summary>
+    private const int MaxStages = 8;
+
+    /// <summary>
     /// Awards experience for a defeated opponent and returns the member as it now is,
     /// along with everything that happened, in order.
     /// </summary>
@@ -39,6 +49,7 @@ public sealed class Progression(GameRules rules)
         events.Add(new BattleEvent.ExperienceGained(Side.Player, gained));
 
         int level = member.Level;
+        int what = member.Species;
         var moves = member.Moves.ToList();
 
         for (int grown = 0; grown < MaxLevelsPerBattle; grown++)
@@ -49,14 +60,51 @@ public sealed class Progression(GameRules rules)
             level++;
             events.Add(new BattleEvent.LevelledUp(Side.Player, level));
 
-            LearnMovesFor(member.Species, level, moves, events);
+            LearnMovesFor(what, level, moves, events);
+
+            // And then, if this is the level it stops being what it was. After the moves
+            // rather than before: the level it reached is the level it learns at, and the
+            // games teach the old form's move before the new form exists.
+            //
+            // In a loop because the threshold is "has reached", not "is exactly". An
+            // operator hands out a CHARMANDER at fifty and it is two evolutions overdue;
+            // one of them per level would take it two more fights to catch up with
+            // itself, and there is no reading of the rule where that is right.
+            for (int stage = 0; stage < MaxStages; stage++)
+            {
+                if (Becomes(what, level) is not { } into) break;
+
+                events.Add(new BattleEvent.Evolved(Side.Player, what, into));
+
+                what = into;
+
+                // The curve is the new thing's curve, and so is everything after it —
+                // the next level's threshold, and the next level's moves. A CHARMELEON
+                // that went on levelling as a CHARMANDER would learn the wrong moves and
+                // cross the wrong thresholds, and nothing would say so.
+                if (rules.SpeciesAt(what) is { } now) species = now;
+            }
         }
 
         if (level >= Experience.MaxLevel)
             total = Math.Min(total, Experience.TotalForLevel(species.GrowthRate, Experience.MaxLevel));
 
-        return (member with { Level = level, Moves = moves, Experience = total }, events);
+        return (member with { Species = what, Level = level, Moves = moves, Experience = total }, events);
     }
+
+    /// <summary>
+    /// What this becomes on reaching a level, if it becomes anything.
+    /// <para>
+    /// Only the level method. A stone is an item somebody has to use and a trade is two
+    /// players; neither of those is something a victory can bring about, and evolving a
+    /// GRAVELER because it hit level forty would be inventing a rule this cartridge does
+    /// not have.
+    /// </para>
+    /// </summary>
+    private int? Becomes(int species, int level) =>
+        rules.EvolutionAt(species, level) is { } evolution && evolution.Into != species
+            ? evolution.Into
+            : null;
 
     /// <summary>
     /// Teaches whatever this species learns at a level.

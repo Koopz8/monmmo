@@ -23,26 +23,32 @@ public sealed class GameRules
 {
     private static readonly byte[] Magic = "MONRULES"u8.ToArray();
 
-    private const int Version = 6;
+    private const int Version = 7;
 
     private readonly Dictionary<int, SpeciesData> _species;
     private readonly Dictionary<int, MoveData> _moves;
     private readonly Dictionary<int, Learnset> _learnsets;
     private readonly Dictionary<int, TrainerParty> _trainers;
     private readonly Dictionary<int, ItemData> _items;
+    private readonly Dictionary<int, List<Evolution>> _evolutions;
 
     public GameRules(
         IEnumerable<SpeciesData> species,
         IEnumerable<MoveData> moves,
         IEnumerable<Learnset> learnsets,
         IEnumerable<TrainerParty>? trainers = null,
-        IEnumerable<ItemData>? items = null)
+        IEnumerable<ItemData>? items = null,
+        IEnumerable<Evolution>? evolutions = null)
     {
         _species = species.ToDictionary(s => s.Index);
         _moves = moves.ToDictionary(m => m.Id);
         _learnsets = learnsets.ToDictionary(l => l.Species);
         _trainers = (trainers ?? []).ToDictionary(t => t.Id);
         _items = (items ?? []).ToDictionary(i => i.Id);
+
+        _evolutions = (evolutions ?? [])
+            .GroupBy(e => e.Species)
+            .ToDictionary(g => g.Key, g => g.ToList());
 
         // Worked out here, while the names are still in memory, and written to the file
         // as a number. The same arrangement the ball kinds already use, and for the same
@@ -60,6 +66,40 @@ public sealed class GameRules
     /// </para>
     /// </summary>
     public int SurfMove { get; init; }
+
+    /// <summary>
+    /// Which method number means "on reaching a level".
+    /// <para>
+    /// Derived at export from the cartridge's own table and written here as a number,
+    /// for the same reason the ball kinds and SURF are: the server never sees a name and
+    /// never sees a cartridge, and a constant written here from memory of another game
+    /// is the mistake this project keeps a standing rule against. Zero means this image
+    /// had no such method, and nothing evolves.
+    /// </para>
+    /// </summary>
+    public int EvolveByLevel { get; init; }
+
+    public int EvolutionCount => _evolutions.Sum(e => e.Value.Count);
+
+    /// <summary>Everything this species can turn into, by any means.</summary>
+    public IReadOnlyList<Evolution> EvolutionsOf(int species) =>
+        _evolutions.GetValueOrDefault(species) ?? (IReadOnlyList<Evolution>)[];
+
+    /// <summary>
+    /// What this species becomes on reaching a level, if anything.
+    /// <para>
+    /// The level is a threshold rather than a match: a member that crossed two levels in
+    /// one victory, or that was handed over above its own evolution level, still evolves.
+    /// The alternative is a creature that missed its moment and can never have it back.
+    /// </para>
+    /// </summary>
+    public Evolution? EvolutionAt(int species, int level) =>
+        EvolveByLevel == 0
+            ? null
+            : EvolutionsOf(species)
+                .Where(e => e.Method == EvolveByLevel && e.Parameter <= level)
+                .OrderByDescending(e => e.Parameter)
+                .FirstOrDefault();
 
     public int SpeciesCount => _species.Count;
 
@@ -209,6 +249,17 @@ public sealed class GameRules
         // Derived from this cartridge's own move names at export, for the same reason
         // the ball kinds are: the server never sees a name.
         writer.Write(SurfMove);
+
+        writer.Write(EvolveByLevel);
+        writer.Write(EvolutionCount);
+
+        foreach (Evolution evolution in _evolutions.Values.SelectMany(e => e))
+        {
+            writer.Write(evolution.Species);
+            writer.Write(evolution.Method);
+            writer.Write(evolution.Parameter);
+            writer.Write(evolution.Into);
+        }
     }
 
     public void Save(string path)
@@ -340,8 +391,24 @@ public sealed class GameRules
         }
 
         int surf = reader.ReadInt32();
+        int byLevel = reader.ReadInt32();
 
-        return new GameRules(species, moves, learnsets, trainers, items) { SurfMove = surf };
+        var evolutions = new List<Evolution>();
+
+        foreach (int _ in Counted(reader, "evolutions", 8192))
+        {
+            evolutions.Add(new Evolution(
+                reader.ReadInt32(),
+                reader.ReadInt32(),
+                reader.ReadInt32(),
+                reader.ReadInt32()));
+        }
+
+        return new GameRules(species, moves, learnsets, trainers, items, evolutions)
+        {
+            SurfMove = surf,
+            EvolveByLevel = byLevel,
+        };
     }
 
     /// <summary>

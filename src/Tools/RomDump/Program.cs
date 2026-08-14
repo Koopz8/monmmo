@@ -196,6 +196,8 @@ public static class Program
 
         if (options.AfterFights) WriteAfterFights(rom);
 
+        if (options.Evolutions) WriteEvolutions(rom);
+
         if (options.BytesAfter is { } after) WriteBytesAfter(rom, after);
 
         if (options.Glyphs) WriteGlyphCandidates(rom, options.OutputDirectory);
@@ -4588,6 +4590,76 @@ public static class Program
     /// and thrown away in the same frame.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// What turns into what, and how the reading was arrived at.
+    /// <para>
+    /// The two lines of evidence are the point of printing this at all: the table is
+    /// picked out of four thousand candidates by the fact that almost every one of its
+    /// entries points at something with a higher base-stat total, and the level method is
+    /// picked out of fifteen by the fact that it is the only one that follows itself —
+    /// and always at a bigger number.
+    /// </para>
+    /// </summary>
+    private static void WriteEvolutions(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("What turns into what");
+
+        RomExtractor extractor = RomExtractor.Open(rom);
+        List<SpeciesData> species = extractor.ExtractSpecies();
+
+        if (EvolutionExtractor.Locate(rom, species, Console.WriteLine) is not { } table)
+        {
+            Console.WriteLine("  nothing on this cartridge reads as an evolution table");
+            return;
+        }
+
+        var named = species.ToDictionary(s => s.Index, s => GameText.ToAscii(s.Name));
+
+        string Named(int index) => named.GetValueOrDefault(index) ?? $"species {index}";
+
+        Console.WriteLine();
+
+        foreach (IGrouping<int, Evolution> by in table.Evolutions.GroupBy(e => e.Method).OrderByDescending(g => g.Count()))
+        {
+            Console.WriteLine(
+                $"  method {by.Key}: {by.Count()} of them" +
+                (by.Key == table.ByLevel ? "  <- the level one" : "") +
+                $", parameters {by.Min(e => e.Parameter)}..{by.Max(e => e.Parameter)}");
+
+            foreach (Evolution one in by.Take(4))
+            {
+                Console.WriteLine(
+                    $"      {Named(one.Species),-12} -> {Named(one.Into),-12} " +
+                    (by.Key == table.ByLevel ? $"at level {one.Parameter}" : $"parameter {one.Parameter}"));
+            }
+        }
+
+        // The longest lines this cartridge has, which is the readable version of the
+        // chain test the method number was derived from.
+        Console.WriteLine();
+        Console.WriteLine("  The longest lines, by the level method:");
+
+        var byLevel = table.Evolutions.Where(e => e.Method == table.ByLevel).ToList();
+
+        foreach (Evolution first in byLevel
+                     .Where(e => byLevel.All(other => other.Into != e.Species))
+                     .Where(e => byLevel.Any(next => next.Species == e.Into))
+                     .Take(8))
+        {
+            var line = new List<string> { Named(first.Species) };
+            Evolution? step = first;
+
+            while (step is { } here)
+            {
+                line.Add($"-{here.Parameter}-> {Named(here.Into)}");
+                step = byLevel.FirstOrDefault(next => next.Species == here.Into);
+            }
+
+            Console.WriteLine("      " + string.Join(" ", line));
+        }
+    }
+
     private static void WriteAfterFights(Rom rom)
     {
         Console.WriteLine();
@@ -6056,6 +6128,8 @@ public static class Program
                                      holds, and who they keep off the map
               --after-fights         report what every script that starts a fight with
                                      nobody in it says once the fight is over
+              --evolutions           report the evolution table: where it is, which
+                                     method means a level, and what turns into what
               --script-map <b.m>     dump every script on one map, decoded and as bytes
               --export-rules <path>  write the rules file the server resolves battles
                                      against: base stats, move power, catch rates and
@@ -6194,6 +6268,9 @@ public static class Program
         /// <summary>Report what a script says once the fight it started is over.</summary>
         public bool AfterFights { get; private init; }
 
+        /// <summary>Report the evolution table and what it says.</summary>
+        public bool Evolutions { get; private init; }
+
         /// <summary>Print what follows one unknown command, everywhere it appears.</summary>
         public byte? BytesAfter { get; private init; }
 
@@ -6272,6 +6349,7 @@ public static class Program
             bool ledges = false;
             bool newGame = false;
             bool afterFights = false;
+            bool evolutions = false;
             byte? bytesAfter = null;
             bool glyphs = false;
             uint font = 0;
@@ -6467,6 +6545,9 @@ public static class Program
                     case "--after-fights":
                         afterFights = true;
                         break;
+                    case "--evolutions":
+                        evolutions = true;
+                        break;
                     case "--bytes-after":
                         string which = Next(args, ref i, "--bytes-after");
                         bytesAfter = Convert.ToByte(
@@ -6605,6 +6686,7 @@ public static class Program
                 Ledges = ledges,
                 NewGame = newGame,
                 AfterFights = afterFights,
+                Evolutions = evolutions,
                 BytesAfter = bytesAfter,
                 Glyphs = glyphs,
                 Font = font,
