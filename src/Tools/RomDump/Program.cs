@@ -199,6 +199,7 @@ public static class Program
         if (options.Evolutions) WriteEvolutions(rom);
         if (options.Machines) WriteMachineCompatibility(rom);
         if (options.Computers) WriteComputers(rom);
+        if (options.Letters) WriteLetterHunt(rom);
 
         if (options.BytesAfter is { } after) WriteBytesAfter(rom, after);
 
@@ -4952,6 +4953,93 @@ public static class Program
         }
     }
 
+    /// <summary>
+    /// Four ways of looking for the cartridge's lettering, and what each one rules out.
+    /// <para>
+    /// The expensive part of a search like this is not running it — it is discovering,
+    /// again, that the four obvious ideas do not work. This exists so that the next
+    /// attempt starts where this one stopped.
+    /// </para>
+    /// </summary>
+    private static void WriteLetterHunt(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("Looking for the lettering");
+
+        Console.WriteLine();
+        Console.WriteLine($"  {LetterHunt.PrintableCodes()} of 256 character codes print something.");
+
+        List<LetterHit> byCode = LetterHunt.IndexedByCharacterCode(rom);
+
+        Console.WriteLine();
+        Console.WriteLine("  By character code — blank where nothing prints, ink where something does:");
+
+        Report(byCode);
+
+        List<LetterHit> raw = LetterHunt.LooksLikeAnAlphabet(rom.Span, Rom.BaseAddress);
+
+        Console.WriteLine();
+        Console.WriteLine("  By the shape of an alphabet — eleven capitals read the same backwards,");
+        Console.WriteLine("  in an order nothing else has:");
+
+        Report(raw);
+
+        var blocks = 0;
+        var unpacked = new List<LetterHit>();
+
+        for (int at = 0; at + 4 < rom.Length; at += 4)
+        {
+            if (rom.ReadU8(at) != 0x10) continue;
+
+            int size = (int)(rom.ReadU32(at) >> 8);
+
+            if (size is < 512 or > 0x8000) continue;
+
+            byte[] data;
+
+            try { data = Lz77.Decompress(rom.Span[at..]); }
+            catch { continue; }
+
+            if (data.Length < size) continue;
+
+            blocks++;
+            unpacked.AddRange(LetterHunt.LooksLikeAnAlphabet(data, Rom.BaseAddress + (uint)at));
+        }
+
+        Console.WriteLine();
+        Console.WriteLine($"  The same, through {blocks} compressed blocks unpacked:");
+
+        Report(unpacked);
+
+        Console.WriteLine();
+        Console.WriteLine("  Four: a person looking. The block at 0x08232800 is plain eight-by-eight and");
+        Console.WriteLine("  reads perfectly — a clean Latin lowercase alphabet among the kana — which is");
+        Console.WriteLine("  how we know the readers above work. It holds no capitals and is not indexed");
+        Console.WriteLine("  by code either. Sheets across 0x08230000-0x08236000 show that block and then");
+        Console.WriteLine("  compressed data; the Latin sheet is not beside it.");
+        Console.WriteLine();
+        Console.WriteLine("  So the lettering is in this image in a form none of these four recognises.");
+        Console.WriteLine("  What is ruled out is a bitmap eight pixels wide, at one, two or four bits");
+        Console.WriteLine("  deep, eight, twelve or sixteen tall, packed or compressed.");
+    }
+
+    private static void Report(List<LetterHit> hits)
+    {
+        if (hits.Count == 0)
+        {
+            Console.WriteLine("    nothing anywhere on the image");
+            return;
+        }
+
+        foreach (LetterHit hit in hits.OrderByDescending(h => h.Share).Take(6))
+        {
+            Console.WriteLine(
+                $"    0x{hit.Address:X8}  {hit.Depth}bpp {hit.Height} tall" +
+                (hit.Offset > 0 ? $", glyph {hit.Offset}" : "") +
+                $"   {hit.Score}/{hit.OutOf}");
+        }
+    }
+
     private static void WriteAfterFights(Rom rom)
     {
         Console.WriteLine();
@@ -6464,6 +6552,8 @@ public static class Program
                                      runs of bytes with the same shape
               --computers            report the behaviour byte that means a storage
                                      machine, and the evidence separating it
+              --letters              hunt for the cartridge's own lettering four ways,
+                                     and report where it is not
               --script-map <b.m>     dump every script on one map, decoded and as bytes
               --export-rules <path>  write the rules file the server resolves battles
                                      against: base stats, move power, catch rates and
@@ -6609,6 +6699,8 @@ public static class Program
 
         public bool Computers { get; private init; }
 
+        public bool Letters { get; private init; }
+
         /// <summary>Print what follows one unknown command, everywhere it appears.</summary>
         public byte? BytesAfter { get; private init; }
 
@@ -6690,6 +6782,7 @@ public static class Program
             bool evolutions = false;
             bool machines = false;
             bool computers = false;
+            bool letters = false;
             byte? bytesAfter = null;
             bool glyphs = false;
             uint font = 0;
@@ -6894,6 +6987,9 @@ public static class Program
                     case "--computers":
                         computers = true;
                         break;
+                    case "--letters":
+                        letters = true;
+                        break;
                     case "--bytes-after":
                         string which = Next(args, ref i, "--bytes-after");
                         bytesAfter = Convert.ToByte(
@@ -7035,6 +7131,7 @@ public static class Program
                 Evolutions = evolutions,
                 Machines = machines,
                 Computers = computers,
+                Letters = letters,
                 BytesAfter = bytesAfter,
                 Glyphs = glyphs,
                 Font = font,
