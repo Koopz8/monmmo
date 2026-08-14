@@ -75,6 +75,13 @@ internal static class TestRules
     /// <summary>The kind that restores all of it, whatever the maximum happens to be.</summary>
     public const int FullPotionItem = 20;
 
+    /// <summary>One that clears one thing, one that clears the lot, and one that does both.</summary>
+    public const int AntidoteItem = 14;
+
+    public const int FullHealItem = 23;
+
+    public const int FullRestoreItem = 19;
+
     /// <summary>A machine that is used up, and one that is not.</summary>
     public const int DiscItem = 289;
 
@@ -187,6 +194,15 @@ internal static class TestRules
             new(MasterBallItem, 0, Pocket.Balls, 0, 0, 0, 0, 0, BallKind.Master),
             new(PotionItem, 300, Pocket.Items, 0, 20, 0, 1, 0),
             new(FullPotionItem, 2500, Pocket.Items, 0, ItemData.FullRestore, 0, 1, 0),
+
+            // Three that put a condition right. The first restores nothing at all, which
+            // is the case that catches a use path gated on the health going up.
+            new(AntidoteItem, 100, Pocket.Items, 0, 0, 0, 1, 0) { Cures = Ailments.Poison },
+            new(FullHealItem, 600, Pocket.Items, 0, 0, 0, 1, 0) { Cures = Ailments.Everything },
+            new(FullRestoreItem, 3000, Pocket.Items, 0, ItemData.FullRestore, 0, 1, 0)
+            {
+                Cures = Ailments.Everything,
+            },
 
             // A machine of each kind, as the cartridge distinguishes them: the disc has
             // a price and no importance, the hidden machine has importance and no price.

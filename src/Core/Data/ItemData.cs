@@ -92,6 +92,24 @@ public sealed record ItemData(
     public int? Restores =>
         BattleUsage != 0 && Pocket == Pocket.Items && HoldEffectParam > 0 ? HoldEffectParam : null;
 
+    /// <summary>
+    /// What this clears, or nothing.
+    /// <para>
+    /// Not in the item's own record — an Antidote and a Full Heal have zero in every
+    /// field of theirs, and both run the same field routine besides. It comes from a
+    /// second table of short arrays, one column of which is the one every named cure
+    /// item claims a single distinct bit of.
+    /// </para>
+    /// <para>
+    /// A set rather than a condition, because four items on this cartridge clear six
+    /// things each.
+    /// </para>
+    /// </summary>
+    public Ailments Cures { get; init; }
+
+    /// <summary>True when using this could put a condition right.</summary>
+    public bool IsCure => Cures != Ailments.None;
+
     /// <summary>How much this would actually put back on somebody, given their maximum.</summary>
     public int RestoreFor(int maxHp) =>
         Restores is not { } amount ? 0 : amount >= FullRestore ? maxHp : amount;

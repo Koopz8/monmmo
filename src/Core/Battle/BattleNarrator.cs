@@ -1,3 +1,5 @@
+using PokeMmo.Core.Data;
+
 namespace PokeMmo.Core.Battle;
 
 /// <summary>
@@ -129,6 +131,10 @@ public static class BattleNarrator
             ? $"{names.Of(e.Side)} recovered {e.Amount} HP!"
             : $"It would have no effect on {names.Of(e.Side)}.",
 
+        // Named one at a time rather than as a list, because an item that puts several
+        // things right on a creature that had one of them should say the one it fixed.
+        BattleEvent.PutRight e => WhatWasPutRight(names.Of(e.Side), e.Cleared),
+
         BattleEvent.BallThrown e => e.Caught
             ? $"Gotcha! {names.Of(e.Target)} was caught!"
             : e.Shakes switch
@@ -210,6 +216,21 @@ public static class BattleNarrator
         Stat.Accuracy => "accuracy",
         Stat.Evasion => "evasiveness",
         _ => "HP",
+    };
+
+    /// <summary>
+    /// What an item put right, named one at a time. An item that clears six things used
+    /// on a creature that had one of them should say the one it fixed.
+    /// </summary>
+    private static string WhatWasPutRight(string who, Ailments cleared) => cleared switch
+    {
+        Ailments.Poison => $"{who} was cured of its poisoning!",
+        Ailments.Burn => $"{who}'s burn was healed!",
+        Ailments.Paralysis => $"{who} was cured of paralysis!",
+        Ailments.Sleep => $"{who} woke up!",
+        Ailments.Freeze => $"{who} was defrosted!",
+        Ailments.Confusion => $"{who} snapped out of its confusion!",
+        _ => $"{who} is feeling better!",
     };
 
     private static string DescribeDamage(BattleEvent.DamageDealt e, BattleNames names)

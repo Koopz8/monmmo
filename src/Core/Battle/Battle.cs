@@ -1,3 +1,4 @@
+using PokeMmo.Core.Data;
 using System.Text.Json.Serialization;
 
 namespace PokeMmo.Core.Battle;
@@ -41,6 +42,7 @@ public enum Side
 [JsonDerivedType(typeof(HurtItself), "hurtitself")]
 [JsonDerivedType(typeof(Fainted), "fainted")]
 [JsonDerivedType(typeof(HealthRestored), "healed")]
+[JsonDerivedType(typeof(PutRight), "putright")]
 [JsonDerivedType(typeof(BallThrown), "ball")]
 [JsonDerivedType(typeof(ExperienceGained), "exp")]
 [JsonDerivedType(typeof(LevelledUp), "levelup")]
@@ -131,6 +133,16 @@ public abstract record BattleEvent
 
     /// <summary>Somebody drank something. The amount is what actually went back on.</summary>
     public sealed record HealthRestored(Side Side, int ItemId, int Amount) : BattleEvent;
+
+    /// <summary>
+    /// Something that was wrong is no longer wrong.
+    /// <para>
+    /// Separate from the health event rather than a field on it, because one item does
+    /// both and one does only this — a Full Heal restores nothing and is not a wasted
+    /// turn, and an event that carried "restored zero" would read as one.
+    /// </para>
+    /// </summary>
+    public sealed record PutRight(Side Side, int ItemId, Ailments Cleared) : BattleEvent;
 
     /// <summary>
     /// A ball was thrown. <paramref name="Shakes"/> is how many times it wobbled,
@@ -287,6 +299,9 @@ public abstract record BattleAction
     public sealed record UseItem(int ItemId) : BattleAction
     {
         public int Restores { get; init; }
+
+        /// <summary>What this would put right, decided by the server for the same reason.</summary>
+        public Ailments Cures { get; init; }
     }
 }
 
@@ -457,14 +472,39 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         Battler defender = Of(Other(side));
 
         if (attacker.HasFainted) return;
-        if (!CanAct(side, attacker, events)) return;
 
+        // The bag, the door and a ball come before the question of whether this one can
+        // move, because none of them are it moving — a trainer reaching into a bag is
+        // not something sleep can stop. Written the other way round it made a Full Heal
+        // useless on the only thing it is for: the check ran first, the creature slept
+        // through its own cure, and the item was spent on nothing.
+        //
+        // It also means the sleep counter does not tick. In these games it comes down
+        // when the creature tries to move, and this turn it never tried.
         if (action is BattleAction.UseItem item)
         {
             // Spends the turn whether or not it did much, exactly as a throw does.
             int healed = attacker.Heal(item.Restores);
 
             events.Add(new BattleEvent.HealthRestored(side, item.ItemId, healed));
+
+            // And what it puts right, which is the half a Full Heal is entirely made of.
+            Ailments cleared = Ailments.None;
+
+            if (item.Cures.Clears(attacker.Status))
+            {
+                cleared |= attacker.Status.AsAilment();
+                attacker.Status = StatusCondition.None;
+            }
+
+            if (item.Cures.HasFlag(Ailments.Confusion) && attacker.IsConfused)
+            {
+                cleared |= Ailments.Confusion;
+                attacker.ConfusedTurns = 0;
+            }
+
+            if (cleared != Ailments.None) events.Add(new BattleEvent.PutRight(side, item.ItemId, cleared));
+
             return;
         }
 
@@ -481,6 +521,9 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             ThrowAt(side, defender, throwBall.Kind, events);
             return;
         }
+
+        // And here is where it matters, which is everything else: a move.
+        if (!CanAct(side, attacker, events)) return;
 
         MoveData? move = action is BattleAction.UseMove use ? attacker.MoveAt(use.Slot) : null;
         if (move is null) return;

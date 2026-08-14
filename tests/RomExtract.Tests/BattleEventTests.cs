@@ -103,6 +103,7 @@ public class BattleEventShapeTests
         if (bare == typeof(Side)) return Side.Player;
         if (bare == typeof(Stat)) return Stat.Attack;
         if (bare == typeof(StatusCondition)) return StatusCondition.Poison;
+        if (bare == typeof(Ailments)) return Ailments.Poison;
         if (bare == typeof(DamageResult)) return new DamageResult(12, true, 200, true);
         if (bare == typeof(int)) return 1;
         if (bare == typeof(bool)) return true;

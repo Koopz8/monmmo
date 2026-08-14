@@ -6158,6 +6158,24 @@ public static class Program
             }
         }
 
+        // What each one clears, which is in no field of its own record and not in the
+        // routine either — all six of the named cures run the same one. Printed with
+        // the bit each anchor claimed, because "ANTIDOTE is poison" is a claim and
+        // "ANTIDOTE alone sets 0x10, and the one that clears everything sets 0x3F" is
+        // evidence.
+        if (ItemEffects.Locate(rom, items, Console.WriteLine) is { } cures)
+        {
+            Console.WriteLine();
+            Console.WriteLine($"  What clears what, from items {cures.FirstItem}..{cures.LastItem}:");
+
+            foreach ((int id, Ailments clears) in cures.Cures.OrderBy(c => c.Key))
+            {
+                string name = id < items.Count ? items[id].Name.Trim() : $"item {id}";
+
+                Console.WriteLine($"    {id,4} {name,-14} {clears}");
+            }
+        }
+
         // Which pockets holding is for. No field says it, and the obvious reading —
         // anything with a hold effect — is wrong: most of what a player hands over has
         // no hold effect at all, and a Potion held does nothing and is still held. What

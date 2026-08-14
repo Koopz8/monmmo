@@ -1735,11 +1735,24 @@ public sealed class GameWorld
             if (_rules is { } rules && rules.IsEvolutionStone(itemId))
                 return UseStone(player, slot, itemId, rules);
 
-            if (_battles is null || _rules?.ItemAt(itemId) is not { Restores: not null } medicine) return [];
+            if (_battles is null || _rules?.ItemAt(itemId) is not { } medicine) return [];
+            if (medicine.Restores is null && !medicine.IsCure) return [];
 
-            (SavedMon healed, int restored) = _battles.Restored(player.Party[slot], medicine);
+            SavedMon member = player.Party[slot];
 
-            if (restored <= 0)
+            // Health first, then the condition. One item does both — a Full Restore
+            // clears six things and fills the bar — and one does only the second, so
+            // neither half may be the gate on the other.
+            (SavedMon healed, int restored) = medicine.Restores is not null
+                ? _battles.Restored(member, medicine)
+                : (member, 0);
+
+            StatusCondition was = healed.Status;
+            bool cured = medicine.Cures.Clears(was);
+
+            if (cured) healed = healed with { Status = StatusCondition.None };
+
+            if (restored <= 0 && !cured)
             {
                 return [new Outgoing(
                     new BagUpdated(player.Bag.Entries, [.. player.Party], "It won't have any effect."),
@@ -1749,11 +1762,33 @@ public sealed class GameWorld
             player.Bag.Remove(itemId);
             player.Party[slot] = healed;
 
+            string said = (restored > 0, cured) switch
+            {
+                (true, true) => $"Restored {restored} health, and {WhatWentAway(was)}",
+                (true, false) => $"Restored {restored} health.",
+                _ => char.ToUpperInvariant(WhatWentAway(was)[0]) + WhatWentAway(was)[1..],
+            };
+
             return [new Outgoing(
-                new BagUpdated(player.Bag.Entries, [.. player.Party], $"Restored {restored} health."),
+                new BagUpdated(player.Bag.Entries, [.. player.Party], said),
                 OnlyTo: playerId)];
         }
     }
+
+    /// <summary>
+    /// What a cure just put right, as half a sentence. The condition is named rather
+    /// than the item, because an item that clears six things used on somebody who had
+    /// one of them should say which one it was.
+    /// </summary>
+    private static string WhatWentAway(StatusCondition was) => was switch
+    {
+        StatusCondition.Poison => "the poison is gone.",
+        StatusCondition.Burn => "the burn is gone.",
+        StatusCondition.Paralysis => "it can move again.",
+        StatusCondition.Sleep => "it woke up.",
+        StatusCondition.Freeze => "it thawed out.",
+        _ => "it's feeling better.",
+    };
 
     /// <summary>
     /// Hands something over to a party member to carry.
@@ -3155,6 +3190,23 @@ public sealed class GameWorld
                 ];
             }
 
+            // The same argument /hurt was written for, one field along. Nothing else in
+            // this game gives a party a condition on demand, so testing that a cure
+            // cures meant walking into grass until something poisoned somebody — and a
+            // cure used on a healthy creature proves the bag opened and nothing else.
+            case "ail":
+            {
+                if (player.Party.Count == 0) return [Said(player, "nobody to trouble")];
+
+                if (!Enum.TryParse(line.Word(0), ignoreCase: true, out StatusCondition wrong))
+                    return [Said(player, "/ail <poison|burn|paralysis|sleep|freeze|none>")];
+
+                for (int i = 0; i < player.Party.Count; i++)
+                    player.Party[i] = player.Party[i] with { Status = wrong };
+
+                return [Said(player, $"{player.Party.Count} now {wrong}"), .. Resend(player)];
+            }
+
             case "money":
             {
                 if (line.Number(0) is not { } amount) return [Said(player, "/money <amount>")];
@@ -3379,7 +3431,7 @@ public sealed class GameWorld
         _rules is null
             ? []
             : player.Bag.InPocket(_rules, Pocket.Items)
-                .Where(e => _rules.ItemAt(e.ItemId)?.Restores is not null)
+                .Where(e => _rules.ItemAt(e.ItemId) is { } i && (i.Restores is not null || i.IsCure))
                 .ToList();
 
     /// <summary>
@@ -3394,14 +3446,18 @@ public sealed class GameWorld
     {
         if (action is BattleAction.UseItem using_)
         {
-            // Everything checked here: that it is a thing, that it restores anything,
-            // that it is actually carried. A client sends an id and nothing else.
-            if (_rules?.ItemAt(using_.ItemId) is not { Restores: not null } medicine)
-                return new BattleAction.UseMove(0);
+            // Everything checked here: that it is a thing, that it does something, that
+            // it is actually carried. A client sends an id and nothing else.
+            if (_rules?.ItemAt(using_.ItemId) is not { } medicine) return new BattleAction.UseMove(0);
+            if (medicine.Restores is null && !medicine.IsCure) return new BattleAction.UseMove(0);
 
             if (player.Bag.Remove(using_.ItemId) == 0) return new BattleAction.UseMove(0);
 
-            return using_ with { Restores = medicine.RestoreFor(encounter.Player.MaxHp) };
+            return using_ with
+            {
+                Restores = medicine.RestoreFor(encounter.Player.MaxHp),
+                Cures = medicine.Cures,
+            };
         }
 
         if (action is not BattleAction.ThrowBall throwing) return action;

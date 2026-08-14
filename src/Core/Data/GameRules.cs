@@ -23,7 +23,7 @@ public sealed class GameRules
 {
     private static readonly byte[] Magic = "MONRULES"u8.ToArray();
 
-    private const int Version = 9;
+    private const int Version = 10;
 
     private readonly Dictionary<int, SpeciesData> _species;
     private readonly Dictionary<int, MoveData> _moves;
@@ -362,6 +362,12 @@ public sealed class GameRules
             // cartridge — it comes from a separate list matched to the machines by
             // position. Zero for everything that teaches nothing, which is most of it.
             writer.Write(item.Teaches);
+
+            // And what it clears, which is in no field of that record either. Written as
+            // this project's own set rather than the cartridge's byte, because the bits
+            // were given their meanings at export by the names of the items that claim
+            // them, and the server has never seen a name.
+            writer.Write((int)item.Cures);
         }
 
         // Derived from this cartridge's own move names at export, for the same reason
@@ -514,6 +520,7 @@ public sealed class GameRules
                 reader.ReadInt32() is var ball && ball >= 0 ? (BallKind)ball : null)
             {
                 Teaches = reader.ReadInt32(),
+                Cures = (Ailments)reader.ReadInt32(),
             });
         }
 

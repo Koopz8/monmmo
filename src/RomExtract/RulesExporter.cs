@@ -166,8 +166,21 @@ public static class RulesExporter
             return ([], []);
         }
 
-        List<ItemData> items =
-            [.. ItemTable.Read(rom, table).Select(i => i.ToData() with { Ball = BallFor(i) })];
+        List<ItemRecord> records = ItemTable.Read(rom, table);
+
+        List<ItemData> items = [.. records.Select(i => i.ToData() with { Ball = BallFor(i) })];
+
+        // What each one clears, from a second table this project had written down as
+        // unknown since potions worked. Read here rather than in the world export
+        // because it needs the names, and this is where names stop.
+        if (ItemEffects.Locate(rom, records, log) is { } cures)
+        {
+            items =
+            [
+                .. items.Select(i =>
+                    cures.Cures.TryGetValue(i.Id, out Ailments clears) ? i with { Cures = clears } : i)
+            ];
+        }
 
         return Teach(rom, items, moveCount, log);
     }

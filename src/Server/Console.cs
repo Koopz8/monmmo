@@ -59,6 +59,7 @@ public static class ConsoleHelp
         "/read <id>                 what a variable holds",
         "/heal                      everybody back on their feet",
         "/hurt [hp]                 everybody down to that much, 1 by default",
+        "/ail <condition>           everybody poisoned, burned, asleep — or none",
         "/money <amount>            set it",
         "/forget                    every flag and variable, gone",
         "/help                      this",

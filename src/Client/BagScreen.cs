@@ -1,3 +1,4 @@
+using PokeMmo.Core.Battle;
 using PokeMmo.Core.Net;
 using PokeMmo.Core.Save;
 using PokeMmo.RomExtract;
@@ -317,7 +318,20 @@ public sealed class BagScreen
                 : _choosingWho ? selected ? Skin.Ink : Skin.InkDim : Skin.InkFaint;
 
             Font.Draw(name, party.X + 24, y, 2, ink);
-            Font.DrawRight($"Lv{member.Level}", party.X + party.Width - 20, y, 2, ink);
+
+            string level = $"Lv{member.Level}";
+
+            Font.DrawRight(level, party.X + party.Width - 20, y, 2, ink);
+
+            // What is wrong with them, beside the level. Cures had nothing to aim at
+            // until this was here: a player could carry an Antidote and have no way to
+            // see which one needed it.
+            if (Ailing(member.Status) is { } ailing)
+            {
+                Font.DrawRight(
+                    ailing,
+                    party.X + party.Width - 28 - Font.Measure(level, 2), y, 2, Skin.HpPoor);
+            }
 
             int most = Math.Max(1, MaxHpOf(member));
 
@@ -356,6 +370,24 @@ public sealed class BagScreen
 
         DrawKeys(_choosingWho ? $"Z use    {handing}T take    X back" : "Z choose    X close");
     }
+
+    /// <summary>
+    /// Three letters for what is wrong, or nothing when nothing is.
+    /// <para>
+    /// The same abbreviations these games have always used, and short on purpose: it
+    /// shares a line with a name that can be ten letters and a level that can be three
+    /// digits.
+    /// </para>
+    /// </summary>
+    private static string? Ailing(StatusCondition status) => status switch
+    {
+        StatusCondition.Poison => "PSN",
+        StatusCondition.Burn => "BRN",
+        StatusCondition.Paralysis => "PAR",
+        StatusCondition.Sleep => "SLP",
+        StatusCondition.Freeze => "FRZ",
+        _ => null,
+    };
 
     /// <summary>The line along the bottom that says which keys do anything.</summary>
     private static void DrawKeys(string keys) => Font.Draw(keys, 40, Height - 42, 2, Skin.InkFaint);
