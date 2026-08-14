@@ -28,13 +28,29 @@ public class BoxTests
 {
     private const string Town = "1.0";
 
-    private static (GameWorld World, ServerPlayer Player) Standing(int party = 1, int stored = 0)
+    /// <summary>
+    /// A room with a machine on one square, and the player standing in front of it.
+    /// <para>
+    /// The machine matters: every one of these operations is refused anywhere else, so a
+    /// fixture on bare ground would test the refusal and nothing else.
+    /// </para>
+    /// </summary>
+    private static (GameWorld World, ServerPlayer Player) Standing(
+        int party = 1, int stored = 0, bool atAMachine = true)
     {
-        MapData map = new(Town, "PALLET TOWN", 8, 8, new byte[64]);
+        var behaviours = new byte[64];
+
+        // (3,3), which is the square the player at (3,4) faces when looking up.
+        if (atAMachine) behaviours[3 * 8 + 3] = MetatileBehaviour.Computer;
+
+        MapData map = new(Town, "PALLET TOWN", 8, 8, new byte[64]) { Behaviours = behaviours };
 
         var world = new GameWorld(new WorldData([map]), Town, TestRules.All);
 
-        (ServerPlayer player, _) = world.Join(1, "Mason", SavedCharacter.Fresh(Town, 3, 4));
+        (ServerPlayer player, _) = world.Join(1, "Mason", SavedCharacter.Fresh(Town, 3, 4) with
+        {
+            Facing = Direction.Up,
+        });
 
         player.Party = [.. Enumerable.Range(0, party).Select(Member)];
         player.Box = [.. Enumerable.Range(100, stored).Select(Member)];
@@ -285,6 +301,36 @@ public class BoxTests
 
         Assert.True(finished.ToTheBox);
         Assert.Single(finished.Box);
+    }
+
+    /// <summary>
+    /// And none of it happens anywhere else. The games put the box behind a machine and
+    /// so does this — it is the one interaction in the game a player could otherwise do
+    /// from the middle of a route.
+    /// </summary>
+    [Fact]
+    public void NoneOfItWorksAwayFromAMachine()
+    {
+        (GameWorld world, ServerPlayer player) = Standing(party: 2, stored: 1, atAMachine: false);
+
+        Assert.Equal("There is no machine here.", Said(world.Deposit(player.Id, 1))?.Message);
+        Assert.Equal("There is no machine here.", Said(world.Withdraw(player.Id, 0))?.Message);
+
+        Assert.Equal(2, player.Party.Count);
+        Assert.Single(player.Box);
+    }
+
+    /// <summary>
+    /// A catch still reaches the box from wherever it happened. What the machine gates
+    /// is moving things about on purpose, not a creature having nowhere else to go.
+    /// </summary>
+    [Fact]
+    public void ACatchStillReachesTheBoxOutOnARoute()
+    {
+        (GameWorld world, ServerPlayer player) = Standing(party: 6, atAMachine: false);
+
+        Assert.Equal(GameWorld.Kept.InTheBox, world.Catch(player.Id, Member(200)));
+        Assert.Single(player.Box);
     }
 
     /// <summary>What is written down goes back where the player left it.</summary>

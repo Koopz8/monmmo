@@ -198,6 +198,7 @@ public static class Program
 
         if (options.Evolutions) WriteEvolutions(rom);
         if (options.Machines) WriteMachineCompatibility(rom);
+        if (options.Computers) WriteComputers(rom);
 
         if (options.BytesAfter is { } after) WriteBytesAfter(rom, after);
 
@@ -4843,6 +4844,95 @@ public static class Program
         }
     }
 
+    /// <summary>
+    /// Which behaviour byte is a storage machine, and why that one.
+    /// <para>
+    /// The same method the water was found by: lay the behaviour bytes against a
+    /// structure that has nothing to do with them. Here it is the healer script, which
+    /// was located for an unrelated reason years of milestones ago.
+    /// </para>
+    /// </summary>
+    private static void WriteComputers(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("The machine in the corner");
+
+        var library = MapLibrary.Open(rom);
+        List<LoadedMap> maps = [.. library.All()];
+
+        uint? healer = HealerLocator.Locate(
+            maps.Select(m => ($"{m.Bank}.{m.Number}", (IReadOnlyList<MapObject>)m.Objects)), rom);
+
+        if (healer is null)
+        {
+            Console.WriteLine("  no healer script, so there is nothing to cross this against");
+            return;
+        }
+
+        var heals = new HashSet<string>(
+            maps.Where(m => m.Objects.Any(o => HealerLocator.Heals(rom, o, healer)))
+                .Select(m => $"{m.Bank}.{m.Number}"));
+
+        Console.WriteLine($"  healer script 0x{healer:X8}, on {heals.Count} maps");
+        Console.WriteLine();
+        Console.WriteLine("  Every behaviour byte, by how well it separates those maps from the rest:");
+
+        var onHealing = new Dictionary<byte, HashSet<string>>();
+        var elsewhere = new Dictionary<byte, HashSet<string>>();
+
+        foreach (LoadedMap map in maps)
+        {
+            string id = $"{map.Bank}.{map.Number}";
+
+            foreach (byte behaviour in new HashSet<byte>(map.Behaviours))
+            {
+                Dictionary<byte, HashSet<string>> into = heals.Contains(id) ? onHealing : elsewhere;
+
+                if (!into.TryGetValue(behaviour, out HashSet<string>? set)) into[behaviour] = set = [];
+
+                set.Add(id);
+            }
+        }
+
+        foreach (byte behaviour in onHealing.Keys
+                     .OrderByDescending(b => onHealing[b].Count - (elsewhere.GetValueOrDefault(b)?.Count ?? 0))
+                     .Take(6))
+        {
+            int other = elsewhere.GetValueOrDefault(behaviour)?.Count ?? 0;
+
+            Console.WriteLine(
+                $"    0x{behaviour:X2}   {onHealing[behaviour].Count,3} of {heals.Count} healing maps, " +
+                $"{other,4} of {maps.Count - heals.Count} others" +
+                (behaviour == MetatileBehaviour.Computer ? "   <- taken as the machine" : ""));
+        }
+
+        // And where it sits. The counter would be beside the healer; this is across the
+        // room from it, in the same corner every time.
+        Console.WriteLine();
+        Console.WriteLine("  map                    size     machine   healer   apart");
+
+        foreach (LoadedMap map in maps)
+        {
+            int width = map.Collision.Width;
+
+            for (int at = 0; at < map.Behaviours.Length; at++)
+            {
+                if (!MetatileBehaviour.IsComputer(map.Behaviours[at])) continue;
+
+                var square = new GridPosition(at % width, at / width);
+
+                MapObject? nurse = map.Objects.FirstOrDefault(o => HealerLocator.Heals(rom, o, healer));
+
+                Console.WriteLine(
+                    $"    {map.Name,-22} {width}x{map.Collision.Height,-4} ({square.X},{square.Y})" +
+                    (nurse is null
+                        ? "     -        -"
+                        : $"     ({nurse.X},{nurse.Y})    " +
+                          $"{Math.Abs(nurse.X - square.X) + Math.Abs(nurse.Y - square.Y)}"));
+            }
+        }
+    }
+
     private static void WriteAfterFights(Rom rom)
     {
         Console.WriteLine();
@@ -6353,6 +6443,8 @@ public static class Program
               --machines             report which machines work on which species, and
                                      how the table was told apart from seven thousand
                                      runs of bytes with the same shape
+              --computers            report the behaviour byte that means a storage
+                                     machine, and the evidence separating it
               --script-map <b.m>     dump every script on one map, decoded and as bytes
               --export-rules <path>  write the rules file the server resolves battles
                                      against: base stats, move power, catch rates and
@@ -6496,6 +6588,8 @@ public static class Program
 
         public bool Machines { get; private init; }
 
+        public bool Computers { get; private init; }
+
         /// <summary>Print what follows one unknown command, everywhere it appears.</summary>
         public byte? BytesAfter { get; private init; }
 
@@ -6576,6 +6670,7 @@ public static class Program
             bool afterFights = false;
             bool evolutions = false;
             bool machines = false;
+            bool computers = false;
             byte? bytesAfter = null;
             bool glyphs = false;
             uint font = 0;
@@ -6777,6 +6872,9 @@ public static class Program
                     case "--machines":
                         machines = true;
                         break;
+                    case "--computers":
+                        computers = true;
+                        break;
                     case "--bytes-after":
                         string which = Next(args, ref i, "--bytes-after");
                         bytesAfter = Convert.ToByte(
@@ -6917,6 +7015,7 @@ public static class Program
                 AfterFights = afterFights,
                 Evolutions = evolutions,
                 Machines = machines,
+                Computers = computers,
                 BytesAfter = bytesAfter,
                 Glyphs = glyphs,
                 Font = font,

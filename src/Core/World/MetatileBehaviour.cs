@@ -146,6 +146,39 @@ public static class MetatileBehaviour
     /// <summary>True when standing here can start a land encounter.</summary>
     public static bool IsEncounterGrass(byte behaviour) => behaviour is TallGrass or LongGrass;
 
+    /// <summary>
+    /// The storage machine in the corner of every Pokémon Center.
+    /// <para>
+    /// Found the way the water was: by laying the behaviour bytes against a structure
+    /// that has nothing to do with them. Twenty of this cartridge's maps have somebody
+    /// on them who heals a party, which is a fact held in a script the healer locator
+    /// already found. 0x6A is on nineteen of those twenty and on <b>nought of the other
+    /// four hundred and five</b>, one square each and never more.
+    /// </para>
+    /// <para>
+    /// And it is in the same place every time. Eighteen of the nineteen rooms are
+    /// fifteen by ten with the square at (1, 6) and the healer at (7, 2) — the far
+    /// corner from the counter, ten steps away. That rules out the two things it might
+    /// otherwise have been: the counter itself would be next to the healer, and the
+    /// stairs to the club are in the opposite corner.
+    /// </para>
+    /// <para>
+    /// The twentieth healing map is TRAINER TOWER, which has somebody who heals and no
+    /// machine. That is a fact about the tower rather than a hole in the reading.
+    /// </para>
+    /// <para>
+    /// The one in the player's bedroom is <em>not</em> this byte, and this project has
+    /// not worked out which one it is — the rare bytes on that floor turn up in the
+    /// ROCKET HIDEOUT and the POWER PLANT, which is what scenery does and not what a
+    /// storage machine does. So the box lives in the Pokémon Centers and nowhere else,
+    /// which is stated rather than quietly worked around.
+    /// </para>
+    /// </summary>
+    public const byte Computer = 0x6A;
+
+    /// <summary>True when there is a storage machine on this square.</summary>
+    public static bool IsComputer(byte behaviour) => behaviour == Computer;
+
     /// <summary>True when this square is a ledge of any direction.</summary>
     public static bool IsLedge(byte behaviour) => behaviour is >= HopWest and <= HopSouth;
 }

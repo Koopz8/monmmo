@@ -550,20 +550,6 @@ public static class Program
             if (carrying is null && talking is null && !console.IsOpen && Raylib.IsKeyPressed(KeyboardKey.B))
                 carrying = new BagScreen(bag, party, items, data);
 
-            // The box, on its own key. The games put it behind a PC in a Pokémon Center
-            // and this project has not located which map objects are computers, so for
-            // now it opens anywhere — written down rather than hidden.
-            // The console has to be shut, and that is not fussiness. These screens are
-            // read before the console gets a look at the keyboard, so without it every
-            // "p" typed into a command opened the box and swallowed the rest of the line
-            // — which is how "/tp 3.19 10 8" became "/t". The bag had the same hole and
-            // nobody had yet typed a command with a "b" in it.
-            if (carrying is null && storing is null && talking is null && !console.IsOpen
-                && Raylib.IsKeyPressed(KeyboardKey.P))
-            {
-                storing = new BoxScreen(party, box, boxSize, data, items);
-            }
-
             if (storing is not null)
             {
                 storing.Update();
@@ -737,7 +723,12 @@ public static class Program
             }
             else if (DialogueBox.Pressed() && !player.IsStepping)
             {
-                talking = Talk(data, view, player, network, script, party, rival, waiting);
+                // The machine in the corner comes first, because it is not a
+                // conversation and there is nobody on that square to talk to. The
+                // server enforces the same rule from its own copy of the world; this is
+                // only the interface refusing to open a box in the middle of a route.
+                if (FacingAComputer(view, player)) storing = new BoxScreen(party, box, boxSize, data, items);
+                else talking = Talk(data, view, player, network, script, party, rival, waiting);
             }
 
             exclaimFor = Math.Max(0f, exclaimFor - delta);
@@ -1525,6 +1516,27 @@ public static class Program
 
             return view.Collision.IsWalkable(landing) ? landing : null;
         };
+
+    /// <summary>
+    /// True when the square in front holds a storage machine.
+    /// <para>
+    /// The client's half of a rule the server also keeps, read off the same behaviour
+    /// byte on the same square. Neither side is told by the other, and the server is
+    /// the one that decides — this only stops the interface offering something that
+    /// would be refused.
+    /// </para>
+    /// </summary>
+    private static bool FacingAComputer(MapView view, WalkingCharacter player)
+    {
+        GridPosition front = player.Square.Step(player.Facing);
+
+        if (view.Map.Behaviours.Length == 0) return false;
+
+        int at = front.Y * view.Collision.Width + front.X;
+
+        return at >= 0 && at < view.Map.Behaviours.Length
+            && MetatileBehaviour.IsComputer(view.Map.Behaviours[at]);
+    }
 
     /// <summary>
     /// Reads whatever is written on the square in front, if anything is.

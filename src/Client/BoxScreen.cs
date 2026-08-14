@@ -14,10 +14,9 @@ namespace PokeMmo.Client;
 /// whole screen — there is nothing else to do here.
 /// </para>
 /// <para>
-/// The games put this behind a PC in a Pokémon Center. This project has not located
-/// which map objects are computers, so for now it opens anywhere, and that is a gap
-/// worth writing down rather than hiding — a box you can reach from the middle of a
-/// route is not what the cartridge says.
+/// Opened by standing in front of the machine in the corner of a Pokémon Center and
+/// pressing the same key that talks to people. Which squares those are is read off the
+/// cartridge's own behaviour bytes, on both sides of the split independently.
 /// </para>
 /// </summary>
 public sealed class BoxScreen

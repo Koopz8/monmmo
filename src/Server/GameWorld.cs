@@ -1861,6 +1861,7 @@ public sealed class GameWorld
 
             if (slot < 0 || slot >= player.Party.Count) return [];
 
+            if (!AtAComputer(player)) return [Boxed(player, "There is no machine here.")];
             if (BoxSize <= 0) return [Boxed(player, "There is nowhere to put it.")];
             if (player.Box.Count >= BoxSize) return [Boxed(player, "The box is full.")];
 
@@ -1894,6 +1895,8 @@ public sealed class GameWorld
 
             if (slot < 0 || slot >= player.Box.Count) return [];
 
+            if (!AtAComputer(player)) return [Boxed(player, "There is no machine here.")];
+
             if (player.Party.Count >= Party.MaxSize)
                 return [Boxed(player, "The party is full.")];
 
@@ -1910,6 +1913,24 @@ public sealed class GameWorld
 
     /// <summary>What the last box operation came to.</summary>
     public string? LastBoxed { get; private set; }
+
+    /// <summary>
+    /// True when the player is standing in front of a storage machine.
+    /// <para>
+    /// By the same rule the counter uses, because it is the same question: something two
+    /// rooms away is not something you are standing at. The client will not offer the
+    /// box anywhere else either — a rule enforced on one side of the split needs its
+    /// counterpart on the other — and this is the side that decides.
+    /// </para>
+    /// </summary>
+    public bool AtAComputer(ServerPlayer player)
+    {
+        if (_world.Find(player.MapId) is not { } map) return false;
+
+        return Interaction
+            .Reachable(player.Square, player.Facing, square => !GridFor(player.MapId).IsWalkable(square))
+            .Any(square => MetatileBehaviour.IsComputer(map.BehaviourAt(square)));
+    }
 
     private Outgoing Boxed(ServerPlayer player, string said) =>
         new(new BoxUpdated([.. player.Party], [.. player.Box], BoxSize, said), OnlyTo: player.Id);
