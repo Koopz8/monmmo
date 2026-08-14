@@ -83,6 +83,12 @@ internal static class TestRules
     /// <summary>The one species no machine works on, so a refusal can be asked for.</summary>
     public const int LearnsNothing = 5;
 
+    /// <summary>Something worth carrying — the one item here with a hold effect on it.</summary>
+    public const int TrinketItem = 207;
+
+    /// <summary>And something that may never leave the bag.</summary>
+    public const int BicycleItem = 259;
+
     /// <summary>What each of them teaches. The second is the one that moves trees.</summary>
     public const int TaughtMove = 2;
 
@@ -190,6 +196,16 @@ internal static class TestRules
             // A stone, which restores nothing and teaches nothing and is the only thing
             // in this bag that turns one creature into another.
             new(StoneItem, 2100, Pocket.Items, 0, 0, 0, 0, 0),
+
+            // Something with a hold effect on it, which is what makes its pocket a
+            // pocket holding is for. Nothing else in this bag carries one, and without
+            // it a fixture would say — correctly, and uselessly — that this cartridge
+            // has nothing anybody can be handed.
+            new(TrinketItem, 1500, Pocket.Items, 5, 0, 0, 0, 0),
+
+            // And one nobody may ever be parted from, which is refused on top of the
+            // pocket rule rather than by it: it is in a pocket of its own.
+            new(BicycleItem, 0, Pocket.KeyItems, 0, 0, 1, 0, 0),
         };
 
         // One word per species, one bit per machine, in the order the machines sit in

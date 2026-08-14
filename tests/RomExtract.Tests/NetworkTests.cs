@@ -83,6 +83,8 @@ public class MessageChannelTests
             new FlagsChanged([0x4F1]),
             new TrainerBeaten(41),
             new UseItemRequest(13, 0),
+            new GiveItemRequest(207, 2),
+            new TakeItemRequest(2),
             new BagUpdated([new BagEntry(13, 2)], [], "Restored 20 health."),
             new PartyHealed([], true),
             new BlackedOut("3.0", 7, 4, 1500, []),

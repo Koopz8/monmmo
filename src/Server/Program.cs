@@ -920,6 +920,22 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                                 .ConfigureAwait(false);
                             break;
 
+                        case GiveItemRequest give when playerId != 0:
+                            await DispatchAsync(
+                                world.GiveItem(playerId, give.ItemId, give.Slot), playerId, cancellationToken)
+                                .ConfigureAwait(false);
+
+                            if (world.LastHandedOver is { } handover) Console.WriteLine($"* #{playerId} {handover}");
+                            break;
+
+                        case TakeItemRequest take when playerId != 0:
+                            await DispatchAsync(
+                                world.TakeItem(playerId, take.Slot), playerId, cancellationToken)
+                                .ConfigureAwait(false);
+
+                            if (world.LastHandedOver is { } tookBack) Console.WriteLine($"* #{playerId} {tookBack}");
+                            break;
+
                         case SurfRequest when playerId != 0:
                             await DispatchAsync(world.Surf(playerId), playerId, cancellationToken)
                                 .ConfigureAwait(false);

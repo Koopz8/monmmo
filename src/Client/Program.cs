@@ -550,6 +550,8 @@ public static class Program
                 switch (carrying.TakePending())
                 {
                     case UseItemRequest use: network.SendUseItem(use.ItemId, use.Slot); break;
+                    case GiveItemRequest give: network.SendGiveItem(give.ItemId, give.Slot); break;
+                    case TakeItemRequest take: network.SendTakeItem(take.Slot); break;
                     case LearnMoveRequest answer: network.SendLearnMove(answer.MoveId, answer.Forget); break;
                 }
 

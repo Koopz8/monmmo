@@ -25,9 +25,11 @@ public sealed class GameData
         List<SpeciesData> species,
         List<MoveData> moves,
         Dictionary<int, Learnset> learnsets,
+        List<ItemData> items,
         List<int> machineItems,
         MachineSets? machines)
     {
+        Items = items;
         Rom = rom;
         Extractor = extractor;
         Species = species;
@@ -39,9 +41,18 @@ public sealed class GameData
         _machineAt = machineItems
             .Select((id, index) => (id, index))
             .ToDictionary(m => m.id, m => m.index);
+
+        _itemAt = items.ToDictionary(i => i.Id);
+
+        // The same reading the rules file makes, made here off the same image rather
+        // than accepted from the other side. Non-zero hold effects appear in exactly the
+        // pockets holding is for, and in no others.
+        _holdingPockets = [.. items.Where(i => i.HoldEffect != 0).Select(i => i.Pocket).Distinct()];
     }
 
     private readonly Dictionary<int, int> _machineAt;
+    private readonly Dictionary<int, ItemData> _itemAt;
+    private readonly HashSet<Pocket> _holdingPockets;
 
     public Rom Rom { get; }
 
@@ -52,6 +63,22 @@ public sealed class GameData
     public IReadOnlyList<MoveData> Moves { get; }
 
     public IReadOnlyDictionary<int, Learnset> Learnsets { get; }
+
+    /// <summary>Every item on this cartridge, with no names on it — those come separately.</summary>
+    public IReadOnlyList<ItemData> Items { get; }
+
+    /// <summary>
+    /// Whether this is something a party member could be handed to carry.
+    /// <para>
+    /// The client's half of the rule the server enforces, worked out the same way from
+    /// the same field: the pockets whose items ever carry a hold effect. What it buys is
+    /// a bag that does not offer to hand over a bicycle.
+    /// </para>
+    /// </summary>
+    public bool CanBeHeld(int itemId) =>
+        _itemAt.TryGetValue(itemId, out ItemData? item)
+        && !item.IsKeyItem
+        && _holdingPockets.Contains(item.Pocket);
 
     /// <summary>The machine items in pocket order, which is the order of the bits.</summary>
     public IReadOnlyList<int> MachineItems { get; }
@@ -116,9 +143,14 @@ public sealed class GameData
 
         Dictionary<int, Learnset> learnsets = LearnsetExtractor.Extract(rom, log);
 
-        (List<int> machineItems, MachineSets? machines) = FindMachines(rom, species.Count, moves, learnsets, log);
+        List<ItemData> items = ItemTable.Locate(rom) is { } at
+            ? [.. ItemTable.Read(rom, at).Select(i => i.ToData())]
+            : [];
 
-        return new GameData(rom, extractor, species, moves, learnsets, machineItems, machines)
+        (List<int> machineItems, MachineSets? machines) =
+            FindMachines(rom, species.Count, moves, learnsets, items, log);
+
+        return new GameData(rom, extractor, species, moves, learnsets, items, machineItems, machines)
         {
             SuggestedNames = NameSuggestions.Locate(rom, log),
         };
@@ -138,14 +170,12 @@ public sealed class GameData
         int speciesCount,
         List<MoveData> moves,
         Dictionary<int, Learnset> learnsets,
+        List<ItemData> items,
         Action<string>? log)
     {
-        if (ItemTable.Locate(rom) is not { } table) return ([], null);
-
         List<int> machineItems =
         [
-            .. ItemTable.Read(rom, table)
-                .Select(i => i.ToData())
+            .. items
                 .Where(i => i.Pocket == Pocket.Machines)
                 .OrderBy(i => i.Id)
                 .Select(i => i.Id)

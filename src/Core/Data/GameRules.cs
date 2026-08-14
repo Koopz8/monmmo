@@ -70,7 +70,14 @@ public sealed class GameRules
             .OrderBy(i => i.Id)
             .Select((item, index) => (item.Id, index))
             .ToDictionary(m => m.Id, m => m.index);
+
+        // Worked out rather than stored, from a field the file already carries. Nothing
+        // new is written down: the answer was always in the item records and nobody had
+        // asked them the right question.
+        _holdingPockets = [.. _items.Values.Where(i => i.HoldEffect != 0).Select(i => i.Pocket).Distinct()];
     }
+
+    private readonly HashSet<Pocket> _holdingPockets;
 
     /// <summary>
     /// The move that gets somebody onto the water, as an id.
@@ -147,6 +154,33 @@ public sealed class GameRules
 
     /// <summary>How many species this file has a machine word for, which may be none.</summary>
     public int MachineSetCount => _machineSets.Count;
+
+    /// <summary>
+    /// Whether this is a thing somebody can be given to carry.
+    /// <para>
+    /// No field says so, and the obvious reading — "anything with a hold effect" — is
+    /// wrong in a way that would be hard to notice: most of what a player can hand over
+    /// has no hold effect at all. A Potion held does nothing and is still held.
+    /// </para>
+    /// <para>
+    /// The pocket is what says it. Across three hundred and eight items on this
+    /// cartridge the hold effect field is non-zero in exactly two pockets — ordinary
+    /// items and berries — and never once among the balls, the machines or the key
+    /// items. That is the cartridge saying which pockets holding is <em>for</em>, and it
+    /// is a stronger statement than any single item's record makes: forty-eight of a
+    /// hundred and forty items use the field and none of the twelve balls do.
+    /// </para>
+    /// <para>
+    /// Key items are refused on top of that, because they are refused everywhere else
+    /// too — a thing the player is never allowed to lose is not a thing to hand to
+    /// something that can be stolen from.
+    /// </para>
+    /// </summary>
+    public bool CanBeHeld(int itemId) =>
+        ItemAt(itemId) is { } item && !item.IsKeyItem && _holdingPockets.Contains(item.Pocket);
+
+    /// <summary>Which pockets this cartridge ever puts a hold effect in.</summary>
+    public IReadOnlyCollection<Pocket> HoldingPockets => _holdingPockets;
 
     /// <summary>
     /// Whether this machine may be used on this species.

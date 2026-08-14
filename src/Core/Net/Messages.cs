@@ -24,6 +24,8 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(FlagsChanged), "flags")]
 [JsonDerivedType(typeof(TrainerBeaten), "beaten")]
 [JsonDerivedType(typeof(UseItemRequest), "useitem")]
+[JsonDerivedType(typeof(GiveItemRequest), "giveitem")]
+[JsonDerivedType(typeof(TakeItemRequest), "takeitem")]
 [JsonDerivedType(typeof(BagUpdated), "bagupdate")]
 [JsonDerivedType(typeof(PartyHealed), "healed")]
 [JsonDerivedType(typeof(BlackedOut), "blackedout")]
@@ -340,6 +342,27 @@ public sealed record TrainerBeaten(int TrainerId) : NetMessage;
 /// </para>
 /// </summary>
 public sealed record UseItemRequest(int ItemId, int Slot) : NetMessage;
+
+/// <summary>
+/// Hand this over, to the party member in this slot.
+/// <para>
+/// A separate request from using something rather than a mode of it, because the two
+/// mean opposite things about the same item: a Potion used on somebody is drunk, and a
+/// Potion handed to them is kept. A single verb would have to guess, and the games do
+/// not — they ask.
+/// </para>
+/// </summary>
+public sealed record GiveItemRequest(int ItemId, int Slot) : NetMessage;
+
+/// <summary>
+/// Take back whatever the party member in this slot is holding.
+/// <para>
+/// No item id. What they are holding is a thing the server knows and the client is only
+/// shown, and a request that named the item would be a request a client could get wrong
+/// — or lie about, and be handed something nobody was carrying.
+/// </para>
+/// </summary>
+public sealed record TakeItemRequest(int Slot) : NetMessage;
 
 /// <summary>
 /// The bag and the party after something was used out of a fight.

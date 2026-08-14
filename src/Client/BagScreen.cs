@@ -160,6 +160,25 @@ public sealed class BagScreen
         if (Raylib.IsKeyPressed(KeyboardKey.Up) || Raylib.IsKeyPressed(KeyboardKey.W))
             cursor = (cursor - 1 + count) % count;
 
+        // Handing over and taking back, which only mean anything once somebody has been
+        // picked. Their own keys rather than a mode: using a Potion on somebody and
+        // giving them one to carry are opposite things about the same item, and a single
+        // key would have to guess which was meant.
+        if (_choosingWho && lines.Count > 0)
+        {
+            if (Raylib.IsKeyPressed(KeyboardKey.G) && _data.CanBeHeld(lines[_row].ItemId))
+            {
+                Pending = new GiveItemRequest(lines[_row].ItemId, _member);
+                return;
+            }
+
+            if (Raylib.IsKeyPressed(KeyboardKey.T))
+            {
+                Pending = new TakeItemRequest(_member);
+                return;
+            }
+        }
+
         if (!Raylib.IsKeyPressed(KeyboardKey.Z) && !Raylib.IsKeyPressed(KeyboardKey.Enter)) return;
 
         if (!_choosingWho)
@@ -331,7 +350,11 @@ public sealed class BagScreen
 
         if (_message.Length > 0) Font.Draw(_message, 40, Height - 74, 2, Skin.HpGood);
 
-        DrawKeys(_choosingWho ? "Z use    X back" : "Z choose    X close");
+        // The give key is offered only for things that can be carried, so the line does
+        // not advertise handing somebody a bicycle.
+        string handing = lines.Count > 0 && _data.CanBeHeld(lines[_row].ItemId) ? "G give    " : "";
+
+        DrawKeys(_choosingWho ? $"Z use    {handing}T take    X back" : "Z choose    X close");
     }
 
     /// <summary>The line along the bottom that says which keys do anything.</summary>

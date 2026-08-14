@@ -180,6 +180,10 @@ public sealed class NetworkClient : IDisposable
 
     public void SendUseItem(int itemId, int slot) => Send(new UseItemRequest(itemId, slot));
 
+    public void SendGiveItem(int itemId, int slot) => Send(new GiveItemRequest(itemId, slot));
+
+    public void SendTakeItem(int slot) => Send(new TakeItemRequest(slot));
+
     private void Send(NetMessage message)
     {
         if (_channel is null) return;

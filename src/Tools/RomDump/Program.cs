@@ -6158,6 +6158,25 @@ public static class Program
             }
         }
 
+        // Which pockets holding is for. No field says it, and the obvious reading —
+        // anything with a hold effect — is wrong: most of what a player hands over has
+        // no hold effect at all, and a Potion held does nothing and is still held. What
+        // the cartridge does say, and says clearly, is which pockets ever use the field.
+        Console.WriteLine();
+        Console.WriteLine("  Where the hold effect field is used at all:");
+
+        foreach (IGrouping<Pocket, ItemData> pocket in items
+                     .Select(i => i.ToData())
+                     .GroupBy(i => i.Pocket)
+                     .OrderBy(g => (int)g.Key))
+        {
+            int holding = pocket.Count(i => i.HoldEffect != 0);
+
+            Console.WriteLine(
+                $"    {pocket.Key,-10} {pocket.Count(),4} items, {holding,3} with a hold effect" +
+                (holding == 0 ? "   <- nothing here is carried" : ""));
+        }
+
         Console.WriteLine();
         Console.WriteLine("  Spot check — compare these names and prices against the games:");
 

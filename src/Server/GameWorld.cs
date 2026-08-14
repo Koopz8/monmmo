@@ -1756,6 +1756,113 @@ public sealed class GameWorld
     }
 
     /// <summary>
+    /// Hands something over to a party member to carry.
+    /// <para>
+    /// The other half of a loop that had one end. THIEF could take a held item off
+    /// somebody and there was no way to give one — which meant the only way a player's
+    /// own party ever carried anything was to steal it, and the eighty-seven trainers
+    /// whose parties hold something were the only source in the world.
+    /// </para>
+    /// <para>
+    /// Somebody already carrying something swaps rather than refuses. The old one goes
+    /// back to the bag in the same breath, so the player never ends a hand-over holding
+    /// fewer things than they started with — and swapping is what the games do, which
+    /// here matters less than the fact that the alternative silently destroys an item.
+    /// </para>
+    /// </summary>
+    public List<Outgoing> GiveItem(int playerId, int itemId, int slot)
+    {
+        lock (_gate)
+        {
+            if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
+
+            if (player.InBattle)
+                return [new Outgoing(new Rejected("Not in the middle of a battle."), OnlyTo: playerId)];
+
+            if (slot < 0 || slot >= player.Party.Count) return [];
+            if (player.Bag.CountOf(itemId) == 0) return [];
+
+            if (_rules is not { } rules || !rules.CanBeHeld(itemId))
+            {
+                return [new Outgoing(
+                    new BagUpdated(player.Bag.Entries, [.. player.Party], "That can't be carried."),
+                    OnlyTo: playerId)];
+            }
+
+            SavedMon member = player.Party[slot];
+
+            if (member.HeldItem == itemId)
+            {
+                return [new Outgoing(
+                    new BagUpdated(player.Bag.Entries, [.. player.Party], "It's already carrying that."),
+                    OnlyTo: playerId)];
+            }
+
+            int swapped = member.HeldItem;
+
+            player.Bag.Remove(itemId);
+            player.Party[slot] = member with { HeldItem = itemId };
+
+            if (swapped != 0) Give(player, swapped, 1);
+
+            LastHandedOver = swapped == 0
+                ? $"gave item {itemId} to slot {slot}"
+                : $"swapped item {swapped} for item {itemId} on slot {slot}";
+
+            return [new Outgoing(
+                new BagUpdated(
+                    player.Bag.Entries,
+                    [.. player.Party],
+                    swapped == 0 ? "Handed it over." : "Swapped what it was carrying."),
+                OnlyTo: playerId)];
+        }
+    }
+
+    /// <summary>
+    /// Takes back whatever somebody is carrying.
+    /// <para>
+    /// No item id comes in with the request. What a party member is holding is something
+    /// the server knows and the client is merely shown, and a request naming the item
+    /// would be a request that could name the wrong one.
+    /// </para>
+    /// </summary>
+    public List<Outgoing> TakeItem(int playerId, int slot)
+    {
+        lock (_gate)
+        {
+            if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
+
+            if (player.InBattle)
+                return [new Outgoing(new Rejected("Not in the middle of a battle."), OnlyTo: playerId)];
+
+            if (slot < 0 || slot >= player.Party.Count) return [];
+
+            SavedMon member = player.Party[slot];
+
+            if (member.HeldItem == 0)
+            {
+                return [new Outgoing(
+                    new BagUpdated(player.Bag.Entries, [.. player.Party], "It isn't carrying anything."),
+                    OnlyTo: playerId)];
+            }
+
+            int taken = member.HeldItem;
+
+            player.Party[slot] = member with { HeldItem = 0 };
+            Give(player, taken, 1);
+
+            LastHandedOver = $"took item {taken} back from slot {slot}";
+
+            return [new Outgoing(
+                new BagUpdated(player.Bag.Entries, [.. player.Party], "Took it back."),
+                OnlyTo: playerId)];
+        }
+    }
+
+    /// <summary>What the last hand-over came to, for the log and for tests.</summary>
+    public string? LastHandedOver { get; private set; }
+
+    /// <summary>
     /// Turns something into something else with a stone, or says why not.
     /// <para>
     /// The whole rule is in the table: this species and this item, or nothing. A stone
