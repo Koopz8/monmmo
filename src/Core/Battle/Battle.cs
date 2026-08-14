@@ -31,6 +31,11 @@ public enum Side
 [JsonDerivedType(typeof(StatusInflicted), "status")]
 [JsonDerivedType(typeof(StageChanged), "stage")]
 [JsonDerivedType(typeof(NothingHappened), "nothing")]
+[JsonDerivedType(typeof(HitSeveralTimes), "severaltimes")]
+[JsonDerivedType(typeof(Drained), "drained")]
+[JsonDerivedType(typeof(Recoiled), "recoiled")]
+[JsonDerivedType(typeof(Flinched), "flinched")]
+[JsonDerivedType(typeof(Recovered), "recovered")]
 [JsonDerivedType(typeof(Fainted), "fainted")]
 [JsonDerivedType(typeof(HealthRestored), "healed")]
 [JsonDerivedType(typeof(BallThrown), "ball")]
@@ -81,6 +86,21 @@ public abstract record BattleEvent
     /// cartridge rather than about the battle.
     /// </summary>
     public sealed record NothingHappened(Side Side) : BattleEvent;
+
+    /// <summary>A move that landed more than once, and how many times.</summary>
+    public sealed record HitSeveralTimes(Side Side, int Times) : BattleEvent;
+
+    /// <summary>The user got some of what it dealt back.</summary>
+    public sealed record Drained(Side Side, int Amount) : BattleEvent;
+
+    /// <summary>The user hurt itself doing that.</summary>
+    public sealed record Recoiled(Side Side, int Amount) : BattleEvent;
+
+    /// <summary>Somebody lost their turn to a flinch.</summary>
+    public sealed record Flinched(Side Side) : BattleEvent;
+
+    /// <summary>Health restored by a move rather than by an item.</summary>
+    public sealed record Recovered(Side Side, int Amount) : BattleEvent;
 
     public sealed record Fainted(Side Side) : BattleEvent;
 
@@ -228,6 +248,27 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
 
     private static Side Other(Side side) => side == Side.Player ? Side.Opponent : Side.Player;
 
+    /// <summary>
+    /// Who is flinching, which lasts exactly one turn and belongs to the battle rather
+    /// than to the battler.
+    /// <para>
+    /// On the battle because it is a fact about this turn, not about the creature: a
+    /// flinch that survived being switched out, or a save, would be a condition, and it
+    /// is not one.
+    /// </para>
+    /// </summary>
+    private bool _playerFlinching;
+
+    private bool _opponentFlinching;
+
+    private bool Flinching(Side side) => side == Side.Player ? _playerFlinching : _opponentFlinching;
+
+    private void SetFlinching(Side side, bool value)
+    {
+        if (side == Side.Player) _playerFlinching = value;
+        else _opponentFlinching = value;
+    }
+
     /// <summary>Resolves one turn and returns everything that happened, in order.</summary>
     public List<BattleEvent> ResolveTurn(BattleAction playerAction, BattleAction opponentAction)
     {
@@ -319,17 +360,64 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             return;
         }
 
-        bool critical = DamageCalculator.RollCritical(_rng, criticalStage: 0);
-        DamageResult result = DamageCalculator.Calculate(_rng, attacker, defender, move, critical);
+        MoveEffect carried = MoveEffects.Of(move.Effect);
 
-        if (result.NoEffect)
+        // How many times, and how likely a critical. Both are read off the move's group
+        // rather than off its record — see MoveEffects — and the numbers here are
+        // modelled rather than read: nothing in a move's record says how many times
+        // DOUBLESLAP lands.
+        int times = carried.Kind == EffectKind.MultiHit ? RollHits() : 1;
+        int criticalStage = carried.Kind == EffectKind.HighCritical ? 1 : 0;
+
+        int total = 0;
+        int landed = 0;
+
+        for (int hit = 0; hit < times; hit++)
         {
-            events.Add(new BattleEvent.NoEffect(Other(side)));
-            return;
+            bool critical = DamageCalculator.RollCritical(_rng, criticalStage);
+            DamageResult result = DamageCalculator.Calculate(_rng, attacker, defender, move, critical);
+
+            if (result.NoEffect)
+            {
+                events.Add(new BattleEvent.NoEffect(Other(side)));
+                return;
+            }
+
+            int dealt = defender.TakeDamage(result.Damage);
+
+            total += dealt;
+            landed++;
+
+            events.Add(new BattleEvent.DamageDealt(Other(side), dealt, defender.CurrentHp, result));
+
+            if (defender.HasFainted) break;
         }
 
-        int dealt = defender.TakeDamage(result.Damage);
-        events.Add(new BattleEvent.DamageDealt(Other(side), dealt, defender.CurrentHp, result));
+        if (times > 1) events.Add(new BattleEvent.HitSeveralTimes(side, landed));
+
+        // What the user gets back, or pays, for what it dealt. Both happen whether or not
+        // the target fainted — a knockout does not un-hurt the thing that took the hit,
+        // and TAKE DOWN costs whether or not it worked.
+        //
+        // Half back and a quarter paid. Modelled, not read: the shares are in the game's
+        // code and this project does not read code. They are stated here so that anybody
+        // checking them knows what they are checking.
+        if (carried.Kind == EffectKind.Drain && total > 0)
+        {
+            int back = Math.Max(1, total / 2);
+            int given = attacker.Heal(back);
+
+            if (given > 0) events.Add(new BattleEvent.Drained(side, given));
+        }
+
+        if (carried.Kind == EffectKind.Recoil && total > 0)
+        {
+            int cost = attacker.TakeDamage(Math.Max(1, total / 4));
+
+            events.Add(new BattleEvent.Recoiled(side, cost));
+
+            if (attacker.HasFainted) events.Add(new BattleEvent.Fainted(side));
+        }
 
         if (defender.HasFainted)
         {
@@ -340,6 +428,23 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         // And whatever rides on the hit. Nothing rides on a knockout, which is why this
         // is after the faint rather than beside the damage.
         Apply(side, attacker, defender, move, events, rolled: true);
+    }
+
+    /// <summary>
+    /// How many times a multi-hit move lands.
+    /// <para>
+    /// Two to five, weighted towards the low end. <b>Modelled, not read.</b> Nothing in
+    /// a move's record carries this — the record says DOUBLESLAP has fifteen power and
+    /// eighty-five accuracy and nothing about repetition — so the distribution is a
+    /// judgement, stated here rather than buried, and the only thing derived is that the
+    /// group does repeat at all.
+    /// </para>
+    /// </summary>
+    private int RollHits()
+    {
+        int roll = _rng.Next(8);
+
+        return roll < 3 ? 2 : roll < 6 ? 3 : roll < 7 ? 4 : 5;
     }
 
     /// <summary>
@@ -362,6 +467,28 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
 
         Side at = effect.OnUser ? side : Other(side);
         Battler target = effect.OnUser ? attacker : defender;
+
+        if (effect.Kind == EffectKind.Flinch)
+        {
+            // Set on the target, and it only costs them anything if they have not gone
+            // yet. Nothing clears it at the end of a turn because nothing needs to: the
+            // one place it is read also unsets it.
+            SetFlinching(Other(side), true);
+
+            return;
+        }
+
+        if (effect.Kind == EffectKind.Heal)
+        {
+            // Half of the user's own maximum, rounded up. Modelled, not read — a move's
+            // record says RECOVER has no power and nothing about how much it gives back.
+            int given = target.Heal((target.MaxHp + 1) / 2);
+
+            if (given > 0) events.Add(new BattleEvent.Recovered(at, given));
+            else events.Add(new BattleEvent.NothingHappened(at));
+
+            return;
+        }
 
         if (effect.Kind == EffectKind.Status)
         {
@@ -400,6 +527,17 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
     /// </summary>
     private bool CanAct(Side side, Battler battler, List<BattleEvent> events)
     {
+        // Before the conditions, because a flinch is not one. It lasts exactly as long
+        // as the turn it was caused in, and it only reaches somebody who had not moved
+        // yet — which is why nothing has to clear it for the loser of the speed roll.
+        if (Flinching(side))
+        {
+            SetFlinching(side, false);
+            events.Add(new BattleEvent.Flinched(side));
+
+            return false;
+        }
+
         switch (battler.Status)
         {
             case StatusCondition.Sleep:

@@ -1284,6 +1284,24 @@ public static class Program
             $"  {MoveEffects.Known(real)} of {real.Count} have an effect this engine knows how to do, " +
             $"{MoveEffects.Known(real.Where(m => m.Category == DamageCategory.Status))} of the {status} status moves");
 
+        // The list that decides what to build next: the groups this engine does not
+        // know, heaviest first. Everything else in this report is context.
+        Console.WriteLine();
+        Console.WriteLine("  What is still silent, by how many moves it costs (effect 0 is not silent,");
+        Console.WriteLine("  it is a move with nothing to do beyond hitting). A group can be silent");
+        Console.WriteLine("  here and still work: 0x11 is SWIFT and AERIAL ACE, which never miss because");
+        Console.WriteLine("  their records carry no accuracy, and that is read where accuracy is read.");
+
+        foreach (var group in byEffect
+                     .Where(g => g.Key != 0 && Core.Battle.MoveEffects.Of(g.Key).Kind == Core.Battle.EffectKind.None)
+                     .OrderByDescending(g => g.Count())
+                     .Take(16))
+        {
+            Console.WriteLine(
+                $"    0x{group.Key:X2}  {group.Count(),3} moves   " +
+                string.Join(", ", group.Select(m => m.Name).Take(6)));
+        }
+
         Console.WriteLine();
         Console.WriteLine("  The effects with the most status moves in them");
 

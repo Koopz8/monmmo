@@ -11,6 +11,24 @@ public enum EffectKind
 
     /// <summary>Moves a stat stage up or down.</summary>
     Stage,
+
+    /// <summary>Lands several times in one turn.</summary>
+    MultiHit,
+
+    /// <summary>Lands a critical hit far more often than usual.</summary>
+    HighCritical,
+
+    /// <summary>Makes the target lose its turn, if it has not taken it yet.</summary>
+    Flinch,
+
+    /// <summary>Gives the user back a share of what it dealt.</summary>
+    Drain,
+
+    /// <summary>Costs the user a share of what it dealt.</summary>
+    Recoil,
+
+    /// <summary>Restores the user's own health.</summary>
+    Heal,
 }
 
 /// <summary>
@@ -113,6 +131,30 @@ public static class MoveEffects
         0x04 => new MoveEffect(EffectKind.Status, OnUser: false, Status: StatusCondition.Burn),
         0x05 => new MoveEffect(EffectKind.Status, OnUser: false, Status: StatusCondition.Freeze),
         0x06 => new MoveEffect(EffectKind.Status, OnUser: false, Status: StatusCondition.Paralysis),
+
+        // What a hit can carry besides a condition. Each of these is read off its group's
+        // membership, the same way the four stat runs above were: a group is what its
+        // members have in common, and these six groups each have something obvious.
+        //
+        //   0x1D  12 moves  DOUBLESLAP, COMET PUNCH, FURY ATTACK, PIN MISSILE, BARRAGE
+        //   0x2B   8 moves  KARATE CHOP, RAZOR LEAF, CRABHAMMER, SLASH, CROSS CHOP
+        //   0x1F   6 moves  ROLLING KICK, HEADBUTT, BITE, BONE CLUB, ROCK SLIDE
+        //   0x96   4 moves  STOMP, NEEDLE ARM, ASTONISH, EXTRASENSORY
+        //   0x03   4 moves  ABSORB, MEGA DRAIN, LEECH LIFE, GIGA DRAIN
+        //   0x30   3 moves  TAKE DOWN, SUBMISSION, STRUGGLE
+        //   0x20   2 moves  RECOVER, SLACK OFF
+        //   0x9D   2 moves  SOFTBOILED, MILK DRINK
+        //
+        // The membership is read; the amounts are not, and are marked as modelled where
+        // the engine applies them. Nothing in a move's record says how many times
+        // DOUBLESLAP lands or what share of the damage ABSORB gives back — those numbers
+        // are in the game's code, which this project does not read.
+        0x1D => new MoveEffect(EffectKind.MultiHit, OnUser: false),
+        0x2B => new MoveEffect(EffectKind.HighCritical, OnUser: false),
+        0x1F or 0x96 => new MoveEffect(EffectKind.Flinch, OnUser: false),
+        0x03 => new MoveEffect(EffectKind.Drain, OnUser: true),
+        0x30 => new MoveEffect(EffectKind.Recoil, OnUser: true),
+        0x20 or 0x9D => new MoveEffect(EffectKind.Heal, OnUser: true),
 
         _ => Stages(effect),
     };

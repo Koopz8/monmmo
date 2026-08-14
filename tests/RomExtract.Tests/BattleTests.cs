@@ -55,6 +55,24 @@ internal static class TestMons
     public static readonly MoveData Thunderbolt =
         new(5, "THUNDERBOLT", 0x06, 95, PokemonType.Electric, 100, 15, 100, 0, 0);
     public static readonly MoveData NeverMisses = Move("SWIFT", PokemonType.Normal, power: 60, accuracy: 0);
+
+    /// <summary>Effect 0x1D: the twelve that land more than once, like DOUBLESLAP.</summary>
+    public static readonly MoveData DoubleSlap = new(6, "DOUBLESLAP", 0x1D, 15, PokemonType.Normal, 100, 10, 0, 0, 0);
+
+    /// <summary>Effect 0x2B: the eight that crit far more often, like SLASH.</summary>
+    public static readonly MoveData Slash = new(7, "SLASH", 0x2B, 70, PokemonType.Normal, 100, 20, 0, 0, 0);
+
+    /// <summary>Effect 0x1F: the six that can make somebody lose their turn, like BITE.</summary>
+    public static readonly MoveData Bite = new(8, "BITE", 0x1F, 60, PokemonType.Dark, 100, 25, 100, 0, 0);
+
+    /// <summary>Effect 0x03: the four that give back what they take, like ABSORB.</summary>
+    public static readonly MoveData Absorb = new(9, "ABSORB", 0x03, 40, PokemonType.Grass, 100, 25, 0, 0, 0);
+
+    /// <summary>Effect 0x30: the three that cost the user, like TAKE DOWN.</summary>
+    public static readonly MoveData TakeDown = new(10, "TAKE DOWN", 0x30, 90, PokemonType.Normal, 85, 20, 0, 0, 0);
+
+    /// <summary>Effect 0x20: RECOVER and SLACK OFF.</summary>
+    public static readonly MoveData Recover = new(11, "RECOVER", 0x20, 0, PokemonType.Normal, 0, 10, 0, 0, 0);
 }
 
 public class DamageCalculatorTests
@@ -758,5 +776,205 @@ public class MoveEffectTests
         // move sitting in that slot is the check: SWIFT is not "raise evasion by one" and
         // TRANSFORM is not "raise accuracy by two".
         Assert.Equal(EffectKind.None, MoveEffects.Of(effect).Kind);
+    }
+}
+
+/// <summary>
+/// The rest of what a hit can carry.
+/// <para>
+/// Six groups of the effect table that had nothing behind them: the twelve that land
+/// more than once, the eight that crit, the ten that make somebody lose a turn, the four
+/// that drink, the three that cost the user, and the four that heal. Forty-one moves,
+/// every one of which announced itself and did exactly as much as a move with no effect
+/// byte at all.
+/// </para>
+/// <para>
+/// The group membership is read off the cartridge. The amounts — how many times, what
+/// share back, what share paid, how much healed — are modelled, and the tests below
+/// assert the shape of them rather than the exact numbers, because the exact numbers are
+/// a judgement and a test that pins a judgement is a test that has to be rewritten the
+/// day the judgement improves.
+/// </para>
+/// </summary>
+public class HitRiderTests
+{
+    private static Battler One(params MoveData[] moves) =>
+        new Battler(TestMons.Species("ONE", PokemonType.Normal, hp: 120, speed: 200), level: 50, nickname: "ONE")
+            .Knowing(moves);
+
+    private static Battler Two(params MoveData[] moves) =>
+        new Battler(TestMons.Species("TWO", PokemonType.Normal, hp: 250, speed: 5), level: 50, nickname: "TWO")
+            .Knowing(moves);
+
+    private static readonly BattleAction First = new BattleAction.UseMove(0);
+
+    [Fact]
+    public void AMultiHitMoveLandsBetweenTwoAndFiveTimes()
+    {
+        var seen = new HashSet<int>();
+
+        for (uint seed = 1; seed <= 60; seed++)
+        {
+            var battle = new Battle(One(TestMons.DoubleSlap), Two(TestMons.Tackle), seed);
+
+            List<BattleEvent> events = battle.ResolveTurn(First, First);
+
+            if (events.OfType<BattleEvent.HitSeveralTimes>().FirstOrDefault() is not { } several) continue;
+
+            seen.Add(several.Times);
+
+            Assert.InRange(several.Times, 2, 5);
+
+            // And the damage lines match the count, because the count is what the player
+            // is being told and the lines are what they watched.
+            Assert.Equal(
+                several.Times,
+                events.OfType<BattleEvent.DamageDealt>().Count(d => d.Side == Side.Opponent));
+        }
+
+        Assert.True(seen.Count > 1, $"only ever landed {string.Join(",", seen)} times");
+    }
+
+    [Fact]
+    public void AnOrdinaryMoveSaysNothingAboutHowManyTimesItLanded()
+    {
+        var battle = new Battle(One(TestMons.Tackle), Two(TestMons.Tackle), seed: 1);
+
+        Assert.Empty(battle.ResolveTurn(First, First).OfType<BattleEvent.HitSeveralTimes>());
+    }
+
+    [Fact]
+    public void TheHighCriticalGroupCritsMoreOftenThanAnOrdinaryMove()
+    {
+        // A proportion rather than a number. What is being tested is that the group does
+        // something at all — an engine that ignored the effect byte would give these two
+        // the same answer, and that is the failure this catches.
+        // Half again rather than double, because doubling is what the model does and a
+        // test that asserts the model's exact number is a test that has to be rewritten
+        // the day the model improves. What must not happen is the two coming out equal.
+        Assert.True(Crits(TestMons.Slash) * 2 > Crits(TestMons.Tackle) * 3,
+            $"SLASH crit {Crits(TestMons.Slash)} times, TACKLE {Crits(TestMons.Tackle)}");
+
+        static int Crits(MoveData move)
+        {
+            int count = 0;
+
+            for (uint seed = 1; seed <= 200; seed++)
+            {
+                var battle = new Battle(One(move), Two(TestMons.Tackle), seed);
+
+                count += battle.ResolveTurn(First, First)
+                    .OfType<BattleEvent.DamageDealt>()
+                    .Count(d => d.Side == Side.Opponent && d.Detail.Critical);
+            }
+
+            return count;
+        }
+    }
+
+    [Fact]
+    public void ADrainingMoveGivesBackSomeOfWhatItDealt()
+    {
+        var mine = One(TestMons.Absorb);
+
+        mine.TakeDamage(mine.MaxHp - 10);
+
+        var battle = new Battle(mine, Two(TestMons.Tackle), seed: 3);
+
+        List<BattleEvent> events = battle.ResolveTurn(First, First);
+
+        BattleEvent.Drained drained = events.OfType<BattleEvent.Drained>().Single();
+
+        int dealt = events.OfType<BattleEvent.DamageDealt>().First(d => d.Side == Side.Opponent).Damage;
+
+        Assert.True(drained.Amount > 0);
+        Assert.True(drained.Amount <= dealt, "gave back more than it took");
+    }
+
+    [Fact]
+    public void ARecoilMoveCostsTheUserSomething()
+    {
+        var battle = new Battle(One(TestMons.TakeDown), Two(TestMons.Tackle), seed: 5);
+
+        List<BattleEvent> events = battle.ResolveTurn(First, First);
+
+        // It may miss — eighty-five accuracy — so this asserts the pairing rather than
+        // the occurrence: recoil happens exactly when damage was dealt.
+        bool hit = events.OfType<BattleEvent.DamageDealt>().Any(d => d.Side == Side.Opponent);
+
+        Assert.Equal(hit, events.OfType<BattleEvent.Recoiled>().Any());
+    }
+
+    [Fact]
+    public void AFlinchCostsSomebodyWhoHasNotMovedYetTheirTurn()
+    {
+        // The fast one bites; the slow one never gets to act. BITE carries a hundred per
+        // cent secondary chance in this fixture so the roll is not what is being tested.
+        var battle = new Battle(One(TestMons.Bite), Two(TestMons.Tackle), seed: 1);
+
+        List<BattleEvent> events = battle.ResolveTurn(First, First);
+
+        Assert.Contains(events, e => e is BattleEvent.Flinched { Side: Side.Opponent });
+        Assert.DoesNotContain(events, e => e is BattleEvent.MoveUsed { Side: Side.Opponent });
+    }
+
+    [Fact]
+    public void AFlinchOnSomebodyWhoHasAlreadyMovedCostsThemNothing()
+    {
+        // The slow one bites second, so the fast one has already had its turn. A flinch
+        // that reached backwards would be a flinch that costs a turn already spent.
+        var battle = new Battle(One(TestMons.Tackle), Two(TestMons.Bite), seed: 1);
+
+        List<BattleEvent> events = battle.ResolveTurn(First, First);
+
+        Assert.Contains(events, e => e is BattleEvent.MoveUsed { Side: Side.Player });
+        Assert.DoesNotContain(events, e => e is BattleEvent.Flinched);
+    }
+
+    [Fact]
+    public void AndItDoesNotCarryIntoTheNextTurn()
+    {
+        // The first draft of this test bit twice and asserted the second turn was free,
+        // which it never could be: BITE flinches every time in this fixture, so a flinch
+        // that carried and a flinch that happened again look identical. So the second
+        // turn is a different move, and the only thing that could still flinch is a
+        // flinch left lying about.
+        var battle = new Battle(One(TestMons.Bite, TestMons.Tackle), Two(TestMons.Tackle), seed: 1);
+
+        battle.ResolveTurn(First, First);
+
+        List<BattleEvent> next = battle.ResolveTurn(new BattleAction.UseMove(1), First);
+
+        Assert.Contains(next, e => e is BattleEvent.MoveUsed { Side: Side.Opponent });
+        Assert.DoesNotContain(next, e => e is BattleEvent.Flinched);
+    }
+
+    [Fact]
+    public void AHealingMoveGivesBackAboutHalf()
+    {
+        var mine = One(TestMons.Recover);
+
+        mine.TakeDamage(mine.MaxHp - 1);
+
+        var battle = new Battle(mine, Two(TestMons.Tackle), seed: 9);
+
+        BattleEvent.Recovered healed = battle.ResolveTurn(First, First)
+            .OfType<BattleEvent.Recovered>()
+            .Single();
+
+        Assert.InRange(healed.Amount, mine.MaxHp / 3, mine.MaxHp);
+    }
+
+    [Fact]
+    public void HealingSomebodyAlreadyWellSaysSoRatherThanNothing()
+    {
+        // The difference between "this did nothing" and "this is not implemented" is the
+        // whole reason NothingHappened exists.
+        var battle = new Battle(One(TestMons.Recover), Two(TestMons.Tackle), seed: 9);
+
+        List<BattleEvent> events = battle.ResolveTurn(First, First);
+
+        Assert.Contains(events, e => e is BattleEvent.NothingHappened);
+        Assert.Empty(events.OfType<BattleEvent.Recovered>());
     }
 }

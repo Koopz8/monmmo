@@ -86,6 +86,18 @@ public static class BattleNarrator
 
         BattleEvent.NothingHappened e => $"It had no effect on {names.Of(e.Side)}.",
 
+        // Said once, after the hits, rather than counted out one line at a time. Five
+        // "took 4 damage" in a row is the same information read five times.
+        BattleEvent.HitSeveralTimes e => $"Hit {e.Times} time{(e.Times == 1 ? "" : "s")}!",
+
+        BattleEvent.Drained e => $"{names.Of(e.Side)} had its energy drained back.",
+
+        BattleEvent.Recoiled e => $"{names.Of(e.Side)} was hurt by the recoil!",
+
+        BattleEvent.Flinched e => $"{names.Of(e.Side)} flinched and couldn't move!",
+
+        BattleEvent.Recovered e => $"{names.Of(e.Side)} regained {e.Amount} health.",
+
         BattleEvent.Fainted e => $"{names.Of(e.Side)} fainted!",
 
         // The amount, not the item's number: a Potion used on somebody two health short
