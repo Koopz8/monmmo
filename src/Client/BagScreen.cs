@@ -24,6 +24,12 @@ public sealed class BagScreen
     private const int Height = 640;
     private const int Rows = 8;
 
+    /// <summary>
+    /// How tall one party line is: a name, a bar, and room under it for whatever the
+    /// member is carrying.
+    /// </summary>
+    private const int Row = 60;
+
     private readonly ItemNames _items;
     private readonly GameData _data;
 
@@ -267,11 +273,11 @@ public sealed class BagScreen
         {
             SavedMon member = _party[i];
 
-            float y = party.Y + 18 + i * 46;
+            float y = party.Y + 18 + i * Row;
             bool selected = i == _member && _choosingWho;
 
             if (selected)
-                Skin.DrawSelection(new Rectangle(party.X + 10, y - 5, party.Width - 20, 42));
+                Skin.DrawSelection(new Rectangle(party.X + 10, y - 5, party.Width - 20, Row - 4));
 
             string name = GameText.ToAscii(
                 member.Nickname ?? _data.SpeciesAt(member.Species)?.Name ?? $"species {member.Species}");
@@ -294,6 +300,16 @@ public sealed class BagScreen
                 member.CurrentHp <= 0 ? "fainted" : $"{member.CurrentHp}/{most}",
                 party.X + party.Width - 20, y + 18, 2,
                 member.CurrentHp <= 0 ? Skin.HpPoor : Skin.InkFaint);
+
+            // And what it is carrying, under the bar rather than beside the name — a
+            // name can be ten letters and an item name twelve, and the first attempt put
+            // BLACK BELT straight through the middle of the health bar.
+            if (member.HeldItem != 0)
+            {
+                Font.Draw(
+                    GameText.ToAscii(_items.Of(member.HeldItem)),
+                    party.X + 24, y + 34, 2, Skin.Accent);
+            }
         }
 
         if (_message.Length > 0) Font.Draw(_message, 40, Height - 74, 2, Skin.HpGood);

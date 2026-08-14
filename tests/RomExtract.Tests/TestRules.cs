@@ -45,6 +45,9 @@ internal static class TestRules
     /// <summary>A trainer with one, for the simple case.</summary>
     public const int OneAlone = 4;
 
+    /// <summary>A trainer whose party carries something, which most of the real ones do not.</summary>
+    public const int Carrying = 9;
+
     /// <summary>An ordinary ball, as an item id.</summary>
     public const int BallItem = 4;
 
@@ -153,6 +156,10 @@ internal static class TestRules
         var trainers = new List<TrainerParty>
         {
             new(OneAlone, false, [new TrainerMember(3, 5, 0, [])]),
+
+            // Eighty-seven of the cartridge's seventeen hundred party members hold
+            // something, and this is one of them.
+            new(Carrying, false, [new TrainerMember(3, 5, 207, [])]),
 
             // Moves written out on one of them and left to the learnset on the others,
             // because both are ordinary and the second is what most of the games use.

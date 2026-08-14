@@ -58,6 +58,7 @@ public enum Side
 [JsonDerivedType(typeof(CouldNotGetAway), "couldnotgetaway")]
 [JsonDerivedType(typeof(HeldFast), "heldfast")]
 [JsonDerivedType(typeof(BlownAway), "blownaway")]
+[JsonDerivedType(typeof(Stole), "stole")]
 [JsonDerivedType(typeof(Ended), "ended")]
 public abstract record BattleEvent
 {
@@ -194,6 +195,9 @@ public abstract record BattleEvent
 
     /// <summary>Sent off, which ends a fight with something wild in it.</summary>
     public sealed record BlownAway(Side Side, int MoveId) : BattleEvent;
+
+    /// <summary>Took what the other one was carrying.</summary>
+    public sealed record Stole(Side Side, int ItemId) : BattleEvent;
 
     /// <summary>
     /// A move was offered and could not be taken, because four are already known.
@@ -834,6 +838,24 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
                 defender.CannotEscape = true;
                 events.Add(new BattleEvent.Trapped(Other(side), move.Id));
             }
+
+            return;
+        }
+
+        // Taken. Only when the user is carrying nothing, which is the games' rule and
+        // also the only one that does not need somewhere to put a second item.
+        if (effect.Kind == EffectKind.Steal)
+        {
+            if (attacker.Holding != 0 || defender.Holding == 0)
+            {
+                events.Add(new BattleEvent.NothingHappened(Other(side)));
+                return;
+            }
+
+            attacker.Holding = defender.Holding;
+            defender.Holding = 0;
+
+            events.Add(new BattleEvent.Stole(side, attacker.Holding));
 
             return;
         }

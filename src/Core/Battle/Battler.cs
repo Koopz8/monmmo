@@ -69,6 +69,23 @@ public sealed class Battler
 
     public StatusCondition Status { get; set; }
 
+    /// <summary>
+    /// What this one is carrying, as an item id, or nothing.
+    /// <para>
+    /// Every trainer's party on the cartridge says what its members hold, and this
+    /// project has been extracting that number, writing it into the rules file and never
+    /// reading it since trainers existed.
+    /// </para>
+    /// <para>
+    /// What a held item <em>does</em> is another matter and mostly not answerable: the
+    /// item record carries a hold effect as a number, and what each number means is in
+    /// the game's code. So this is the item, not its effect — which is enough for the
+    /// one thing in the move table that is about held items rather than about their
+    /// effects.
+    /// </para>
+    /// </summary>
+    public int Holding { get; set; }
+
     /// <summary>Turns of sleep remaining, counted down at the start of each of this battler's turns.</summary>
     public int SleepTurns { get; set; }
 

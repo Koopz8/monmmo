@@ -62,6 +62,9 @@ public enum EffectKind
 
     /// <summary>Sends the target off, which ends a fight with something wild in it.</summary>
     BlowAway,
+
+    /// <summary>Takes what the target is carrying, if the user is carrying nothing.</summary>
+    Steal,
 }
 
 /// <summary>
@@ -257,6 +260,13 @@ public static class MoveEffects
         //   0x1C   2 moves  WHIRLWIND, ROAR
         0x6A => new MoveEffect(EffectKind.NoEscape, OnUser: false),
         0x1C => new MoveEffect(EffectKind.BlowAway, OnUser: false),
+
+        // And the one group that is about a held item rather than about what holding it
+        // does — which is the only kind this project can answer, because the hold effects
+        // themselves are numbers whose meaning lives in the game's code.
+        //
+        //   0x69   2 moves  THIEF, COVET
+        0x69 => new MoveEffect(EffectKind.Steal, OnUser: false),
 
         _ => Stages(effect),
     };

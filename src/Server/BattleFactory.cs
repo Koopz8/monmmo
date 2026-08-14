@@ -38,6 +38,7 @@ public sealed class BattleFactory(GameRules rules)
         if (missing > 0) battler.TakeDamage(missing);
 
         battler.Status = saved.Status;
+        battler.Holding = saved.HeldItem;
 
         return battler;
     }
@@ -85,6 +86,10 @@ public sealed class BattleFactory(GameRules rules)
 
             if (battler.Moves.Count == 0 && rules.MoveAt(1) is { } fallback) battler.Moves.Add(fallback);
 
+            // What the cartridge says they are carrying. This number has been read off
+            // every trainer's party since trainers existed and thrown away here.
+            battler.Holding = member.HeldItem;
+
             built.Add(battler);
         }
 
@@ -117,7 +122,10 @@ public sealed class BattleFactory(GameRules rules)
         battler.CurrentHp,
         battler.Status,
         battler.Nature,
-        battler.Moves.Select(m => m.Id).ToList());
+        battler.Moves.Select(m => m.Id).ToList())
+    {
+        HeldItem = battler.Holding,
+    };
 
     /// <summary>
     /// A party member restored to full health, as a visit to a centre would leave it.

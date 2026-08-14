@@ -23,6 +23,9 @@ public sealed record SavedMon(
     IReadOnlyList<int> Moves,
     int Experience = 0)
 {
+    /// <summary>What this one is carrying, or zero. Kept because a stolen item is kept.</summary>
+    public int HeldItem { get; init; }
+
     /// <summary>
     /// Compares move lists by their contents.
     /// <para>

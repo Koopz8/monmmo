@@ -12,7 +12,8 @@ public sealed class BattleNames(
     string player,
     string opponent,
     Func<int, string> moveNamed,
-    Func<int, string>? speciesNamed = null)
+    Func<int, string>? speciesNamed = null,
+    Func<int, string>? itemNamed = null)
 {
     /// <summary>Names for a battle nobody can put words to, so narration still works.</summary>
     public static readonly BattleNames Unknown = new("Your side", "The opponent", id => $"move {id}");
@@ -27,6 +28,9 @@ public sealed class BattleNames(
     /// narrator with no cartridge has.
     /// </summary>
     public string SpeciesNamed(int species) => speciesNamed?.Invoke(species) ?? $"species {species}";
+
+    /// <summary>What to call an item, for the one sentence that is about a thing.</summary>
+    public string ItemNamed(int itemId) => itemNamed?.Invoke(itemId) ?? $"item {itemId}";
 }
 
 /// <summary>
@@ -172,6 +176,8 @@ public static class BattleNarrator
         BattleEvent.HeldFast e => $"{names.MoveNamed(e.MoveId)} is holding on — there is no getting away!",
 
         BattleEvent.BlownAway e => $"{names.Of(e.Side)} was blown away by {names.MoveNamed(e.MoveId)}!",
+
+        BattleEvent.Stole e => $"{names.Of(e.Side)} took the {names.ItemNamed(e.ItemId)}!",
 
         BattleEvent.MoveNotLearned e =>
             $"{names.Of(e.Side)} wants to learn {names.MoveNamed(e.MoveId)}, but already knows four moves.",

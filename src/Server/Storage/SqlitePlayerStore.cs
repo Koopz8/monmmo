@@ -156,6 +156,10 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
 
         AddColumnIfMissing(connection, "party_members", "experience", "INTEGER NOT NULL DEFAULT 0");
 
+        // What it is carrying. Zero for everything that already existed, which is right:
+        // nothing could be carrying anything before there was anything to carry.
+        AddColumnIfMissing(connection, "party_members", "held_item", "INTEGER NOT NULL DEFAULT 0");
+
         // The balls column is what the bag used to be, back when a player could carry
         // exactly one kind of thing. It is left in place and written as zero rather than
         // dropped, because dropping a column in SQLite means rebuilding the table and
@@ -357,8 +361,8 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
         // health here means "as much as it has", which is what a fresh one gets.
         await using SqliteCommand insert = connection.CreateCommand();
         insert.CommandText =
-            "INSERT INTO party_members (account_id, slot, species, level, nickname, current_hp, status, nature, experience) " +
-            "VALUES ($id, $slot, $species, $level, NULL, 0, 0, 0, 0);";
+            "INSERT INTO party_members (account_id, slot, species, level, nickname, current_hp, status, nature, experience, held_item) " +
+            "VALUES ($id, $slot, $species, $level, NULL, 0, 0, 0, 0, 0);";
 
         insert.Parameters.AddWithValue("$id", accountId);
         insert.Parameters.AddWithValue("$slot", slot);
@@ -566,8 +570,8 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
                 insert.CommandText =
                     """
                     INSERT INTO party_members
-                        (account_id, slot, species, level, nickname, current_hp, status, nature, experience)
-                    VALUES ($account, $slot, $species, $level, $nickname, $hp, $status, $nature, $experience)
+                        (account_id, slot, species, level, nickname, current_hp, status, nature, experience, held_item)
+                    VALUES ($account, $slot, $species, $level, $nickname, $hp, $status, $nature, $experience, $held)
                     RETURNING id;
                     """;
 
@@ -580,6 +584,7 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
                 insert.Parameters.AddWithValue("$status", (int)mon.Status);
                 insert.Parameters.AddWithValue("$nature", (int)mon.Nature);
                 insert.Parameters.AddWithValue("$experience", mon.Experience);
+                insert.Parameters.AddWithValue("$held", mon.HeldItem);
 
                 memberId = (long)(await insert.ExecuteScalarAsync(cancellationToken))!;
             }
@@ -654,7 +659,7 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
         {
             command.CommandText =
                 """
-                SELECT id, species, level, nickname, current_hp, status, nature, experience
+                SELECT id, species, level, nickname, current_hp, status, nature, experience, held_item
                 FROM party_members
                 WHERE account_id = $id
                 ORDER BY slot;
@@ -676,7 +681,10 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
                     Status: (StatusCondition)reader.GetInt32(5),
                     Nature: (Nature)reader.GetInt32(6),
                     Moves: moves.GetValueOrDefault(memberId, []),
-                    Experience: reader.GetInt32(7)));
+                    Experience: reader.GetInt32(7))
+                {
+                    HeldItem = reader.GetInt32(8),
+                });
             }
         }
 

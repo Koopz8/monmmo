@@ -3522,6 +3522,10 @@ public sealed class GameWorld
         {
             CurrentHp = encounter.Player.CurrentHp,
             Status = encounter.Player.Status,
+
+            // And what it is carrying, which it may not have walked in with. THIEF keeps
+            // what it took, in these games and here.
+            HeldItem = encounter.Player.Holding,
         };
     }
 

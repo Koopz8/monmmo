@@ -79,6 +79,17 @@ public static class RulesExporter
             $"{rules.LearnsetCount} learnsets, {rules.TrainerCount} trainers, " +
             $"{rules.ItemCount} items, {rules.EvolutionCount} evolutions (no names)");
 
+        // What trainers' parties are carrying, which this file has been writing down
+        // since trainers existed and nothing had ever read.
+        List<TrainerMember> carrying =
+            [.. trainers.SelectMany(t => t.Members).Where(m => m.HeldItem != 0)];
+
+        log?.Invoke(
+            carrying.Count == 0
+                ? "  rules: nobody's party carries anything"
+                : $"  rules: {carrying.Count} of {trainers.Sum(t => t.Members.Count)} party members carry something, " +
+                  $"across {carrying.Select(m => m.HeldItem).Distinct().Count()} different items");
+
         ReportUsableness(rules, log);
 
         return rules;
