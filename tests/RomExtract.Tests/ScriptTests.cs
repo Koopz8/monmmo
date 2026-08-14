@@ -1563,27 +1563,61 @@ public class TheMachineTests
     }
 
     [Fact]
-    public void WaitingForASoundTakesNothingAndTheCommandAfterItIsReal()
+    public void WaitingForASoundTakesNothingAndTheCryAfterItTakesFour()
     {
-        // 0x08160C30. Read with five bytes here — which is what this project believed
-        // for two milestones — the whole of the next command is swallowed, and what
-        // follows is read from the middle of it.
+        // 0x08160C30, and this one line of bytes has now settled two arguments and
+        // overturned one of them.
+        //
+        // 0x30 was read as five bytes for two milestones, which swallowed the whole of
+        // the command after it. Then 0xA1 — the command that swallowing had been hiding
+        // — was read as one, which left three nops standing in front of a loadpointer
+        // here and in front of twenty others. It is four: a species and a word, and the
+        // species is the same one the setwildbattle three bytes later names.
         List<ScriptCommand> commands = Read(
             0x6A,                                   // lock
             0x5A,                                   // faceplayer2
             0x30,                                   // wait for the sound: nothing
-            0xA1, 0x28,                             // one byte, not five
-            0x00, 0x00, 0x00,                       // three nops the old width ate
+            0xA1, 0x28, 0x00, 0x00, 0x00,           // the cry: four, not one and not five
             0x0F, 0x00, 0x61, 0x3B, 0x17, 0x08,     // loadpointer
             0x09, 0x04,                             // callstd 4
             ScriptCommands.End);
 
         Assert.Equal(
-            new byte[]
-            {
-                0x6A, 0x5A, 0x30, 0xA1, 0x00, 0x00, 0x00, 0x0F, 0x09, ScriptCommands.End,
-            },
+            new byte[] { 0x6A, 0x5A, 0x30, 0xA1, 0x0F, 0x09, ScriptCommands.End },
             commands.Select(c => c.Code));
+
+        // No nops at all. A run of them in front of a loadpointer is what a wrong width
+        // leaves behind, and it is the thing that gave this away.
+        Assert.DoesNotContain(ScriptCommands.Nop, commands.Select(c => c.Code));
+    }
+
+    [Fact]
+    public void TheSleeperReachesTheFlagThatTakesItOffTheMap()
+    {
+        // 0x08168048, byte for byte: the tail of the script that wakes the sleeper on
+        // ROUTE 12. Read with 0xA1 one byte wide this ends at the nop three commands
+        // early, and the flag that hides the creature is never reached — so it wakes up,
+        // fights, and is still lying across the road afterwards. Sixty-six maps behind
+        // one argument width.
+        List<ScriptCommand> commands = Read(
+            0xB6, 0x8F, 0x00, 0x1E, 0x00, 0x00,     // set up SNORLAX at level 30
+            0x30,                                   // wait for the sound
+            0xA1, 0x8F, 0x00, 0x02, 0x00,           // its cry
+            0x28, 0x28, 0x00,                       // pause
+            0xC5,
+            0x29, 0x54, 0x00,                       // setflag 0x0054 — off the map
+            0xB7,                                   // and only now, the battle
+            ScriptCommands.End);
+
+        Assert.Contains(commands, c => c.Code == 0x29 && c.Word() == 0x0054);
+        Assert.Contains(commands, c => c.Code == 0xB7);
+
+        // The fight it sets up, which is what the world file carries for this person and
+        // what the server checks a client's claim against.
+        ScriptCommand setUp = commands.First(c => c.Code == 0xB6);
+
+        Assert.Equal(0x8F, setUp.Word());
+        Assert.Equal(30, setUp.Arguments[2]);
     }
 
     [Fact]

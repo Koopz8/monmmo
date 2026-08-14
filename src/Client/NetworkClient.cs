@@ -139,6 +139,10 @@ public sealed class NetworkClient : IDisposable
     /// <summary>Names the item a script just handed over, for the server to check.</summary>
     public void SendScriptGave(int localId, int itemId) => Send(new ScriptGave(localId, itemId));
 
+    /// <summary>Tells the server which fight a script just set up, for it to check and run.</summary>
+    public void SendScriptFought(int localId, int species, int level) =>
+        Send(new ScriptFought(localId, species, level));
+
     /// <summary>Answers which of the four to drop, or that none of them should go.</summary>
     public void SendLearnMove(int moveId, int forget) => Send(new LearnMoveRequest(moveId, forget));
 

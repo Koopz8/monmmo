@@ -2618,6 +2618,77 @@ public sealed class GameWorld
     }
 
     /// <summary>
+    /// Starts the fight a script set up, if the object it names is allowed to start it.
+    /// <para>
+    /// The counterpart of <see cref="ScriptGave"/>, and the same three questions: is
+    /// that person there, are they within reach, and is this one of the fights their
+    /// script can actually pick. Ten scripts in the game set one up and every one of
+    /// them is worth guarding — the list holds MEWTWO at level 70.
+    /// </para>
+    /// <para>
+    /// The battle itself is built here from the server's own rules, so what arrives is a
+    /// species and a level and never a creature.
+    /// </para>
+    /// </summary>
+    public List<Outgoing> ScriptFought(int playerId, int localId, int species, int level)
+    {
+        lock (_gate)
+        {
+            LastScriptFight = null;
+
+            if (_rules is null || _battles is null) return [];
+            if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
+            if (player.InBattle) return [];
+            if (!_populated.TryGetValue(player.MapId, out MapPopulation? people)) return [];
+            if (people.ById(localId) is not { } person) return [];
+
+            if (!person.Template.CanFight.Contains(new WildFight(species, level)))
+            {
+                LastScriptFight = $"refused: object {localId} never fights species {species} at level {level}";
+                return [];
+            }
+
+            var reachable = Interaction
+                .Reachable(player.Square, player.Facing, square => !GridFor(player.MapId).IsWalkable(square))
+                .ToHashSet();
+
+            if (!reachable.Contains(person.Square))
+            {
+                LastScriptFight = $"refused: object {localId} is not within reach";
+                return [];
+            }
+
+            if (_battles.Wild(species, level) is not { } wild)
+            {
+                LastScriptFight = $"refused: species {species} is not one this server can field";
+                return [];
+            }
+
+            if (LeadBattler(player) is not { } lead)
+            {
+                LastScriptFight = "refused: nobody in the party can fight";
+                return [];
+            }
+
+            player.Battle = new Encounter(lead.Slot, lead.Battler, [wild], _rng.State);
+
+            LastScriptFight = $"species {species} at level {level}, set up by object {localId}";
+
+            return
+            [
+                new Outgoing(
+                    new BattleStarted(
+                        BattleFactory.View(lead.Battler), BattleFactory.View(wild),
+                        BallsOf(player), MedicineOf(player), Slot: lead.Slot),
+                    OnlyTo: playerId),
+            ];
+        }
+    }
+
+    /// <summary>What the last scripted fight came to, refusal included.</summary>
+    public string? LastScriptFight { get; private set; }
+
+    /// <summary>
     /// Takes a move that was offered and could not fit, in place of one already known.
     /// <para>
     /// Offered, not asked for: the server put it on a list when a level-up produced a

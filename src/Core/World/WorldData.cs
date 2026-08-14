@@ -263,7 +263,7 @@ public sealed class WorldData
     /// <summary>Identifies the format, so a wrong or stale file fails loudly.</summary>
     private static readonly byte[] Magic = "MONWORLD"u8.ToArray();
 
-    private const int Version = 22;
+    private const int Version = 23;
 
     private readonly Dictionary<string, MapData> _maps;
 
@@ -431,6 +431,15 @@ public sealed class WorldData
             // against it, exactly as it already does for a trigger's trainer ids.
             writer.Write(entry.CanGive.Count);
             foreach (int itemId in entry.CanGive) writer.Write(itemId);
+
+            // And the fights it could ever start, on the same terms.
+            writer.Write(entry.CanFight.Count);
+
+            foreach (WildFight fight in entry.CanFight)
+            {
+                writer.Write(fight.Species);
+                writer.Write(fight.Level);
+            }
             writer.Write(entry.TakesItemId);
             writer.Write(entry.TakesCount);
             writer.Write(entry.Talks);
@@ -574,6 +583,21 @@ public sealed class WorldData
     }
 
     /// <summary>What one object sells, refusing a count that could only be corruption.</summary>
+    /// <summary>The fights an object's script can start, with the same guard as a shop.</summary>
+    private static List<WildFight> ReadFights(BinaryReader reader)
+    {
+        int count = reader.ReadInt32();
+
+        if (count is < 0 or > 16)
+            throw new InvalidDataException($"A person claiming {count} scripted battles.");
+
+        var fights = new List<WildFight>(count);
+
+        for (int i = 0; i < count; i++) fights.Add(new WildFight(reader.ReadInt32(), reader.ReadInt32()));
+
+        return fights;
+    }
+
     private static List<int> ReadStock(BinaryReader reader, string mapId)
     {
         int count = reader.ReadInt32();
@@ -630,6 +654,7 @@ public sealed class WorldData
                 WinsItemId = reader.ReadInt32(),
                 WinsCount = reader.ReadInt32(),
                 CanGive = ReadStock(reader, mapId),
+                CanFight = ReadFights(reader),
                 TakesItemId = reader.ReadInt32(),
                 TakesCount = reader.ReadInt32(),
                 Talks = reader.ReadBoolean(),

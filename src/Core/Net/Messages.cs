@@ -34,6 +34,7 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(WentInside), "wentinside")]
 [JsonDerivedType(typeof(TriggerFired), "triggered")]
 [JsonDerivedType(typeof(ScriptGave), "scriptgave")]
+[JsonDerivedType(typeof(ScriptFought), "scriptfought")]
 [JsonDerivedType(typeof(NameMonRequest), "namemon")]
 [JsonDerivedType(typeof(LearnMoveRequest), "learnmove")]
 [JsonDerivedType(typeof(SurfRequest), "surf")]
@@ -131,6 +132,18 @@ public sealed record TriggerFired(int X, int Y, int? TrainerId = null) : NetMess
 /// </para>
 /// </summary>
 public sealed record ScriptGave(int LocalId, int ItemId) : NetMessage;
+
+/// <summary>
+/// A script started a fight with something that is not on any encounter table.
+/// <para>
+/// The same shape as <see cref="ScriptGave"/>, and the same reason: the client is the
+/// only machine that can run the script, so it names the fight, and the server checks
+/// the name against the set the world file carries for that person. Ten scripts in this
+/// game set one up — the two sleepers, the three birds, and MEWTWO at level 70 — and a
+/// client that could name its own would be a client that fights a level 5 MEWTWO.
+/// </para>
+/// </summary>
+public sealed record ScriptFought(int LocalId, int Species, int Level) : NetMessage;
 
 /// <summary>
 /// A name for one of the party, given by the player on a screen this project had to

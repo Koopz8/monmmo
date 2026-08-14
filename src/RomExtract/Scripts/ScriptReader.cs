@@ -433,15 +433,30 @@ public static class ScriptCommands
         // scripts whatever 0xA1 does.
         [0x30] = 0,
 
-        // One, and it exists in this table at all because 0x30 stopped hiding it.
+        // Four, and this is the second answer this entry has had.
         //
-        // Thirty-five sites the moment it became visible. Everything from two bytes up
-        // is ruled out for eating an instruction or leaving a standard routine to print
-        // a page nobody loaded; of the two left, one byte reads on to a proper end at
-        // all thirty-five sites and none reads on at only twelve. The byte it takes is
-        // not constant — 0x28, 0x43, 0x96, 0x20, 0x69 — which is what an argument looks
-        // like when it is a real one.
-        [0xA1] = 1,
+        // Milestone 50 read it as one byte on thirty-five sites, on the strength of a
+        // continuation test: one byte read on to a proper end at every site and none did
+        // at a third of them. It is wrong, and the way it is wrong is the reason this
+        // project keeps writing these notes. One byte leaves three nops in front of
+        // every loadpointer in the game — which reads perfectly, ends properly, and
+        // quietly ends the script that wakes the sleeper on ROUTE 12 three commands
+        // before the flag that takes it off the map. Sixty-six maps behind a width.
+        //
+        // The column settles it, and it is the same column this project has trusted
+        // since milestone 14 — only asked by machine this time. Every site is the same
+        // shape:
+        //
+        //   A1 | 8F 00 02 00 | 28 28 00 ...    ROUTE 12's sleeper, species 0x8F
+        //   A1 | 28 00 00 00 | 0F 00 61 3B     a loadpointer follows
+        //   A1 | 61 00 02 00 | C5 B6 61 00     and here the same species again, in the
+        //                                      setwildbattle three bytes later
+        //
+        // Byte one is a species and varies; bytes two and four are 00 at all twenty-one
+        // sites. Read one byte wide, the byte it resumes on is 0x00 at 97% of sites and
+        // does real work at 3% of them — it is resuming inside an argument. Read four,
+        // it resumes on loadpointer, pause, setflag, message: on work, at every site.
+        [0xA1] = 4,
 
         // Nothing at all, and it only became visible once 0x30 was five bytes wide —
         // the same twenty-four scripts moved from stopping at one to stopping at the

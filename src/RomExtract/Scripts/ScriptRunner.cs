@@ -109,6 +109,17 @@ public sealed record ScriptRun
     /// the call, in plain sight, by the script that is about to make it.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// A fight this run set up and started, if it did.
+    /// <para>
+    /// Two commands: one sets the creature up and one starts it, and they are not next
+    /// to each other — the sleeper on ROUTE 12 sets a SNORLAX at level 30, then takes
+    /// itself off the map, and only then fights. Recorded when the second one runs, so
+    /// that everything in between has already happened.
+    /// </para>
+    /// </summary>
+    public (int Species, int Level)? WildBattle { get; init; }
+
     public int? GivesItem { get; init; }
 
     public int GivesCount { get; init; }
@@ -321,6 +332,10 @@ public static class ScriptRunner
         int? gives = null;
         int givesCount = 0;
         (int Species, int Level)? givesMon = null;
+
+        // What a scripted fight was set up with, and what actually got started.
+        (int Species, int Level)? setUp = null;
+        (int Species, int Level)? wild = null;
         int? shifts = null;
         uint? question = null;
         byte? stoppedAt = null;
@@ -583,6 +598,21 @@ public static class ScriptRunner
                     save.Write(0x800D, 1);
                     break;
 
+                // The pair that fights something out of nowhere. The first sets the
+                // creature up and the second starts it, and they are not adjacent: the
+                // sleeper on ROUTE 12 sets a SNORLAX at 30, takes itself off the map, and
+                // only then fights. Recording it on the second is what lets everything
+                // in between happen first.
+                case 0xB6:
+                    if (command.Arguments.Length >= 3 && command.Word() > 0)
+                        setUp = (command.Word(), command.Arguments[2]);
+
+                    break;
+
+                case 0xB7:
+                    wild ??= setUp;
+                    break;
+
                 case 0x79:                              // gives a monster
                     // The species is a number or a variable holding one. Both turn up:
                     // Lapras and Eevee are written into the script, and the starter is
@@ -739,6 +769,7 @@ public static class ScriptRunner
             GivesItem = gives,
             GivesCount = givesCount,
             GivesMon = givesMon,
+            WildBattle = wild,
             ShiftedBy = shifts,
             Question = question,
             FlagsSet = set,

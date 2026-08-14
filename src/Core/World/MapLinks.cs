@@ -251,6 +251,9 @@ public sealed record MapEntryScript(int Variable, int Value, uint ScriptAddress)
 /// the script that decides what it says is a separate problem, and a large one.
 /// </para>
 /// </summary>
+/// <summary>A fight a script sets up: one creature, at one level, from nowhere.</summary>
+public sealed record WildFight(int Species, int Level);
+
 public sealed record MapObject(
     int LocalId,
     int GraphicsId,
@@ -359,6 +362,18 @@ public sealed record MapObject(
     public IReadOnlyList<int> CanGive { get; init; } = [];
 
     /// <summary>
+    /// The wild battles this one's script can start, as species and level.
+    /// <para>
+    /// The same arrangement as <see cref="CanGive"/> and for the same reason: which
+    /// battle, if any, depends on what was said to a yes/no, so the client names it and
+    /// the server checks the name against this. Ten scripts in the game set one up, and
+    /// they are the ones worth being careful about — the two sleepers across the roads
+    /// south and west, the three birds, and MEWTWO at level 70.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<WildFight> CanFight { get; init; } = [];
+
+    /// <summary>
     /// The monster this one hands over, or zero. May be a variable id rather than a
     /// species, which is how the three balls on the professor's table are one script.
     /// <para>
@@ -456,6 +471,7 @@ public sealed record MapObject(
         WinsItemId == other.WinsItemId &&
         WinsCount == other.WinsCount &&
         CanGive.SequenceEqual(other.CanGive) &&
+        CanFight.SequenceEqual(other.CanFight) &&
         Talks == other.Talks &&
         ShiftedBy == other.ShiftedBy &&
         Stock.SequenceEqual(other.Stock);

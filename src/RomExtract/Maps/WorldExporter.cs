@@ -146,6 +146,22 @@ public static class WorldExporter
                                     .Distinct(),
                             ],
 
+                            // Every fight this script could ever set up. Ten scripts in
+                            // the game do, and two of them are the sleepers across the
+                            // roads out of LAVENDER and CELADON — 33 maps each.
+                            //
+                            // Species, level, and a held item that is zero at all ten
+                            // sites: `B6 8F 00 1E 00 00` is SNORLAX at 30.
+                            CanFight =
+                            [
+                                .. Scripts.ScriptReader.Reachable(rom, o.ScriptAddress)
+                                    .SelectMany(a => Scripts.ScriptReader.Read(rom, a))
+                                    .Where(c => c.Code == 0xB6 && c.Arguments.Length >= 3)
+                                    .Select(c => new WildFight(c.Word(), c.Arguments[2]))
+                                    .Where(f => f.Species > 0 && f.Level is > 0 and <= 100)
+                                    .Distinct(),
+                            ],
+
                             TakesItemId = Scripts.ScriptReader.ReadAll(rom, o.ScriptAddress)
                                 .FirstOrDefault(c => c.Code == 0x45)?.Word() ?? 0,
                             TakesCount = Math.Max(1, Scripts.ScriptReader.ReadAll(rom, o.ScriptAddress)

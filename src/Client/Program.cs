@@ -958,6 +958,7 @@ public static class Program
         // said "tester received a NUGGET from the mystery TRAINER!" to a bag with a
         // POKe BALL in it and nothing else, and nothing anywhere reported a problem.
         Handed(run, script, network);
+        Fought(run, script, network);
 
         // A counter that heals asks, and until now this project answered for the player.
         // The yes and the no are inside a standard routine — code, never followed here —
@@ -1220,6 +1221,7 @@ public static class Program
         TakeAway(run, view, script, network);
 
         Handed(run, script, network);
+        Fought(run, script, network);
 
         var box = new DialogueBox(run.Pages, run.Question);
 
@@ -1266,6 +1268,26 @@ public static class Program
         if (who is <= 0 or >= 64) return;
 
         network.SendScriptGave(who, given);
+    }
+
+    /// <summary>
+    /// Tells the server about a fight a script started.
+    /// <para>
+    /// Same shape as handing something over, and for the same reason: the client runs
+    /// the script and the server runs the battle. What travels is a species and a level,
+    /// which the server checks against the list the world file carries for that person
+    /// before it fields anything.
+    /// </para>
+    /// </summary>
+    private static void Fought(ScriptRun run, ScriptState script, NetworkClient network)
+    {
+        if (run.WildBattle is not { } fight) return;
+
+        int who = script.Read(TalkingTo);
+
+        if (who is <= 0 or >= 64) return;
+
+        network.SendScriptFought(who, fight.Species, fight.Level);
     }
 
     /// <summary>

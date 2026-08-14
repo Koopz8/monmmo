@@ -856,6 +856,16 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                             await DispatchAsync(fired, playerId, cancellationToken).ConfigureAwait(false);
                             break;
 
+                        case ScriptFought fought when playerId != 0:
+                            List<Outgoing> ambush = world.ScriptFought(
+                                playerId, fought.LocalId, fought.Species, fought.Level);
+
+                            if (world.LastScriptFight is { } startedBy)
+                                Console.WriteLine($"! #{playerId} a script started a fight: {startedBy}");
+
+                            await DispatchAsync(ambush, playerId, cancellationToken).ConfigureAwait(false);
+                            break;
+
                         case ScriptGave gave when playerId != 0:
                             List<Outgoing> fromScript = world.ScriptGave(playerId, gave.LocalId, gave.ItemId);
 

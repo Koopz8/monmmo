@@ -59,6 +59,7 @@ public class MessageChannelTests
             new MoveOffered(1, 57),
             new SurfingChanged(true, 9, 12),
             new PlayerHopped(1, 9, 12, Direction.Down),
+            new ScriptFought(5, 143, 30),
             new BattleTurn(new BattleAction.UseMove(2)),
             new BattleTurn(new BattleAction.ThrowBall(4) { Kind = BallKind.Great }),
             new BattleStarted(

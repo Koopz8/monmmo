@@ -4694,7 +4694,16 @@ public static class Program
                 int spoke = 0;
                 int named = 0;
 
-                bool ruled = false;
+                // Ruled out before the sites are even walked: a width that resumes on the
+                // same byte at nearly every site has resumed inside an argument. Nine in
+                // ten rather than all ten, because a few of any scorer's sites are a
+                // misaligned read that happened to land on this byte.
+                double column = ResumesOnAColumn(rom, where, width);
+
+                // And the same idea from the other side: a width that resumes on nothing
+                // but nops and ends at nearly every site has landed in the padding at
+                // the tail of an argument rather than on the next instruction.
+                bool ruled = column >= 0.9 || ResumesOnWork(rom, where, width) <= 0.1;
 
                 foreach (int at in where)
                 {
@@ -4783,13 +4792,15 @@ public static class Program
             foreach ((int width, double cleanly, double pointing, double deep, double speech, bool ruled) in scores)
             {
                 string mark = ruled
-                    ? "  ruled out: it eats instructions or loses a page"
+                    ? "  ruled out: it eats a page, an instruction, or resumes on a column"
                     : (top > 0 || spoken > 0) && shortlist.Contains(width) ? " <-" : "";
 
                 Console.WriteLine(
                     $"      {width} bytes:  {deep,5:P0} carry a real pointer, " +
                     $"{cleanly,5:P0} read on to an end, {pointing,5:P0} of those pointers land, " +
-                    $"{speech,5:P0} of the text they name reads as speech{mark}");
+                    $"{speech,5:P0} of the text they name reads as speech, " +
+                    $"{ResumesOnAColumn(rom, where, width),5:P0} resume on the same byte, " +
+                    $"{ResumesOnWork(rom, where, width),5:P0} resume on real work{mark}");
             }
 
             Console.WriteLine(
@@ -4807,6 +4818,80 @@ public static class Program
     }
 
     /// <summary>
+    /// True when the byte a width would resume on never changes across the sites.
+    /// <para>
+    /// The oldest rule in this project, finally asked by a machine rather than by eye: a
+    /// column that never changes is an argument. Turned round, it is sharper still —
+    /// what a width <em>resumes on</em> is supposed to be an opcode, and opcodes vary
+    /// from site to site. A resume byte that is the same at every one of twenty-one
+    /// sites is not an opcode; it is the middle of an argument.
+    /// </para>
+    /// <para>
+    /// This is what the continuation test cannot see. Reading 0xA1 as one byte wide
+    /// leaves three nops in front of every loadpointer in the game and reads on to a
+    /// proper end every time, so it scores perfectly — and it is wrong, and the column
+    /// says so: the byte it resumes on is 0x00 at all twenty-one sites, while the right
+    /// width resumes on 0x0F, 0x67, 0x28 and 0xC5.
+    /// </para>
+    /// </summary>
+    /// <param name="sites">Where the command was found, by offset of the command itself.</param>
+    /// <returns>
+    /// How much of the sites agree on the resume byte, from nothing to one. Reported as a
+    /// share rather than a yes, because a handful of the sites a scorer gathers are
+    /// always a misaligned read that happened to land on this byte, and demanding
+    /// unanimity hands the answer to them.
+    /// </returns>
+    private static double ResumesOnAColumn(Rom rom, IReadOnlyList<int> sites, int width)
+    {
+        if (sites.Count < 4) return 0;
+
+        var counts = new Dictionary<byte, int>();
+
+        foreach (int at in sites)
+        {
+            if (at + 1 + width >= rom.Length) continue;
+
+            byte b = rom.ReadU8(at + 1 + width);
+
+            counts[b] = counts.GetValueOrDefault(b) + 1;
+        }
+
+        return counts.Count == 0 ? 0 : counts.Values.Max() / (double)sites.Count;
+    }
+
+    /// <summary>
+    /// How often a width resumes on a command that actually does something.
+    /// <para>
+    /// The other half of the column test, and the one that settles 0xA1. Reading it two
+    /// bytes wide resumes on 0x02 at eight sites and 0x00 at the rest — <c>end</c> and
+    /// <c>nop</c>, nothing else, ever. That scores a hundred per cent on "reads on to an
+    /// end" because it ends immediately, which is the continuation test being shown
+    /// exactly what it asks for and nothing at all.
+    /// </para>
+    /// <para>
+    /// A correct width resumes on work: a loadpointer, a pause, a setflag, a message. A
+    /// wrong one lands in the padding at the end of an argument.
+    /// </para>
+    /// </summary>
+    private static double ResumesOnWork(Rom rom, IReadOnlyList<int> sites, int width)
+    {
+        if (sites.Count == 0) return 0;
+
+        int work = 0;
+
+        foreach (int at in sites)
+        {
+            if (at + 1 + width >= rom.Length) continue;
+
+            byte code = rom.ReadU8(at + 1 + width);
+
+            if (code is not (ScriptCommands.Nop or ScriptCommands.End or 0x01)) work++;
+        }
+
+        return work / (double)sites.Count;
+    }
+
+    /// <summary>
     /// True when the bytes a width swallows are themselves whole instructions.
     /// <para>
     /// A width that is too long does not merely take extra bytes: it takes the commands
@@ -4815,10 +4900,17 @@ public static class Program
     /// least one command that carries arguments of its own.
     /// </para>
     /// <para>
-    /// The "carries arguments" part matters. A run of nothing but 0x00 decodes as a run
-    /// of nops and always will, so a width that swallows a single zero byte cannot be
-    /// told apart from one that reads it as an argument — and, since a nop does nothing,
-    /// nothing downstream can tell them apart either.
+    /// What counts as an instruction has to be narrow, and this is the second time of
+    /// asking. It was "any command carrying arguments", and that ruled out the right
+    /// answer for 0xA1: its four argument bytes are <c>28 00 00 00</c>, which decodes as
+    /// a pause and a nop as readily as anything else does. The result read beautifully
+    /// and ended the script that wakes the sleeper on ROUTE 12 immediately after the
+    /// battle, three commands short of the flag that takes it off the map.
+    /// </para>
+    /// <para>
+    /// So it now counts only a command that carries a pointer landing on something real.
+    /// Argument bytes look like small commands all the time; they almost never look like
+    /// a command holding an address that leads to a script or a page of text.
     /// </para>
     /// </summary>
     private static bool EatsInstructions(Rom rom, int from, int width)
@@ -4853,7 +4945,27 @@ public static class Program
                 if (rom.ToOffsetOrNull(page) is { } at && GameText.LooksLikeDialogue(rom.Span[at..])) return true;
             }
 
-            if (length > 0) carried = true;
+            // A pointer that lands, which is the only kind of swallowed command worth
+            // believing in. Anything looser and ordinary arguments read as code.
+            if (length > 0 && offset + 1 + length <= from + width)
+            {
+                var swallowed = new ScriptCommand(offset, code, rom.Slice(offset + 1, length).ToArray());
+
+                uint target = code switch
+                {
+                    ScriptCommands.Call or ScriptCommands.Goto => swallowed.Pointer(),
+                    ScriptCommands.CallIf or ScriptCommands.GotoIf => swallowed.Pointer(1),
+                    ScriptCommands.LoadPointer => swallowed.Pointer(1),
+                    ScriptCommands.Message => swallowed.Pointer(),
+                    _ => 0,
+                };
+
+                if (rom.ToOffsetOrNull(target) is { } lands &&
+                    (GameText.LooksLikeDialogue(rom.Span[lands..]) || ScriptReader.Read(rom, target).Count >= 2))
+                {
+                    carried = true;
+                }
+            }
 
             offset += 1 + length;
         }

@@ -2139,3 +2139,97 @@ public class ScenePlacementTests
         Assert.Contains($"has #{player.Id} standing on it", world.LastScenePlacement);
     }
 }
+
+/// <summary>
+/// A fight a script starts, and who is allowed to say so.
+/// <para>
+/// The client is the only machine that can run the script, so it names the fight. The
+/// list of fights it is allowed to name comes off the cartridge at export and lives in
+/// the world file, exactly as the list of items a person can hand over does — and it is
+/// worth guarding, because the ten scripts that set one up include MEWTWO at level 70.
+/// </para>
+/// </summary>
+public class ScriptedFightTests
+{
+    private const string Road = "3.90";
+
+    /// <summary>The shape of the thing on ROUTE 12: one species, one level, no table.</summary>
+    private static readonly WildFight Sleeper = new(1, 30);
+
+    private static GameWorld World(params WildFight[] allowed)
+    {
+        var person = new MapObject(1, 5, 2, 2, Direction.Down, 0, IsTrainer: false)
+        {
+            CanFight = allowed,
+        };
+
+        MapData map = new(Road, "THE ROAD", 6, 6, new byte[36]) { Objects = [person] };
+
+        return new GameWorld(new WorldData([map]), Road, TestRules.All, 1);
+    }
+
+    private static ServerPlayer Facing(GameWorld world)
+    {
+        (ServerPlayer player, _) = world.Join(1, "Mason", TestRules.Equipped(world));
+
+        player.Square = new GridPosition(2, 3);
+        player.Facing = Direction.Up;
+
+        return player;
+    }
+
+    [Fact]
+    public void TheFightOnTheListIsFielded()
+    {
+        GameWorld world = World(Sleeper);
+        ServerPlayer player = Facing(world);
+
+        List<NetMessage> said = world
+            .ScriptFought(player.Id, 1, Sleeper.Species, Sleeper.Level)
+            .Select(o => o.Message)
+            .ToList();
+
+        BattleStarted started = said.OfType<BattleStarted>().Single();
+
+        Assert.Equal(Sleeper.Species, started.Opponent.Species);
+        Assert.Equal(Sleeper.Level, started.Opponent.Level);
+        Assert.True(player.InBattle);
+    }
+
+    [Fact]
+    public void AFightNobodyHereSetsUpIsRefused()
+    {
+        // The whole reason this is a list rather than a pair of numbers on the wire.
+        GameWorld world = World(Sleeper);
+        ServerPlayer player = Facing(world);
+
+        Assert.Empty(world.ScriptFought(player.Id, 1, Sleeper.Species, 70));
+
+        Assert.Contains("never fights", world.LastScriptFight ?? "");
+        Assert.False(player.InBattle);
+    }
+
+    [Fact]
+    public void SoIsOneFromAcrossTheRoom()
+    {
+        GameWorld world = World(Sleeper);
+        ServerPlayer player = Facing(world);
+
+        player.Square = new GridPosition(5, 5);
+
+        Assert.Empty(world.ScriptFought(player.Id, 1, Sleeper.Species, Sleeper.Level));
+
+        Assert.Contains("not within reach", world.LastScriptFight ?? "");
+    }
+
+    [Fact]
+    public void AndOneStartedWhileAlreadyFighting()
+    {
+        GameWorld world = World(Sleeper);
+        ServerPlayer player = Facing(world);
+
+        world.ScriptFought(player.Id, 1, Sleeper.Species, Sleeper.Level);
+
+        Assert.Empty(world.ScriptFought(player.Id, 1, Sleeper.Species, Sleeper.Level));
+    }
+}
