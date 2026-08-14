@@ -255,6 +255,41 @@ public static class Program
             }
         }
 
+        // What is behind somebody who is not there yet.
+        //
+        // The walker measures walls, and the largest thing in this game's way is not a
+        // wall. Sixty-six maps sit behind two sleepers; the sleepers were solved four
+        // milestones ago; what is left is the POKé FLUTE, and the flute is behind MR.
+        // FUJI, and MR. FUJI is hidden by a flag the opening sets before the first
+        // frame. A report that only counts walls will never say that, and this project
+        // spent two roadmaps planning around a measurement of the wrong thing.
+        //
+        // So: everything anybody hands over, and whether the one holding it is on the
+        // map at all for a player who has just started.
+        List<(string MapId, MapObject Who)> givers =
+        [
+            .. world.Maps.SelectMany(m => m.Objects.Select(o => (m.Id, o)))
+                .Where(g => g.o.GivesItemId != 0)
+        ];
+
+        List<(string MapId, MapObject Who)> away =
+        [
+            .. givers
+                .Where(g => reach.Maps.Contains(g.MapId))
+                .Where(g => !g.Who.IsHereFor(world.FlagsAtStart.Contains))
+        ];
+
+        Console.WriteLine(
+            $"  {givers.Count} people hand something over; {away.Count} of them are on a map " +
+            "you can already reach and are not there yet");
+
+        foreach ((string mapId, MapObject who) in away.OrderBy(a => a.Who.GivesItemId).Take(8))
+        {
+            Console.WriteLine(
+                $"    {mapId,-6} {world.Find(mapId)?.Name,-16} ({who.X}, {who.Y}) " +
+                $"holds item {who.GivesItemId}, hidden by flag 0x{who.HiddenBy:X4}");
+        }
+
         var byMove = reach.Blocked
             .GroupBy(b => b.ShiftedBy)
             .OrderByDescending(g => g.Count())
