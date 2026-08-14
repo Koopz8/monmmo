@@ -60,11 +60,38 @@ public sealed class RemoteCharacter
         _progress = 0f;
     }
 
+    /// <summary>
+    /// Goes over a ledge: the same two-square movement the player's own character makes,
+    /// drawn with the same arc so that watching somebody hop looks like hopping.
+    /// </summary>
+    public void HopTo(GridPosition square, Direction facing)
+    {
+        MoveTo(square, facing);
+
+        _hopping = square != Square || _progress < 1f;
+    }
+
+    /// <summary>True while this character is in the air over a ledge.</summary>
+    public bool IsHopping => _hopping && IsMoving;
+
+    /// <summary>How far off the ground to draw them, in pixels.</summary>
+    public float Arc => IsHopping ? MathF.Sin(MathF.PI * _progress) * 10f : 0f;
+
+    private bool _hopping;
+
     public void Update(float deltaSeconds)
     {
-        if (!IsMoving) return;
+        if (!IsMoving)
+        {
+            _hopping = false;
+            return;
+        }
 
-        _progress += deltaSeconds / WalkingCharacter.StepSeconds;
+        // Two squares' worth of time for a hop, which is what the character taking it
+        // spends. Anything faster and everyone else sees a jump that finishes before the
+        // jumper has landed.
+        _progress += deltaSeconds / (WalkingCharacter.StepSeconds * (_hopping ? 2f : 1f));
+
         if (_progress > 1f) _progress = 1f;
     }
 

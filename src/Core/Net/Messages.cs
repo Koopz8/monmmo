@@ -55,6 +55,7 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(ObjectMoved), "objectmoved")]
 [JsonDerivedType(typeof(PlayerAppeared), "appeared")]
 [JsonDerivedType(typeof(PlayerMoved), "moved")]
+[JsonDerivedType(typeof(PlayerHopped), "hopped")]
 [JsonDerivedType(typeof(PlayerLeft), "left")]
 [JsonDerivedType(typeof(MoveRejected), "rejected")]
 [JsonDerivedType(typeof(BattleStarted), "battlestart")]
@@ -470,6 +471,16 @@ public sealed record PlayerAppeared(int PlayerId, string Name, int X, int Y, Dir
 
 /// <summary>A player stepped. Sent to everyone, including the player who moved.</summary>
 public sealed record PlayerMoved(int PlayerId, int X, int Y, Direction Facing) : NetMessage;
+
+/// <summary>
+/// A player went over a ledge: two squares, in one movement.
+/// <para>
+/// Its own message rather than a move with a flag on it, because everyone watching has
+/// to draw it differently — a figure that slid two squares in the time a step takes
+/// reads as a glitch, and the arc is the only thing that says what happened.
+/// </para>
+/// </summary>
+public sealed record PlayerHopped(int PlayerId, int X, int Y, Direction Facing) : NetMessage;
 
 public sealed record PlayerLeft(int PlayerId) : NetMessage;
 

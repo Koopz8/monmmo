@@ -181,6 +181,18 @@ public static class Program
             $"  {reach.Maps.Count} of {world.Count} maps are walkable from {startingMapId} " +
             $"with no move, no flag and nobody stepping aside");
 
+        // And with the ledges treated as the walls they are in the block data, which is
+        // what this game did until they were hopped. Reported as a difference rather
+        // than as a number, because the number on its own says nothing: the point is
+        // that one behaviour byte is the difference between a corner of the map and a
+        // country.
+        Reach walled = WorldWalker.Walk(world, startingMapId, hops: new Dictionary<byte, Direction>());
+
+        Console.WriteLine(
+            $"  {reach.Maps.Count - walled.Maps.Count} of those are behind a ledge, " +
+            $"and {WorldWalker.Walk(world, startingMapId, throughPeople: true).Maps.Count - WorldWalker.Walk(world, startingMapId, throughPeople: true, hops: new Dictionary<byte, Direction>()).Maps.Count} " +
+            "would be if nobody stood in a doorway");
+
         // And with the three the game can already teach. The difference is what the
         // obstacle work is worth in maps rather than in objects, which is the unit
         // anybody planning the rest of this actually cares about.

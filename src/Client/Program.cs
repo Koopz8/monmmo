@@ -197,6 +197,19 @@ public static class Program
         return null;
     }
 
+    /// <summary>
+    /// The shadow under somebody in the air over a ledge.
+    /// <para>
+    /// Drawn where the feet would be if they were on the ground, which is the whole
+    /// trick: without it a raised sprite reads as a taller sprite, and the hop looks
+    /// like the character growing rather than jumping.
+    /// </para>
+    /// </summary>
+    private static void DrawShadow(float x, float y)
+    {
+        Raylib.DrawEllipse((int)x + 8, (int)y + 15, 6, 3, new Color(0, 0, 0, 70));
+    }
+
     /// <summary>A speech bubble with an exclamation mark in it, above somebody's head.</summary>
     private static void DrawExclamation(float x, float y)
     {
@@ -240,7 +253,7 @@ public static class Program
         CharacterSprite? sprite = sprites.For(CharacterSprite.DefaultGraphicsId);
 
         var player = new WalkingCharacter();
-        player.Place(view.Collision, view.Collision.FirstWalkable());
+        player.Place(view.Collision, view.Collision.FirstWalkable(), HopsOn(view));
 
         var camera = new Camera2D
         {
@@ -457,7 +470,7 @@ public static class Program
                 }
                 else if (pending.Square != player.Square)
                 {
-                    player.Place(view.Collision, pending.Square);
+                    player.Place(view.Collision, pending.Square, HopsOn(view));
                 }
 
                 correction = null;
@@ -733,16 +746,23 @@ public static class Program
             {
                 (float x, float y) = other.PixelPosition;
 
-                if (sprite is not null) sprite.Draw(x, y, other.Facing, other.IsMoving, other.Id);
-                else DrawPlayer(x, y, other.Facing, new Color(120, 200, 255, 255));
+                if (other.Arc > 0f) DrawShadow(x, y);
 
-                DrawNameTag(other.Name, x, y);
+                if (sprite is not null) sprite.Draw(x, y - other.Arc, other.Facing, other.IsMoving, other.Id);
+                else DrawPlayer(x, y - other.Arc, other.Facing, new Color(120, 200, 255, 255));
+
+                DrawNameTag(other.Name, x, y - other.Arc);
             }
 
+            // Off the ground while hopping, and the shadow stays where the feet would
+            // be — without it a raised sprite reads as a taller sprite rather than as
+            // one in the air.
+            if (player.Arc > 0f) DrawShadow(playerX, playerY);
+
             if (sprite is not null)
-                sprite.Draw(playerX, playerY, player.Facing, player.IsStepping, player.StepsTaken);
+                sprite.Draw(playerX, playerY - player.Arc, player.Facing, player.IsStepping, player.StepsTaken);
             else
-                DrawPlayer(playerX, playerY, player.Facing);
+                DrawPlayer(playerX, playerY - player.Arc, player.Facing);
             Raylib.EndMode2D();
 
             if (fadingIn > 0f)
@@ -1349,6 +1369,31 @@ public static class Program
     }
 
     /// <summary>
+    /// How this client reads a ledge, handed to whatever is walking.
+    /// <para>
+    /// The client's half of a rule the server keeps too, off the same behaviour bytes:
+    /// a client that predicted a hop the server refuses would jump two squares and be
+    /// pulled back, and one that refused a hop the server allows would stand at the
+    /// edge pressing a direction that quietly works for everybody else.
+    /// </para>
+    /// </summary>
+    private static Func<GridPosition, Direction, GridPosition?> HopsOn(MapView view) =>
+        (square, facing) =>
+        {
+            if (view.Map.Behaviours.Length == 0) return null;
+            if (!view.Collision.Contains(square)) return null;
+
+            int at = square.Y * view.Collision.Width + square.X;
+
+            if (at >= view.Map.Behaviours.Length) return null;
+            if (MetatileBehaviour.Hop(view.Map.Behaviours[at]) != facing) return null;
+
+            GridPosition landing = square.Step(facing);
+
+            return view.Collision.IsWalkable(landing) ? landing : null;
+        };
+
+    /// <summary>
     /// Reads whatever is written on the square in front, if anything is.
     /// <para>
     /// Signs are the fourth list in a map's events record and this project has never
@@ -1435,7 +1480,7 @@ public static class Program
                     // decides where you actually are, and it is usually somewhere else.
                     if (view.SwitchTo(welcome.MapId)) Raylib.SetWindowTitle($"MonMMO — {view.Map.Name}");
 
-                    player.Place(view.Collision, new GridPosition(welcome.X, welcome.Y));
+                    player.Place(view.Collision, new GridPosition(welcome.X, welcome.Y), HopsOn(view));
                     bag = welcome.Bag;
                     party = welcome.Party;
                     if (battle is not null) battle.Party = party;
@@ -1492,7 +1537,7 @@ public static class Program
                     // on the shore a frame later.
                     view.Surfing = afloat.Surfing;
 
-                    player.Place(view.Collision, new GridPosition(afloat.X, afloat.Y));
+                    player.Place(view.Collision, new GridPosition(afloat.X, afloat.Y), HopsOn(view));
 
                     break;
 
@@ -1612,6 +1657,14 @@ public static class Program
                         other.MoveTo(new GridPosition(moved.X, moved.Y), moved.Facing);
                     break;
 
+                // Somebody else went over a ledge. Two squares in one movement, and told
+                // apart from a step so it can be drawn as the jump it was rather than as
+                // a figure sliding twice as fast as anyone can walk.
+                case PlayerHopped hopped when hopped.PlayerId != network.PlayerId:
+                    if (others.TryGetValue(hopped.PlayerId, out RemoteCharacter? jumper))
+                        jumper.HopTo(new GridPosition(hopped.X, hopped.Y), hopped.Facing);
+                    break;
+
                 case ObjectsPlaced placed:
                     view.Place(placed.Objects);
                     break;
@@ -1641,10 +1694,17 @@ public static class Program
 
                     if (view.SwitchTo(changed.MapId))
                     {
-                        player.Place(view.Collision, new GridPosition(changed.X, changed.Y));
+                        player.Place(view.Collision, new GridPosition(changed.X, changed.Y), HopsOn(view));
                         Raylib.SetWindowTitle($"MonMMO — {view.Map.Name}");
                     }
 
+                    break;
+
+                // Our own hop, confirmed. Same as a step: where the server agrees this
+                // costs nothing, and where it does not it is the only thing that puts us
+                // back on the right side of the ledge.
+                case PlayerHopped mine when mine.PlayerId == network.PlayerId:
+                    correction = (view.MapId, new GridPosition(mine.X, mine.Y));
                     break;
 
                 case PlayerMoved mine when mine.PlayerId == network.PlayerId:

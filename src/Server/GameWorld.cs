@@ -507,6 +507,24 @@ public sealed class GameWorld
             CollisionGrid grid = GridFor(player);
             GridPosition wanted = player.Square.Step(direction);
 
+            // A ledge, hopped the way it is meant to be hopped. Asked before walkability,
+            // because every ledge square in the world is solid in the block data — a
+            // ledge that could be stood on would not be a ledge — so a step onto one is
+            // always refused by the time anything else has had a chance to look at it.
+            if (MapFor(player) is { } here && here.HopOnto(wanted, direction) is { } landing)
+            {
+                if (!IsOccupiedFor(player, player.MapId, landing))
+                    return Hop(player, landing, nowSeconds);
+
+                // Somebody standing where you would land. Refused rather than shuffled
+                // aside: two squares is a jump, and there is nowhere to stop halfway.
+                LastStepRefusal = $"a hop to {landing} with somebody already standing there";
+
+                return [new Outgoing(
+                    new MoveRejected(player.Square.X, player.Square.Y, player.Facing, "Somebody is in the way."),
+                    OnlyTo: playerId)];
+            }
+
             if (grid.Contains(wanted) && (!grid.IsWalkable(wanted) || IsOccupiedFor(player, player.MapId, wanted)))
             {
                 // Blocked is not an error: the client predicted the same thing and is
@@ -561,6 +579,51 @@ public sealed class GameWorld
             AfterArrival(player, send, nowSeconds);
             return send;
         }
+    }
+
+    private MapData? MapFor(ServerPlayer player) => _world.Find(player.MapId);
+
+    /// <summary>
+    /// A hop over a ledge: two squares, in one movement, and only downhill.
+    /// <para>
+    /// Told to everybody as an ordinary move, because from outside it is one — somebody
+    /// was there and now they are here. What makes it a hop is the client's problem and
+    /// the client already knows, having predicted the same jump off the same behaviour
+    /// byte before asking.
+    /// </para>
+    /// <para>
+    /// Everything a step does afterwards happens here too: a hop can land you on a door,
+    /// in the grass, or in front of somebody who has been waiting to notice you.
+    /// </para>
+    /// </summary>
+    private List<Outgoing> Hop(ServerPlayer player, GridPosition landing, double nowSeconds)
+    {
+        if (nowSeconds - player.LastStepAt < MinimumStepInterval)
+        {
+            LastStepRefusal =
+                $"too fast to hop: {nowSeconds - player.LastStepAt:F2}s since the last step";
+
+            return [new Outgoing(
+                new MoveRejected(player.Square.X, player.Square.Y, player.Facing, "Too fast."),
+                OnlyTo: player.Id)];
+        }
+
+        player.Square = landing;
+
+        // A hop costs a little more than a step, which is what the games do and what
+        // stops a row of ledges being a faster road than the path beside it.
+        player.LastStepAt = nowSeconds + MinimumStepInterval;
+
+        LastStepRefusal = null;
+
+        var send = new List<Outgoing>
+        {
+            new(new PlayerHopped(player.Id, landing.X, landing.Y, player.Facing), OnMap: player.MapId),
+        };
+
+        AfterArrival(player, send, nowSeconds);
+
+        return send;
     }
 
     /// <summary>

@@ -190,6 +190,8 @@ public static class Program
 
         if (options.Audit) WriteWidthAudit(rom);
 
+        if (options.Ledges) WriteLedges(rom);
+
         if (options.BytesAfter is { } after) WriteBytesAfter(rom, after);
 
         if (options.Glyphs) WriteGlyphCandidates(rom, options.OutputDirectory);
@@ -5165,6 +5167,131 @@ public static class Program
     /// Reported, never applied. Nothing here changes a number.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Which way each ledge byte is hopped, asked of the map data rather than remembered.
+    /// <para>
+    /// Four behaviour bytes sit together in the table and this project named them south,
+    /// north, west and east on the strength of two maps. The counts say that naming is at
+    /// least incomplete — one of the four never appears at all — and every one of the
+    /// 1042 ledge squares in the world is a wall in the collision data, so nobody has
+    /// ever crossed one to find out.
+    /// </para>
+    /// <para>
+    /// Three questions, each answerable from the bytes:
+    /// </para>
+    /// <para>
+    /// Which axis. A ledge you hop southward runs east–west, because it is the edge of a
+    /// step in the ground. So the axis a byte's squares run <i>along</i> is the axis it
+    /// is <i>not</i> hopped along.
+    /// </para>
+    /// <para>
+    /// Which side you stand on and which you land on. Both are walkable — that is what
+    /// makes a hop possible — and they are told apart by height: a ledge is hopped down.
+    /// The elevation nibble in each block says which side is higher, and it is read here
+    /// straight off the cartridge rather than through the world file, which keeps only
+    /// what a server needs.
+    /// </para>
+    /// </summary>
+    private static void WriteLedges(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("Ledges, and which way each one is hopped");
+
+        // Straight off the bank table rather than through the map library, because the
+        // library renders every map it hands out and this question needs no pictures.
+        MapBankTable banks = MapBankLocator.Locate(rom)
+            ?? throw new InvalidDataException("no map bank table");
+
+        var sides = new SortedDictionary<byte, (int Count, int AlongX, int AlongY, int[] Walkable, int[] Higher, int[] Lower)>();
+
+        Direction[] ways = [Direction.Up, Direction.Down, Direction.Left, Direction.Right];
+
+        foreach ((int bank, int number, MapHeaderRecord header) in banks.AllMaps)
+        {
+            byte[] behaviours = header.Layout.ReadBehaviours(rom);
+            ushort[] blocks = header.Layout.ReadBlocks(rom);
+
+            int width = header.Layout.Width;
+            int height = header.Layout.Height;
+
+            if (behaviours.Length < width * height) continue;
+
+            CollisionGrid collision = header.Layout.ReadCollision(rom);
+
+            byte At(int x, int y) => behaviours[y * width + x];
+            int Up(int x, int y) => new MapBlock(blocks[y * width + x]).Elevation;
+
+            for (int y = 1; y < height - 1; y++)
+            {
+                for (int x = 1; x < width - 1; x++)
+                {
+                    byte behaviour = At(x, y);
+
+                    if (!MetatileBehaviour.IsLedge(behaviour)) continue;
+
+                    sides.TryGetValue(behaviour, out var tally);
+
+                    tally.Walkable ??= new int[4];
+                    tally.Higher ??= new int[4];
+                    tally.Lower ??= new int[4];
+
+                    tally.Count++;
+
+                    // The run this square is part of: the same byte to either side of it
+                    // along one axis or the other.
+                    if (At(x - 1, y) == behaviour || At(x + 1, y) == behaviour) tally.AlongX++;
+                    if (At(x, y - 1) == behaviour || At(x, y + 1) == behaviour) tally.AlongY++;
+
+                    for (int i = 0; i < ways.Length; i++)
+                    {
+                        GridPosition next = new GridPosition(x, y).Step(ways[i]);
+
+                        if (collision.IsWalkable(next)) tally.Walkable[i]++;
+
+                        // Against the square on the other side rather than against the
+                        // ledge itself. A ledge block carries elevation zero — the value
+                        // that means "whatever is around it" — so everything next to one
+                        // reads as higher and nothing reads as lower, which answers
+                        // nothing. What matters is which of the two sides is the step up.
+                        GridPosition across = new GridPosition(x, y).Step(Opposite(ways[i]));
+
+                        int there = Up(next.X, next.Y);
+                        int beyond = Up(across.X, across.Y);
+
+                        if (there > beyond) tally.Higher[i]++;
+                        if (there < beyond) tally.Lower[i]++;
+                    }
+
+                    sides[behaviour] = tally;
+                }
+            }
+        }
+
+        foreach ((byte behaviour, var tally) in sides)
+        {
+            Console.WriteLine();
+            Console.WriteLine(
+                $"  0x{behaviour:X2}  {tally.Count} squares, " +
+                $"{tally.AlongX} of them in an east–west run, {tally.AlongY} in a north–south one " +
+                $"-> hopped {(tally.AlongX > tally.AlongY ? "north or south" : "east or west")}");
+
+            for (int i = 0; i < ways.Length; i++)
+            {
+                Console.WriteLine(
+                    $"      {ways[i],-5}: {tally.Walkable[i],5} walkable, " +
+                    $"{tally.Higher[i],5} higher than the far side, {tally.Lower[i],5} lower");
+            }
+        }
+    }
+
+    private static Direction Opposite(Direction direction) => direction switch
+    {
+        Direction.Up => Direction.Down,
+        Direction.Down => Direction.Up,
+        Direction.Left => Direction.Right,
+        _ => Direction.Left,
+    };
+
     private static void WriteWidthAudit(Rom rom, int maxWidth = 8)
     {
         Console.WriteLine();
@@ -5793,6 +5920,8 @@ public static class Program
 
         public bool Audit { get; private init; }
 
+        public bool Ledges { get; private init; }
+
         /// <summary>Print what follows one unknown command, everywhere it appears.</summary>
         public byte? BytesAfter { get; private init; }
 
@@ -5868,6 +5997,7 @@ public static class Program
             bool derive = false;
             bool opcodes = false;
             bool audit = false;
+            bool ledges = false;
             byte? bytesAfter = null;
             bool glyphs = false;
             uint font = 0;
@@ -6054,6 +6184,9 @@ public static class Program
                     case "--audit":
                         audit = true;
                         break;
+                    case "--ledges":
+                        ledges = true;
+                        break;
                     case "--bytes-after":
                         string which = Next(args, ref i, "--bytes-after");
                         bytesAfter = Convert.ToByte(
@@ -6189,6 +6322,7 @@ public static class Program
                 Derive = derive,
                 Opcodes = opcodes,
                 Audit = audit,
+                Ledges = ledges,
                 BytesAfter = bytesAfter,
                 Glyphs = glyphs,
                 Font = font,

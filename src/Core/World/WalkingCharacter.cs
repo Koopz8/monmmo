@@ -68,6 +68,7 @@ public sealed class WalkingCharacter
     private CollisionGrid _grid = new(1, 1, [0]);
     private GridPosition _stepFrom;
     private float _stepProgress = 1f;
+    private Func<GridPosition, Direction, GridPosition?>? _hop;
 
     /// <summary>The square the character occupies, or is walking into.</summary>
     public GridPosition Square { get; private set; }
@@ -106,14 +107,42 @@ public sealed class WalkingCharacter
     /// </summary>
     public float StepProgress => _stepProgress;
 
-    public void Place(CollisionGrid grid, GridPosition start)
+    /// <summary>
+    /// Puts the character on a grid, and optionally tells it how to read a ledge.
+    /// <para>
+    /// Passed in rather than looked up, because this class knows about walkability and
+    /// nothing else — it has never needed to know what a square <em>is</em>. The
+    /// function is asked one question: stepping onto that square, going that way, where
+    /// does it land? A map with no behaviour data answers nothing and the character
+    /// walks exactly as it always has.
+    /// </para>
+    /// </summary>
+    public void Place(
+        CollisionGrid grid, GridPosition start, Func<GridPosition, Direction, GridPosition?>? hop = null)
     {
         _grid = grid;
         _stepFrom = start;
         _stepProgress = 1f;
         Square = start;
         IsStepping = false;
+        IsHopping = false;
+        _hop = hop;
     }
+
+    /// <summary>True while the character is in the air over a ledge.</summary>
+    public bool IsHopping { get; private set; }
+
+    /// <summary>
+    /// How far off the ground the character is drawn, in pixels.
+    /// <para>
+    /// A half sine over the whole hop, so it leaves and lands on the ground exactly. The
+    /// height is the only part of this that is a choice rather than a measurement, and
+    /// it is a small one: high enough to read as a jump at three times scale, low enough
+    /// not to clear the tree the character is jumping past.
+    /// </para>
+    /// </summary>
+    public float Arc =>
+        IsHopping ? MathF.Sin(MathF.PI * _stepProgress) * 10f : 0f;
 
     /// <summary>
     /// Advances by <paramref name="deltaSeconds"/>, starting a new step in
@@ -139,6 +168,19 @@ public sealed class WalkingCharacter
                 Square = destination;
                 _stepProgress = 0f;
                 IsStepping = true;
+                IsHopping = false;
+                ToReport = direction;
+            }
+
+            // A ledge, which is a wall to the step above — every one of them is solid in
+            // the block data — so this is asked only once walking has been refused.
+            else if (_hop?.Invoke(Square.Step(direction), direction) is { } landing)
+            {
+                _stepFrom = Square;
+                Square = landing;
+                _stepProgress = 0f;
+                IsStepping = true;
+                IsHopping = true;
                 ToReport = direction;
             }
             else if (turned)
@@ -153,12 +195,17 @@ public sealed class WalkingCharacter
 
         // The frame that starts a step also advances it, rather than losing that
         // frame's worth of motion to bookkeeping.
-        _stepProgress += deltaSeconds / StepSeconds;
+        //
+        // Two squares' worth of time for a hop, so that the character crosses the ground
+        // at walking pace rather than twice it. This is also the rule the server keeps:
+        // a hop costs two steps of the interval it holds people to.
+        _stepProgress += deltaSeconds / (IsHopping ? StepSeconds * 2f : StepSeconds);
 
         if (_stepProgress >= 1f)
         {
             _stepProgress = 1f;
             IsStepping = false;
+            IsHopping = false;
             StepsTaken++;
         }
     }

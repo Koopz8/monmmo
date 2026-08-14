@@ -64,7 +64,8 @@ public static class WorldWalker
         string startMapId,
         IReadOnlyCollection<int>? moves = null,
         bool throughPeople = false,
-        bool surfing = false)
+        bool surfing = false,
+        IReadOnlyDictionary<byte, Direction>? hops = null)
     {
         IReadOnlyCollection<int> known = moves ?? [];
 
@@ -141,6 +142,17 @@ public static class WorldWalker
                         from, SideFor(direction), map, neighbour, edge.Offset);
 
                     if (GridOf(neighbour).IsWalkable(arrival)) queue.Enqueue((neighbour, arrival));
+
+                    continue;
+                }
+
+                // A ledge, hopped the way it is meant to be hopped. Checked before
+                // walkability rather than after, because every ledge square in the world
+                // is solid in the block data — that is what makes a ledge a ledge — so a
+                // walker that asked "can I stand there" first would never ask this.
+                if (map.HopOnto(next, direction, hops) is { } landing)
+                {
+                    if (ObjectOn(map, landing) is null || throughPeople) queue.Enqueue((map, landing));
 
                     continue;
                 }

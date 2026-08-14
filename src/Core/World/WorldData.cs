@@ -160,6 +160,38 @@ public sealed record MapData(string Id, string Name, int Width, int Height, byte
     }
 
     /// <summary>
+    /// Where a step onto this square lands, when the square is a ledge being hopped the
+    /// way it is meant to be hopped.
+    /// <para>
+    /// Null for anything else, and that covers three quite different cases on purpose: a
+    /// square that is not a ledge, a ledge approached from any of the other three sides,
+    /// and a ledge whose landing square is not somewhere anybody could stand. All three
+    /// mean the same thing to whoever is asking — you cannot go that way — and none of
+    /// them is a special case worth a caller knowing about.
+    /// </para>
+    /// <para>
+    /// The landing is two squares from where the walker started, because a ledge is not
+    /// somewhere you end up. Nobody stands on one.
+    /// </para>
+    /// </summary>
+    public GridPosition? HopOnto(GridPosition square, Direction facing, IReadOnlyDictionary<byte, Direction>? hops = null)
+    {
+        if (square.X < 0 || square.X >= Width || square.Y < 0 || square.Y >= Height) return null;
+
+        int at = square.Y * Width + square.X;
+
+        if (at >= Behaviours.Length) return null;
+
+        IReadOnlyDictionary<byte, Direction> table = hops ?? MetatileBehaviour.Hops;
+
+        if (!table.TryGetValue(Behaviours[at], out Direction way) || way != facing) return null;
+
+        GridPosition landing = square.Step(facing);
+
+        return ToGrid().IsWalkable(landing) ? landing : null;
+    }
+
+    /// <summary>
     /// How many warps sit on squares the block data calls solid.
     /// <para>
     /// Reported at startup. Doors are the overwhelming majority of warps, so a world
