@@ -108,6 +108,15 @@ public sealed record SavedCharacter(
     public IReadOnlyList<int> DefeatedTrainers { get; init; } = [];
 
     /// <summary>
+    /// Everything not in the party.
+    /// <para>
+    /// An init property for the same reason the defeated trainers are. Empty on every
+    /// account that has never filled a party, which is most of them.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<SavedMon> Box { get; init; } = [];
+
+    /// <summary>
     /// Everything carried, as item ids and counts.
     /// <para>
     /// Init properties rather than positional members for the same reason the defeated

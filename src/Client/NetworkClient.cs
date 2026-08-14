@@ -184,6 +184,10 @@ public sealed class NetworkClient : IDisposable
 
     public void SendTakeItem(int slot) => Send(new TakeItemRequest(slot));
 
+    public void SendDeposit(int slot) => Send(new DepositRequest(slot));
+
+    public void SendWithdraw(int slot) => Send(new WithdrawRequest(slot));
+
     private void Send(NetMessage message)
     {
         if (_channel is null) return;

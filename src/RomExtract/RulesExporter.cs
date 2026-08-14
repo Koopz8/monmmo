@@ -69,11 +69,15 @@ public static class RulesExporter
         // this is the file the server decides fights with.
         EvolutionTable? evolutions = EvolutionExtractor.Locate(rom, species, FieldRoutines(rom), log);
 
+        // How many a box holds, out of the sentence the man in the Pokémon Center says.
+        int boxSize = BoxCapacity.Locate(rom, log) ?? 0;
+
         var rules = new GameRules(
             anonymousSpecies, anonymousMoves, learnsets.Values, trainers, items, evolutions?.Evolutions,
             machineSets?.Masks)
         {
             SurfMove = surf,
+            BoxSize = boxSize,
             EvolveByLevel = evolutions?.ByLevel ?? 0,
             EvolveByItem = evolutions?.ByItem ?? 0,
         };

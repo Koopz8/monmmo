@@ -936,6 +936,22 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                             if (world.LastHandedOver is { } tookBack) Console.WriteLine($"* #{playerId} {tookBack}");
                             break;
 
+                        case DepositRequest put when playerId != 0:
+                            await DispatchAsync(
+                                world.Deposit(playerId, put.Slot), playerId, cancellationToken)
+                                .ConfigureAwait(false);
+
+                            if (world.LastBoxed is { } stored) Console.WriteLine($"* #{playerId} {stored}");
+                            break;
+
+                        case WithdrawRequest out_ when playerId != 0:
+                            await DispatchAsync(
+                                world.Withdraw(playerId, out_.Slot), playerId, cancellationToken)
+                                .ConfigureAwait(false);
+
+                            if (world.LastBoxed is { } fetched) Console.WriteLine($"* #{playerId} {fetched}");
+                            break;
+
                         case SurfRequest when playerId != 0:
                             await DispatchAsync(world.Surf(playerId), playerId, cancellationToken)
                                 .ConfigureAwait(false);

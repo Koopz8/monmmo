@@ -87,6 +87,9 @@ internal static class TestRules
 
     public const int HiddenMachineItem = 339;
 
+    /// <summary>How many the box holds here — small, so "full" is reachable in a test.</summary>
+    public const int BoxSize = 4;
+
     /// <summary>The one species no machine works on, so a refusal can be asked for.</summary>
     public const int LearnsNothing = 5;
 
@@ -236,6 +239,7 @@ internal static class TestRules
 
         return new GameRules(species, moves, learnsets, trainers, items, Evolutions, machineSets)
         {
+            BoxSize = BoxSize,
             EvolveByLevel = LevelMethod,
             EvolveByItem = ItemMethod,
         };

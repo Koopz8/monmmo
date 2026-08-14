@@ -358,7 +358,14 @@ public static class Program
         // The party, out of a fight. Held because the bag has to say who a potion would
         // go on, and until now nothing outside a battle had any reason to know.
         IReadOnlyList<SavedMon> party = [];
+
+        // What is not in the party, and how much room there is for more of it. Both come
+        // from the server — the size is the cartridge's number and a client that assumed
+        // thirty would be remembering rather than reading.
+        IReadOnlyList<SavedMon> box = [];
+        int boxSize = 0;
         BagScreen? carrying = null;
+        BoxScreen? storing = null;
 
         // Who has spotted the player and is walking over, and how long the mark above
         // their head has left. The server refuses movement for the duration; this is the
@@ -436,8 +443,8 @@ public static class Program
             }
 
             ApplyServerMessages(
-                network, others, player, view, data, trainers, items, script, carrying,
-                ref talking, ref battle, ref shop, ref bag, ref party, ref money,
+                network, others, player, view, data, trainers, items, script, carrying, storing,
+                ref talking, ref battle, ref shop, ref bag, ref party, ref box, ref boxSize, ref money,
                 ref correction, ref watching, ref exclaimFor, ref scene, ref arrived, ref fadingIn, ref holdInput,
                 ref afterTheFight, ref cameOut, outcomes, rival, console);
 
@@ -540,8 +547,41 @@ public static class Program
             // The bag, which is a whole screen for the same reason the counter is. Only
             // openable with nothing else going on — mid-conversation it would be a way
             // to walk off while somebody is held still.
-            if (carrying is null && talking is null && Raylib.IsKeyPressed(KeyboardKey.B))
+            if (carrying is null && talking is null && !console.IsOpen && Raylib.IsKeyPressed(KeyboardKey.B))
                 carrying = new BagScreen(bag, party, items, data);
+
+            // The box, on its own key. The games put it behind a PC in a Pokémon Center
+            // and this project has not located which map objects are computers, so for
+            // now it opens anywhere — written down rather than hidden.
+            // The console has to be shut, and that is not fussiness. These screens are
+            // read before the console gets a look at the keyboard, so without it every
+            // "p" typed into a command opened the box and swallowed the rest of the line
+            // — which is how "/tp 3.19 10 8" became "/t". The bag had the same hole and
+            // nobody had yet typed a command with a "b" in it.
+            if (carrying is null && storing is null && talking is null && !console.IsOpen
+                && Raylib.IsKeyPressed(KeyboardKey.P))
+            {
+                storing = new BoxScreen(party, box, boxSize, data, items);
+            }
+
+            if (storing is not null)
+            {
+                storing.Update();
+
+                switch (storing.TakePending())
+                {
+                    case DepositRequest put: network.SendDeposit(put.Slot); break;
+                    case WithdrawRequest out_: network.SendWithdraw(out_.Slot); break;
+                }
+
+                Raylib.BeginDrawing();
+                storing.Draw();
+                Raylib.EndDrawing();
+
+                if (storing.IsClosed) storing = null;
+
+                continue;
+            }
 
             if (carrying is not null)
             {
@@ -1543,11 +1583,14 @@ public static class Program
         ItemNames items,
         ScriptState script,
         BagScreen? carrying,
+        BoxScreen? storing,
         ref DialogueBox? said,
         ref BattleScreen? battle,
         ref ShopScreen? shop,
         ref IReadOnlyList<BagEntry> bag,
         ref IReadOnlyList<SavedMon> party,
+        ref IReadOnlyList<SavedMon> box,
+        ref int boxSize,
         ref int money,
         ref (string MapId, GridPosition Square)? correction,
         ref int? watching,
@@ -1578,6 +1621,8 @@ public static class Program
                     player.Place(view.Collision, new GridPosition(welcome.X, welcome.Y), HopsOn(view));
                     bag = welcome.Bag;
                     party = welcome.Party;
+                    box = welcome.Box;
+                    boxSize = welcome.BoxSize;
                     if (battle is not null) battle.Party = party;
                     money = welcome.Money;
 
@@ -1695,6 +1740,16 @@ public static class Program
                     party = updated.Party;
                     if (battle is not null) battle.Party = party;
                     carrying?.Apply(updated);
+                    storing?.Apply(party);
+
+                    break;
+
+                case BoxUpdated stored:
+                    party = stored.Party;
+                    box = stored.Box;
+                    boxSize = stored.BoxSize;
+                    if (battle is not null) battle.Party = party;
+                    storing?.Apply(stored);
 
                     break;
 
@@ -1896,6 +1951,8 @@ public static class Program
                     // would open on a party that was last accurate at login and offer
                     // a potion to somebody who is already full.
                     party = finished.Party;
+                    box = finished.Box;
+                    storing?.Apply(party);
 
                     break;
 

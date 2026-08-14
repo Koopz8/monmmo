@@ -344,6 +344,11 @@ public sealed class BattleScreen
 
         if (finished.Prize > 0) Say($"You got {finished.Prize} for winning!");
 
+        // Where it went, when that was not the obvious place. A catch that vanished
+        // into a full party used to say nothing at all, and "Gotcha!" followed by
+        // silence is the worst thing this screen has ever said.
+        if (finished.ToTheBox) Say("Your party is full, so it was sent to the BOX.");
+
         if (finished.Winner == Side.Opponent)
             Say("You have no more usable Pokémon! Your party was healed.");
         else if (IsTrainerBattle && finished.Winner == Side.Player)

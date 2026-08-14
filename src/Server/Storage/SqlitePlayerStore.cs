@@ -160,6 +160,12 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
         // nothing could be carrying anything before there was anything to carry.
         AddColumnIfMissing(connection, "party_members", "held_item", "INTEGER NOT NULL DEFAULT 0");
 
+        // Which list this row is in. Added to an existing database rather than only to a
+        // fresh one, for the same reason the held item was: a schema that is right on a
+        // new machine and wrong on every machine that has been playing is the worst of
+        // both. Everything already stored is in the party, which is where it was.
+        AddColumnIfMissing(connection, "party_members", "in_box", "INTEGER NOT NULL DEFAULT 0");
+
         // The balls column is what the bag used to be, back when a player could carry
         // exactly one kind of thing. It is left in place and written as zero rather than
         // dropped, because dropping a column in SQLite means rebuilding the table and
@@ -559,9 +565,18 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
             await clear.ExecuteNonQueryAsync(cancellationToken);
         }
 
-        for (int slot = 0; slot < character.Party.Count; slot++)
+        // Party first, then the box, numbering straight through. The slot is only row
+        // order — which list a row belongs to is the column that says so — and keeping
+        // them distinct is what the table's own uniqueness rule wants.
+        List<(SavedMon Mon, bool InBox)> stored =
+        [
+            .. character.Party.Select(m => (m, false)),
+            .. character.Box.Select(m => (m, true)),
+        ];
+
+        for (int slot = 0; slot < stored.Count; slot++)
         {
-            SavedMon mon = character.Party[slot];
+            (SavedMon mon, bool inBox) = stored[slot];
             long memberId;
 
             await using (SqliteCommand insert = connection.CreateCommand())
@@ -570,8 +585,8 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
                 insert.CommandText =
                     """
                     INSERT INTO party_members
-                        (account_id, slot, species, level, nickname, current_hp, status, nature, experience, held_item)
-                    VALUES ($account, $slot, $species, $level, $nickname, $hp, $status, $nature, $experience, $held)
+                        (account_id, slot, species, level, nickname, current_hp, status, nature, experience, held_item, in_box)
+                    VALUES ($account, $slot, $species, $level, $nickname, $hp, $status, $nature, $experience, $held, $box)
                     RETURNING id;
                     """;
 
@@ -585,6 +600,7 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
                 insert.Parameters.AddWithValue("$nature", (int)mon.Nature);
                 insert.Parameters.AddWithValue("$experience", mon.Experience);
                 insert.Parameters.AddWithValue("$held", mon.HeldItem);
+                insert.Parameters.AddWithValue("$box", inBox ? 1 : 0);
 
                 memberId = (long)(await insert.ExecuteScalarAsync(cancellationToken))!;
             }
@@ -654,12 +670,13 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
         }
 
         var party = new List<SavedMon>();
+        var box = new List<SavedMon>();
 
         await using (SqliteCommand command = connection.CreateCommand())
         {
             command.CommandText =
                 """
-                SELECT id, species, level, nickname, current_hp, status, nature, experience, held_item
+                SELECT id, species, level, nickname, current_hp, status, nature, experience, held_item, in_box
                 FROM party_members
                 WHERE account_id = $id
                 ORDER BY slot;
@@ -673,7 +690,7 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
             {
                 long memberId = reader.GetInt64(0);
 
-                party.Add(new SavedMon(
+                var mon = new SavedMon(
                     Species: reader.GetInt32(1),
                     Level: reader.GetInt32(2),
                     Nickname: reader.IsDBNull(3) ? null : reader.GetString(3),
@@ -684,7 +701,9 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
                     Experience: reader.GetInt32(7))
                 {
                     HeldItem = reader.GetInt32(8),
-                });
+                };
+
+                (reader.GetInt32(9) != 0 ? box : party).Add(mon);
             }
         }
 
@@ -767,6 +786,7 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
 
         return new SavedCharacter(mapId, x, y, facing, party)
         {
+            Box = box,
             ItemsTaken = taken,
             RestingAt = restingAt,
             RestingX = restingX,

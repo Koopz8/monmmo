@@ -186,6 +186,15 @@ public sealed record ServerPlayer(int Id, long AccountId, string Name)
     /// </summary>
     public List<SavedMon> Party { get; set; } = [];
 
+    /// <summary>
+    /// Everything not in the party, which until now had nowhere to be.
+    /// <para>
+    /// One list rather than several. How many boxes a cartridge has is said nowhere in
+    /// it, so there is one and it holds what the cartridge says a box holds.
+    /// </para>
+    /// </summary>
+    public List<SavedMon> Box { get; set; } = [];
+
     public PlayerAppeared ToAppeared() => new(Id, Name, Square.X, Square.Y, Facing);
 }
 
@@ -433,6 +442,7 @@ public sealed class GameWorld
                 Bag = new Bag(saved.Items),
                 Money = saved.Money,
                 Party = [.. saved.Party],
+                Box = [.. saved.Box],
                 Script = new ScriptState(
                     saved.Flags,
                     saved.Variables.Select(v => new KeyValuePair<int, int>(v.Id, v.Value))),
@@ -1775,6 +1785,135 @@ public sealed class GameWorld
         }
     }
 
+    /// <summary>Where the last thing caught ended up, for the message and the log.</summary>
+    public enum Kept
+    {
+        /// <summary>Nowhere. The party was full and so was the box.</summary>
+        Nowhere,
+        InTheParty,
+        InTheBox,
+    }
+
+    /// <summary>Where the last catch went.</summary>
+    public Kept LastCatch { get; private set; }
+
+    /// <summary>
+    /// Puts something caught wherever there is room, and says where that was.
+    /// <para>
+    /// The party first, because that is what a player expects and what these games do.
+    /// The box after, which is the whole point of there being one.
+    /// </para>
+    /// <para>
+    /// Both full is a refusal rather than a loss. It cannot happen with anything the
+    /// server currently allows — a ball is not thrown when the party is full <em>and</em>
+    /// the box is — but a branch that silently drops a creature is exactly what this
+    /// milestone exists to remove, so it returns an answer instead of none.
+    /// </para>
+    /// </summary>
+    public Kept Catch(int playerId, SavedMon caught)
+    {
+        lock (_gate)
+        {
+            return _players.TryGetValue(playerId, out ServerPlayer? player) ? Keep(player, caught) : Kept.Nowhere;
+        }
+    }
+
+    private Kept Keep(ServerPlayer player, SavedMon caught)
+    {
+        if (player.Party.Count < Party.MaxSize)
+        {
+            player.Party.Add(caught);
+            return Kept.InTheParty;
+        }
+
+        if (BoxSize > 0 && player.Box.Count < BoxSize)
+        {
+            player.Box.Add(caught);
+            return Kept.InTheBox;
+        }
+
+        return Kept.Nowhere;
+    }
+
+    /// <summary>
+    /// How many the box holds, as this cartridge said it. Zero means no box at all,
+    /// which is what a rules file written before this existed carries.
+    /// </summary>
+    public int BoxSize => _rules?.BoxSize ?? 0;
+
+    /// <summary>
+    /// Moves somebody out of the party and into the box.
+    /// <para>
+    /// The last one able to fight never goes. A player with an empty party — or with
+    /// nothing left standing — cannot start a battle, cannot be challenged out of it,
+    /// and has no way back except a centre they may be a long walk from. The games
+    /// refuse this too and it is worth refusing for a better reason than tradition.
+    /// </para>
+    /// </summary>
+    public List<Outgoing> Deposit(int playerId, int slot)
+    {
+        lock (_gate)
+        {
+            if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
+
+            if (player.InBattle)
+                return [new Outgoing(new Rejected("Not in the middle of a battle."), OnlyTo: playerId)];
+
+            if (slot < 0 || slot >= player.Party.Count) return [];
+
+            if (BoxSize <= 0) return [Boxed(player, "There is nowhere to put it.")];
+            if (player.Box.Count >= BoxSize) return [Boxed(player, "The box is full.")];
+
+            if (_battles is { } battles
+                && battles.CanFight(player.Party[slot])
+                && player.Party.Count(battles.CanFight) <= 1)
+            {
+                return [Boxed(player, "That's the last one that can fight.")];
+            }
+
+            SavedMon going = player.Party[slot];
+
+            player.Party.RemoveAt(slot);
+            player.Box.Add(going);
+
+            LastBoxed = $"put slot {slot} in the box";
+
+            return [Boxed(player, "Into the box.")];
+        }
+    }
+
+    /// <summary>Brings somebody back out of the box, if the party has room.</summary>
+    public List<Outgoing> Withdraw(int playerId, int slot)
+    {
+        lock (_gate)
+        {
+            if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
+
+            if (player.InBattle)
+                return [new Outgoing(new Rejected("Not in the middle of a battle."), OnlyTo: playerId)];
+
+            if (slot < 0 || slot >= player.Box.Count) return [];
+
+            if (player.Party.Count >= Party.MaxSize)
+                return [Boxed(player, "The party is full.")];
+
+            SavedMon coming = player.Box[slot];
+
+            player.Box.RemoveAt(slot);
+            player.Party.Add(coming);
+
+            LastBoxed = $"took box slot {slot} out";
+
+            return [Boxed(player, "Out of the box.")];
+        }
+    }
+
+    /// <summary>What the last box operation came to.</summary>
+    public string? LastBoxed { get; private set; }
+
+    private Outgoing Boxed(ServerPlayer player, string said) =>
+        new(new BoxUpdated([.. player.Party], [.. player.Box], BoxSize, said), OnlyTo: player.Id);
+
     /// <summary>
     /// What a cure just put right, as half a sentence. The condition is named rather
     /// than the item, because an item that clears six things used on somebody who had
@@ -3007,6 +3146,8 @@ public sealed class GameWorld
             Flags = [.. player.Script.Flags],
             Variables = [.. player.Script.Variables.Select(v => new SavedVariable(v.Key, v.Value))],
             Beaten = [.. player.DefeatedTrainers],
+            Box = [.. player.Box],
+            BoxSize = BoxSize,
         };
 
     /// <summary>
@@ -3743,8 +3884,10 @@ public sealed class GameWorld
     {
         bool caught = encounter.Current.OpponentCaught;
 
-        if (caught && player.Party.Count < Party.MaxSize)
-            player.Party.Add(BattleFactory.Save(encounter.Opponent));
+        // Where a catch goes. This used to read "if there is room in the party", with no
+        // else — the fight said "Gotcha!", the party was already six, and the creature
+        // stopped existing. A player could watch that happen and had no way to prove it.
+        if (caught) LastCatch = Keep(player, BattleFactory.Save(encounter.Opponent));
 
         if (winner == Side.Player && encounter.TrainerId is { } beaten)
             player.DefeatedTrainers.Add(beaten);
@@ -3771,7 +3914,11 @@ public sealed class GameWorld
 
         player.Money = Math.Min(MaxMoney, player.Money + prize);
 
-        return new BattleFinished(winner, caught, player.Money, prize, BallsOf(player), [.. player.Party]);
+        return new BattleFinished(winner, caught, player.Money, prize, BallsOf(player), [.. player.Party])
+        {
+            ToTheBox = caught && LastCatch == Kept.InTheBox,
+            Box = [.. player.Box],
+        };
     }
 
     /// <summary>
@@ -3804,6 +3951,7 @@ public sealed class GameWorld
             return new SavedCharacter(
                 player.MapId, player.Square.X, player.Square.Y, player.Facing, [.. player.Party])
             {
+                Box = [.. player.Box],
                 DefeatedTrainers = [.. player.DefeatedTrainers],
                 Items = player.Bag.Entries,
                 Money = player.Money,

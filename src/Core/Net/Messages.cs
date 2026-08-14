@@ -26,6 +26,9 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(UseItemRequest), "useitem")]
 [JsonDerivedType(typeof(GiveItemRequest), "giveitem")]
 [JsonDerivedType(typeof(TakeItemRequest), "takeitem")]
+[JsonDerivedType(typeof(DepositRequest), "deposit")]
+[JsonDerivedType(typeof(WithdrawRequest), "withdraw")]
+[JsonDerivedType(typeof(BoxUpdated), "boxupdate")]
 [JsonDerivedType(typeof(BagUpdated), "bagupdate")]
 [JsonDerivedType(typeof(PartyHealed), "healed")]
 [JsonDerivedType(typeof(BlackedOut), "blackedout")]
@@ -301,6 +304,11 @@ public sealed record Welcome(
 
     /// <summary>Who this character has already beaten, so their scripts run correctly.</summary>
     public IReadOnlyList<int> Beaten { get; init; } = [];
+
+    /// <summary>Everything not in the party, and how much room the cartridge said there is.</summary>
+    public IReadOnlyList<SavedMon> Box { get; init; } = [];
+
+    public int BoxSize { get; init; }
 }
 
 /// <summary>
@@ -363,6 +371,30 @@ public sealed record GiveItemRequest(int ItemId, int Slot) : NetMessage;
 /// </para>
 /// </summary>
 public sealed record TakeItemRequest(int Slot) : NetMessage;
+
+/// <summary>Put the party member in this slot into the box.</summary>
+public sealed record DepositRequest(int Slot) : NetMessage;
+
+/// <summary>Take the one in this box slot back out.</summary>
+public sealed record WithdrawRequest(int Slot) : NetMessage;
+
+/// <summary>
+/// The party and the box after one moved between them.
+/// <para>
+/// Both lists, for the same reason a bag update carries both the bag and the party:
+/// every one of these operations changes two things at once, and a client holding one
+/// of them stale shows a creature in two places or in neither.
+/// </para>
+/// <para>
+/// The size comes with it because it is the cartridge's number and the client has no
+/// other way to know it. A client that assumed thirty would be remembering.
+/// </para>
+/// </summary>
+public sealed record BoxUpdated(
+    IReadOnlyList<SavedMon> Party,
+    IReadOnlyList<SavedMon> Box,
+    int BoxSize,
+    string Message) : NetMessage;
 
 /// <summary>
 /// The bag and the party after something was used out of a fight.
@@ -667,7 +699,30 @@ public sealed record BattleFinished(
     int Money,
     int Prize,
     IReadOnlyList<BagEntry> Balls,
-    IReadOnlyList<SavedMon> Party) : NetMessage;
+    IReadOnlyList<SavedMon> Party) : NetMessage
+{
+    /// <summary>
+    /// True when what was caught went to the box rather than the party.
+    /// <para>
+    /// Carried rather than worked out by the client from the party not having grown.
+    /// That inference is available and wrong the moment anything else can change a
+    /// party mid-fight, and it reads as "nothing happened", which is precisely the
+    /// silence this field exists to end.
+    /// </para>
+    /// </summary>
+    public bool ToTheBox { get; init; }
+
+    /// <summary>
+    /// The box, for the same reason the party comes back: a fight can change it.
+    /// <para>
+    /// Only a catch can, and only when the party is full, which is rare enough that the
+    /// first version left it out — and then the box screen opened on a box that was
+    /// accurate at login and did not contain the creature the player had just been told
+    /// went into it.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<SavedMon> Box { get; init; } = [];
+}
 
 /// <summary>One line of a shop's stock: what it is and what it costs today.</summary>
 public sealed record ShopEntry(int ItemId, int Price);

@@ -23,7 +23,7 @@ public sealed class GameRules
 {
     private static readonly byte[] Magic = "MONRULES"u8.ToArray();
 
-    private const int Version = 10;
+    private const int Version = 11;
 
     private readonly Dictionary<int, SpeciesData> _species;
     private readonly Dictionary<int, MoveData> _moves;
@@ -112,6 +112,19 @@ public sealed class GameRules
     public int EvolveByItem { get; init; }
 
     public int EvolutionCount => _evolutions.Sum(e => e.Value.Count);
+
+    /// <summary>
+    /// How many a box holds, or zero for a cartridge that never said.
+    /// <para>
+    /// Read at export out of the game's own sentence — "Each BOX can hold up to 30
+    /// POKéMON" — for the same reason the ball kinds and SURF are read at export: the
+    /// server never sees a cartridge and never sees a word, and a number written here
+    /// from memory of another game is the mistake this project keeps a standing rule
+    /// against. Zero means there is nowhere to put a seventh, and a seventh is refused
+    /// rather than lost.
+    /// </para>
+    /// </summary>
+    public int BoxSize { get; init; }
 
     /// <summary>
     /// What using this item on this species would turn it into, if anything.
@@ -374,6 +387,9 @@ public sealed class GameRules
         // the ball kinds are: the server never sees a name.
         writer.Write(SurfMove);
 
+        // And out of a sentence, which is stranger and the same principle.
+        writer.Write(BoxSize);
+
         writer.Write(EvolveByLevel);
         writer.Write(EvolveByItem);
         writer.Write(EvolutionCount);
@@ -525,6 +541,7 @@ public sealed class GameRules
         }
 
         int surf = reader.ReadInt32();
+        int boxSize = reader.ReadInt32();
         int byLevel = reader.ReadInt32();
         int byItem = reader.ReadInt32();
 
@@ -546,6 +563,7 @@ public sealed class GameRules
         return new GameRules(species, moves, learnsets, trainers, items, evolutions, machineSets)
         {
             SurfMove = surf,
+            BoxSize = boxSize,
             EvolveByLevel = byLevel,
             EvolveByItem = byItem,
         };
