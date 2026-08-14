@@ -125,6 +125,16 @@ public sealed class Battler
     /// </summary>
     public bool IsAway { get; set; }
 
+    /// <summary>
+    /// True while something has made sure this one is not going anywhere.
+    /// <para>
+    /// MEAN LOOK, and it lasts as long as the creature is standing there rather than for
+    /// a count of turns — which is why it is a flag and not a number, and why switching
+    /// out ends it without anything having to say so.
+    /// </para>
+    /// </summary>
+    public bool CannotEscape { get; set; }
+
     /// <summary>What is holding this one, and for how many more turns.</summary>
     public int TrappedTurns { get; set; }
 

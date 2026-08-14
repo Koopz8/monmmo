@@ -165,6 +165,14 @@ public static class BattleNarrator
 
         BattleEvent.Unaffected e => $"It had no effect on {names.Of(e.Side)}.",
 
+        BattleEvent.GotAway => "Got away safely!",
+
+        BattleEvent.CouldNotGetAway => "Couldn't get away!",
+
+        BattleEvent.HeldFast e => $"{names.MoveNamed(e.MoveId)} is holding on — there is no getting away!",
+
+        BattleEvent.BlownAway e => $"{names.Of(e.Side)} was blown away by {names.MoveNamed(e.MoveId)}!",
+
         BattleEvent.MoveNotLearned e =>
             $"{names.Of(e.Side)} wants to learn {names.MoveNamed(e.MoveId)}, but already knows four moves.",
 

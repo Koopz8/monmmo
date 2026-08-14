@@ -54,6 +54,10 @@ public enum Side
 [JsonDerivedType(typeof(BrokeFree), "brokefree")]
 [JsonDerivedType(typeof(OneHitKnockout), "onehit")]
 [JsonDerivedType(typeof(Unaffected), "unaffected")]
+[JsonDerivedType(typeof(GotAway), "gotaway")]
+[JsonDerivedType(typeof(CouldNotGetAway), "couldnotgetaway")]
+[JsonDerivedType(typeof(HeldFast), "heldfast")]
+[JsonDerivedType(typeof(BlownAway), "blownaway")]
 [JsonDerivedType(typeof(Ended), "ended")]
 public abstract record BattleEvent
 {
@@ -179,6 +183,18 @@ public abstract record BattleEvent
     /// </summary>
     public sealed record Unaffected(Side Side) : BattleEvent;
 
+    /// <summary>Left.</summary>
+    public sealed record GotAway(Side Side) : BattleEvent;
+
+    /// <summary>Tried to leave and did not, which costs the turn.</summary>
+    public sealed record CouldNotGetAway(Side Side) : BattleEvent;
+
+    /// <summary>Tried to leave and is being held, which also costs the turn.</summary>
+    public sealed record HeldFast(Side Side, int MoveId) : BattleEvent;
+
+    /// <summary>Sent off, which ends a fight with something wild in it.</summary>
+    public sealed record BlownAway(Side Side, int MoveId) : BattleEvent;
+
     /// <summary>
     /// A move was offered and could not be taken, because four are already known.
     /// <para>
@@ -199,6 +215,7 @@ public abstract record BattleEvent
 [JsonDerivedType(typeof(ThrowBall), "ball")]
 [JsonDerivedType(typeof(UseItem), "item")]
 [JsonDerivedType(typeof(SwitchTo), "switch")]
+[JsonDerivedType(typeof(RunAway), "run")]
 public abstract record BattleAction
 {
     public sealed record UseMove(int Slot) : BattleAction;
@@ -221,6 +238,16 @@ public abstract record BattleAction
     public sealed record SwitchTo(int Slot) : BattleAction;
 
     public sealed record Struggle : BattleAction;
+
+    /// <summary>
+    /// Leave. The one thing a player could not do.
+    /// <para>
+    /// Only from something wild — a trainer does not let you walk off, and that is a
+    /// rule both halves have to know, because a client that offers it and a server that
+    /// refuses it is a button that does nothing.
+    /// </para>
+    /// </summary>
+    public sealed record RunAway : BattleAction;
 
     /// <summary>Throwing a ball uses the turn; the target still gets to act if it stays free.</summary>
     /// <summary>
@@ -293,16 +320,44 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
     /// <summary>True once the opponent has been caught, which ends the battle.</summary>
     public bool OpponentCaught { get; private set; }
 
-    public bool IsOver => OpponentCaught || Player.HasFainted || Opponent.HasFainted;
+    /// <summary>
+    /// True once somebody walked out of it — either the player ran or the opponent was
+    /// sent off. A fight nobody won, which is a thing that had never happened here.
+    /// </summary>
+    public bool Escaped { get; private set; }
+
+    /// <summary>
+    /// Whether the thing on the other side is wild.
+    /// <para>
+    /// Set by whoever built the battle. Running, and being blown away, are both only
+    /// possible against something wild — and the client is told the same thing, because
+    /// a button that is offered and refused is worse than one that is not offered.
+    /// </para>
+    /// </summary>
+    public bool IsWild { get; init; } = true;
+
+    public bool IsOver => OpponentCaught || Escaped || Player.HasFainted || Opponent.HasFainted;
 
     public Side? Winner => OpponentCaught
         ? Side.Player
-        : (Player.HasFainted, Opponent.HasFainted) switch
-        {
-            (false, true) => Side.Player,
-            (true, false) => Side.Opponent,
-            _ => null,
-        };
+        : Escaped
+            ? null
+            : (Player.HasFainted, Opponent.HasFainted) switch
+            {
+                (false, true) => Side.Player,
+                (true, false) => Side.Opponent,
+                _ => null,
+            };
+
+    /// <summary>
+    /// How many times this side has tried to leave.
+    /// <para>
+    /// Counted because trying again is meant to be easier than trying the first time —
+    /// which is the one part of the escape rule that is a fact about these games rather
+    /// than a number, and it is the part that makes a fight you cannot win survivable.
+    /// </para>
+    /// </summary>
+    private int _attempts;
 
     public Battler Of(Side side) => side == Side.Player ? Player : Opponent;
 
@@ -406,6 +461,12 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             int healed = attacker.Heal(item.Restores);
 
             events.Add(new BattleEvent.HealthRestored(side, item.ItemId, healed));
+            return;
+        }
+
+        if (action is BattleAction.RunAway)
+        {
+            RunFrom(side, attacker, defender, events);
             return;
         }
 
@@ -622,6 +683,55 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
     }
 
     /// <summary>
+    /// Leaving, or failing to.
+    /// <para>
+    /// Refused outright against a trainer and against anything holding on, and otherwise
+    /// a roll: the faster you are the better your chances, and every attempt makes the
+    /// next one better. Both of those are facts about these games; the numbers that turn
+    /// them into odds are in the game's code, so they are <b>modelled, not read</b>, and
+    /// they are written here rather than buried — a hundred and twenty-eight over the
+    /// speeds, plus thirty a try, out of two hundred and fifty-six.
+    /// </para>
+    /// </summary>
+    private void RunFrom(Side side, Battler runner, Battler from, List<BattleEvent> events)
+    {
+        if (!IsWild)
+        {
+            events.Add(new BattleEvent.CouldNotGetAway(side));
+            return;
+        }
+
+        if (runner.TrappedTurns > 0)
+        {
+            events.Add(new BattleEvent.HeldFast(side, runner.TrappedBy));
+            return;
+        }
+
+        if (runner.CannotEscape)
+        {
+            events.Add(new BattleEvent.CouldNotGetAway(side));
+            return;
+        }
+
+        _attempts++;
+
+        int mine = Math.Max(1, runner.EffectiveStat(Stat.Speed));
+        int theirs = Math.Max(1, from.EffectiveStat(Stat.Speed));
+
+        int odds = mine * 128 / theirs + 30 * _attempts;
+
+        if (odds >= 256 || _rng.Next(256) < odds)
+        {
+            Escaped = true;
+            events.Add(new BattleEvent.GotAway(side));
+
+            return;
+        }
+
+        events.Add(new BattleEvent.CouldNotGetAway(side));
+    }
+
+    /// <summary>
     /// What a move with no power of its own takes, when the number is somewhere the
     /// fight already knows.
     /// <para>
@@ -713,6 +823,37 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         }
 
         if (rolled && !_rng.Chance(move.SecondaryChance)) return;
+
+        // Made sure of. It lasts as long as they are standing there rather than for a
+        // count, which is what makes it worse than being wrapped.
+        if (effect.Kind == EffectKind.NoEscape)
+        {
+            if (defender.CannotEscape) events.Add(new BattleEvent.NothingHappened(Other(side)));
+            else
+            {
+                defender.CannotEscape = true;
+                events.Add(new BattleEvent.Trapped(Other(side), move.Id));
+            }
+
+            return;
+        }
+
+        // And sent off, which ends a fight with something wild in it and does nothing at
+        // all to somebody's trainer — the games make them switch instead, and switching
+        // somebody else's party is not a thing this engine can do.
+        if (effect.Kind == EffectKind.BlowAway)
+        {
+            if (!IsWild || defender.CannotEscape)
+            {
+                events.Add(new BattleEvent.NothingHappened(Other(side)));
+                return;
+            }
+
+            Escaped = true;
+            events.Add(new BattleEvent.BlownAway(Other(side), move.Id));
+
+            return;
+        }
 
         Side at = effect.OnUser ? side : Other(side);
         Battler target = effect.OnUser ? attacker : defender;

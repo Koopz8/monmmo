@@ -466,6 +466,22 @@ public sealed class BattleScreen
         if (Raylib.IsKeyPressed(KeyboardKey.Up) || Raylib.IsKeyPressed(KeyboardKey.W))
             _selectedMove = (_selectedMove - 1 + _moveNames.Count) % _moveNames.Count;
 
+        if (Raylib.IsKeyPressed(KeyboardKey.R))
+        {
+            if (IsTrainerBattle)
+            {
+                // Refused here and refused on the server too. This is only what stops a
+                // player spending a turn finding out.
+                Say("There's no running from a trainer battle!");
+                Phase = BattlePhase.ReadingMessages;
+                AdvanceMessage();
+                return;
+            }
+
+            Choose(new BattleAction.RunAway());
+            return;
+        }
+
         if (Raylib.IsKeyPressed(KeyboardKey.C))
         {
             if (ChosenMedicine is not { } medicine)
@@ -939,6 +955,18 @@ public sealed class BattleScreen
         x += Skin.ChipWidth(_font, ball, 2) + 12;
 
         Skin.DrawChip(_font, medicine, x, y, 2, ChosenMedicine is not null ? Skin.PanelHigh : Skin.PanelDeep);
+
+        // Leaving, which for two years of this project's life was not a thing a player
+        // could do. Drawn only when it is possible, because a chip offering something
+        // the server refuses is worse than no chip at all.
+        if (!IsTrainerBattle)
+        {
+            const string running = "R RUN";
+
+            x += Skin.ChipWidth(_font, medicine, 2) + 12;
+
+            Skin.DrawChip(_font, running, x, y, 2, Skin.PanelHigh);
+        }
 
         if (Party.Count > 1)
         {

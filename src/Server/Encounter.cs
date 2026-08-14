@@ -31,7 +31,7 @@ public sealed class Encounter
         TrainerId = trainerId;
         _opponents = [.. opponents];
 
-        Current = new Battle(player, _opponents[0], seed);
+        Current = new Battle(player, _opponents[0], seed) { IsWild = trainerId is null };
     }
 
     /// <summary>Which trainer started this, or null when something walked out of the grass.</summary>
@@ -78,7 +78,7 @@ public sealed class Encounter
 
         // Carried on from where the dice had got to, not restarted from the seed.
         // Restarting would replay the same rolls against everyone they send out.
-        Current = new Battle(Current.Player, _opponents[_opponentSlot], Current.State);
+        Current = new Battle(Current.Player, _opponents[_opponentSlot], Current.State) { IsWild = !IsTrainerBattle };
 
         return Current.Opponent;
     }
@@ -87,6 +87,6 @@ public sealed class Encounter
     public void SendPlayer(int slot, Battler battler)
     {
         PlayerSlot = slot;
-        Current = new Battle(battler, Current.Opponent, Current.State);
+        Current = new Battle(battler, Current.Opponent, Current.State) { IsWild = !IsTrainerBattle };
     }
 }

@@ -3486,6 +3486,11 @@ public sealed class GameWorld
             return true;
         }
 
+        // Walked out of. Nobody won, nothing is paid, and the fight is over — which is
+        // the case this whole path had never had, because until now there was no way to
+        // leave one.
+        if (battle.Escaped) return true;
+
         if (encounter.OpponentIsBeaten)
         {
             winner = Side.Player;

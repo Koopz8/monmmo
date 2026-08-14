@@ -56,6 +56,12 @@ public enum EffectKind
 
     /// <summary>Brings the target down to whatever the user has left.</summary>
     DownToMine,
+
+    /// <summary>Stops the target leaving, for as long as it is standing there.</summary>
+    NoEscape,
+
+    /// <summary>Sends the target off, which ends a fight with something wild in it.</summary>
+    BlowAway,
 }
 
 /// <summary>
@@ -243,6 +249,14 @@ public static class MoveEffects
         0x57 => new MoveEffect(EffectKind.LevelDamage, OnUser: false),
         0x28 => new MoveEffect(EffectKind.HalfTheirHealth, OnUser: false),
         0xBD => new MoveEffect(EffectKind.DownToMine, OnUser: false),
+
+        // And the two that are about leaving, which had nothing to be about until there
+        // was a way to leave. Both read off membership, both lists of one idea:
+        //
+        //   0x6A   3 moves  SPIDER WEB, MEAN LOOK, BLOCK
+        //   0x1C   2 moves  WHIRLWIND, ROAR
+        0x6A => new MoveEffect(EffectKind.NoEscape, OnUser: false),
+        0x1C => new MoveEffect(EffectKind.BlowAway, OnUser: false),
 
         _ => Stages(effect),
     };
