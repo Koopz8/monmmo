@@ -127,6 +127,10 @@ public static class Program
         Raylib.InitWindow(WindowWidth, WindowHeight, $"MonMMO — {map.Name}");
         Raylib.SetTargetFPS(60);
 
+        // The lettering, which needs a window before it can become a texture. Every
+        // screen draws through this from here on.
+        Skin.Font = PixelFont.Build();
+
         // Escape does not quit. It is raylib's default and it is wrong for a game: the
         // naming screen offers Escape to leave a name alone, and the first time that was
         // played the whole client shut down to the desktop instead. The window's own
@@ -395,6 +399,7 @@ public static class Program
                     network.SendTalkFinished();
                 }
 
+                battle.Animate(delta);
                 battle.Update();
 
                 // The answer to "forget which?", once there is one. Sent from the loop
@@ -1803,48 +1808,97 @@ public static class Program
         LoadedMap map, WalkingCharacter player, NetworkClient network, int others, int money, int carrying,
         System.Numerics.Vector2 camera, CharacterSprite? sprite, float worstFrame, string? scene)
     {
-        string connection = network.Failure is { } failure
-            ? $"   offline: {failure}"
-            : network.IsConnected ? $"   online, {others} others" : "";
+        // A plaque for the place and a strip for the party, and everything else behind
+        // a key. What was here before was six lines of diagnostics drawn over the world
+        // at all times — indispensable while the world was being built and, once it was,
+        // the first thing anybody looking at the screen sees.
+        DrawPlace(map, player, money, carrying, network, others);
 
-        string line = $"{map.Name}  ({map.Bank}.{map.Number})   " +
-                      $"{player.Square.X},{player.Square.Y}   " +
-                      $"{money}   {carrying} items{connection}";
+        if (!Raylib.IsKeyDown(KeyboardKey.F1)) return;
 
-        Raylib.DrawText(line, 13, 13, 20, Color.Black);
-        Raylib.DrawText(line, 12, 12, 20, Color.White);
+        DrawDiagnostics(map, player, camera, sprite, worstFrame, scene);
+    }
 
-        // The second line exists because "my character turned invisible" has three
-        // completely different causes and no way to tell them apart by looking. Either
-        // the figure is somewhere the camera is not, or the camera is somewhere the map
-        // is not, or the cartridge's own sprite never loaded and what is being drawn is
-        // the white placeholder box — which is invisible on the professor's white floor
-        // and perfectly visible on grass, which is exactly the shape of the report.
+    /// <summary>Where you are and what you are carrying, as a plaque in the corner.</summary>
+    private static void DrawPlace(
+        LoadedMap map, WalkingCharacter player, int money, int carrying, NetworkClient network, int others)
+    {
+        PixelFont font = Skin.Font;
+
+        string place = GameText.ToAscii(map.Name);
+        string under = $"${money}   {carrying} items";
+
+        int width = Math.Max(font.Measure(place, 3), font.Measure(under, 2)) + 36;
+
+        var box = new Rectangle(16, 14, width, 62);
+
+        Skin.DrawPanel(box);
+
+        font.DrawShadowed(place, 32, 26, 3, Skin.Ink, new Color(0, 0, 0, 120));
+        font.Draw(under, 32, 52, 2, Skin.InkDim);
+
+        // Connection, as a dot rather than a sentence. Green is fine, amber is trying,
+        // red is not — and the only time it needs words is when it is broken.
+        Color light = network.Failure is not null
+            ? Skin.HpPoor
+            : network.IsConnected ? Skin.HpGood : Skin.HpFair;
+
+        Raylib.DrawCircle((int)(box.X + box.Width - 16), (int)box.Y + 18, 5, light);
+
+        if (network.IsConnected && others > 0)
+            font.DrawRight($"{others} here", box.X + box.Width - 28, box.Y + 14, 2, Skin.InkFaint);
+
+        if (network.Failure is { } failure)
+        {
+            var strip = new Rectangle(16, box.Y + box.Height + 8, font.Measure(failure, 2) + 32, 28);
+
+            Skin.DrawPanel(strip, fill: Skin.HpPoor);
+            font.Draw(GameText.ToAscii(failure), 32, strip.Y + 10, 2, Skin.InkOnLight);
+        }
+    }
+
+    /// <summary>
+    /// The numbers that were on screen at all times until now, kept because they earned
+    /// their keep and moved behind F1 because they had stopped earning it every frame.
+    /// <para>
+    /// "My character turned invisible" has three completely different causes and no way
+    /// to tell them apart by looking: the figure is somewhere the camera is not, the
+    /// camera is somewhere the map is not, or the cartridge's own sprite never loaded and
+    /// what is drawn is the white placeholder — invisible on the professor's white floor
+    /// and perfectly visible on grass, which is exactly the shape of that report.
+    /// </para>
+    /// </summary>
+    private static void DrawDiagnostics(
+        LoadedMap map, WalkingCharacter player, System.Numerics.Vector2 camera,
+        CharacterSprite? sprite, float worstFrame, string? scene)
+    {
+        PixelFont font = Skin.Font;
+
         (float px, float py) = player.PixelPosition;
 
-        // Frame time as well as position, because "jittery" is a word and this is a
-        // number. A stutter is one long frame, so the longest recent one is the reading
-        // that matters — an average hides exactly the thing being complained about.
-        string second =
-            $"you {px:F0},{py:F0}   map {map.PixelWidth}x{map.PixelHeight}   " +
-            $"camera {camera.X:F0},{camera.Y:F0}   " +
+        var lines = new List<string>
+        {
+            $"{map.Name} ({map.Bank}.{map.Number}) at {player.Square.X},{player.Square.Y}",
+            $"you {px:F0},{py:F0}   map {map.PixelWidth}x{map.PixelHeight}   camera {camera.X:F0},{camera.Y:F0}",
+
+            // Frame time as well as position, because "jittery" is a word and this is a
+            // number. A stutter is one long frame, so the longest recent one is the
+            // reading that matters — an average hides the thing being complained about.
             $"{Raylib.GetFPS()} fps, worst {worstFrame * 1000f:F0} ms   " +
-            (sprite is null ? "NO SPRITE" : "sprite ok");
+            (sprite is null ? "NO SPRITE" : "sprite ok"),
+        };
 
-        Raylib.DrawText(second, 13, 37, 20, Color.Black);
-        Raylib.DrawText(second, 12, 36, 20, Color.White);
+        if (scene is not null) lines.Add(scene);
 
-        if (scene is not null)
-        {
-            Raylib.DrawText(scene, 13, 133, 20, Color.Black);
-            Raylib.DrawText(scene, 12, 132, 20, Color.White);
-        }
+        lines.AddRange(Talks);
 
-        for (int i = 0; i < Talks.Count; i++)
-        {
-            Raylib.DrawText(Talks[i], 13, 61 + i * 24, 20, Color.Black);
-            Raylib.DrawText(Talks[i], 12, 60 + i * 24, 20, Color.White);
-        }
+        int width = lines.Max(l => font.Measure(l, 2)) + 32;
+        var box = new Rectangle(16, 90, width, lines.Count * 20 + 22);
+
+        Skin.DrawPanel(box, fill: new Color(16, 18, 28, 225));
+
+        for (int i = 0; i < lines.Count; i++)
+            font.Draw(lines[i], 32, box.Y + 12 + i * 20, 2, i < 3 ? Skin.Ink : Skin.InkDim);
     }
 
     /// <summary>Opens a window that just explains what went wrong, rather than exiting silently.</summary>
@@ -1854,6 +1908,8 @@ public static class Program
 
         Raylib.InitWindow(WindowWidth, WindowHeight, "MonMMO");
         Raylib.SetTargetFPS(30);
+
+        Skin.Font = PixelFont.Build();
 
         while (!Raylib.WindowShouldClose())
         {

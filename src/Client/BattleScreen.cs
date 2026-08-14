@@ -56,6 +56,9 @@ public sealed class BattleScreen
     private bool _hasWildSprite;
     private bool _hasPlayerSprite;
 
+    /// <summary>The client's lettering. Shared, because there is one of it.</summary>
+    private static PixelFont _font => Skin.Font;
+
     private readonly Queue<string> _pending = new();
     private string _message = "";
     private int _selectedMove;
@@ -584,106 +587,195 @@ public sealed class BattleScreen
         Phase = BattlePhase.WaitingForServer;
     }
 
+    /// <summary>
+    /// Health slides rather than jumps.
+    /// <para>
+    /// The one piece of animation on this screen, and it earns its place: a bar that
+    /// snaps to its new length says a number changed, and a bar that runs down says how
+    /// much. The value drawn chases the value the server sent; nothing waits for it.
+    /// </para>
+    /// </summary>
+    private float _shownYours = -1;
+
+    private float _shownTheirs = -1;
+
+    private float _blink;
+
+    /// <summary>Called once a frame, before drawing, so the meters can catch up.</summary>
+    public void Animate(float delta)
+    {
+        _blink += delta;
+
+        Chase(ref _shownYours, _you.CurrentHp, _you.MaxHp, delta);
+        Chase(ref _shownTheirs, _opponent.CurrentHp, _opponent.MaxHp, delta);
+
+        static void Chase(ref float shown, int target, int max, float delta)
+        {
+            if (shown < 0) { shown = target; return; }
+
+            // A fixed share of the bar a second rather than of the gap, so a big hit
+            // takes longer to draw than a small one — which is the whole point.
+            float speed = Math.Max(1f, max * 0.7f) * delta;
+
+            shown = shown < target
+                ? Math.Min(target, shown + speed)
+                : Math.Max(target, shown - speed);
+        }
+    }
+
     public void Draw()
     {
-        Raylib.ClearBackground(new Color(248, 248, 232, 255));
+        DrawArena();
 
         // The plain name on the plate, not the one narration uses. "A wild PIDGEY
         // appeared!" is a sentence and wants the article; a label above a health bar is
         // not a sentence, and "the wild PIDGEY" written on one reads as a mistake.
-        DrawCombatant(_opponent, SpeciesNameOf(_opponent), _wildSprite, _hasWildSprite,
-            spriteX: Width - 260, spriteY: 60, boxX: 40, boxY: 60, showHp: false);
+        DrawSprite(_wildSprite, _hasWildSprite, Width - 300, 70);
+        DrawSprite(_playerSprite, _hasPlayerSprite, 80, 250);
 
-        DrawCombatant(_you, SpeciesNameOf(_you), _playerSprite, _hasPlayerSprite,
-            spriteX: 90, spriteY: 250, boxX: Width - 380, boxY: 250, showHp: true);
+        DrawPlate(_opponent, SpeciesNameOf(_opponent), _shownTheirs, 40, 48, showHp: false);
+        DrawPlate(_you, SpeciesNameOf(_you), _shownYours, Width - 400, 296, showHp: true);
 
         DrawMessageBox();
     }
 
-    private void DrawCombatant(
-        BattlerView battler, string name, Texture2D sprite, bool hasSprite,
-        int spriteX, int spriteY, int boxX, int boxY, bool showHp)
+    /// <summary>
+    /// The ground the fight happens on: a wash from dusk at the top to floor at the
+    /// bottom, with a band where the two battlers stand.
+    /// </summary>
+    private static void DrawArena()
     {
-        if (hasSprite)
+        Raylib.ClearBackground(new Color(30, 34, 50, 255));
+
+        Raylib.DrawRectangleGradientV(0, 0, Width, 300, new Color(46, 54, 82, 255), new Color(30, 34, 50, 255));
+        Raylib.DrawRectangleGradientV(0, 300, Width, 170, new Color(30, 34, 50, 255), new Color(24, 27, 40, 255));
+
+        // Two ellipses of floor, which is all the old games draw and all that is needed
+        // to stop a sprite looking as though it is falling.
+        Raylib.DrawEllipse(Width - 210, 268, 150, 26, new Color(52, 60, 88, 255));
+        Raylib.DrawEllipse(190, 452, 170, 30, new Color(52, 60, 88, 255));
+    }
+
+    private static void DrawSprite(Texture2D sprite, bool has, int x, int y)
+    {
+        if (has)
         {
-            Raylib.DrawTextureEx(sprite, new System.Numerics.Vector2(spriteX, spriteY), 0f, SpriteScale, Color.White);
-        }
-        else
-        {
-            Raylib.DrawRectangleLines(spriteX, spriteY, 64 * SpriteScale, 64 * SpriteScale, Color.Gray);
+            Raylib.DrawTextureEx(sprite, new System.Numerics.Vector2(x, y), 0f, SpriteScale, Color.White);
+            return;
         }
 
-        const int boxWidth = 340;
-        const int boxHeight = 80;
+        Skin.DrawCutBorder(new Rectangle(x, y, 64 * SpriteScale, 64 * SpriteScale), Skin.EdgeSoft);
+    }
 
-        Raylib.DrawRectangle(boxX, boxY, boxWidth, boxHeight, new Color(255, 255, 255, 230));
-        Raylib.DrawRectangleLines(boxX, boxY, boxWidth, boxHeight, new Color(64, 64, 64, 255));
+    /// <summary>
+    /// One combatant's plate: who, what level, and how they are doing.
+    /// <para>
+    /// Corner-mounted the way the games have always had it, because that is where a
+    /// player's eye already goes. What is new is that the level is a chip rather than a
+    /// word, and that the numbers only appear on your own — knowing the opponent's exact
+    /// health is not something the games give you and not something to invent.
+    /// </para>
+    /// </summary>
+    private void DrawPlate(BattlerView battler, string name, float shownHp, int x, int y, bool showHp)
+    {
+        const int width = 360;
+        int height = showHp ? 92 : 74;
 
-        Raylib.DrawText(name, boxX + 14, boxY + 10, 22, Color.Black);
-        Raylib.DrawText($"L{battler.Level}", boxX + boxWidth - 60, boxY + 10, 22, Color.Black);
+        var box = new Rectangle(x, y, width, height);
 
-        DrawHealthBar(battler, boxX + 14, boxY + 44, boxWidth - 28);
+        Skin.DrawPanel(box);
+
+        _font.DrawShadowed(name, x + 18, y + 16, 3, Skin.Ink, new Color(0, 0, 0, 120));
+
+        Skin.DrawChip(_font, $"Lv{battler.Level}", x + width - 78, y + 14, 2, Skin.PanelHigh);
+
+        float fraction = battler.MaxHp <= 0 ? 0 : Math.Max(0, shownHp) / battler.MaxHp;
+
+        _font.Draw("HP", x + 18, y + 44, 2, Skin.InkFaint);
+
+        Skin.DrawMeter(
+            new Rectangle(x + 48, y + 42, width - 66, 10),
+            fraction,
+            Skin.HealthColour(battler.CurrentHp, battler.MaxHp));
 
         if (showHp)
-            Raylib.DrawText($"{battler.CurrentHp}/{battler.MaxHp}", boxX + boxWidth - 110, boxY + 54, 16, Color.Black);
-    }
-
-    private static void DrawHealthBar(BattlerView battler, int x, int y, int width)
-    {
-        Raylib.DrawRectangle(x, y, width, 10, new Color(80, 80, 80, 255));
-
-        int filled = battler.MaxHp <= 0 ? 0 : width * battler.CurrentHp / battler.MaxHp;
-
-        // Green, amber, red — the same thresholds the games use, which is what makes a
-        // health bar readable at a glance rather than something to calculate.
-        double fraction = battler.MaxHp <= 0 ? 0 : (double)battler.CurrentHp / battler.MaxHp;
-
-        Color colour = fraction switch
         {
-            > 0.5 => new Color(88, 208, 88, 255),
-            > 0.2 => new Color(248, 208, 48, 255),
-            _ => new Color(232, 72, 72, 255),
-        };
+            _font.DrawRight(
+                $"{battler.CurrentHp}/{battler.MaxHp}", x + width - 18, y + 62, 2, Skin.InkDim);
+        }
 
-        Raylib.DrawRectangle(x, y, Math.Max(0, filled), 10, colour);
+        if (battler.Status != StatusCondition.None)
+            Skin.DrawChip(_font, ShortStatus(battler.Status), x + 18, y + height - 26, 2, Skin.HpFair);
     }
+
+    private static string ShortStatus(StatusCondition status) => status switch
+    {
+        StatusCondition.Poison => "PSN",
+        StatusCondition.Burn => "BRN",
+        StatusCondition.Paralysis => "PAR",
+        StatusCondition.Sleep => "SLP",
+        StatusCondition.Freeze => "FRZ",
+        _ => "",
+    };
 
     private void DrawMessageBox()
     {
         const int boxY = 470;
         const int boxHeight = 150;
 
-        Raylib.DrawRectangle(30, boxY, Width - 60, boxHeight, new Color(255, 255, 255, 240));
-        Raylib.DrawRectangleLines(30, boxY, Width - 60, boxHeight, new Color(64, 64, 64, 255));
+        var box = new Rectangle(24, boxY, Width - 48, boxHeight);
 
-        if (Phase == BattlePhase.ChoosingForget)
+        Skin.DrawPanel(box);
+
+        switch (Phase)
         {
-            DrawForgetMenu(boxY);
-            return;
+            case BattlePhase.ChoosingForget: DrawForgetMenu(boxY); return;
+            case BattlePhase.ChoosingWho: DrawPartyMenu(boxY); return;
+            case BattlePhase.ChoosingMove: DrawMoveMenu(boxY); return;
         }
 
-        if (Phase == BattlePhase.ChoosingWho)
-        {
-            DrawPartyMenu(boxY);
-            return;
-        }
-
-        if (Phase == BattlePhase.ChoosingMove)
-        {
-            DrawMoveMenu(boxY);
-            return;
-        }
-
-        Raylib.DrawText(_message, 52, boxY + 30, 24, Color.Black);
+        _font.Draw(_message, 48, boxY + 34, 3, Skin.Ink);
 
         string prompt = Phase switch
         {
-            BattlePhase.Finished => "Press Z to return",
-            BattlePhase.WaitingForServer => "...",
-            _ => "Press Z",
+            BattlePhase.Finished => "Z to return",
+            BattlePhase.WaitingForServer => "",
+            _ => "Z",
         };
 
-        Raylib.DrawText(prompt, Width - 220, boxY + boxHeight - 34, 18, new Color(120, 120, 120, 255));
+        // The blinking marker the games put in the corner of a full box. It is the only
+        // thing on screen that says the game is waiting for a person rather than for a
+        // server, and without it the two look identical.
+        if (prompt.Length > 0 && _blink % 1.0f < 0.6f)
+        {
+            _font.DrawRight(prompt, Width - 64, boxY + boxHeight - 34, 2, Skin.InkDim);
+
+            Raylib.DrawTriangle(
+                new System.Numerics.Vector2(Width - 52, boxY + boxHeight - 32),
+                new System.Numerics.Vector2(Width - 40, boxY + boxHeight - 32),
+                new System.Numerics.Vector2(Width - 46, boxY + boxHeight - 24),
+                Skin.Accent);
+        }
+    }
+
+    /// <summary>The four already known, and the option of keeping all of them.</summary>
+    private void DrawForgetMenu(int boxY)
+    {
+        string coming = _offered.Count > 0 ? MoveNamed(_offered.Peek()) : "?";
+
+        _font.Draw($"Forget which, to learn {coming}?", 48, boxY + 18, 2, Skin.InkDim);
+
+        for (int i = 0; i <= _moveNames.Count; i++)
+        {
+            int y = boxY + 44 + i * 22;
+            bool selected = i == _selectedForget || (i == _moveNames.Count && _selectedForget >= _moveNames.Count);
+
+            if (selected) Skin.DrawSelection(new Rectangle(36, y - 5, Width - 72, 22));
+
+            string label = i < _moveNames.Count ? _moveNames[i] : $"Keep all four - do not learn {coming}";
+
+            _font.Draw(label, 56, y, 2, i < _moveNames.Count ? Skin.Ink : Skin.InkDim);
+        }
     }
 
     /// <summary>
@@ -694,104 +786,135 @@ public sealed class BattleScreen
     /// a fight's worth of decompression at the moment a player is deciding something.
     /// </para>
     /// </summary>
-    /// <summary>The four already known, and the option of keeping all of them.</summary>
-    private void DrawForgetMenu(int boxY)
-    {
-        string coming = _offered.Count > 0 ? MoveNamed(_offered.Peek()) : "?";
-
-        Raylib.DrawText($"Forget which, to learn {coming}?", 52, boxY + 14, 20, new Color(96, 96, 96, 255));
-
-        for (int i = 0; i < _moveNames.Count; i++)
-        {
-            int y = boxY + 44 + i * 22;
-
-            if (i == _selectedForget) Raylib.DrawText(">", 52, y, 20, Color.Black);
-
-            Raylib.DrawText(_moveNames[i], 76, y, 20, Color.Black);
-        }
-
-        int keep = boxY + 44 + _moveNames.Count * 22;
-
-        if (_selectedForget >= _moveNames.Count) Raylib.DrawText(">", 52, keep, 20, Color.Black);
-
-        Raylib.DrawText($"Keep all four — don't learn {coming}", 76, keep, 20, new Color(120, 120, 140, 255));
-    }
-
     private void DrawPartyMenu(int boxY)
     {
-        Raylib.DrawText("Send out who?", 52, boxY + 18, 20, new Color(96, 96, 96, 255));
-        Raylib.DrawText("V or X: back", Width - 400, boxY + 18, 20, new Color(96, 96, 96, 255));
+        _font.Draw("Send out who?", 48, boxY + 18, 2, Skin.InkDim);
+        _font.DrawRight("V or X: back", Width - 48, boxY + 18, 2, Skin.InkFaint);
 
         for (int i = 0; i < Party.Count; i++)
         {
             SavedMon member = Party[i];
-            int y = boxY + 48 + i * 24;
+
+            int y = boxY + 46 + i * 22;
             bool selected = i == _selectedMon;
 
-            if (selected) Raylib.DrawText(">", 52, y, 20, Color.Black);
+            if (selected) Skin.DrawSelection(new Rectangle(36, y - 5, Width - 72, 22));
 
             // Out already, or unable — both drawn differently, because the difference is
             // the whole of what a player is looking at this list to find out.
             Color colour = member.CurrentHp <= 0
-                ? new Color(180, 120, 120, 255)
-                : i == Active ? new Color(150, 150, 150, 255) : Color.Black;
+                ? Skin.HpPoor
+                : i == Active ? Skin.InkFaint : Skin.Ink;
 
-            string name = member.Nickname ?? _data.SpeciesAt(member.Species)?.Name ?? $"species {member.Species}";
+            string name = GameText.ToAscii(
+                member.Nickname ?? _data.SpeciesAt(member.Species)?.Name ?? $"species {member.Species}");
 
-            Raylib.DrawText($"{name}", 76, y, 20, colour);
-            Raylib.DrawText($"L{member.Level}", 300, y, 20, colour);
+            _font.Draw(name, 56, y, 2, colour);
+            _font.Draw($"Lv{member.Level}", 260, y, 2, colour);
 
-            Raylib.DrawText(
+            if (member.CurrentHp > 0 && _data.SpeciesAt(member.Species) is not null)
+            {
+                Skin.DrawMeter(
+                    new Rectangle(340, y + 2, 120, 8),
+                    Fraction(member),
+                    Skin.HealthColour(member.CurrentHp, Math.Max(1, MaxHpOf(member))));
+            }
+
+            _font.Draw(
                 member.CurrentHp <= 0 ? "fainted" : $"{member.CurrentHp} HP",
-                380, y, 20, colour);
+                480, y, 2, colour);
 
-            if (i == Active) Raylib.DrawText("out", 500, y, 20, colour);
+            if (i == Active) Skin.DrawChip(_font, "OUT", 600, y - 3, 2, Skin.AccentDeep);
         }
     }
 
+    /// <summary>
+    /// How full a party member is, worked out the same way the server does it.
+    /// <para>
+    /// The client can rebuild a member's maximum health from base stats because it has
+    /// the cartridge; what it must not do is decide anything with it. This is a bar to
+    /// look at, not a number anybody acts on.
+    /// </para>
+    /// </summary>
+    private float Fraction(SavedMon member)
+    {
+        int max = MaxHpOf(member);
+
+        return max <= 0 ? 0 : Math.Clamp(member.CurrentHp / (float)max, 0f, 1f);
+    }
+
+    private int MaxHpOf(SavedMon member) =>
+        PartyBuilder.Restore(_data, member) is { } battler ? battler.MaxHp : member.CurrentHp;
+
     private void DrawMoveMenu(int boxY)
     {
-        Raylib.DrawText("Choose a move:", 52, boxY + 18, 20, new Color(96, 96, 96, 255));
+        // The actions along the top, as chips. A key nobody knows about is a feature
+        // nobody has, and a row of chips says what the keys are without a legend.
+        DrawActionChips(boxY);
 
-        // Advertised rather than left to be discovered. A key nobody knows about is a
-        // feature nobody has.
-        if (Party.Count > 1)
-        {
-            Raylib.DrawText(
-                "V: send out somebody else", Width - 400, boxY + 70, 20, new Color(96, 96, 96, 255));
-        }
-
-        string medicineLine = ChosenMedicine is { } potion
-            ? $"C: use {NameOf(potion.ItemId)} ({potion.Count})"
-            : "C: nothing to use";
-
-        Raylib.DrawText(medicineLine, Width - 400, boxY + 44, 20, ChosenMedicine is not null
-            ? new Color(96, 96, 96, 255)
-            : new Color(180, 120, 120, 255));
-
-        string ballLine = ChosenBall is { } ball
-            ? $"X: throw {NameOf(ball.ItemId)} ({ball.Count})" + (Balls.Count > 1 ? "  < >" : "")
-            : "X: no balls left";
-
-        Raylib.DrawText(
-            ballLine,
-            Width - 400, boxY + 18, 20,
-            ChosenBall is not null ? new Color(96, 96, 96, 255) : new Color(180, 120, 120, 255));
-
+        // Two by two, the way the games lay it out, in the left half.
         for (int i = 0; i < _moveNames.Count; i++)
         {
-            int y = boxY + 48 + i * 26;
+            int column = i % 2;
+            int row = i / 2;
+
+            var cell = new Rectangle(40 + column * 240, boxY + 48 + row * 38, 232, 32);
+
             bool selected = i == _selectedMove;
 
-            if (selected) Raylib.DrawText(">", 52, y, 22, Color.Black);
+            if (selected) Skin.DrawSelection(cell);
 
-            Raylib.DrawText(
-                _moveNames[i],
-                76, y, 22,
-                selected ? Color.Black : new Color(110, 110, 110, 255));
+            _font.Draw(_moveNames[i], cell.X + 14, cell.Y + 8, 3, selected ? Skin.Ink : Skin.InkDim);
+        }
 
-            if (_data.MoveAt(_you.Moves[i]) is { } move)
-                Raylib.DrawText($"{move.Type}", 300, y + 3, 18, new Color(140, 140, 140, 255));
+        // And what the highlighted one is, on the right: the modern half of this screen.
+        if (_selectedMove < _you.Moves.Count && _data.MoveAt(_you.Moves[_selectedMove]) is { } move)
+        {
+            int right = Width - 290;
+
+            Skin.DrawChip(_font, move.Type.ToString().ToUpperInvariant(), right, boxY + 48, 2, Skin.TypeColour(move.Type));
+
+            _font.Draw(
+                move.Power > 0 ? $"POWER {move.Power}" : "STATUS",
+                right, boxY + 80, 2, Skin.InkDim);
+
+            _font.Draw($"PP {move.Pp}", right, boxY + 104, 2, Skin.InkDim);
+        }
+    }
+
+    /// <summary>
+    /// The other things a turn can be spent on, as a row of chips.
+    /// <para>
+    /// A key nobody knows about is a feature nobody has. The old games put these in a
+    /// second menu — FIGHT, BAG, POKeMON, RUN — and a second menu is a keypress before
+    /// every keypress; a row that says what the keys are costs nothing and is always
+    /// visible.
+    /// </para>
+    /// </summary>
+    private void DrawActionChips(int boxY)
+    {
+        string ball = ChosenBall is { } b
+            ? $"X {GameText.ToAscii(NameOf(b.ItemId))} x{b.Count}" + (Balls.Count > 1 ? "  < >" : "")
+            : "X NO BALLS";
+
+        string medicine = ChosenMedicine is { } potion
+            ? $"C {GameText.ToAscii(NameOf(potion.ItemId))} x{potion.Count}"
+            : "C NOTHING TO USE";
+
+        int x = 44;
+        int y = boxY + 14;
+
+        Skin.DrawChip(_font, ball, x, y, 2, ChosenBall is not null ? Skin.PanelHigh : Skin.PanelDeep);
+        x += Skin.ChipWidth(_font, ball, 2) + 12;
+
+        Skin.DrawChip(_font, medicine, x, y, 2, ChosenMedicine is not null ? Skin.PanelHigh : Skin.PanelDeep);
+
+        if (Party.Count > 1)
+        {
+            const string switching = "V SEND OUT SOMEBODY ELSE";
+
+            Skin.DrawChip(
+                _font, switching, Width - 68 - Skin.ChipWidth(_font, switching, 2), y, 2, Skin.PanelHigh);
         }
     }
 

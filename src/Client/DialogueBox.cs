@@ -23,6 +23,8 @@ public sealed class DialogueBox
 
     private int _page;
 
+    private float _blink;
+
     public DialogueBox(IEnumerable<string> pages, uint? resume = null, bool asks = false)
     {
         _pages = pages.Select(GameText.ToAscii).ToList();
@@ -126,43 +128,73 @@ public sealed class DialogueBox
         Raylib.IsKeyPressed(KeyboardKey.Space);
 
     /// <summary>Drawn over the map in screen space, after the camera has been ended.</summary>
+    /// <summary>
+    /// The box, and the question when there is one.
+    /// <para>
+    /// Across the bottom of the screen the way every one of these games has had it, with
+    /// the answer floating above the right-hand end. What is modern is that the choice is
+    /// a filled bar rather than a caret, and that the marker saying the box is waiting
+    /// blinks — before, it said "Z to close" in words, because the font had no arrow to
+    /// draw. It has one now.
+    /// </para>
+    /// </summary>
     public void Draw(int windowWidth, int windowHeight)
     {
         if (IsFinished) return;
 
+        PixelFont font = Skin.Font;
+
+        _blink += Raylib.GetFrameTime();
+
         int top = windowHeight - Height - Margin;
         int width = windowWidth - Margin * 2;
 
-        Raylib.DrawRectangle(Margin, top, width, Height, new Color(248, 248, 248, 255));
-        Raylib.DrawRectangleLines(Margin, top, width, Height, new Color(64, 64, 88, 255));
-        Raylib.DrawRectangleLines(Margin + 3, top + 3, width - 6, Height - 6, new Color(160, 160, 184, 255));
+        var box = new Rectangle(Margin, top, width, Height);
 
-        Raylib.DrawText(_pages[_page], Margin + 20, top + 20, TextSize, new Color(32, 32, 40, 255));
+        Skin.DrawPanel(box);
 
-        // A quiet reminder rather than the blinking arrow the games use. The default
-        // font is ASCII only, so it is words: without something here a player who has
-        // read the page has no idea the box is waiting for them.
+        // Two lines, split where the cartridge split them. Nothing is re-flowed: a page
+        // break is a control byte put there by somebody who wrote the line to fit.
+        string[] lines = _pages[_page].Split('\n');
+
+        for (int i = 0; i < lines.Length; i++)
+            font.Draw(lines[i], Margin + 24, top + 26 + i * 28, 3, Skin.Ink);
+
         if (IsQuestion && _page >= _pages.Count - 1)
         {
-            int box = 120;
-            int left = Margin + width - box - 16;
-            int top2 = top - 76;
-
-            Raylib.DrawRectangle(left, top2, box, 72, new Color(248, 248, 248, 255));
-            Raylib.DrawRectangleLines(left, top2, box, 72, new Color(64, 64, 88, 255));
-
-            Raylib.DrawText("YES", left + 40, top2 + 8, TextSize, new Color(32, 32, 40, 255));
-            Raylib.DrawText("NO", left + 40, top2 + 38, TextSize, new Color(32, 32, 40, 255));
-            Raylib.DrawText(">", left + 16, top2 + (Answer ? 8 : 38), TextSize, new Color(32, 32, 40, 255));
-
-            Raylib.DrawText("Z picks", Margin + width - 90, top + Height - 26, 16, new Color(120, 120, 140, 255));
-
+            DrawAnswer(font, Margin + width - 148, top - 88);
             return;
         }
 
-        string more = _page + 1 < _pages.Count ? $"more  ({_page + 1}/{_pages.Count})" : "Z to close";
-        int hintWidth = Raylib.MeasureText(more, 16);
+        string more = _page + 1 < _pages.Count ? $"{_page + 1}/{_pages.Count}" : "";
 
-        Raylib.DrawText(more, Margin + width - hintWidth - 16, top + Height - 26, 16, new Color(120, 120, 140, 255));
+        if (more.Length > 0)
+            font.DrawRight(more, Margin + width - 44, top + Height - 26, 2, Skin.InkFaint);
+
+        // The blinking marker, which is the only thing on screen that says the game is
+        // waiting for a person.
+        if (_blink % 1.0f < 0.6f)
+        {
+            Raylib.DrawTriangle(
+                new System.Numerics.Vector2(Margin + width - 34, top + Height - 26),
+                new System.Numerics.Vector2(Margin + width - 22, top + Height - 26),
+                new System.Numerics.Vector2(Margin + width - 28, top + Height - 16),
+                Skin.Accent);
+        }
     }
+
+    private void DrawAnswer(PixelFont font, int left, int top)
+    {
+        var box = new Rectangle(left, top, 132, 76);
+
+        Skin.DrawPanel(box);
+
+        var chosen = new Rectangle(left + 6, top + (Answer ? 10 : 40), 120, 26);
+
+        Skin.DrawSelection(chosen);
+
+        font.Draw("YES", left + 24, top + 18, 3, Answer ? Skin.Ink : Skin.InkDim);
+        font.Draw("NO", left + 24, top + 48, 3, Answer ? Skin.InkDim : Skin.Ink);
+    }
+
 }
