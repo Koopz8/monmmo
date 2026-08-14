@@ -200,6 +200,7 @@ public static class Program
         if (options.Machines) WriteMachineCompatibility(rom);
         if (options.Computers) WriteComputers(rom);
         if (options.Letters) WriteLetterHunt(rom);
+        if (options.Clears is { } askedAbout) WriteFlagClearers(rom, askedAbout);
 
         if (options.BytesAfter is { } after) WriteBytesAfter(rom, after);
 
@@ -5040,6 +5041,70 @@ public static class Program
         }
     }
 
+    /// <summary>
+    /// Who turns a flag on, and who turns it off.
+    /// <para>
+    /// The reach report says what is behind somebody who is not there yet. This says
+    /// what would put them there, which is the next question in every case.
+    /// </para>
+    /// </summary>
+    private static void WriteFlagClearers(Rom rom, int flag)
+    {
+        Console.WriteLine();
+        Console.WriteLine($"Flag 0x{flag:X4}");
+
+        List<FlagChange> changes = FlagClearers.Find(rom, flag);
+
+        if (changes.Count == 0)
+        {
+            Console.WriteLine("  nothing on this image sets or clears it");
+            return;
+        }
+
+        var library = MapLibrary.Open(rom);
+        List<LoadedMap> maps = [.. library.All()];
+
+        foreach (FlagChange change in changes)
+        {
+            Console.WriteLine();
+            Console.WriteLine(
+                $"  {(change.Sets ? "set" : "cleared")} at 0x{change.At:X8}" +
+                (change.ScriptStart == 0
+                    ? " — nothing points anywhere near it"
+                    : $", in the script beginning 0x{change.ScriptStart:X8}"));
+
+            if (change.ScriptStart == 0) continue;
+
+            // Who runs it, if anybody does. A script nobody's record points at is
+            // reached some other way, and which other way is the useful half.
+            var owned = false;
+
+            foreach (LoadedMap map in maps)
+            {
+                foreach (MapObject person in map.Objects)
+                {
+                    if (person.ScriptAddress != change.ScriptStart) continue;
+
+                    owned = true;
+
+                    Console.WriteLine(
+                        $"    run by {map.Bank}.{map.Number} {map.Name} object {person.LocalId} " +
+                        $"at ({person.X}, {person.Y})");
+                }
+            }
+
+            if (!owned)
+            {
+                Console.WriteLine(
+                    change.InsideAFight
+                        ? "    nobody's record points at it, and a trainerbattle stands in front of the " +
+                          "change — so it is in the script a won fight leads to, which this reader does " +
+                          "not follow"
+                        : "    nobody's record points at it");
+            }
+        }
+    }
+
     private static void WriteAfterFights(Rom rom)
     {
         Console.WriteLine();
@@ -6554,6 +6619,8 @@ public static class Program
                                      machine, and the evidence separating it
               --letters              hunt for the cartridge's own lettering four ways,
                                      and report where it is not
+              --clears <flag>        who turns a flag on and who turns it off, e.g.
+                                     --clears 0x0035
               --script-map <b.m>     dump every script on one map, decoded and as bytes
               --export-rules <path>  write the rules file the server resolves battles
                                      against: base stats, move power, catch rates and
@@ -6701,6 +6768,8 @@ public static class Program
 
         public bool Letters { get; private init; }
 
+        public int? Clears { get; private init; }
+
         /// <summary>Print what follows one unknown command, everywhere it appears.</summary>
         public byte? BytesAfter { get; private init; }
 
@@ -6783,6 +6852,7 @@ public static class Program
             bool machines = false;
             bool computers = false;
             bool letters = false;
+            int? clears = null;
             byte? bytesAfter = null;
             bool glyphs = false;
             uint font = 0;
@@ -6990,6 +7060,12 @@ public static class Program
                     case "--letters":
                         letters = true;
                         break;
+                    case "--clears":
+                        string flagAsked = Next(args, ref i, "--clears");
+                        clears = flagAsked.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+                            ? Convert.ToInt32(flagAsked[2..], 16)
+                            : int.Parse(flagAsked);
+                        break;
                     case "--bytes-after":
                         string which = Next(args, ref i, "--bytes-after");
                         bytesAfter = Convert.ToByte(
@@ -7132,6 +7208,7 @@ public static class Program
                 Machines = machines,
                 Computers = computers,
                 Letters = letters,
+                Clears = clears,
                 BytesAfter = bytesAfter,
                 Glyphs = glyphs,
                 Font = font,
