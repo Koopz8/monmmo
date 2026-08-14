@@ -79,7 +79,13 @@ public sealed class Bag
     /// sell you two, not refuse five and not silently swallow three.
     /// </para>
     /// </summary>
-    public int Add(int itemId, int count = 1)
+    /// <param name="most">
+    /// The most of this one the bag may hold. One for a key item, which is how these
+    /// games have it — you cannot carry two S.S. TICKETs, and a script that hands one
+    /// over twice should leave you with one. The bag does not know which items those
+    /// are; whoever has the rules does.
+    /// </param>
+    public int Add(int itemId, int count = 1, int most = MaxStack)
     {
         if (itemId <= 0 || count <= 0) return 0;
 
@@ -87,7 +93,7 @@ public sealed class Bag
 
         if (held == 0 && _order.Count >= PocketCapacity) return 0;
 
-        int taken = Math.Min(count, MaxStack - held);
+        int taken = Math.Min(count, Math.Min(most, MaxStack) - held);
         if (taken <= 0) return 0;
 
         if (held == 0) _order.Add(itemId);

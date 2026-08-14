@@ -714,6 +714,23 @@ public sealed class GameWorld
         !(mapId == player.MapId && player.Shifted.Contains(who)) &&
         !(mapId == player.MapId && !player.Seeing.Contains(who) && HiddenOn(mapId, who));
 
+    /// <summary>
+    /// Puts something in a bag, holding key items to one.
+    /// <para>
+    /// Everything that hands anything over goes through here, because "how many of this
+    /// may I have" is a rule and the bag does not hold the rules. The S.S. ANNE's
+    /// CAPTAIN is what made it worth centralising: talk to him twice quickly enough and
+    /// the flag saying he has already thanked you has not come back from the client yet,
+    /// so the game handed over two HM01s — and two HM01s is not a thing.
+    /// </para>
+    /// </summary>
+    private int Give(ServerPlayer player, int itemId, int count)
+    {
+        bool key = _rules?.ItemAt(itemId)?.IsKeyItem == true;
+
+        return player.Bag.Add(itemId, count, key ? 1 : Bag.MaxStack);
+    }
+
     /// <summary>Whether an object on a map is one of the six hundred that can be hidden.</summary>
     private bool HiddenOn(string mapId, int localId) =>
         (_populated.TryGetValue(mapId, out MapPopulation? people)
@@ -1028,7 +1045,7 @@ public sealed class GameWorld
                 {
                     int count = Math.Max(1, person.Template.GivesCount);
 
-                    player.Bag.Add(person.Template.GivesItemId, count);
+                    Give(player, person.Template.GivesItemId, count);
 
                     gift = $"item {person.Template.GivesItemId} x{count} off the ground";
 
@@ -2521,7 +2538,7 @@ public sealed class GameWorld
 
         int count = Math.Max(1, entry.GivesCount);
 
-        player.Bag.Add(entry.GivesItemId, count);
+        Give(player, entry.GivesItemId, count);
 
         LastGift = $"item {entry.GivesItemId} x{count} for arriving";
 
@@ -2592,7 +2609,7 @@ public sealed class GameWorld
                 return [];
             }
 
-            player.Bag.Add(itemId, 1);
+            Give(player, itemId, 1);
 
             LastGift = $"item {itemId} from object {localId}";
 
@@ -2820,7 +2837,7 @@ public sealed class GameWorld
 
                 int count = Math.Max(1, line.Number(1) ?? 1);
 
-                player.Bag.Add(itemId, count);
+                Give(player, itemId, count);
 
                 return [Said(player, $"item {itemId} x{count}"), .. Resend(player)];
             }
@@ -3301,7 +3318,7 @@ public sealed class GameWorld
 
         int count = Math.Max(1, leader.WinsCount);
 
-        player.Bag.Add(leader.WinsItemId, count);
+        Give(player, leader.WinsItemId, count);
 
         LastPrize = $"item {leader.WinsItemId} x{count} for beating trainer {trainerId}";
 

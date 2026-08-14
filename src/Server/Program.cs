@@ -659,6 +659,10 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
             int playerId = 0;
             long accountId = 0;
 
+            // When this character was last written down, so that a run of anything does
+            // not rewrite the same row several times a second.
+            double lastSaved = double.NegativeInfinity;
+
             try
             {
                 while (await channel.ReceiveAsync(cancellationToken).ConfigureAwait(false) is { } message)
@@ -972,6 +976,33 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                                 .SendAsync(new Rejected("Log in first."), cancellationToken)
                                 .ConfigureAwait(false);
                             break;
+                    }
+
+                    // Written down here as well as after a battle, because everything
+                    // else that lasts happens somewhere in that switch: an item handed
+                    // over, a flag a script set, a move taught, money spent. The S.S.
+                    // TICKET is the case that made this obvious — it is given by a
+                    // conversation, and a server that stopped before the next battle
+                    // handed it over for nothing.
+                    //
+                    // Movement is left out on purpose. It is by far the commonest thing
+                    // a client says and much the cheapest to lose: somebody who comes
+                    // back where they last did something has lost a walk, not a ticket.
+                    if (playerId != 0 && message is not MoveRequest && Now - lastSaved > 1.0
+                        && world.Snapshot(playerId) is { } sinceThen)
+                    {
+                        lastSaved = Now;
+
+                        try
+                        {
+                            await store.SaveAsync(accountId, sinceThen, cancellationToken).ConfigureAwait(false);
+                        }
+                        catch (Exception ex)
+                        {
+                            // Best effort, and said out loud. A save that fails quietly
+                            // is one that looks like it worked until somebody logs in.
+                            Console.Error.WriteLine($"! could not save #{playerId}: {ex.Message}");
+                        }
                     }
                 }
             }

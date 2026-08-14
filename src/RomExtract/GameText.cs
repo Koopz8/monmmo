@@ -58,8 +58,55 @@ public static class GameText
     /// <summary>Wait for a button, then scroll up a line and carry on.</summary>
     public const byte Scroll = 0xFA;
 
-    /// <summary>Wait for a button without clearing anything.</summary>
-    public const byte Prompt = 0xFC;
+    /// <summary>
+    /// The introducer for a formatting command, and what it introduces is an argument
+    /// list whose length depends on the command.
+    /// <para>
+    /// It was called Prompt here and skipped as a single byte, which is how the sailor
+    /// on the VERMILION dock came to say "{06}{04}Sorry!" — the two bytes after it are
+    /// its arguments and were being read as letters. Fifteen of the 2230 pages the map
+    /// scripts name carry one, which is few enough to have gone unnoticed for fifty
+    /// milestones and quite enough to be on the critical path: two of the fifteen are
+    /// the gangway to the S.S. ANNE.
+    /// </para>
+    /// <para>
+    /// The lengths are read off the sites rather than remembered. Every one of them
+    /// leaves clean text at exactly one width:
+    /// </para>
+    /// <code>
+    ///   FC 06 02 | {FD}{01} flashed the S.S. TICKET!     one argument
+    ///   FC 06 04 | Great! Welcome to the S.S. ANNE!      one argument
+    ///   FC 08 60 | ...                                   one argument
+    ///   FC 0B 56 01 | FF                                 two, and the page ends
+    ///   FC 17 | FC 0B 01 01 | FC 08 60 | FC 18 | FB      none, and none
+    /// </code>
+    /// <para>
+    /// The last of those is the one that settles it: four of these run back to back, so
+    /// any width that is wrong for one of them derails the next, and only this reading
+    /// arrives at the "Okay, then." that follows.
+    /// </para>
+    /// </summary>
+    public const byte Format = 0xFC;
+
+    /// <summary>
+    /// How many bytes each formatting command takes after its own number.
+    /// <para>
+    /// What they mean is not needed and not claimed: they change colour, timing and
+    /// sound, none of which this client does mid-line. What is needed is their length,
+    /// because the alternative to knowing it is printing it.
+    /// </para>
+    /// <para>
+    /// A command not in this table takes one, which is the commonest length here and the
+    /// one that fails most gently — a page with an unknown code in it loses a byte
+    /// rather than a sentence.
+    /// </para>
+    /// </summary>
+    public static int FormatArguments(byte command) => command switch
+    {
+        0x0B => 2,
+        0x17 or 0x18 => 0,
+        _ => 1,
+    };
 
     /// <summary>
     /// Decodes a run of dialogue, which is not the same job as decoding a name.
@@ -97,11 +144,18 @@ public static class GameText
                 // not something this can express — both end the page.
                 case Paragraph:
                 case Scroll:
-                    pages.Add(page.ToString().TrimEnd());
+                    // An empty page is not a page. They appear where a line begins with
+                    // nothing but formatting — the trainer at the door of the S.S. ANNE
+                    // starts with four commands and a page break — and handing one to a
+                    // text box gives the player an empty box to press through.
+                    if (page.ToString().TrimEnd() is { Length: > 0 } said) pages.Add(said);
+
                     page.Clear();
                     break;
 
-                case Prompt:
+                // The formatting command and its arguments, stepped over together.
+                case Format:
+                    i += 1 + (i + 1 < bytes.Length ? FormatArguments(bytes[i + 1]) : 0);
                     break;
 
                 default:
@@ -145,7 +199,17 @@ public static class GameText
             byte b = bytes[i];
             if (b == Terminator) break;
 
-            if (b is NewLine or Paragraph or Scroll or Prompt) continue;
+            if (b is NewLine or Paragraph or Scroll) continue;
+
+            if (b == Format)
+            {
+                // Stepped over here too, and for a sharper reason than tidiness: this is
+                // what decides whether a pointer leads to text at all, and counting a
+                // command's arguments as letters is counting nonsense against a page
+                // that is perfectly good.
+                i += 1 + (i + 1 < bytes.Length ? FormatArguments(bytes[i + 1]) : 0);
+                continue;
+            }
 
             char decoded = DecodeByte(b);
 

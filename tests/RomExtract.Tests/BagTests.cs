@@ -729,3 +729,43 @@ public class TeachingTests
         Assert.False(reloaded.ItemAt(TestRules.PotionItem)!.CanTeach);
     }
 }
+
+/// <summary>
+/// Key items, of which there is only ever one.
+/// <para>
+/// Written after the S.S. ANNE handed over two HM01s: talk to the CAPTAIN twice before
+/// the flag saying he has already thanked you comes back, and both runs give. The flag
+/// race is worth fixing on its own, and it is not what this is. Two HM01s is not a
+/// thing these games can express, so it is the bag that says no.
+/// </para>
+/// </summary>
+public class KeyItemTests
+{
+    [Fact]
+    public void ABagHoldsOneOfSomethingCappedAtOne()
+    {
+        var bag = new Bag();
+
+        Assert.Equal(1, bag.Add(TestRules.BallItem, 1, most: 1));
+        Assert.Equal(0, bag.Add(TestRules.BallItem, 1, most: 1));
+        Assert.Equal(1, bag.CountOf(TestRules.BallItem));
+    }
+
+    [Fact]
+    public void AskingForFiveOfThemGetsOne()
+    {
+        var bag = new Bag();
+
+        Assert.Equal(1, bag.Add(TestRules.BallItem, 5, most: 1));
+        Assert.Equal(1, bag.CountOf(TestRules.BallItem));
+    }
+
+    [Fact]
+    public void EverythingElseStacksAsBefore()
+    {
+        var bag = new Bag();
+
+        Assert.Equal(5, bag.Add(TestRules.BallItem, 5));
+        Assert.Equal(5, bag.CountOf(TestRules.BallItem));
+    }
+}

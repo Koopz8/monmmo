@@ -1605,3 +1605,90 @@ public class TheMachineTests
         Assert.Equal(ScriptCommands.LoadPointer, commands[printing - 1].Code);
     }
 }
+
+/// <summary>
+/// The formatting commands inside a page of text.
+/// <para>
+/// 0xFC was read as a single byte that means "wait", and it is an introducer: what
+/// follows it is a command number and that command's arguments. Read the old way, the
+/// arguments are printed as letters — which is how the sailor guarding the gangway to
+/// the S.S. ANNE came to say "{06}{04}Sorry!" to anybody without a ticket.
+/// </para>
+/// </summary>
+public class TextFormattingTests
+{
+    private static readonly byte[] Hello = [0xC1, 0xE6, 0xD9, 0xD5, 0xE8, 0xAB];  // "Great!"
+
+    private static byte[] Page(params byte[][] parts) =>
+        [.. parts.SelectMany(p => p), GameText.Terminator];
+
+    [Fact]
+    public void ACommandAndItsArgumentAreBothSteppedOver()
+    {
+        // FC 06 04, which is what stands in front of "Great! Welcome to the S.S. ANNE!"
+        List<string> pages = GameText.DecodeDialogue(Page([GameText.Format, 0x06, 0x04], Hello));
+
+        Assert.Equal(["Great!"], pages);
+    }
+
+    [Fact]
+    public void ACommandWithTwoArgumentsTakesBoth()
+    {
+        List<string> pages = GameText.DecodeDialogue(Page([GameText.Format, 0x0B, 0x56, 0x01], Hello));
+
+        Assert.Equal(["Great!"], pages);
+    }
+
+    [Fact]
+    public void ACommandWithNoArgumentsTakesNone()
+    {
+        List<string> pages = GameText.DecodeDialogue(Page([GameText.Format, 0x18], Hello));
+
+        Assert.Equal(["Great!"], pages);
+    }
+
+    [Fact]
+    public void FourOfThemInARowStillArriveAtTheWords()
+    {
+        // Byte for byte from 0x081A5877, which is the site that settles the lengths: any
+        // width that is wrong for one of these derails the next three.
+        List<string> pages = GameText.DecodeDialogue(Page(
+            [GameText.Format, 0x17],
+            [GameText.Format, 0x0B, 0x01, 0x01],
+            [GameText.Format, 0x08, 0x60],
+            [GameText.Format, 0x18],
+            Hello));
+
+        Assert.Equal(["Great!"], pages);
+    }
+
+    [Fact]
+    public void APageOfNothingButFormattingIsNotAPage()
+    {
+        // Otherwise the player presses through an empty box to get to the words.
+        List<string> pages = GameText.DecodeDialogue(Page(
+            [GameText.Format, 0x17],
+            [GameText.Paragraph],
+            Hello));
+
+        Assert.Equal(["Great!"], pages);
+    }
+
+    [Fact]
+    public void AnUnknownCommandCostsAByteRatherThanASentence()
+    {
+        // The commonest length, chosen because it fails most gently.
+        List<string> pages = GameText.DecodeDialogue(Page([GameText.Format, 0x7F, 0x00], Hello));
+
+        Assert.Equal(["Great!"], pages);
+    }
+
+    [Fact]
+    public void TextWithACommandInItStillReadsAsText()
+    {
+        // The other half, and the sharper one: this is what decides whether a pointer
+        // leads to words at all, and counting a command's arguments as nonsense would
+        // argue a perfectly good page out of being text.
+        Assert.True(GameText.LooksLikeDialogue(Page([GameText.Format, 0x06, 0x02], Hello)));
+    }
+}
