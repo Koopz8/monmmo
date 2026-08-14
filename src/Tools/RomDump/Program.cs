@@ -186,6 +186,10 @@ public static class Program
 
         if (options.Derive) WriteDerivedLengths(rom);
 
+        if (options.Opcodes) WriteOpcodeCounts(rom);
+
+        if (options.Audit) WriteWidthAudit(rom);
+
         if (options.BytesAfter is { } after) WriteBytesAfter(rom, after);
 
         if (options.Glyphs) WriteGlyphCandidates(rom, options.OutputDirectory);
@@ -4639,23 +4643,42 @@ public static class Program
         // of the whole image for a byte would mostly find that byte inside an argument.
         var sites = new Dictionary<byte, List<int>>();
 
+        // Every script on every map, and everything reachable from each of them.
+        //
+        // This used to run each person's script on a fresh save and record where that
+        // one run stopped, which is two mistakes at once. It saw only the people, so the
+        // signs — added late, scenery for most of this project — were invisible; and it
+        // saw only the path today's flags choose, so anything behind a condition was
+        // invisible too. The command blocking the machine in BILL's cottage is both: a
+        // sign, behind a flag. It had exactly one site to be scored on, and one site
+        // decides nothing.
         foreach (LoadedMap map in library.All())
         {
-            foreach (MapObject person in map.Objects.Where(o => o.HasScript))
+            IEnumerable<uint> starts =
+            [
+                .. map.Objects.Where(o => o.HasScript).Select(o => o.ScriptAddress),
+                .. map.Signs.Where(s => s.HasScript).Select(s => s.ScriptAddress),
+                .. map.Triggers.Where(t => t.HasScript).Select(t => t.ScriptAddress),
+                .. map.OnEntry.Where(e => e.HasScript).Select(e => e.ScriptAddress),
+            ];
+
+            foreach (uint start in starts)
             {
-                ScriptRun run = ScriptRunner.Run(rom, person.ScriptAddress);
+                foreach (uint reachable in ScriptReader.Reachable(rom, start))
+                {
+                    if (ScriptReader.StoppedAt(rom, reachable) is not { } code) continue;
+                    if (ScriptReader.StoppedAtOffset(rom, reachable) is not { } at) continue;
 
-                if (run.StoppedAt is not { } code || run.StoppedAtOffset is not { } at) continue;
+                    if (!sites.TryGetValue(code, out List<int>? where)) sites[code] = where = [];
 
-                if (!sites.TryGetValue(code, out List<int>? where)) sites[code] = where = [];
-
-                if (where.Count < sitesPer && !where.Contains(at)) where.Add(at);
+                    if (where.Count < sitesPer && !where.Contains(at)) where.Add(at);
+                }
             }
         }
 
         foreach ((byte code, List<int> where) in sites.OrderByDescending(e => e.Value.Count))
         {
-            var scores = new List<(int Width, double Clean, double Pointers, double Depth)>();
+            var scores = new List<(int Width, double Clean, double Pointers, double Depth, double Speech, bool Ruled)>();
 
             for (int width = 0; width <= maxWidth; width++)
             {
@@ -4666,17 +4689,31 @@ public static class Program
                 int depth = 0;
                 int carries = 0;
 
+                int spoke = 0;
+                int named = 0;
+
+                bool ruled = false;
+
                 foreach (int at in where)
                 {
+                    // Ruled out rather than scored down. These two are not preferences
+                    // between widths; they are a width caught taking something that
+                    // belongs to the script, and one site is enough to catch it.
+                    if (LosesAPage(rom, at + 1 + width)) ruled = true;
+                    if (EatsInstructions(rom, at + 1, width)) ruled = true;
+
                     if (CarriesAPointer(rom, at + 1, width)) carries++;
 
-                    (bool ended, int good, int total, int read) = ReadsOn(rom, at + 1 + width);
+                    (bool ended, int good, int total, int read, int speech, int said) =
+                        ReadsOn(rom, at + 1 + width);
 
                     if (ended) clean++;
 
                     pointers += good;
                     landed += total;
                     depth += read;
+                    spoke += speech;
+                    named += said;
                 }
 
                 // No pointers at all is not evidence of anything, and scoring it as
@@ -4686,7 +4723,9 @@ public static class Program
                     width,
                     clean / (double)where.Count,
                     landed == 0 ? 0 : pointers / (double)landed,
-                    carries / (double)where.Count));
+                    carries / (double)where.Count,
+                    named == 0 ? 0 : spoke / (double)named,
+                    ruled));
             }
 
             // Scored on what the argument holds, not on what follows it. What follows
@@ -4699,35 +4738,164 @@ public static class Program
             // sites is the bar: below that it is a coincidence being promoted over a
             // real signal, which is how 0x51 was briefly declared eight bytes wide on
             // the strength of three sites out of twenty-one.
-            double top = scores.Max(s => s.Depth) >= 0.5 ? scores.Max(s => s.Depth) : 0;
+            // Ruled out first, and separately from everything else. A width caught
+            // eating instructions or losing a page is not a worse answer than the
+            // others — it is not an answer, and letting it compete on the scores is how
+            // a width that reads beautifully and prints nothing gets adopted.
+            List<(int Width, double Clean, double Pointers, double Depth, double Speech, bool Ruled)> standing =
+                [.. scores.Where(s => !s.Ruled)];
+
+            if (standing.Count == 0) standing = scores;
+
+            double top = standing.Max(s => s.Depth) >= 0.5 ? standing.Max(s => s.Depth) : 0;
+
+            // The second-sharpest test, and the one that settles the commands whose
+            // neighbours are speech rather than jumps. A width that resumed inside an
+            // argument makes the next loadpointer or message name an address, and an
+            // address that is not a page of text does not read as one — the same
+            // recognisability the extractor uses to find seven thousand pages of
+            // dialogue, aimed at one word. It only gets to speak when the pointer test
+            // has said nothing, and only when it is unanimous across the sites.
+            double spoken = top > 0 || standing.Max(s => s.Speech) < 1 ? 0 : standing.Max(s => s.Speech);
 
             // Everything close to the top, not just the top. A single arrow claims more
             // than this evidence supports, and claiming more than the evidence supports
             // is the specific mistake this whole method exists to avoid.
-            int[] shortlist = top <= 0
-                ? [.. scores.Where(s => s.Clean + s.Pointers >= scores.Max(x => x.Clean + x.Pointers) - 0.1).Select(s => s.Width)]
-                : [.. scores.Where(s => s.Depth >= top - 0.05).Select(s => s.Width)];
+            int[] shortlist = top > 0
+                ? [.. standing.Where(s => s.Depth >= top - 0.05).Select(s => s.Width)]
+                : spoken > 0
+                    ? [.. standing
+                        .Where(s => s.Speech >= spoken)
+                        // Tied on text, separated by whether the read gets anywhere. A
+                        // continuation test cannot be trusted on its own — that is why
+                        // it comes last — but between two widths that have already
+                        // survived everything else, "reads to an end at every site" and
+                        // "reads to an end at a third of them" is not a close call.
+                        .Where(s => s.Clean >= standing.Where(x => x.Speech >= spoken).Max(x => x.Clean) - 0.05)
+                        .Select(s => s.Width)]
+                    : [.. standing.Where(s => s.Clean + s.Pointers >= standing.Max(x => x.Clean + x.Pointers) - 0.1).Select(s => s.Width)];
 
             Console.WriteLine();
-            Console.WriteLine($"  0x{code:X2}  stops {where.Count} people");
+            Console.WriteLine($"  0x{code:X2}  stops {where.Count} scripts");
 
-            foreach ((int width, double cleanly, double pointing, double deep) in scores)
+            foreach ((int width, double cleanly, double pointing, double deep, double speech, bool ruled) in scores)
             {
-                string mark = top > 0 && shortlist.Contains(width) ? " <-" : "";
+                string mark = ruled
+                    ? "  ruled out: it eats instructions or loses a page"
+                    : (top > 0 || spoken > 0) && shortlist.Contains(width) ? " <-" : "";
 
                 Console.WriteLine(
                     $"      {width} bytes:  {deep,5:P0} carry a real pointer, " +
-                    $"{cleanly,5:P0} read on to an end, {pointing,5:P0} of those pointers land{mark}");
+                    $"{cleanly,5:P0} read on to an end, {pointing,5:P0} of those pointers land, " +
+                    $"{speech,5:P0} of the text they name reads as speech{mark}");
             }
 
             Console.WriteLine(
-                top <= 0
-                    ? "      -> undecided. No width ends on a real pointer, and the continuation " +
-                      "test is not to be trusted alone: read the bytes"
-                    : shortlist.Length == 1
+                top > 0
+                    ? shortlist.Length == 1
                         ? $"      -> {shortlist[0]} bytes, ending on a pointer that lands on something real"
-                        : $"      -> {string.Join(" or ", shortlist)} bytes, equally");
+                        : $"      -> {string.Join(" or ", shortlist)} bytes, equally"
+                    : spoken > 0
+                        ? shortlist.Length == 1
+                            ? $"      -> {shortlist[0]} bytes, the one left once the text it names and where it reads on are both counted"
+                            : $"      -> {string.Join(" or ", shortlist)} bytes, all of whose text reads as text"
+                        : "      -> undecided. No width ends on a real pointer, and the continuation " +
+                          "test is not to be trusted alone: read the bytes");
         }
+    }
+
+    /// <summary>
+    /// True when the bytes a width swallows are themselves whole instructions.
+    /// <para>
+    /// A width that is too long does not merely take extra bytes: it takes the commands
+    /// that were standing there. This asks the question directly — decode the swallowed
+    /// bytes as a script and see whether they end exactly where the width does, with at
+    /// least one command that carries arguments of its own.
+    /// </para>
+    /// <para>
+    /// The "carries arguments" part matters. A run of nothing but 0x00 decodes as a run
+    /// of nops and always will, so a width that swallows a single zero byte cannot be
+    /// told apart from one that reads it as an argument — and, since a nop does nothing,
+    /// nothing downstream can tell them apart either.
+    /// </para>
+    /// </summary>
+    private static bool EatsInstructions(Rom rom, int from, int width)
+    {
+        if (width == 0) return false;
+
+        int offset = from;
+        bool carried = false;
+
+        while (offset < from + width)
+        {
+            if (offset + 1 >= rom.Length) return false;
+
+            byte code = rom.ReadU8(offset);
+
+            if (ScriptCommands.ArgumentLength(code, rom.ReadU8(offset + 1)) is not { } length)
+                return false;
+
+            // Cut in half rather than swallowed whole, which is the same crime and
+            // shows up differently. Only counted when the thing being cut is provably
+            // an instruction and not a coincidence: a page pointer that lands on text.
+            // Anything looser would reject correct widths, because the argument bytes
+            // of a real command decode as commands as readily as anything else does.
+            if (offset + 1 + length > from + width
+                && code is ScriptCommands.LoadPointer or ScriptCommands.Message
+                && offset + 1 + length <= rom.Length)
+            {
+                var straddling = new ScriptCommand(offset, code, rom.Slice(offset + 1, length).ToArray());
+
+                uint page = code == ScriptCommands.LoadPointer ? straddling.Pointer(1) : straddling.Pointer();
+
+                if (rom.ToOffsetOrNull(page) is { } at && GameText.LooksLikeDialogue(rom.Span[at..])) return true;
+            }
+
+            if (length > 0) carried = true;
+
+            offset += 1 + length;
+        }
+
+        return carried && offset == from + width;
+    }
+
+    /// <summary>
+    /// True when reading on from here meets a standard routine that prints a page
+    /// before anything has loaded one.
+    /// <para>
+    /// The sharpest single test in this whole method, and the only one with a count
+    /// behind it rather than a judgement: of the 1202 calls to standard routine 4 in
+    /// every script this cartridge's maps can reach, 1202 have a page loaded first.
+    /// Zero do not. A width that leaves one standing alone has swallowed the loadpointer
+    /// it needed, and what it swallowed is the words.
+    /// </para>
+    /// </summary>
+    private static bool LosesAPage(Rom rom, int from, int maxCommands = 12)
+    {
+        int offset = from;
+
+        for (int i = 0; i < maxCommands; i++)
+        {
+            if (offset < 0 || offset + 1 >= rom.Length) return false;
+
+            byte code = rom.ReadU8(offset);
+            byte first = rom.ReadU8(offset + 1);
+
+            if (ScriptCommands.ArgumentLength(code, first) is not { } length) return false;
+
+            if (code == ScriptCommands.LoadPointer) return false;
+
+            // The routines that print. Standard 1 is not one of them — it is called
+            // without a page 168 times out of 168, which is how it can be told apart
+            // from the ones that are.
+            if (code == ScriptCommands.CallStandard && first is 2 or 3 or 4 or 5 or 6 or 9) return true;
+
+            offset += 1 + length;
+
+            if (code is ScriptCommands.End or ScriptCommands.Return or ScriptCommands.Goto) return false;
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -4777,23 +4945,25 @@ public static class Program
     /// both across every site is not a coincidence.
     /// </para>
     /// </summary>
-    private static (bool Ended, int GoodPointers, int TotalPointers, int Read) ReadsOn(
+    private static (bool Ended, int GoodPointers, int TotalPointers, int Read, int GoodText, int TotalText) ReadsOn(
         Rom rom, int from, int maxCommands = 12)
     {
         int offset = from;
         int good = 0;
         int total = 0;
         int read = 0;
+        int speech = 0;
+        int said = 0;
 
         for (int i = 0; i < maxCommands; i++)
         {
-            if (offset < 0 || offset + 1 >= rom.Length) return (false, good, total, read);
+            if (offset < 0 || offset + 1 >= rom.Length) return (false, good, total, read, speech, said);
 
             byte code = rom.ReadU8(offset);
             byte first = rom.ReadU8(offset + 1);
 
-            if (ScriptCommands.ArgumentLength(code, first) is not { } length) return (false, good, total, read);
-            if (offset + 1 + length > rom.Length) return (false, good, total, read);
+            if (ScriptCommands.ArgumentLength(code, first) is not { } length) return (false, good, total, read, speech, said);
+            if (offset + 1 + length > rom.Length) return (false, good, total, read, speech, said);
 
             read++;
 
@@ -4824,13 +4994,35 @@ public static class Program
                 }
             }
 
+            // The other kind of pointer these scripts carry, and the one that decides
+            // this case: text. A width that resumed inside an argument makes the next
+            // loadpointer or message name an address that is not speech, and speech is
+            // recognisable — that is the same test the extractor uses to find dialogue
+            // in the first place, pointed at one address instead of sixteen megabytes.
+            uint words = code switch
+            {
+                ScriptCommands.LoadPointer => new ScriptCommand(
+                    offset, code, rom.Slice(offset + 1, length).ToArray()).Pointer(1),
+                ScriptCommands.Message => new ScriptCommand(
+                    offset, code, rom.Slice(offset + 1, length).ToArray()).Pointer(),
+                _ => 0,
+            };
+
+            if (words != 0)
+            {
+                said++;
+
+                if (rom.ToOffsetOrNull(words) is { } page && GameText.LooksLikeDialogue(rom.Span[page..]))
+                    speech++;
+            }
+
             offset += 1 + length;
 
             if (code is ScriptCommands.End or ScriptCommands.Return or ScriptCommands.Goto)
-                return (true, good, total, read);
+                return (true, good, total, read, speech, said);
         }
 
-        return (false, good, total, read);
+        return (false, good, total, read, speech, said);
     }
 
     /// <summary>
@@ -4842,6 +5034,291 @@ public static class Program
     /// up as a column rather than as a hunch.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// How often each byte value actually begins a command, counted over every script
+    /// this cartridge's maps can reach.
+    /// <para>
+    /// Built because two commands tied on every other test. A candidate width is a claim
+    /// about where the next command starts, and that claim can be checked against what
+    /// commands actually start with — a width that resumes on a byte no script in the
+    /// whole game ever starts a command with is resuming inside an argument, whatever
+    /// else it scores.
+    /// </para>
+    /// <para>
+    /// Counted at real boundaries, which is the same lesson as the warp command: the
+    /// same byte counted anywhere it appears is mostly argument, and a histogram of
+    /// arguments answers a different question than the one being asked.
+    /// </para>
+    /// </summary>
+    private static int[] OpcodeCounts(Rom rom)
+    {
+        var counts = new int[256];
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        var seen = new HashSet<uint>();
+
+        foreach (LoadedMap map in library.All())
+        {
+            IEnumerable<uint> starts =
+            [
+                .. map.Objects.Where(o => o.HasScript).Select(o => o.ScriptAddress),
+                .. map.Signs.Where(s => s.HasScript).Select(s => s.ScriptAddress),
+                .. map.Triggers.Where(t => t.HasScript).Select(t => t.ScriptAddress),
+                .. map.OnEntry.Where(e => e.HasScript).Select(e => e.ScriptAddress),
+            ];
+
+            foreach (uint start in starts)
+            {
+                foreach (uint reachable in ScriptReader.Reachable(rom, start))
+                {
+                    // Once each. A script every door on a route points at would
+                    // otherwise vote as many times as it has doors.
+                    if (!seen.Add(reachable)) continue;
+
+                    foreach (ScriptCommand command in ScriptReader.Read(rom, reachable))
+                        counts[command.Code]++;
+                }
+            }
+        }
+
+        return counts;
+    }
+
+    /// <summary>
+    /// How often a call to a standard routine has a page loaded immediately before it.
+    /// <para>
+    /// Counted rather than assumed, because it is about to be used as evidence.
+    /// </para>
+    /// </summary>
+    private static (int Loaded, int Alone) LoadedBeforeCallStandard(Rom rom)
+    {
+        int loaded = 0;
+        int alone = 0;
+
+        var byNumber = new SortedDictionary<byte, (int Loaded, int Alone)>();
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        var seen = new HashSet<uint>();
+
+        foreach (LoadedMap map in library.All())
+        {
+            IEnumerable<uint> starts =
+            [
+                .. map.Objects.Where(o => o.HasScript).Select(o => o.ScriptAddress),
+                .. map.Signs.Where(s => s.HasScript).Select(s => s.ScriptAddress),
+                .. map.Triggers.Where(t => t.HasScript).Select(t => t.ScriptAddress),
+                .. map.OnEntry.Where(e => e.HasScript).Select(e => e.ScriptAddress),
+            ];
+
+            foreach (uint start in starts)
+            {
+                foreach (uint reachable in ScriptReader.Reachable(rom, start))
+                {
+                    if (!seen.Add(reachable)) continue;
+
+                    List<ScriptCommand> commands = ScriptReader.Read(rom, reachable);
+
+                    for (int i = 0; i < commands.Count; i++)
+                    {
+                        if (commands[i].Code != ScriptCommands.CallStandard) continue;
+
+                        // Anywhere earlier in the same straight-line run, not merely
+                        // immediately before: the commonest shape puts the gaps to fill
+                        // in between, as BILL's does when he hands over the ticket.
+                        bool has = commands.Take(i).Any(c => c.Code == ScriptCommands.LoadPointer);
+
+                        byte which = commands[i].Arguments.Length > 0 ? commands[i].Arguments[0] : (byte)0xFF;
+
+                        byNumber.TryGetValue(which, out (int Loaded, int Alone) tally);
+                        byNumber[which] = has ? (tally.Loaded + 1, tally.Alone) : (tally.Loaded, tally.Alone + 1);
+
+                        if (has) loaded++;
+                        else alone++;
+                    }
+                }
+            }
+        }
+
+        foreach ((byte which, (int with, int without)) in byNumber)
+        {
+            Console.WriteLine(
+                $"    callstd {which,3}: {with,5} with a page, {without,5} without " +
+                $"({with / (double)Math.Max(1, with + without),6:P1})");
+        }
+
+        return (loaded, alone);
+    }
+
+    /// <summary>
+    /// Points the rejection tests at the widths this reader already believes.
+    /// <para>
+    /// Every width in the table was decided on the evidence available at the time, and
+    /// two of them were decided twice. A test sharp enough to rule a width out is sharp
+    /// enough to be aimed at the answers already given — and a width that was right on
+    /// one script and wrong on the cartridge is exactly the failure this project cannot
+    /// see from the inside, because a wrong width does not fail. It reads on, and the
+    /// script quietly contains less.
+    /// </para>
+    /// <para>
+    /// Reported, never applied. Nothing here changes a number.
+    /// </para>
+    /// </summary>
+    private static void WriteWidthAudit(Rom rom, int maxWidth = 8)
+    {
+        Console.WriteLine();
+        Console.WriteLine("Widths already in the table, scored again at every site they are read at");
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        var sites = new Dictionary<byte, List<int>>();
+        var seen = new HashSet<uint>();
+
+        foreach (LoadedMap map in library.All())
+        {
+            IEnumerable<uint> starts =
+            [
+                .. map.Objects.Where(o => o.HasScript).Select(o => o.ScriptAddress),
+                .. map.Signs.Where(s => s.HasScript).Select(s => s.ScriptAddress),
+                .. map.Triggers.Where(t => t.HasScript).Select(t => t.ScriptAddress),
+                .. map.OnEntry.Where(e => e.HasScript).Select(e => e.ScriptAddress),
+            ];
+
+            foreach (uint start in starts)
+            {
+                foreach (uint reachable in ScriptReader.Reachable(rom, start))
+                {
+                    if (!seen.Add(reachable)) continue;
+
+                    foreach (ScriptCommand command in ScriptReader.Read(rom, reachable))
+                    {
+                        if (ScriptCommands.ArgumentLength(command.Code, 0) is not { } declared) continue;
+                        if (declared == 0) continue;
+
+                        if (!sites.TryGetValue(command.Code, out List<int>? where)) sites[command.Code] = where = [];
+
+                        if (!where.Contains(command.Offset)) where.Add(command.Offset);
+                    }
+                }
+            }
+        }
+
+        int clean = 0;
+
+        foreach ((byte code, List<int> where) in sites.OrderByDescending(e => e.Value.Count))
+        {
+            if (ScriptCommands.ArgumentLength(code, 0) is not { } declared) continue;
+
+            // Caught taking something, and left standing in the road for it. Either
+            // test alone is far too eager to be worth printing: the argument bytes of a
+            // perfectly ordinary loadpointer decode as instructions, so "eats
+            // instructions" fires at 2519 of loadpointer's 2520 sites and means nothing
+            // there. What means something is a width that eats an instruction AND then
+            // cannot read on, while some other width can — that is not an argument
+            // that happens to look like code, it is a boundary in the wrong place.
+            bool Suspect(int at) =>
+                (EatsInstructions(rom, at + 1, declared) || LosesAPage(rom, at + 1 + declared))
+                && !ReadsOn(rom, at + 1 + declared).Ended;
+
+            int caught = where.Count(Suspect);
+
+            if (caught == 0)
+            {
+                clean++;
+                continue;
+            }
+
+            int[] better =
+            [
+                .. Enumerable.Range(0, maxWidth + 1)
+                    .Where(w => w != declared)
+                    .Where(w => where.All(at =>
+                        !EatsInstructions(rom, at + 1, w)
+                        && !LosesAPage(rom, at + 1 + w)
+                        && ReadsOn(rom, at + 1 + w).Ended)),
+            ];
+
+            if (better.Length == 0)
+            {
+                clean++;
+                continue;
+            }
+
+            Console.WriteLine();
+            Console.WriteLine(
+                $"  0x{code:X2} is read as {declared} bytes and is caught at {caught} of {where.Count} sites");
+
+            Console.WriteLine($"      clean at every site: {string.Join(", ", better)} bytes");
+
+            foreach (int at in where.Where(Suspect).Take(3))
+            {
+                string hex = string.Join(
+                    " ", Enumerable.Range(0, 12).Select(i => $"{rom.ReadU8(at + i):X2}"));
+
+                Console.WriteLine($"        {Rom.BaseAddress + (uint)at:X8}  {hex}");
+            }
+        }
+
+        Console.WriteLine();
+        Console.WriteLine($"  {clean} widths are clean at every site they are read at");
+    }
+
+    private static void WriteOpcodeCounts(Rom rom)
+    {
+        int[] counts = OpcodeCounts(rom);
+        int total = counts.Sum();
+
+        Console.WriteLine();
+        Console.WriteLine($"What starts a command, over {total} commands in every script the maps reach");
+
+        foreach ((byte code, int count) in counts
+                     .Select((c, i) => ((byte)i, c))
+                     .Where(e => e.Item2 > 0)
+                     .OrderByDescending(e => e.Item2)
+                     .Take(24))
+        {
+            Console.WriteLine($"    0x{code:X2}  {count,6}  {count / (double)total,7:P2}  {ScriptCommands.NameOf(code)}");
+        }
+
+        // And the other end of the list, which is the end that decides things. A width
+        // is only ever wrong in the direction of resuming on a byte that starts almost
+        // nothing, so the rare ones are the ones worth naming.
+        Console.WriteLine();
+        Console.WriteLine("  The rarest, which are what a wrong width tends to resume on:");
+
+        foreach ((byte code, int count) in counts
+                     .Select((c, i) => ((byte)i, c))
+                     .Where(e => e.Item2 is > 0 and < 12)
+                     .OrderBy(e => e.Item2))
+        {
+            Console.WriteLine($"    0x{code:X2}  {count,6}  {count / (double)total,7:P3}  {ScriptCommands.NameOf(code)}");
+        }
+
+        // The habit that turns out to decide things: a standard routine that prints a
+        // page is always handed the page first. If that holds across the whole game
+        // then a candidate width which swallows the loadpointer and leaves the callstd
+        // standing alone is not reading a script, it is eating one — and what it eats
+        // is the words.
+        (int loaded, int alone) = LoadedBeforeCallStandard(rom);
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  callstd has a page loaded earlier in its run {loaded} times and none at all {alone} times " +
+            $"({loaded / (double)Math.Max(1, loaded + alone):P1} of the time)");
+
+        var never = counts
+            .Select((c, i) => ((byte)i, c))
+            .Where(e => e.Item2 == 0 && ScriptCommands.ArgumentLength(e.Item1, 0) is not null)
+            .Select(e => e.Item1)
+            .ToList();
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  {never.Count} commands this reader knows the width of never start one: " +
+            string.Join(" ", never.Select(c => $"0x{c:X2}")));
+    }
+
     private static void WriteBytesAfter(Rom rom, byte code, int width = 12)
     {
         Console.WriteLine();
@@ -5312,6 +5789,10 @@ public static class Program
         /// <summary>Score every argument width for the commands that stop a run.</summary>
         public bool Derive { get; private init; }
 
+        public bool Opcodes { get; private init; }
+
+        public bool Audit { get; private init; }
+
         /// <summary>Print what follows one unknown command, everywhere it appears.</summary>
         public byte? BytesAfter { get; private init; }
 
@@ -5385,6 +5866,8 @@ public static class Program
             bool shared = false;
             bool silent = false;
             bool derive = false;
+            bool opcodes = false;
+            bool audit = false;
             byte? bytesAfter = null;
             bool glyphs = false;
             uint font = 0;
@@ -5565,6 +6048,12 @@ public static class Program
                     case "--derive":
                         derive = true;
                         break;
+                    case "--opcodes":
+                        opcodes = true;
+                        break;
+                    case "--audit":
+                        audit = true;
+                        break;
                     case "--bytes-after":
                         string which = Next(args, ref i, "--bytes-after");
                         bytesAfter = Convert.ToByte(
@@ -5698,6 +6187,8 @@ public static class Program
                 Shared = shared,
                 Silent = silent,
                 Derive = derive,
+                Opcodes = opcodes,
+                Audit = audit,
                 BytesAfter = bytesAfter,
                 Glyphs = glyphs,
                 Font = font,

@@ -1518,3 +1518,90 @@ public class TheOpeningsPairTests
     }
 
 }
+
+/// <summary>
+/// The three commands standing between a player and the S.S. ANNE.
+/// <para>
+/// The machine in BILL's cottage is a sign, and its script is what sets the flag that
+/// makes him hand over the ticket. Every byte here is taken from a real image, at
+/// 0x081706FA and 0x08160C30, because the shapes are the evidence: what matters is not
+/// that these widths are in the table but that reading with them reaches the flag, and
+/// that reading with the old ones did not.
+/// </para>
+/// </summary>
+public class TheMachineTests
+{
+    private static List<ScriptCommand> Read(params byte[] script)
+    {
+        var image = new byte[0x400];
+
+        script.CopyTo(image, 0);
+
+        return ScriptReader.Read(new Rom(image), Rom.BaseAddress);
+    }
+
+    [Fact]
+    public void TheSeparatorReachesTheFlagItSets()
+    {
+        // 0x081706FA, up to the flag. Before 0x37 had a width the read stopped on the
+        // first byte, so the machine set nothing, so BILL never had anything to thank
+        // anybody for — and nothing about that failed. The sign just said its line.
+        List<ScriptCommand> commands = Read(
+            0x37, 0x00,                             // the unknown one, one byte wide
+            0x0F, 0x00, 0x2D, 0x04, 0x1A, 0x08,     // loadpointer
+            0x09, 0x04,                             // callstd 4
+            0x68,                                   // closemessage
+            0x2A, 0x02, 0x00,                       // clearflag 0x0002
+            0x29, 0x33, 0x02,                       // setflag 0x0233
+            ScriptCommands.End);
+
+        Assert.Equal(
+            new byte[] { 0x37, 0x0F, 0x09, 0x68, 0x2A, 0x29, ScriptCommands.End },
+            commands.Select(c => c.Code));
+
+        Assert.Equal(0x0233, commands[5].Word());
+    }
+
+    [Fact]
+    public void WaitingForASoundTakesNothingAndTheCommandAfterItIsReal()
+    {
+        // 0x08160C30. Read with five bytes here — which is what this project believed
+        // for two milestones — the whole of the next command is swallowed, and what
+        // follows is read from the middle of it.
+        List<ScriptCommand> commands = Read(
+            0x6A,                                   // lock
+            0x5A,                                   // faceplayer2
+            0x30,                                   // wait for the sound: nothing
+            0xA1, 0x28,                             // one byte, not five
+            0x00, 0x00, 0x00,                       // three nops the old width ate
+            0x0F, 0x00, 0x61, 0x3B, 0x17, 0x08,     // loadpointer
+            0x09, 0x04,                             // callstd 4
+            ScriptCommands.End);
+
+        Assert.Equal(
+            new byte[]
+            {
+                0x6A, 0x5A, 0x30, 0xA1, 0x00, 0x00, 0x00, 0x0F, 0x09, ScriptCommands.End,
+            },
+            commands.Select(c => c.Code));
+    }
+
+    [Fact]
+    public void APageIsAlwaysLoadedBeforeTheRoutineThatPrintsIt()
+    {
+        // The habit the widths above were decided against, stated as a rule so it is
+        // written down somewhere other than a comment: of the 1202 calls to standard
+        // routine 4 in every script this cartridge's maps can reach, 1202 have a page
+        // loaded first and none do not. A width that leaves one of these standing alone
+        // has eaten the words.
+        List<ScriptCommand> commands = Read(
+            0x0F, 0x00, 0x2D, 0x04, 0x1A, 0x08,
+            0x09, 0x04,
+            ScriptCommands.End);
+
+        int printing = commands.FindIndex(c => c.Code == ScriptCommands.CallStandard);
+
+        Assert.True(printing > 0);
+        Assert.Equal(ScriptCommands.LoadPointer, commands[printing - 1].Code);
+    }
+}

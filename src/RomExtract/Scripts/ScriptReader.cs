@@ -403,27 +403,45 @@ public static class ScriptCommands
         // sense together, which is exactly the entanglement that made the scoring tie.
         [0x51] = 2,
 
-        // Five, and this overturns a decision milestone 14 made deliberately.
+        // Nothing at all, and this is the second time this entry has been rewritten.
         //
-        // That round parked 0x30 because two readings of its bytes both reached the
-        // same next command, and refused to guess between them. Right call on the
-        // evidence it had, which was one script. Twenty-five sites side by side say
-        // something one site cannot:
+        // It was parked in milestone 14 with one script to go on, then set to five on
+        // twenty-five sites that all looked like this:
         //
         //   A1 28 00 00 00 | 0F 00 61 3B 17 08     loadpointer
         //   A1 43 00 00 00 | 0F 00 44 44 17 08     loadpointer
         //   A1 96 00 02 00 | 67 9F 7F 17 08        message
-        //   ... twenty more, every one the same shape
         //
-        // The fifth byte is zero at every site without exception. Read as four, that
-        // byte is a separate nop instruction — and it would be a nop sitting in front
-        // of twenty-two of twenty-five loadpointers, which is not something anything
-        // emits. A column that never changes is an argument.
+        // A column of 0xA1 with a zero at the end of it, twenty-five times: an argument
+        // if ever there was one. It is not one. Those twenty-five are one family out of
+        // two hundred sites, and the rest of the sites are not a column at all —
         //
-        // Read as five it is a byte and two words, and the words hold small sensible
-        // numbers. The first byte is usually 0xA1 and is not always, so it is an
-        // argument too rather than a second opcode.
-        [0x30] = 5,
+        //   30 | 2F 26 00 ...      playse            80 sites
+        //   30 | 4F FF 00 B7 ...   applymovement     43 sites
+        //   30 | 6B 02 ...         faceplayer, end   15 sites
+        //   30 | 0F 00 79 9E ...   loadpointer       12 sites
+        //   30 | 04 BC B6 16 08    call              15 sites
+        //   30 | 16 5C 40 01 00    setvar             2 sites
+        //
+        // — it is a catalogue of well-formed instructions, in roughly the proportions
+        // the whole cartridge uses them in. Arguments do not do that. The 0xA1 family
+        // was a real command being swallowed whole, and swallowing it is why 0xA1 was
+        // invisible: with five bytes here, 1574 of 1584 people read to a proper end;
+        // with none, 1543 do and 31 stop at 0xA1. That drop is the point. A read that
+        // ends properly because it ate the command that would have stopped it is the
+        // exact failure this reader exists to avoid, and it cost every one of those
+        // scripts whatever 0xA1 does.
+        [0x30] = 0,
+
+        // One, and it exists in this table at all because 0x30 stopped hiding it.
+        //
+        // Thirty-five sites the moment it became visible. Everything from two bytes up
+        // is ruled out for eating an instruction or leaving a standard routine to print
+        // a page nobody loaded; of the two left, one byte reads on to a proper end at
+        // all thirty-five sites and none reads on at only twelve. The byte it takes is
+        // not constant — 0x28, 0x43, 0x96, 0x20, 0x69 — which is what an argument looks
+        // like when it is a real one.
+        [0xA1] = 1,
 
         // Nothing at all, and it only became visible once 0x30 was five bytes wide —
         // the same twenty-four scripts moved from stopping at one to stopping at the
@@ -549,6 +567,26 @@ public static class ScriptCommands
         // Three. Bytes one and two are `01 00` at all four sites, and all four continue
         // into something known — waitstate twice, a compare, and a 0x4F.
         [0x33] = 3,
+
+        // One, and the two candidates left standing cannot be told apart by anything
+        // downstream — which is itself the finding, and the reason this is safe.
+        //
+        // Two sites, and the scorer ruled out every width from 2 to 8 on two counts a
+        // width cannot argue with. Five and seven swallow whole instructions; three and
+        // four cut a loadpointer in half, and the pointer they cut lands on a page of
+        // real text. Seven is the one worth naming: it reads on cleanly, it ends on
+        // something that looks like a pointer, and what it swallows is the loadpointer
+        // feeding the callstd immediately after it. Of the 1202 calls to standard
+        // routine 4 in every script the maps can reach, 1202 have a page loaded first.
+        // Zero do not. That width does not fail; it prints an empty box.
+        //
+        // What is left is 0 or 1, and the byte between is 0x00 at both sites — a nop
+        // read as an instruction, an argument read as a number. Nothing after it can
+        // tell the difference, because a nop does nothing. One is chosen over zero
+        // because it is the safer of two answers that agree here: if some site elsewhere
+        // ever holds a non-zero byte there, reading it as an argument is right and
+        // reading it as an instruction is a command invented out of a number.
+        [0x37] = 1,
 
         // Two. Three sites, and every one continues into the same pair:
         //
