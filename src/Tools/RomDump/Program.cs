@@ -163,6 +163,7 @@ public static class Program
         if (options.FifthMove) WriteFifthMove(rom);
         if (options.Water) WriteWater(rom);
         if (options.Doors2) WriteDoors(rom);
+        if (options.WarpShape) WriteWarpShape(rom);
         if (!string.IsNullOrEmpty(options.WaterMap)) WriteWaterMap(rom, options.WaterMap);
 
         if (options.RivalFights) WriteRivalFights(rom);
@@ -681,6 +682,102 @@ public static class Program
     /// the windows of a POKeMON CENTER.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Whether a command byte is the one that moves a player to another map.
+    /// <para>
+    /// Asked because the Cable Club above every POKeMON CENTER turned out to be entered
+    /// by talking to somebody rather than by walking through a door, and because 0x39 sits
+    /// in this project's width table at one byte — a width that was never derived, and a
+    /// wrong width does not fail, it makes a script read cleanly and quietly contain less.
+    /// </para>
+    /// <para>
+    /// The test needs no guessing. A warp's arguments are a bank, a map, a warp id and a
+    /// square, and a bank and map either name a map this cartridge has or they do not. A
+    /// candidate whose sites overwhelmingly name real maps at squares inside them is the
+    /// warp; a candidate that lands on real maps a third of the time is arithmetic on
+    /// noise.
+    /// </para>
+    /// </summary>
+    private static void WriteWarpShape(Rom rom)
+    {
+        Core.World.WorldData world = WorldExporter.Export(rom);
+        MapLibrary library = MapLibrary.Open(rom);
+
+        var byId = world.Maps.ToDictionary(m => m.Id);
+
+        // Every script this project can find, read as raw bytes rather than as commands:
+        // the point is to test a width, so nothing may depend on the widths being right.
+        var addresses = new HashSet<uint>();
+
+        foreach (LoadedMap map in library.All())
+        {
+            foreach (uint at in map.Objects.Where(o => o.HasScript).Select(o => o.ScriptAddress)) addresses.Add(at);
+            foreach (uint at in map.Triggers.Where(t => t.HasScript).Select(t => t.ScriptAddress)) addresses.Add(at);
+            foreach (uint at in map.OnEntry.Where(e => e.HasScript).Select(e => e.ScriptAddress)) addresses.Add(at);
+        }
+
+        // Counted at real command boundaries rather than anywhere the byte appears.
+        // A byte inside a pointer is not a command, and a scan that counts it is a scan
+        // measuring the cartridge's spare zeroes.
+        var sites = new Dictionary<byte, int>();
+        var realMap = new Dictionary<byte, int>();
+        var inside = new Dictionary<byte, int>();
+        var examples = new Dictionary<byte, List<string>>();
+
+        foreach (uint address in addresses)
+        {
+            foreach (ScriptCommand command in ScriptReader.ReadAll(rom, address))
+            {
+                int at = command.Offset;
+
+                if (at + 8 >= rom.Length) continue;
+
+                byte code = command.Code;
+
+                sites[code] = sites.GetValueOrDefault(code) + 1;
+
+                int bank = rom.Span[at + 1];
+                int number = rom.Span[at + 2];
+                int x = rom.Span[at + 4] | (rom.Span[at + 5] << 8);
+                int y = rom.Span[at + 6] | (rom.Span[at + 7] << 8);
+
+                if (!byId.TryGetValue($"{bank}.{number}", out Core.World.MapData? target)) continue;
+
+                realMap[code] = realMap.GetValueOrDefault(code) + 1;
+
+                if (x >= target.Width || y >= target.Height) continue;
+
+                inside[code] = inside.GetValueOrDefault(code) + 1;
+
+                List<string> seen = examples.TryGetValue(code, out List<string>? had) ? had : examples[code] = [];
+
+                if (seen.Count < 3) seen.Add($"-> {target.Id} {target.Name} at ({x}, {y})");
+            }
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("Which command byte moves somebody to another map");
+        Console.WriteLine();
+        Console.WriteLine("  Read as bank, map, warp id, x, y — the shape a warp has. A byte whose");
+        Console.WriteLine("  sites almost all name a map this cartridge has, at a square inside it,");
+        Console.WriteLine("  is not doing that by chance.");
+        Console.WriteLine();
+        Console.WriteLine("  byte  sites   names a map   inside it");
+
+        foreach ((byte code, int count) in sites
+                     .Where(e => e.Value >= 8)
+                     .OrderByDescending(e => inside.GetValueOrDefault(e.Key) / (double)e.Value)
+                     .Take(8))
+        {
+            Console.WriteLine(
+                $"  0x{code:X2}  {count,5}   {realMap.GetValueOrDefault(code),5} " +
+                $"({(count == 0 ? 0 : 100 * realMap.GetValueOrDefault(code) / count),3}%)   " +
+                $"{inside.GetValueOrDefault(code),5} ({(count == 0 ? 0 : 100 * inside.GetValueOrDefault(code) / count),3}%)");
+
+            foreach (string one in examples.GetValueOrDefault(code, [])) Console.WriteLine($"          {one}");
+        }
+    }
+
     private static void WriteDoors(Rom rom)
     {
         Core.World.WorldData world = WorldExporter.Export(rom);
@@ -5135,6 +5232,8 @@ public static class Program
 
         public bool Doors2 { get; private init; }
 
+        public bool WarpShape { get; private init; }
+
         public string WaterMap { get; private init; } = "";
 
         /// <summary>Which trainers are fought by a script that names the rival.</summary>
@@ -5222,6 +5321,7 @@ public static class Program
             bool challenges = false;
             bool water = false;
             bool doors2 = false;
+            bool warpShape = false;
             string waterMap = "";
             bool rivalFights = false;
             bool specials = false;
@@ -5349,6 +5449,10 @@ public static class Program
                         break;
                     case "--water-map":
                         waterMap = Next(args, ref i, "--water-map");
+                        break;
+
+                    case "--warp-shape":
+                        warpShape = true;
                         break;
 
                     case "--two-way":
@@ -5530,6 +5634,7 @@ public static class Program
                 Challenges = challenges,
                 Water = water,
                 Doors2 = doors2,
+                WarpShape = warpShape,
                 WaterMap = waterMap,
                 RivalFights = rivalFights,
                 Specials = specials,

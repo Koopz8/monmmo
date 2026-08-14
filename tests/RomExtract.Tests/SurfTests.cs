@@ -302,3 +302,60 @@ public class ReturnDoorTests
         Assert.Empty(reach.Beyond);
     }
 }
+
+/// <summary>
+/// The rooms whose people are held quiet.
+/// <para>
+/// The trade and battle rooms are told apart by a property of their own data rather
+/// than by a list somebody has to keep: every exit they have leads back the way you
+/// came. Being quiet is a decision rather than a discovery, and it is enforced on both
+/// sides — a client that ran their scripts anyway would open a box the server has
+/// refused to hold anybody for.
+/// </para>
+/// </summary>
+public class QuietRoomTests
+{
+    private static MapData Room(params Warp[] warps) =>
+        new("0.1", "THE CABLE CLUB", 4, 4, new byte[16]) { Warps = warps };
+
+    private static Warp Back(int x, int y) => new(x, y, Warp.Dynamic, $"{Warp.Dynamic}.{Warp.Dynamic}");
+
+    [Fact]
+    public void ARoomWhoseEveryExitLeadsBackIsHeldQuiet()
+    {
+        Assert.True(Room(Back(1, 3), Back(2, 3)).PeopleAreSilent);
+    }
+
+    [Fact]
+    public void AnOrdinaryRoomIsNot()
+    {
+        Assert.False(Room(Back(1, 3), new Warp(2, 3, 0, "3.19")).PeopleAreSilent);
+        Assert.False(Room(new Warp(2, 3, 0, "3.19")).PeopleAreSilent);
+    }
+
+    [Fact]
+    public void AMapWithNoExitsAtAllIsNotOneOfThem()
+    {
+        // Otherwise every unfinished corner of a world file would go silent, which is a
+        // rule that fires on the absence of data rather than on the presence of it.
+        Assert.False(Room().PeopleAreSilent);
+    }
+
+    [Fact]
+    public void NobodyInOneIsHeldStillToBeSpokenTo()
+    {
+        var person = new MapObject(1, 5, 1, 1, Direction.Down, 0, IsTrainer: false, ScriptAddress: 0x0810_0000);
+
+        MapData room = Room(Back(1, 3)) with { Objects = [person] };
+
+        var world = new GameWorld(new WorldData([room]), "0.1", TestRules.All);
+
+        (ServerPlayer player, _) = world.Join(1, "Mason", world.FreshCharacter());
+
+        player.Square = new GridPosition(1, 2);
+        player.Facing = Direction.Up;
+
+        Assert.Empty(world.StartTalking(player.Id, 1));
+        Assert.Contains("held quiet", world.LastTalkOutcome ?? "");
+    }
+}

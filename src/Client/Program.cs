@@ -882,6 +882,14 @@ public static class Program
             return Read(data, view, player, network, script, party);
         }
 
+        // Except in the rooms that are held quiet, where nobody is spoken to at all.
+        // Nothing is sent, because there is nothing for the far end to arbitrate.
+        if (view.Map.PeopleAreSilent)
+        {
+            Note($"object {person.LocalId} is in a room whose people are held quiet");
+            return null;
+        }
+
         // Sent whether or not there is anything to read, because what happens next is
         // not this side's decision. Somebody who wants a fight starts one here, and
         // gating the message on finding dialogue would mean a trainer with nothing to

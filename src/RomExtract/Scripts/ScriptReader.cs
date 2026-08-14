@@ -245,7 +245,20 @@ public static class ScriptCommands
         // text box in this game, and it sits immediately after the handover at every gift
         // site. Whatever it is called, it is the game about to say which one you got.
         [0x7D] = 3,
-        [0x39] = 1,
+        // Seven — a bank, a map, a warp id and a square — and this is the command that
+        // moves somebody to another map. It sat here at one byte for forty milestones,
+        // a width nobody had derived, and a wrong width does not fail: it makes every
+        // script containing a warp read cleanly and quietly contain less.
+        //
+        // Derived by shape rather than by name. A bank and a map either name a map this
+        // cartridge has or they do not, and a square is either inside that map or it is
+        // not. Read that way at real command boundaries, 0x39 names a real map at a
+        // square inside it at 19 of 19 sites. The next best byte on this cartridge
+        // manages five per cent.
+        //
+        //   39 | 01 57 | 00 | 1B 00 | 15 00   -> 1.87 SEAFOAM ISLANDS at (27, 21)
+        //   39 | 08 02 | 00 | 04 00 | 07 00   -> 8.2  LAVENDER TOWN   at (4, 7)
+        [0x39] = 7,
         [0x3A] = 0,
         // Eight bytes — four words — and the cleanest column this project has seen. The
         // command sits in a packed run of itself, so the evidence is that the byte eight

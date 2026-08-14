@@ -22,6 +22,17 @@ public sealed record LoadedMap(
     /// </summary>
     public byte[] Behaviours { get; init; } = [];
 
+    /// <summary>
+    /// True when everybody on this map is deliberately quiet.
+    /// <para>
+    /// The client's half of the rule, derived from the same fact the server derives it
+    /// from: every exit this map has leads back the way you came. A rule enforced on one
+    /// side of the split needs its counterpart on the other, and a client that ran their
+    /// scripts anyway would open a box the server has refused to hold anybody for.
+    /// </para>
+    /// </summary>
+    public bool PeopleAreSilent => Warps.Count > 0 && Warps.All(w => w.IsDynamic);
+
     /// <summary>True when this square is water.</summary>
     public bool IsWater(GridPosition square)
     {

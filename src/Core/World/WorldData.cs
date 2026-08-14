@@ -129,6 +129,26 @@ public sealed record MapData(string Id, string Name, int Width, int Height, byte
         }
     }
 
+    /// <summary>
+    /// True when everybody on this map is deliberately quiet.
+    /// <para>
+    /// The trade and battle rooms — the CABLE CLUB above every POKeMON CENTER and the
+    /// rooms beside it. They are told apart by a property of their own data rather than
+    /// by a list somebody has to keep: every exit they have leads back the way you came,
+    /// because a room reached from twelve places cannot write down which one it came
+    /// from. Nothing else in the world is shaped like that except the lifts, which have
+    /// nobody standing in them.
+    /// </para>
+    /// <para>
+    /// Quiet on purpose, and this is a decision rather than a discovery: what those
+    /// rooms are for is two players meeting, and there is no point giving their
+    /// attendants lines until there is something on the other side of the counter. So
+    /// they stand there and say nothing, on both sides of the split, and the day they
+    /// have a job this is the one line to delete.
+    /// </para>
+    /// </summary>
+    public bool PeopleAreSilent => Warps.Count > 0 && Warps.All(w => w.IsDynamic);
+
     /// <summary>True when this square is water.</summary>
     public bool IsWater(GridPosition square)
     {

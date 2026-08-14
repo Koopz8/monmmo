@@ -864,6 +864,15 @@ public sealed class GameWorld
                 return [];
             }
 
+            // Nobody in the trade rooms is spoken to. Enforced here as well as on the
+            // client, because a rule on one side of the split needs its counterpart on
+            // the other and this one is the side that decides.
+            if (_world.Find(player.MapId) is { PeopleAreSilent: true })
+            {
+                LastTalkOutcome = $"object {localId} is in a room whose people are held quiet";
+                return [];
+            }
+
             // Somebody who wants a fight still has to be allowed to finish talking.
             //
             // The fight used to start here, and the note above this line used to say
