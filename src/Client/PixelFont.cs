@@ -82,6 +82,22 @@ public sealed class PixelFont
     public int Height(int scale) => GlyphHeight * scale;
 
     /// <summary>
+    /// A line broken to fit a width, at spaces.
+    /// <para>
+    /// Every glyph here is the same width, so this is arithmetic rather than
+    /// measurement. A word longer than the whole box is left on its own line and allowed
+    /// to run over, because the alternative is breaking a name in half, and a name is
+    /// the one thing on this screen a player has to be able to read.
+    /// </para>
+    /// </summary>
+    public List<string> Wrap(string text, int scale, int maxWidth)
+    {
+        // The width of a line of n characters is n * Advance * scale - scale, since the
+        // last one carries no gap after it. Turned round, that is how many fit.
+        return PokeMmo.Core.Text.Lines.Wrap(text, (maxWidth + scale) / (Advance * scale));
+    }
+
+    /// <summary>
     /// Draws a line.
     /// <para>
     /// Anything with no glyph is drawn as nothing rather than as a box: a missing letter

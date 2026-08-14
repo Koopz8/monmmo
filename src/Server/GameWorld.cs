@@ -2903,13 +2903,22 @@ public sealed class GameWorld
     /// exactly one creature ever fought; a party with two of the same species in it
     /// would have written one's health onto the other.
     /// </para>
+    /// <para>
+    /// The party is searched from the top every time, skipping only whoever is out. It
+    /// used to be searched from the slot after the one who fainted, which reads like the
+    /// right thing — the opponent's team is fought in order — and is not: a player picks
+    /// who fights, so the one who faints can be anywhere. Fainting with the last of six
+    /// ended the battle as a loss with five healthy creatures in the bag.
+    /// </para>
     /// </summary>
-    private (int Slot, Battler Battler)? LeadBattler(ServerPlayer player, int after = -1)
+    private (int Slot, Battler Battler)? LeadBattler(ServerPlayer player, int except = -1)
     {
         if (_battles is null) return null;
 
-        for (int slot = after + 1; slot < player.Party.Count; slot++)
+        for (int slot = 0; slot < player.Party.Count; slot++)
         {
+            if (slot == except) continue;
+
             if (_battles.Restore(player.Party[slot]) is { } battler && !battler.HasFainted)
                 return (slot, battler);
         }

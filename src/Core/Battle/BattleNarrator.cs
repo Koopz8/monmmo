@@ -98,6 +98,14 @@ public static class BattleNarrator
 
         BattleEvent.Recovered e => $"{names.Of(e.Side)} regained {e.Amount} health.",
 
+        BattleEvent.Confused e => $"{names.Of(e.Side)} became confused!",
+
+        BattleEvent.SnappedOut e => $"{names.Of(e.Side)} snapped out of confusion!",
+
+        // Said without naming the move, because there is no move: a confused creature
+        // hits itself, and printing one would be printing something that did not happen.
+        BattleEvent.HurtItself e => $"{names.Of(e.Side)} hurt itself in its confusion!",
+
         BattleEvent.Fainted e => $"{names.Of(e.Side)} fainted!",
 
         // The amount, not the item's number: a Potion used on somebody two health short

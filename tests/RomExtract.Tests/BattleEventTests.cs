@@ -67,6 +67,50 @@ public class BattleEventShapeTests
         Assert.All(actionTypes, t => Assert.Contains(t, declared));
     }
 
+    [Fact]
+    public void EveryEventTypeHasSomethingToSay()
+    {
+        // The narrator ends in a wildcard that returns an empty string, so an event with
+        // no line of its own does not throw and does not fail anything — it arrives at
+        // the client and nothing appears. That is the shape of failure this whole
+        // milestone was about, and it is worth one check that fires on the absence.
+        //
+        // Built by reflection rather than by a hand-written list, because a hand-written
+        // list is a thing somebody has to remember to add to, and the event they forget
+        // is exactly the one that goes quiet.
+        var names = new BattleNames("BULBASAUR", "the wild PIDGEY", id => $"move {id}");
+        var silent = new List<string>();
+
+        foreach (Type type in EventTypes)
+        {
+            ConstructorInfo constructor = type.GetConstructors().Single();
+
+            object?[] arguments = [.. constructor.GetParameters().Select(p => Sample(p.ParameterType))];
+
+            var made = (BattleEvent)constructor.Invoke(arguments);
+
+            if (BattleNarrator.Describe(made, names).Length == 0) silent.Add(type.Name);
+        }
+
+        Assert.Empty(silent);
+    }
+
+    /// <summary>A value of the right type, chosen only so the event can be built.</summary>
+    private static object? Sample(Type type)
+    {
+        Type bare = Nullable.GetUnderlyingType(type) ?? type;
+
+        if (bare == typeof(Side)) return Side.Player;
+        if (bare == typeof(Stat)) return Stat.Attack;
+        if (bare == typeof(StatusCondition)) return StatusCondition.Poison;
+        if (bare == typeof(DamageResult)) return new DamageResult(12, true, 200, true);
+        if (bare == typeof(int)) return 1;
+        if (bare == typeof(bool)) return true;
+
+        throw new InvalidOperationException(
+            $"an event now carries a {bare.Name}, which this test has no value for");
+    }
+
     [Theory]
     [MemberData(nameof(SampleEvents))]
     public void AnEventSurvivesTheWire(BattleEvent original)

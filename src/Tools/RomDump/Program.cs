@@ -5000,6 +5000,41 @@ public static class Program
                     $"    {item.Id,6} {item.Name,-14} {item.HoldEffect,4} {item.HoldEffectParam,5} " +
                     $"{item.BattleUsage,5} {item.SecondaryId,9} {item.Importance,10} {item.Price,5}");
             }
+
+            // And what each of them actually teaches, which is the only thing about a
+            // machine a player cares about and the one thing its own record does not
+            // say. Printed with the move's name and effect group beside it, because a
+            // list of numbers cannot be checked against anything by looking at it: a
+            // machine whose move is one along from its own would read perfectly here
+            // and be wrong for all fifty-eight.
+            List<MoveData> moveTable;
+
+            try
+            {
+                moveTable = MoveExtractor.Extract(rom);
+            }
+            catch (InvalidDataException)
+            {
+                moveTable = [];
+            }
+
+            if (moveTable.Count > 0
+                && MachineMoves.Locate(rom, moveTable.Count, ObstacleMoves.Find(rom)) is { } listAt)
+            {
+                List<int> taught = MachineMoves.Read(rom, listAt);
+
+                Console.WriteLine();
+                Console.WriteLine($"  What they teach, read at 0x{listAt:X6}:");
+
+                foreach ((ItemRecord item, int move) in machines.Zip(taught))
+                {
+                    string name = move >= 0 && move < moveTable.Count ? moveTable[move].Name : "?";
+
+                    Console.WriteLine(
+                        $"    {item.Id,4} {item.Name,-6} {move,4}  {name,-14} " +
+                        $"effect 0x{(move >= 0 && move < moveTable.Count ? moveTable[move].Effect : 0):X2}");
+                }
+            }
         }
 
         Console.WriteLine();

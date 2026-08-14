@@ -240,6 +240,46 @@ public class TrainerBattleTests
     }
 
     [Fact]
+    public void SoDoesTheOneBeforeIt()
+    {
+        // Found by playing. A level two bird was sent out last, fainted, and the battle
+        // ended as a loss with two healthy creatures sitting in the party — because the
+        // search for a replacement started at the slot after the one who fell, which is
+        // right for the opponent's team and wrong for a party the player picks from.
+        //
+        // Written as the same fight as the test above with the party the other way
+        // round, because that is the entire difference between working and not.
+        GameWorld world = World(Trainer(1, 4, 1, Direction.Down, TestRules.ThreeStrong));
+
+        (ServerPlayer player, _) = world.Join(1, "Mason", world.FreshCharacter() with
+        {
+            Party =
+            [
+                Healthy(4, 30),
+                new SavedMon(3, 2, null, 1, StatusCondition.None, Nature.Hardy, [TestRules.FirstMove]),
+            ],
+        });
+
+        StepTo(world, player, new GridPosition(4, 3), Direction.Down);
+
+        // Out of the healthy one and into the one that is about to faint, which is the
+        // only way to be holding the last slot when it happens.
+        // Enumerated rather than called and dropped: what the server returns is a lazy
+        // sequence, and a switch nobody reads is a switch that never happened.
+        List<NetMessage> said =
+            [.. world.TakeBattleTurn(player.Id, new BattleAction.SwitchTo(1)).Select(o => o.Message)];
+
+        said.AddRange(FightToTheEnd(world, player));
+
+        Assert.Contains(said.OfType<BattlerSentOut>(), s => s.Side == Side.Player && s.Slot == 0);
+
+        // And the fight was not handed over. A loss here is the bug, not a hard battle.
+        Assert.DoesNotContain(
+            said.OfType<BattleUpdate>().SelectMany(u => u.Events).OfType<BattleEvent.Ended>(),
+            e => e.Winner == Side.Opponent);
+    }
+
+    [Fact]
     public void WhatHappenedToTheOneWhoFaintedIsWrittenDown()
     {
         // Written before anybody replaces them. A fight that only records the creature

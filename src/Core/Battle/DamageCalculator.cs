@@ -53,6 +53,26 @@ public static class DamageCalculator
     }
 
     /// <summary>
+    /// What a confused creature does to itself.
+    /// <para>
+    /// The games treat it as an ordinary physical hit of forty power, with the same
+    /// creature on both sides of the sum and no type on it at all — so there is no
+    /// effectiveness, no same-type bonus and no critical. Forty is modelled rather than
+    /// read: it is a number in the game's code and this project does not read code.
+    /// </para>
+    /// </summary>
+    public static int Confusion(Battler battler)
+    {
+        int level = battler.Level;
+        int attack = battler.EffectiveStat(Stat.Attack);
+        int defense = battler.EffectiveStat(Stat.Defense);
+
+        int damage = (((2 * level / 5 + 2) * 40 * attack / Math.Max(1, defense)) / 50) + 2;
+
+        return Math.Max(1, damage);
+    }
+
+    /// <summary>
     /// Computes damage for one hit. <paramref name="randomPercent"/> is the 85..100
     /// roll; pass it explicitly so tests can pin an exact number.
     /// </summary>

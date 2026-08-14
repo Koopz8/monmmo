@@ -73,6 +73,12 @@ internal static class TestMons
 
     /// <summary>Effect 0x20: RECOVER and SLACK OFF.</summary>
     public static readonly MoveData Recover = new(11, "RECOVER", 0x20, 0, PokemonType.Normal, 0, 10, 0, 0, 0);
+
+    /// <summary>Effect 0x31: SUPERSONIC, CONFUSE RAY and SWEET KISS, which only confuse.</summary>
+    public static readonly MoveData ConfuseRay = new(12, "CONFUSE RAY", 0x31, 0, PokemonType.Ghost, 100, 10, 0, 0, 0);
+
+    /// <summary>Effect 0x4C: the six that damage and carry confusion on a roll.</summary>
+    public static readonly MoveData Psybeam = new(13, "PSYBEAM", 0x4C, 65, PokemonType.Psychic, 100, 20, 100, 0, 0);
 }
 
 public class DamageCalculatorTests
@@ -976,5 +982,165 @@ public class HitRiderTests
 
         Assert.Contains(events, e => e is BattleEvent.NothingHappened);
         Assert.Empty(events.OfType<BattleEvent.Recovered>());
+    }
+}
+
+/// <summary>
+/// Confusion, which is not a condition.
+/// <para>
+/// It sits beside <c>Status</c> rather than among its values, because the games let you
+/// be poisoned and confused at once. It lives on the battler rather than on the battle
+/// so that it follows the one it happened to — switching out builds a new battler, which
+/// is exactly where confusion should stop — and it is never written down, because
+/// walking out of a battle confused is not something these games do.
+/// </para>
+/// </summary>
+public class ConfusionTests
+{
+    private static Battler Quick(params MoveData[] moves) =>
+        new Battler(TestMons.Species("QUICK", PokemonType.Normal, hp: 200, speed: 200), level: 50, nickname: "QUICK")
+            .Knowing(moves);
+
+    private static Battler Slowly(params MoveData[] moves) =>
+        new Battler(TestMons.Species("SLOWLY", PokemonType.Normal, hp: 200, speed: 5), level: 50, nickname: "SLOWLY")
+            .Knowing(moves);
+
+    private static readonly BattleAction First = new BattleAction.UseMove(0);
+
+    [Fact]
+    public void AMoveThatOnlyConfusesDoesSo()
+    {
+        var battle = new Battle(Quick(TestMons.ConfuseRay), Slowly(TestMons.Tackle), seed: 2);
+
+        Assert.Contains(
+            battle.ResolveTurn(First, First),
+            e => e is BattleEvent.Confused { Side: Side.Opponent });
+    }
+
+    [Fact]
+    public void AMoveThatDamagesCanCarryItToo()
+    {
+        // The distinction the effect table exists to keep: CONFUSE RAY is the move,
+        // PSYBEAM is a hit with confusion riding on it.
+        var battle = new Battle(Quick(TestMons.Psybeam), Slowly(TestMons.Tackle), seed: 2);
+
+        List<BattleEvent> events = battle.ResolveTurn(First, First);
+
+        Assert.Contains(events, e => e is BattleEvent.DamageDealt { Side: Side.Opponent });
+        Assert.Contains(events, e => e is BattleEvent.Confused { Side: Side.Opponent });
+    }
+
+    [Fact]
+    public void ConfusingSomebodyAlreadyConfusedSaysSoRatherThanStacking()
+    {
+        var battle = new Battle(Quick(TestMons.ConfuseRay), Slowly(TestMons.Tackle), seed: 2);
+
+        battle.ResolveTurn(First, First);
+
+        List<BattleEvent> again = battle.ResolveTurn(First, First);
+
+        Assert.Empty(again.OfType<BattleEvent.Confused>());
+        Assert.Contains(again, e => e is BattleEvent.NothingHappened);
+    }
+
+    [Fact]
+    public void AConfusedBattlerSometimesHurtsItselfInsteadOfActing()
+    {
+        // Over many seeds, because half is a proportion. What is being tested is that
+        // both outcomes happen: a confusion that never fired and one that always fired
+        // would each be a rule with no roll in it.
+        int hurt = 0;
+        int acted = 0;
+
+        for (uint seed = 1; seed <= 40; seed++)
+        {
+            var battle = new Battle(Quick(TestMons.ConfuseRay), Slowly(TestMons.Tackle), seed);
+
+            battle.ResolveTurn(First, First);
+
+            List<BattleEvent> next = battle.ResolveTurn(First, First);
+
+            if (next.Any(e => e is BattleEvent.HurtItself { Side: Side.Opponent })) hurt++;
+            if (next.Any(e => e is BattleEvent.MoveUsed { Side: Side.Opponent })) acted++;
+        }
+
+        Assert.True(hurt > 0, "never once hurt itself");
+        Assert.True(acted > 0, "never once got a turn");
+    }
+
+    [Fact]
+    public void HurtingItselfNamesNoMove()
+    {
+        // There is no move — a confused creature hits itself — and printing one would be
+        // printing something that did not happen.
+        for (uint seed = 1; seed <= 40; seed++)
+        {
+            var battle = new Battle(Quick(TestMons.ConfuseRay), Slowly(TestMons.Tackle), seed);
+
+            battle.ResolveTurn(First, First);
+
+            List<BattleEvent> next = battle.ResolveTurn(First, First);
+
+            if (!next.Any(e => e is BattleEvent.HurtItself { Side: Side.Opponent })) continue;
+
+            Assert.DoesNotContain(next, e => e is BattleEvent.MoveUsed { Side: Side.Opponent });
+            return;
+        }
+
+        Assert.Fail("never hurt itself across forty seeds");
+    }
+
+    [Fact]
+    public void ItWearsOffAndTheTurnIsStillTaken()
+    {
+        // Snapping out happens before the turn rather than after it, so the turn it wears
+        // off on is a turn that gets used.
+        var battle = new Battle(Quick(TestMons.ConfuseRay), Slowly(TestMons.Tackle), seed: 2);
+
+        battle.ResolveTurn(First, First);
+
+        for (int turn = 0; turn < 8; turn++)
+        {
+            List<BattleEvent> events = battle.ResolveTurn(First, First);
+
+            if (!events.Any(e => e is BattleEvent.SnappedOut { Side: Side.Opponent })) continue;
+
+            Assert.Contains(events, e => e is BattleEvent.MoveUsed { Side: Side.Opponent });
+            return;
+        }
+
+        Assert.Fail("confusion never wore off in eight turns");
+    }
+
+    [Fact]
+    public void ItIsNotAConditionAndDoesNotDisplaceOne()
+    {
+        // The whole reason it is not a StatusCondition. Poisoned and confused at once is
+        // an ordinary state of affairs and a condition that replaced poison would be a
+        // different game.
+        var target = Slowly(TestMons.Tackle);
+
+        target.TryApplyStatus(StatusCondition.Poison);
+
+        var battle = new Battle(Quick(TestMons.ConfuseRay), target, seed: 2);
+
+        battle.ResolveTurn(First, First);
+
+        Assert.Equal(StatusCondition.Poison, target.Status);
+        Assert.True(target.IsConfused);
+    }
+
+    [Fact]
+    public void ItIsNotWrittenDown()
+    {
+        // Walking out of a battle confused is not something these games do, and the
+        // record a battler is saved into has nowhere to put it. Asserted on the record
+        // rather than on a round trip, because the record is the thing that persists.
+        var target = Slowly(TestMons.Tackle);
+        target.ConfusedTurns = 4;
+
+        PokeMmo.Core.Save.SavedMon written = PokeMmo.Server.BattleFactory.Save(target);
+
+        Assert.Equal(StatusCondition.None, written.Status);
     }
 }

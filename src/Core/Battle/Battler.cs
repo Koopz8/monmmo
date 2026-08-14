@@ -72,6 +72,24 @@ public sealed class Battler
     /// <summary>Turns of sleep remaining, counted down at the start of each of this battler's turns.</summary>
     public int SleepTurns { get; set; }
 
+    /// <summary>
+    /// Turns of confusion remaining.
+    /// <para>
+    /// Beside <see cref="Status"/> rather than one of its values, because the games let
+    /// you be poisoned and confused at once and a condition that replaced poison would be
+    /// a different rule. It lives on the battler rather than on the battle so that it
+    /// follows the one it happened to: switching out builds a new battler, which is
+    /// exactly where confusion should stop.
+    /// </para>
+    /// <para>
+    /// And it is never written down. <c>BattleFactory.Save</c> does not carry it, which
+    /// is right — walking out of a battle confused is not something these games do.
+    /// </para>
+    /// </summary>
+    public int ConfusedTurns { get; set; }
+
+    public bool IsConfused => ConfusedTurns > 0;
+
     public PokemonType Type1 => Species.Type1;
     public PokemonType Type2 => Species.Type2;
 

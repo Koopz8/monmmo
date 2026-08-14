@@ -734,7 +734,13 @@ public sealed class BattleScreen
             case BattlePhase.ChoosingMove: DrawMoveMenu(boxY); return;
         }
 
-        _font.Draw(_message, 48, boxY + 34, 3, Skin.Ink);
+        // Wrapped rather than drawn as one line. "You have no more usable Pokemon! Your
+        // party was healed." ran off the right edge of the box and the half that was cut
+        // was the half that said what had been done about it.
+        List<string> lines = _font.Wrap(_message, 3, (int)box.Width - 48);
+
+        for (int i = 0; i < lines.Count && i < 3; i++)
+            _font.Draw(lines[i], 48, boxY + 26 + i * 34, 3, Skin.Ink);
 
         string prompt = Phase switch
         {

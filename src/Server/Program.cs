@@ -728,6 +728,13 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
 
                                         if (battleEvent is BattleEvent.MoveLearned learned)
                                             Console.WriteLine($"^ #{playerId} learned move {learned.MoveId}");
+
+                                        // For the same reason as experience: confusion
+                                        // is a one-in-five rider on a move that also
+                                        // does damage, and "I never saw it" and "it
+                                        // never happened" look identical from a screen.
+                                        if (battleEvent is BattleEvent.Confused confused)
+                                            Console.WriteLine($"? #{playerId} confused {confused.Side}");
                                     }
                                 }
 

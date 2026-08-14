@@ -29,6 +29,9 @@ public enum EffectKind
 
     /// <summary>Restores the user's own health.</summary>
     Heal,
+
+    /// <summary>Muddles the target, which may then hurt itself instead of acting.</summary>
+    Confuse,
 }
 
 /// <summary>
@@ -155,6 +158,14 @@ public static class MoveEffects
         0x03 => new MoveEffect(EffectKind.Drain, OnUser: true),
         0x30 => new MoveEffect(EffectKind.Recoil, OnUser: true),
         0x20 or 0x9D => new MoveEffect(EffectKind.Heal, OnUser: true),
+
+        // Confusion, and it arrives both ways — which is the distinction this table was
+        // built to keep. 0x31 is the three moves that do nothing else and always land it;
+        // 0x4C is the six that damage and carry it on a roll.
+        //
+        //   0x31   3 moves  SUPERSONIC, CONFUSE RAY, SWEET KISS
+        //   0x4C   6 moves  PSYBEAM, CONFUSION, DIZZY PUNCH, DYNAMICPUNCH, SIGNAL BEAM, WATER PULSE
+        0x31 or 0x4C => new MoveEffect(EffectKind.Confuse, OnUser: false),
 
         _ => Stages(effect),
     };

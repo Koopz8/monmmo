@@ -36,6 +36,9 @@ public enum Side
 [JsonDerivedType(typeof(Recoiled), "recoiled")]
 [JsonDerivedType(typeof(Flinched), "flinched")]
 [JsonDerivedType(typeof(Recovered), "recovered")]
+[JsonDerivedType(typeof(Confused), "confused")]
+[JsonDerivedType(typeof(SnappedOut), "snappedout")]
+[JsonDerivedType(typeof(HurtItself), "hurtitself")]
 [JsonDerivedType(typeof(Fainted), "fainted")]
 [JsonDerivedType(typeof(HealthRestored), "healed")]
 [JsonDerivedType(typeof(BallThrown), "ball")]
@@ -101,6 +104,15 @@ public abstract record BattleEvent
 
     /// <summary>Health restored by a move rather than by an item.</summary>
     public sealed record Recovered(Side Side, int Amount) : BattleEvent;
+
+    /// <summary>Somebody became confused.</summary>
+    public sealed record Confused(Side Side) : BattleEvent;
+
+    /// <summary>Confusion wore off before the turn was taken.</summary>
+    public sealed record SnappedOut(Side Side) : BattleEvent;
+
+    /// <summary>Confusion cost the turn, and hurt.</summary>
+    public sealed record HurtItself(Side Side, int Amount) : BattleEvent;
 
     public sealed record Fainted(Side Side) : BattleEvent;
 
@@ -468,6 +480,23 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         Side at = effect.OnUser ? side : Other(side);
         Battler target = effect.OnUser ? attacker : defender;
 
+        if (effect.Kind == EffectKind.Confuse)
+        {
+            // Two to five turns, and it does not stack: somebody already confused is
+            // already confused. Modelled, not read — nothing in a move's record says how
+            // long CONFUSE RAY muddles anybody for.
+            if (target.IsConfused || target.HasFainted)
+            {
+                if (!rolled) events.Add(new BattleEvent.NothingHappened(at));
+                return;
+            }
+
+            target.ConfusedTurns = _rng.Next(4) + 2;
+            events.Add(new BattleEvent.Confused(at));
+
+            return;
+        }
+
         if (effect.Kind == EffectKind.Flinch)
         {
             // Set on the target, and it only costs them anything if they have not gone
@@ -572,10 +601,46 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             case StatusCondition.Paralysis when _rng.Chance(25):
                 events.Add(new BattleEvent.Immobilised(side, StatusCondition.Paralysis));
                 return false;
-
-            default:
-                return true;
         }
+
+        return NotTooConfused(side, battler, events);
+    }
+
+    /// <summary>
+    /// Confusion, which is checked after the conditions because it is not one of them.
+    /// <para>
+    /// It counts down whether or not it costs the turn, wears off before the turn rather
+    /// than after it — snapping out and then acting is what the games do — and half the
+    /// time replaces the move with a hit on oneself. That half is modelled: nothing in a
+    /// move's record says how often a confused creature misjudges.
+    /// </para>
+    /// <para>
+    /// The damage is worked out as an ordinary physical hit of forty power against one's
+    /// own defence, and typeless — which is why it is dealt here rather than routed
+    /// through a move nobody has.
+    /// </para>
+    /// </summary>
+    private bool NotTooConfused(Side side, Battler battler, List<BattleEvent> events)
+    {
+        if (!battler.IsConfused) return true;
+
+        battler.ConfusedTurns--;
+
+        if (battler.ConfusedTurns <= 0)
+        {
+            events.Add(new BattleEvent.SnappedOut(side));
+            return true;
+        }
+
+        if (!_rng.Chance(50)) return true;
+
+        int hurt = battler.TakeDamage(DamageCalculator.Confusion(battler));
+
+        events.Add(new BattleEvent.HurtItself(side, hurt));
+
+        if (battler.HasFainted) events.Add(new BattleEvent.Fainted(side));
+
+        return false;
     }
 
     /// <summary>Poison and burn each take a sixteenth of maximum health, minimum one.</summary>

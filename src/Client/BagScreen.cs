@@ -218,7 +218,10 @@ public sealed class BagScreen
                 72, y, 24,
                 selected ? Color.White : new Color(190, 190, 200, 255));
 
-            Raylib.DrawText($"x{lines[i].Count}", Width - 320, y, 24, new Color(190, 190, 200, 255));
+            // Kept inside the left half. It used to be measured from the right edge of
+            // the window, which put "x20" on top of the first party member's name — a
+            // count of twenty Poke Balls reading as part of a CHARIZARD's level.
+            Raylib.DrawText($"x{lines[i].Count}", Width / 2 - 120, y, 24, new Color(190, 190, 200, 255));
         }
 
         for (int i = 0; i < _party.Count; i++)
