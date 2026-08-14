@@ -87,6 +87,8 @@ public class MessageChannelTests
             new TakeItemRequest(2),
             new DepositRequest(1),
             new WithdrawRequest(0),
+            new SwapPartyRequest(0, 2),
+            new PartyOrdered([], "Leading now."),
             new BoxUpdated([], [], 30, "Into the box."),
             new BagUpdated([new BagEntry(13, 2)], [], "Restored 20 health."),
             new PartyHealed([], true),

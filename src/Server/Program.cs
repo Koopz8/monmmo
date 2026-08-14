@@ -952,6 +952,14 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                             if (world.LastBoxed is { } fetched) Console.WriteLine($"* #{playerId} {fetched}");
                             break;
 
+                        case SwapPartyRequest swap when playerId != 0:
+                            await DispatchAsync(
+                                world.SwapParty(playerId, swap.A, swap.B), playerId, cancellationToken)
+                                .ConfigureAwait(false);
+
+                            if (world.LastOrdered is { } order) Console.WriteLine($"* #{playerId} {order}");
+                            break;
+
                         case SurfRequest when playerId != 0:
                             await DispatchAsync(world.Surf(playerId), playerId, cancellationToken)
                                 .ConfigureAwait(false);

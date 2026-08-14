@@ -188,6 +188,8 @@ public sealed class NetworkClient : IDisposable
 
     public void SendWithdraw(int slot) => Send(new WithdrawRequest(slot));
 
+    public void SendSwapParty(int a, int b) => Send(new SwapPartyRequest(a, b));
+
     private void Send(NetMessage message)
     {
         if (_channel is null) return;

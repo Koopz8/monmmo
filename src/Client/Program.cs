@@ -366,6 +366,7 @@ public static class Program
         int boxSize = 0;
         BagScreen? carrying = null;
         BoxScreen? storing = null;
+        PartyScreen? looking = null;
 
         // Who has spotted the player and is walking over, and how long the mark above
         // their head has left. The server refuses movement for the duration; this is the
@@ -443,7 +444,7 @@ public static class Program
             }
 
             ApplyServerMessages(
-                network, others, player, view, data, trainers, items, script, carrying, storing,
+                network, others, player, view, data, trainers, items, script, carrying, storing, looking,
                 ref talking, ref battle, ref shop, ref bag, ref party, ref box, ref boxSize, ref money,
                 ref correction, ref watching, ref exclaimFor, ref scene, ref arrived, ref fadingIn, ref holdInput,
                 ref afterTheFight, ref cameOut, outcomes, rival, console);
@@ -549,6 +550,29 @@ public static class Program
             // to walk off while somebody is held still.
             if (carrying is null && talking is null && !console.IsOpen && Raylib.IsKeyPressed(KeyboardKey.B))
                 carrying = new BagScreen(bag, party, items, data);
+
+            // The party, on the key the box used to take. Nothing else is going on, the
+            // console is shut, and this is the one screen that needs no machine.
+            if (carrying is null && storing is null && looking is null && talking is null && !console.IsOpen
+                && Raylib.IsKeyPressed(KeyboardKey.P))
+            {
+                looking = new PartyScreen(party, data, items);
+            }
+
+            if (looking is not null)
+            {
+                looking.Update();
+
+                if (looking.TakePending() is SwapPartyRequest swap) network.SendSwapParty(swap.A, swap.B);
+
+                Raylib.BeginDrawing();
+                looking.Draw();
+                Raylib.EndDrawing();
+
+                if (looking.IsClosed) looking = null;
+
+                continue;
+            }
 
             if (storing is not null)
             {
@@ -1596,6 +1620,7 @@ public static class Program
         ScriptState script,
         BagScreen? carrying,
         BoxScreen? storing,
+        PartyScreen? looking,
         ref DialogueBox? said,
         ref BattleScreen? battle,
         ref ShopScreen? shop,
@@ -1753,6 +1778,14 @@ public static class Program
                     if (battle is not null) battle.Party = party;
                     carrying?.Apply(updated);
                     storing?.Apply(party);
+                    looking?.Apply(party);
+
+                    break;
+
+                case PartyOrdered ordered:
+                    party = ordered.Party;
+                    if (battle is not null) battle.Party = party;
+                    looking?.Apply(party, ordered.Message);
 
                     break;
 
@@ -1964,6 +1997,7 @@ public static class Program
                     // a potion to somebody who is already full.
                     party = finished.Party;
                     box = finished.Box;
+                    looking?.Apply(party);
                     storing?.Apply(party);
 
                     break;

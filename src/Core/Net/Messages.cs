@@ -28,6 +28,8 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(TakeItemRequest), "takeitem")]
 [JsonDerivedType(typeof(DepositRequest), "deposit")]
 [JsonDerivedType(typeof(WithdrawRequest), "withdraw")]
+[JsonDerivedType(typeof(SwapPartyRequest), "swapparty")]
+[JsonDerivedType(typeof(PartyOrdered), "partyorder")]
 [JsonDerivedType(typeof(BoxUpdated), "boxupdate")]
 [JsonDerivedType(typeof(BagUpdated), "bagupdate")]
 [JsonDerivedType(typeof(PartyHealed), "healed")]
@@ -377,6 +379,19 @@ public sealed record DepositRequest(int Slot) : NetMessage;
 
 /// <summary>Take the one in this box slot back out.</summary>
 public sealed record WithdrawRequest(int Slot) : NetMessage;
+
+/// <summary>
+/// Put these two party members in each other's places.
+/// <para>
+/// Two slots and nothing else. Which one ends up first is the only thing this changes
+/// and the only thing it needs to say — the party is the party, and a request carrying
+/// a whole new order would be a client handing the server a party.
+/// </para>
+/// </summary>
+public sealed record SwapPartyRequest(int A, int B) : NetMessage;
+
+/// <summary>The party after it was rearranged, with a line about what happened.</summary>
+public sealed record PartyOrdered(IReadOnlyList<SavedMon> Party, string Message) : NetMessage;
 
 /// <summary>
 /// The party and the box after one moved between them.

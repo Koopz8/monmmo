@@ -1911,6 +1911,46 @@ public sealed class GameWorld
         }
     }
 
+    /// <summary>
+    /// Puts two party members in each other's places.
+    /// <para>
+    /// Which one is first is the only thing anybody can decide about a party and, until
+    /// now, the only way to decide it was to win or to faint: the lead is whoever sat in
+    /// slot nought since the day they were caught.
+    /// </para>
+    /// <para>
+    /// No machine is needed. Moving somebody to and from the box is storage and belongs
+    /// at a storage machine; rearranging what is already in your hands is not, and these
+    /// games have never asked anybody to walk to a Pokémon Center to do it.
+    /// </para>
+    /// </summary>
+    public List<Outgoing> SwapParty(int playerId, int a, int b)
+    {
+        lock (_gate)
+        {
+            if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
+
+            if (player.InBattle)
+                return [new Outgoing(new Rejected("Not in the middle of a battle."), OnlyTo: playerId)];
+
+            if (a < 0 || b < 0 || a >= player.Party.Count || b >= player.Party.Count) return [];
+            if (a == b) return [];
+
+            (player.Party[a], player.Party[b]) = (player.Party[b], player.Party[a]);
+
+            LastOrdered = $"swapped party slots {a} and {b}";
+
+            // Named for the consequence rather than for the mechanism. "Swapped slots two
+            // and nought" is what happened; "leads now" is what it means.
+            string said = a == 0 || b == 0 ? "Leading now." : "Swapped.";
+
+            return [new Outgoing(new PartyOrdered([.. player.Party], said), OnlyTo: playerId)];
+        }
+    }
+
+    /// <summary>What the last rearrangement came to.</summary>
+    public string? LastOrdered { get; private set; }
+
     /// <summary>What the last box operation came to.</summary>
     public string? LastBoxed { get; private set; }
 
