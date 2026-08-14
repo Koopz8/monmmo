@@ -111,6 +111,12 @@ public static class BattleNarrator
 
         BattleEvent.Recoiled e => $"{names.Of(e.Side)} was hurt by the recoil!",
 
+        // Named for the miss rather than for the damage, because the damage is the
+        // consequence and the miss is the reason.
+        BattleEvent.Crashed e => $"{names.Of(e.Side)} kept going and crashed!",
+
+        BattleEvent.BlewUp e => $"{names.Of(e.Side)} blew up!",
+
         BattleEvent.Flinched e => $"{names.Of(e.Side)} flinched and couldn't move!",
 
         BattleEvent.Recovered e => $"{names.Of(e.Side)} regained {e.Amount} health.",

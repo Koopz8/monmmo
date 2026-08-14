@@ -65,6 +65,15 @@ public enum EffectKind
 
     /// <summary>Takes what the target is carrying, if the user is carrying nothing.</summary>
     Steal,
+
+    /// <summary>Lands exactly twice, however the roll goes.</summary>
+    Twice,
+
+    /// <summary>Costs the user something when it misses, and nothing when it lands.</summary>
+    CrashOnMiss,
+
+    /// <summary>The user faints, whatever else the turn came to.</summary>
+    UserFaints,
 }
 
 /// <summary>
@@ -186,6 +195,29 @@ public static class MoveEffects
         // DOUBLESLAP lands or what share of the damage ABSORB gives back — those numbers
         // are in the game's code, which this project does not read.
         0x1D => new MoveEffect(EffectKind.MultiHit, OnUser: false),
+        //
+        // Twice, exactly. A separate group from 0x1D and a separate kind, because two is
+        // not a roll: 0x1D's dozen land two to five times and these three land twice
+        // every time. Nothing in a record says either number — both are modelled, and
+        // this one is the easier of the two to be sure of, since a group of two whose
+        // members are DOUBLE KICK and BONEMERANG is a group about the number two.
+        //
+        // TWINEEDLE is the third and carries a rider as well, which is why the poison is
+        // written here rather than left to the group's shape. Its record says a secondary
+        // chance of twenty; every other member of these two groups says nought.
+        0x2C => new MoveEffect(EffectKind.Twice, OnUser: false),
+        0x4D => new MoveEffect(EffectKind.Twice, OnUser: false, Status: StatusCondition.Poison),
+        //
+        // The two that hurt the user when they miss. JUMP KICK and HI JUMP KICK, alone in
+        // their group, and the only moves on this cartridge whose accuracy is a risk to
+        // the one using them.
+        0x2D => new MoveEffect(EffectKind.CrashOnMiss, OnUser: true),
+        //
+        // And the two that end the user. SELFDESTRUCT and EXPLOSION — two hundred power
+        // and two hundred and fifty, the two largest numbers in the whole move table, and
+        // a group of exactly two. What it costs is not a number that has to be modelled:
+        // it is everything.
+        0x07 => new MoveEffect(EffectKind.UserFaints, OnUser: true),
         0x2B => new MoveEffect(EffectKind.HighCritical, OnUser: false),
         0x1F or 0x96 => new MoveEffect(EffectKind.Flinch, OnUser: false),
         0x03 => new MoveEffect(EffectKind.Drain, OnUser: true),

@@ -35,6 +35,8 @@ public enum Side
 [JsonDerivedType(typeof(HitSeveralTimes), "severaltimes")]
 [JsonDerivedType(typeof(Drained), "drained")]
 [JsonDerivedType(typeof(Recoiled), "recoiled")]
+[JsonDerivedType(typeof(Crashed), "crashed")]
+[JsonDerivedType(typeof(BlewUp), "blewup")]
 [JsonDerivedType(typeof(Flinched), "flinched")]
 [JsonDerivedType(typeof(Recovered), "recovered")]
 [JsonDerivedType(typeof(Confused), "confused")]
@@ -113,6 +115,12 @@ public abstract record BattleEvent
 
     /// <summary>The user hurt itself doing that.</summary>
     public sealed record Recoiled(Side Side, int Amount) : BattleEvent;
+
+    /// <summary>A move that missed and hurt the one who used it.</summary>
+    public sealed record Crashed(Side Side, int Amount) : BattleEvent;
+
+    /// <summary>The user took itself out along with the move.</summary>
+    public sealed record BlewUp(Side Side) : BattleEvent;
 
     /// <summary>Somebody lost their turn to a flinch.</summary>
     public sealed record Flinched(Side Side) : BattleEvent;
@@ -582,6 +590,25 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         {
             events.Add(new BattleEvent.MoveMissed(side, move.Id));
 
+            // What a miss costs, for the two moves it costs anything. Half of what the
+            // hit would have taken off the target — modelled, not read: the share is in
+            // the game's code. What is read is which moves pay it, which is the whole of
+            // group 0x2D and nothing else.
+            if (kind.Kind == EffectKind.CrashOnMiss)
+            {
+                DamageResult missed = DamageCalculator.Calculate(_rng, attacker, defender, move, critical: false);
+
+                int hurt = attacker.TakeDamage(Math.Max(1, missed.Damage / 2));
+
+                events.Add(new BattleEvent.Crashed(side, hurt));
+
+                if (attacker.HasFainted) events.Add(new BattleEvent.Fainted(side));
+            }
+
+            // The user goes down whether or not it connected. That is the group, and it
+            // is the one number in this file that did not have to be modelled.
+            if (kind.Kind == EffectKind.UserFaints) BlowUp(side, attacker, events);
+
             // A thrash that misses is still a thrash. It goes on, and it still ends in
             // the same place.
             EndLockedIn(side, attacker, events);
@@ -644,7 +671,12 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         // rather than off its record — see MoveEffects — and the numbers here are
         // modelled rather than read: nothing in a move's record says how many times
         // DOUBLESLAP lands.
-        int times = carried.Kind == EffectKind.MultiHit ? RollHits() : 1;
+        int times = carried.Kind switch
+        {
+            EffectKind.MultiHit => RollHits(),
+            EffectKind.Twice => 2,
+            _ => 1,
+        };
         int criticalStage = carried.Kind == EffectKind.HighCritical ? 1 : 0;
 
         int total = 0;
@@ -696,6 +728,11 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
 
             if (attacker.HasFainted) events.Add(new BattleEvent.Fainted(side));
         }
+
+        // And the one that ends the user. After the damage, so the target takes the hit
+        // first — an EXPLOSION that killed its user before it landed would be a move that
+        // does nothing at all.
+        if (carried.Kind == EffectKind.UserFaints) BlowUp(side, attacker, events);
 
         // What the turn owes. All three are settled here rather than in Apply, because
         // they are not riders on a hit — they do not roll against the move's secondary
@@ -852,6 +889,25 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
     /// promise.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Takes everything the user had left.
+    /// <para>
+    /// Written as damage rather than as a flag so that everything downstream — the
+    /// fainted event, whether the fight is over, who is left to send out — is the same
+    /// code path a fatal hit takes. A separate "is dead" state would be a second way to
+    /// be dead, and two ways to be dead is how a battle ends up with nobody in it.
+    /// </para>
+    /// </summary>
+    private static void BlowUp(Side side, Battler attacker, List<BattleEvent> events)
+    {
+        if (attacker.HasFainted) return;
+
+        attacker.TakeDamage(attacker.CurrentHp);
+
+        events.Add(new BattleEvent.BlewUp(side));
+        events.Add(new BattleEvent.Fainted(side));
+    }
+
     private void Apply(
         Side side, Battler attacker, Battler defender, MoveData move, List<BattleEvent> events, bool rolled)
     {
@@ -864,7 +920,8 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         // effect — a stage change of nothing, to a stat that has no stages — so WRAP
         // landed and then said "The wild PIDGEY's HP won't go any lower!"
         if (effect.Kind is EffectKind.Recharge or EffectKind.TwoTurn or EffectKind.LockedIn or EffectKind.Trap
-            or EffectKind.Knockout or EffectKind.LevelDamage or EffectKind.HalfTheirHealth or EffectKind.DownToMine)
+            or EffectKind.Knockout or EffectKind.LevelDamage or EffectKind.HalfTheirHealth or EffectKind.DownToMine
+            or EffectKind.CrashOnMiss or EffectKind.UserFaints)
         {
             return;
         }
@@ -958,6 +1015,18 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
 
             if (given > 0) events.Add(new BattleEvent.Recovered(at, given));
             else events.Add(new BattleEvent.NothingHappened(at));
+
+            return;
+        }
+
+        // TWINEEDLE, which is the only move on this cartridge that lands twice and
+        // carries a condition. Treated as the rider it is rather than given a kind of its
+        // own: what makes it a rider is the secondary chance in its own record, and that
+        // has already been rolled by the time this is reached.
+        if (effect.Kind == EffectKind.Twice && effect.Status != StatusCondition.None)
+        {
+            if (defender.TryApplyStatus(effect.Status, sleepTurns: _rng.Next(3) + 1))
+                events.Add(new BattleEvent.StatusInflicted(Other(side), effect.Status));
 
             return;
         }

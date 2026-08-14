@@ -1336,6 +1336,25 @@ public static class Program
                 string.Join(", ", group.Select(m => m.Name).Take(6)) + mark);
         }
 
+        // And the number that matters, which is the one this report never gave: how much
+        // of the silence is real. A group whose own record carries the whole answer is
+        // not silent, and counting it as silent is how a report says there is more left
+        // to do than there is.
+        List<IGrouping<byte, MoveData>> stillQuiet =
+        [
+            .. byEffect.Where(g =>
+                g.Key != 0
+                && Core.Battle.MoveEffects.Of(g.Key).Kind == Core.Battle.EffectKind.None
+                && !inTheRecord.Contains(g.Key))
+        ];
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  {stillQuiet.Count} groups covering {stillQuiet.Sum(g => g.Count())} moves are silent and should not be. " +
+            $"{inTheRecord.Count} more are quiet on purpose,");
+        Console.WriteLine(
+            $"  and effect 0 — {byEffect.First(g => g.Key == 0).Count()} moves — has nothing to say beyond hitting.");
+
         // The other marker in a record, and the sharper of the two. Printed in full
         // because the claim is a strong one — no group mixes it — and a claim like that
         // is worth being able to check at a glance.
