@@ -264,6 +264,31 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
     /// <summary>And the worst one.</summary>
     public double SlowestSave => Volatile.Read(ref _slowestSave);
 
+    /// <summary>
+    /// What the <c>in_box</c> column means, and where this character's own lists stop.
+    /// <para>
+    /// Nought is the party, one is the box, two is the daycare, and three is the market.
+    /// The first three are lists a character has; the fourth is somewhere a creature goes
+    /// when it stops being in any of them, which is what listing it for sale means.
+    /// </para>
+    /// <para>
+    /// <see cref="LastOwnList"/> is the line between those two ideas, and it is load-bearing
+    /// in exactly two places: the delete that rewrites a character's creatures wholesale,
+    /// and the select that reads them back. Without it the first destroys anything on the
+    /// market and the second shows it to its seller as though it were still theirs.
+    /// </para>
+    /// </summary>
+    public const int InTheParty = 0;
+
+    public const int InTheBox = 1;
+
+    public const int AtTheDaycare = 2;
+
+    public const int OnTheMarket = 3;
+
+    /// <summary>The highest <c>in_box</c> value that is still one of this character's lists.</summary>
+    public const int LastOwnList = AtTheDaycare;
+
     /// <summary>The six effort columns, in the six-stat order.</summary>
     private static readonly string[] EffortColumns =
         ["ev_hp", "ev_attack", "ev_defense", "ev_speed", "ev_spattack", "ev_spdefense"];
@@ -734,7 +759,19 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
         await using (SqliteCommand clear = connection.CreateCommand())
         {
             clear.Transaction = transaction;
-            clear.CommandText = "DELETE FROM party_members WHERE account_id = $id;";
+            // Bounded to this character's own lists, and that bound is the whole of what
+            // keeps a market safe. The wholesale rewrite above is what makes saving safe —
+            // there is nowhere for a half-written party to exist — and it would destroy a
+            // creature that is on the market, because listing one means it is in none of
+            // these lists and a rewrite of "everything belonging to this account" would
+            // take it with the rest.
+            //
+            // A silent loss is this project's worst known class of bug, and this is the
+            // line that would cause one. Its counterpart is on the SELECT that reads these
+            // rows back; forgetting either is invisible until somebody has lost something,
+            // so both have their own test.
+            clear.CommandText =
+                $"DELETE FROM party_members WHERE account_id = $id AND in_box <= {LastOwnList};";
             clear.Parameters.AddWithValue("$id", accountId);
             await clear.ExecuteNonQueryAsync(cancellationToken);
         }
@@ -747,9 +784,9 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
         // the things this table already does.
         List<(SavedMon Mon, int Where)> stored =
         [
-            .. character.Party.Select(m => (m, 0)),
-            .. character.Box.Select(m => (m, 1)),
-            .. character.Daycare.Select(m => (m, 2)),
+            .. character.Party.Select(m => (m, InTheParty)),
+            .. character.Box.Select(m => (m, InTheBox)),
+            .. character.Daycare.Select(m => (m, AtTheDaycare)),
         ];
 
         for (int slot = 0; slot < stored.Count; slot++)
@@ -879,12 +916,12 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
         await using (SqliteCommand command = connection.CreateCommand())
         {
             command.CommandText =
-                """
+                $"""
                 SELECT id, species, level, nickname, current_hp, status, nature, experience, held_item, in_box,
                        ev_hp, ev_attack, ev_defense, ev_speed, ev_spattack, ev_spdefense,
                        iv_hp, iv_attack, iv_defense, iv_speed, iv_spattack, iv_spdefense, sex, ability_slot
                 FROM party_members
-                WHERE account_id = $id
+                WHERE account_id = $id AND in_box <= {LastOwnList}
                 ORDER BY slot;
                 """;
 
