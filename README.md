@@ -76,6 +76,22 @@ number in the whole of it, and the reason a cap is on a head rather than above i
 
 ---
 
+## Getting a delivery onto GitHub
+
+Work arrives as a git bundle dropped in the working copy. One command takes the newest
+one and puts it on the remote:
+
+```bash
+bash tools/push.sh
+```
+
+It clears the `.git` locks OneDrive leaves behind, fetches the bundle into
+`from-claude`, fast-forwards `main` onto it and pushes. It refuses rather than guesses:
+if `main` has commits the bundle does not, it stops and says so instead of starting a
+rebase nobody asked for.
+
+---
+
 ## Running it
 
 Build once, then export a world and a rules file from your own image:
