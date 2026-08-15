@@ -101,6 +101,22 @@ public sealed class Battler
     public void RefillPp() => _spent.Clear();
 
     /// <summary>
+    /// Sets what is left of each slot from a save, ignoring anything the moves do not
+    /// reach and treating a missing entry as full.
+    /// </summary>
+    public void RestorePp(IReadOnlyList<int> left)
+    {
+        _spent.Clear();
+
+        for (int slot = 0; slot < Moves.Count && slot < left.Count; slot++)
+        {
+            int missing = Math.Clamp(Moves[slot].Pp - left[slot], 0, Moves[slot].Pp);
+
+            if (missing > 0) _spent[slot] = missing;
+        }
+    }
+
+    /// <summary>
     /// True when nothing this one knows has a use left in it.
     /// <para>
     /// A creature with no moves at all counts as spent too. That is not a state the

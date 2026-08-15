@@ -180,6 +180,10 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
         // both. Everything already stored is in the party, which is where it was.
         AddColumnIfMissing(connection, "party_members", "in_box", "INTEGER NOT NULL DEFAULT 0");
 
+        // What is left of each move. Minus one for every row written before moves could
+        // run out, and read as "full" — which is what those creatures were.
+        AddColumnIfMissing(connection, "party_moves", "pp", "INTEGER NOT NULL DEFAULT -1");
+
         // The balls column is what the bag used to be, back when a player could carry
         // exactly one kind of thing. It is left in place and written as zero rather than
         // dropped, because dropping a column in SQLite means rebuilding the table and
@@ -649,10 +653,12 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
             {
                 await using SqliteCommand move = connection.CreateCommand();
                 move.Transaction = transaction;
-                move.CommandText = "INSERT INTO party_moves (member_id, slot, move_id) VALUES ($member, $slot, $move);";
+                move.CommandText =
+                    "INSERT INTO party_moves (member_id, slot, move_id, pp) VALUES ($member, $slot, $move, $pp);";
                 move.Parameters.AddWithValue("$member", memberId);
                 move.Parameters.AddWithValue("$slot", moveSlot);
                 move.Parameters.AddWithValue("$move", mon.Moves[moveSlot]);
+                move.Parameters.AddWithValue("$pp", moveSlot < mon.Pp.Count ? mon.Pp[moveSlot] : -1);
 
                 await move.ExecuteNonQueryAsync(cancellationToken);
             }
@@ -682,12 +688,13 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
         }
 
         var moves = new Dictionary<long, List<int>>();
+        var left = new Dictionary<long, List<int>>();
 
         await using (SqliteCommand command = connection.CreateCommand())
         {
             command.CommandText =
                 """
-                SELECT m.member_id, m.move_id
+                SELECT m.member_id, m.move_id, m.pp
                 FROM party_moves m
                 JOIN party_members p ON p.id = m.member_id
                 WHERE p.account_id = $id
@@ -706,6 +713,11 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
                     moves[memberId] = list = [];
 
                 list.Add(reader.GetInt32(1));
+
+                if (!left.TryGetValue(memberId, out List<int>? remaining))
+                    left[memberId] = remaining = [];
+
+                remaining.Add(reader.GetInt32(2));
             }
         }
 
@@ -741,6 +753,11 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
                     Experience: reader.GetInt32(7))
                 {
                     HeldItem = reader.GetInt32(8),
+
+                    // Minus one is a row written before moves could run out. Dropped
+                    // rather than stored as a number, because empty already means full
+                    // and two ways of saying the same thing is one too many.
+                    Pp = [.. left.GetValueOrDefault(memberId, []).Where(p => p >= 0)],
                 };
 
                 (reader.GetInt32(9) != 0 ? box : party).Add(mon);

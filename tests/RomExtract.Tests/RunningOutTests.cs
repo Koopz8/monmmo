@@ -1,5 +1,9 @@
 using PokeMmo.Core.Battle;
 using PokeMmo.Core.Data;
+using PokeMmo.Core.Save;
+using PokeMmo.Server;
+using PokeMmo.Server.Storage;
+using PokeMmo.Core.World;
 using Xunit;
 
 namespace PokeMmo.RomExtract.Tests;
@@ -164,6 +168,113 @@ public class RunningOutTests
 
         Assert.Contains(spent, e => e is BattleEvent.NothingHappened { Side: Side.Player });
         Assert.DoesNotContain(spent, e => e is BattleEvent.MoveUsed { Side: Side.Player });
+    }
+
+    // ---- and it outlives the fight ----------------------------------------------------
+
+    /// <summary>
+    /// What is left goes into the save and comes back out of it. Without this every
+    /// battler was rebuilt full and running out meant nothing past the last turn of the
+    /// battle it happened in — which is a mechanic that looks whole and is not.
+    /// </summary>
+    [Fact]
+    public void WhatIsLeftSurvivesTheFight()
+    {
+        var factory = new BattleFactory(TestRules.All);
+
+        SavedMon saved = new(1, 20, null, 20, StatusCondition.None, Nature.Hardy, [TestRules.FirstMove]);
+
+        Battler battler = factory.Restore(saved)!;
+
+        int full = battler.PpLeft(0);
+
+        Assert.True(full > 0);
+
+        battler.Spend(0);
+
+        SavedMon written = BattleFactory.Save(battler);
+
+        Assert.Equal(full - 1, written.Pp[0]);
+        Assert.Equal(full - 1, factory.Restore(written)!.PpLeft(0));
+    }
+
+    /// <summary>
+    /// A save written before any of this existed carries nothing, and nothing means full
+    /// — which is what those creatures were.
+    /// </summary>
+    [Fact]
+    public void AndASaveFromBeforeThisComesBackFull()
+    {
+        var factory = new BattleFactory(TestRules.All);
+
+        SavedMon old = new(1, 20, null, 20, StatusCondition.None, Nature.Hardy, [TestRules.FirstMove]);
+
+        Assert.Empty(old.Pp);
+
+        Battler battler = factory.Restore(old)!;
+
+        Assert.Equal(battler.Moves[0].Pp, battler.PpLeft(0));
+    }
+
+    /// <summary>A counter puts every use back, and until it does nobody is well.</summary>
+    [Fact]
+    public void AndACounterPutsThemBack()
+    {
+        var factory = new BattleFactory(TestRules.All);
+
+        SavedMon saved = new(1, 20, null, 20, StatusCondition.None, Nature.Hardy, [TestRules.FirstMove]);
+
+        Battler battler = factory.Restore(saved)!;
+        battler.Spend(0);
+
+        SavedMon spent = BattleFactory.Save(battler);
+
+        Assert.False(factory.IsWell(spent));
+
+        SavedMon healed = factory.Healed(spent);
+
+        Assert.True(factory.IsWell(healed));
+        Assert.Equal(battler.Moves[0].Pp, factory.Restore(healed)!.PpLeft(0));
+    }
+
+    /// <summary>
+    /// And it survives the process, which is the half the database has to get right. The
+    /// column was added to an existing table rather than only to a fresh one, so a save
+    /// written yesterday reads back as full rather than as nought — which would be a
+    /// party that could only struggle.
+    /// </summary>
+    [Fact]
+    public async Task AndItSurvivesTheProcess()
+    {
+        string path = TempDatabase.Path();
+
+        try
+        {
+            SavedMon worn = new(16, 3, null, 8, StatusCondition.None, Nature.Bold, [33, 45])
+            {
+                Pp = [4, 15],
+            };
+
+            using (var writing = new SqlitePlayerStore(path))
+            {
+                await writing.RegisterAsync(
+                    "Mason",
+                    "a-good-password",
+                    new SavedCharacter("1.0", 3, 4, Direction.Down, [worn]));
+            }
+
+            using (var reading = new SqlitePlayerStore(path))
+            {
+                var login = Assert.IsType<AuthOutcome.Success>(
+                    await reading.LoginAsync("Mason", "a-good-password"));
+
+                Assert.Equal([4, 15], Assert.Single(login.Character.Party).Pp);
+            }
+        }
+        finally
+        {
+            TempDatabase.Delete(path);
+        }
     }
 
     /// <summary>Resting anywhere puts every use back.</summary>

@@ -50,6 +50,10 @@ public sealed class BattleFactory(GameRules rules)
         battler.Status = saved.Status;
         battler.Holding = saved.HeldItem;
 
+        // And what is left of each move. Empty means full, which is what everything
+        // written before PP existed comes back as.
+        battler.RestorePp(saved.Pp);
+
         return battler;
     }
 
@@ -147,6 +151,7 @@ public sealed class BattleFactory(GameRules rules)
         battler.Moves.Select(m => m.Id).ToList())
     {
         HeldItem = battler.Holding,
+        Pp = [.. Enumerable.Range(0, battler.Moves.Count).Select(battler.PpLeft)],
     };
 
     /// <summary>
@@ -171,6 +176,11 @@ public sealed class BattleFactory(GameRules rules)
         battler.Heal(battler.MaxHp);
         battler.Status = StatusCondition.None;
         battler.SleepTurns = 0;
+
+        // And every use back, which is what a visit to a counter is for as much as the
+        // health is. A party healed with nothing left to swing with is a party that can
+        // only struggle, and there would be nowhere to fix that.
+        battler.RefillPp();
 
         return Save(battler) with { Experience = saved.Experience };
     }
@@ -205,7 +215,10 @@ public sealed class BattleFactory(GameRules rules)
     /// </para>
     /// </summary>
     public bool IsWell(SavedMon saved) =>
-        Restore(saved) is not { } battler || (battler.CurrentHp >= battler.MaxHp && battler.Status == StatusCondition.None);
+        Restore(saved) is not { } battler
+        || (battler.CurrentHp >= battler.MaxHp
+            && battler.Status == StatusCondition.None
+            && Enumerable.Range(0, battler.Moves.Count).All(s => battler.PpLeft(s) >= battler.Moves[s].Pp));
 
     /// <summary>True when this one can still fight.</summary>
     public bool CanFight(SavedMon saved) => Restore(saved) is { HasFainted: false };

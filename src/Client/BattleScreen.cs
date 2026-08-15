@@ -329,6 +329,10 @@ public sealed class BattleScreen
         _noChoiceBut = update.NoChoiceBut;
 
         _you = _you with { CurrentHp = update.YourHp };
+
+        // What is left of each move, if the server said. Kept rather than recomputed:
+        // this side does not know what a turn costs and should not be guessing.
+        if (update.Pp.Count > 0) _you = _you with { Pp = update.Pp };
         _opponent = _opponent with { CurrentHp = update.OpponentHp };
         Balls = update.Balls;
         Medicine = update.Medicine;
@@ -933,7 +937,14 @@ public sealed class BattleScreen
                 move.Power > 0 ? $"POWER {move.Power}" : "STATUS",
                 right, boxY + 80, 2, Skin.InkDim);
 
-            _font.Draw($"PP {move.Pp}", right, boxY + 104, 2, Skin.InkDim);
+            // What is left, when the server has said — the record's number is what a move
+            // starts with, and drawing that while a fight spends it is a number that is
+            // wrong from the first turn onwards.
+            int left = _selectedMove < _you.Pp.Count ? _you.Pp[_selectedMove] : move.Pp;
+
+            _font.Draw(
+                $"PP {left}/{move.Pp}",
+                right, boxY + 104, 2, left > 0 ? Skin.InkDim : Skin.HpPoor);
         }
     }
 

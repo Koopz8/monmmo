@@ -29,6 +29,21 @@ public sealed record SavedMon(
     public int HeldItem { get; init; }
 
     /// <summary>
+    /// What is left of each move, in the same order as <see cref="Moves"/>.
+    /// <para>
+    /// Empty means full, which is what everything written before this existed comes back
+    /// as — and what a creature just caught or just handed over should be. A list shorter
+    /// than the moves is read the same way for the slots it does not reach.
+    /// </para>
+    /// <para>
+    /// It has to be here rather than only in a battle, because PP is the one thing a fight
+    /// takes that a fight cannot give back. Without it every battler was rebuilt full and
+    /// running out meant nothing past the last turn of the battle it happened in.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<int> Pp { get; init; } = [];
+
+    /// <summary>
     /// Compares move lists by their contents.
     /// <para>
     /// A record compares its members with <c>Equals</c>, and for a list that is
@@ -48,7 +63,9 @@ public sealed record SavedMon(
         Status == other.Status &&
         Nature == other.Nature &&
         Experience == other.Experience &&
-        Moves.SequenceEqual(other.Moves);
+        HeldItem == other.HeldItem &&
+        Moves.SequenceEqual(other.Moves) &&
+        Pp.SequenceEqual(other.Pp);
 
     public override int GetHashCode()
     {
@@ -63,6 +80,7 @@ public sealed record SavedMon(
         hash.Add(Experience);
 
         foreach (int move in Moves) hash.Add(move);
+        foreach (int left in Pp) hash.Add(left);
 
         return hash.ToHashCode();
     }

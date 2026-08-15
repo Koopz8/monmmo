@@ -49,6 +49,7 @@ public sealed class Party
             member.Status = StatusCondition.None;
             member.SleepTurns = 0;
             member.ResetStages();
+            member.RefillPp();
         }
     }
 }

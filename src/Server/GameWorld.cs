@@ -3677,7 +3677,15 @@ public sealed class GameWorld
                         duel.ActiveFor(duel.Other(side)).CurrentHp,
                         [],
                         [],
-                        [.. who.Party]),
+                        [.. who.Party])
+                    {
+                        Pp =
+                        [
+                            .. Enumerable
+                                .Range(0, duel.ActiveFor(side).Moves.Count)
+                                .Select(duel.ActiveFor(side).PpLeft),
+                        ],
+                    },
                     OnlyTo: side));
 
                 foreach ((int sent, Battler battler) in next)
@@ -4955,6 +4963,10 @@ public sealed class GameWorld
                         NoChoiceBut = battle.Player.ForcedSlot is { } held && !battle.Player.HasFainted
                             ? battle.Player.MoveAt(held)?.Id
                             : null,
+
+                        // And what is left, so the menu draws the truth rather than what
+                        // the move's record says it started with.
+                        Pp = [.. Enumerable.Range(0, battle.Player.Moves.Count).Select(battle.Player.PpLeft)],
                     },
                     OnlyTo: playerId),
             };

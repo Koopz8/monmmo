@@ -853,6 +853,15 @@ public sealed record BattleUpdate(
     /// </para>
     /// </summary>
     public int? NoChoiceBut { get; init; }
+
+    /// <summary>
+    /// What is left of each of the player's own moves, after this turn.
+    /// <para>
+    /// Sent every turn for the same reason the party is: it changes every turn, and a
+    /// number drawn from the move's record instead is right once and wrong from then on.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<int> Pp { get; init; } = [];
 }
 
 /// <summary>
