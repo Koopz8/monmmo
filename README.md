@@ -13,7 +13,7 @@ src/RomExtract      cartridge reading. Client-only, and enforced by a test
 src/Server          the authoritative server. Core only
 src/Client          the game: window, input, drawing, screens
 src/Tools/RomDump   the extractor's command line, and every instrument built for it
-tests/              1351 tests, no cartridge required
+tests/              1361 tests, no cartridge required
 tools/rig/          the headless play rig — Xvfb, two clients, screenshots
 ```
 
