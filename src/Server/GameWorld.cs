@@ -496,6 +496,10 @@ public sealed class GameWorld
     {
         lock (_gate)
         {
+            // A trade does not outlive one of the two people in it. Dropped before the
+            // player is removed, because the other side still has to be told.
+            List<Outgoing> stopped = CancelTrade(playerId, "They left.");
+
             if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
 
             string mapId = player.MapId;
@@ -503,7 +507,7 @@ public sealed class GameWorld
 
             AbandonApproaches(playerId);
 
-            return [new Outgoing(new PlayerLeft(playerId), OnMap: mapId)];
+            return [.. stopped, new Outgoing(new PlayerLeft(playerId), OnMap: mapId)];
         }
     }
 
@@ -2929,6 +2933,10 @@ public sealed class GameWorld
             new(new PlayerLeft(player.Id), Except: player.Id, OnMap: previous),
         };
 
+        // And whatever they were negotiating, because a trade held across two rooms is one
+        // neither side can see and the reach test would refuse to start.
+        send.AddRange(CancelTrade(player.Id, "They walked off."));
+
         // Whoever was walking over is walking over to an empty square now. Saying so
         // matters: the player is standing still because somebody was coming, and
         // nothing else is going to tell them that stopped being true.
@@ -3269,6 +3277,213 @@ public sealed class GameWorld
     /// <summary>What the last attempt to wear something came to.</summary>
     public string? LastWorn { get; private set; }
 
+    private readonly Trades _trades = new();
+
+    /// <summary>What the last thing anybody did about a trade came to.</summary>
+    public string? LastTrade { get; private set; }
+
+    /// <summary>How many trades are open, for reporting and for tests.</summary>
+    public int OpenTrades => _trades.Count;
+
+    /// <summary>
+    /// Asks somebody to trade, or agrees to trade with somebody who asked.
+    /// <para>
+    /// Both sides have to be standing within reach of each other, by the same rule that
+    /// decides whether you can talk to somebody: a trade is a conversation, and one across
+    /// a room is one nobody can see happening.
+    /// </para>
+    /// </summary>
+    public List<Outgoing> AskToTrade(int playerId, int withPlayerId)
+    {
+        lock (_gate)
+        {
+            LastTrade = null;
+
+            if (!_players.TryGetValue(playerId, out ServerPlayer? asking)) return [];
+
+            if (playerId == withPlayerId)
+            {
+                LastTrade = "refused: nobody trades with themselves";
+                return [];
+            }
+
+            if (!_players.TryGetValue(withPlayerId, out ServerPlayer? asked)
+                || asked.MapId != asking.MapId)
+            {
+                LastTrade = "refused: they are not here";
+                return [];
+            }
+
+            if (!WithinReach(asking, asked.Square))
+            {
+                LastTrade = "refused: they are not within reach";
+                return [];
+            }
+
+            if (_trades.For(playerId) is not null || _trades.For(withPlayerId) is not null)
+            {
+                LastTrade = "refused: one trade at a time";
+                return [];
+            }
+
+            if (_trades.Ask(playerId, withPlayerId) is { } started)
+            {
+                LastTrade = $"{asking.Name} and {asked.Name} are trading";
+
+                return [.. Both(started)];
+            }
+
+            LastTrade = $"{asking.Name} asked {asked.Name}";
+
+            return [new Outgoing(new TradeAsked(playerId, asking.Name), OnlyTo: withPlayerId)];
+        }
+    }
+
+    /// <summary>Puts a party slot on the table, or takes it back with −1.</summary>
+    public List<Outgoing> OfferInTrade(int playerId, int slot)
+    {
+        lock (_gate)
+        {
+            LastTrade = null;
+
+            if (_trades.For(playerId) is not { } trade) return [];
+            if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
+
+            if (slot >= player.Party.Count)
+            {
+                LastTrade = $"refused: no slot {slot}";
+                return [];
+            }
+
+            // The same rule the box keeps, and for the same reason: somebody who trades
+            // away the last thing they can fight with is somebody who cannot walk out of
+            // the room they are standing in.
+            if (slot >= 0 && _battles is { } battles
+                && battles.CanFight(player.Party[slot])
+                && player.Party.Count(battles.CanFight) <= 1)
+            {
+                LastTrade = "refused: that is the last one that can fight";
+                return [];
+            }
+
+            trade.Offer(playerId, Math.Max(-1, slot));
+
+            LastTrade = slot < 0 ? "took the offer back" : $"offered slot {slot}";
+
+            return [.. Both(trade)];
+        }
+    }
+
+    /// <summary>
+    /// Says yes to what is on the table — and does the swap when both have.
+    /// </summary>
+    public List<Outgoing> ConfirmTrade(int playerId, bool ready)
+    {
+        lock (_gate)
+        {
+            LastTrade = null;
+
+            if (_trades.For(playerId) is not { } trade) return [];
+
+            trade.Ready(playerId, ready);
+
+            if (!trade.IsAgreed)
+            {
+                LastTrade = ready ? "agreed, waiting for the other one" : "took the agreement back";
+                return [.. Both(trade)];
+            }
+
+            if (!_players.TryGetValue(trade.One, out ServerPlayer? one)
+                || !_players.TryGetValue(trade.Two, out ServerPlayer? two))
+            {
+                return [.. Close(trade, "Somebody left.")];
+            }
+
+            // The swap, in one place and with nothing between the two halves of it. Every
+            // duplication bug this project has had came from one fact being written down in
+            // two steps that could be interrupted; this is the one operation where that
+            // would hand somebody two of something and leave somebody else with none.
+            SavedMon fromOne = one.Party[trade.OfferedByOne];
+            SavedMon fromTwo = two.Party[trade.OfferedByTwo];
+
+            one.Party[trade.OfferedByOne] = fromTwo;
+            two.Party[trade.OfferedByTwo] = fromOne;
+
+            _trades.Finish(trade);
+
+            LastTrade = $"{one.Name} and {two.Name} swapped";
+
+            return
+            [
+                new Outgoing(new TradeEnded("Trade complete!", [.. one.Party]), OnlyTo: one.Id),
+                new Outgoing(new TradeEnded("Trade complete!", [.. two.Party]), OnlyTo: two.Id),
+            ];
+        }
+    }
+
+    /// <summary>Walking away from a trade, or from an invitation.</summary>
+    public List<Outgoing> CancelTrade(int playerId, string reason = "Called off.")
+    {
+        lock (_gate)
+        {
+            LastTrade = null;
+
+            if (_trades.Drop(playerId) is not { } trade) return [];
+
+            LastTrade = reason;
+
+            return [.. Close(trade, reason)];
+        }
+    }
+
+    private List<Outgoing> Close(Trade trade, string reason)
+    {
+        _trades.Finish(trade);
+
+        var said = new List<Outgoing>();
+
+        foreach (int id in new[] { trade.One, trade.Two })
+        {
+            if (_players.TryGetValue(id, out ServerPlayer? who))
+                said.Add(new Outgoing(new TradeEnded(reason, [.. who.Party]), OnlyTo: id));
+        }
+
+        return said;
+    }
+
+    /// <summary>The one state message, built for each side from the same trade.</summary>
+    private List<Outgoing> Both(Trade trade)
+    {
+        var said = new List<Outgoing>();
+
+        foreach (int id in new[] { trade.One, trade.Two })
+        {
+            if (!_players.TryGetValue(id, out ServerPlayer? who)) continue;
+            if (!_players.TryGetValue(trade.Other(id), out ServerPlayer? other)) continue;
+
+            said.Add(new Outgoing(
+                new TradeUpdated(
+                    other.Id,
+                    other.Name,
+                    Put(who, trade.OfferedBy(id)),
+                    Put(other, trade.OfferedBy(other.Id)),
+                    trade.ReadyIs(id),
+                    trade.ReadyIs(other.Id)),
+                OnlyTo: id));
+        }
+
+        return said;
+    }
+
+    private static SavedMon? Put(ServerPlayer who, int slot) =>
+        slot >= 0 && slot < who.Party.Count ? who.Party[slot] : null;
+
+    /// <summary>By the same rule that decides whether somebody can be spoken to.</summary>
+    private bool WithinReach(ServerPlayer player, GridPosition square) =>
+        Interaction
+            .Reachable(player.Square, player.Facing, at => !GridFor(player.MapId).IsWalkable(at))
+            .Contains(square);
+
     /// <summary>
     /// Puts something on, or takes a slot off, if this account owns the thing.
     /// <para>
@@ -3599,6 +3814,31 @@ public sealed class GameWorld
                 List<Outgoing> shown = Wear(player.Id, what, slot);
 
                 return [Said(player, LastWorn ?? "nothing happened"), .. shown];
+            }
+
+            case "trade":
+            {
+                if (line.Number(0) is not { } who) return [Said(player, "/trade <player id>")];
+
+                List<Outgoing> asked = AskToTrade(player.Id, who);
+
+                return [Said(player, LastTrade ?? "nothing happened"), .. asked];
+            }
+
+            case "offer":
+            {
+                if (line.Number(0) is not { } slot) return [Said(player, "/offer <party slot>, or -1")];
+
+                List<Outgoing> put = OfferInTrade(player.Id, slot);
+
+                return [Said(player, LastTrade ?? "nothing happened"), .. put];
+            }
+
+            case "agree":
+            {
+                List<Outgoing> done = ConfirmTrade(player.Id, !string.Equals(line.Word(0), "no", StringComparison.OrdinalIgnoreCase));
+
+                return [Said(player, LastTrade ?? "nothing happened"), .. done];
             }
 
             case "wardrobe":

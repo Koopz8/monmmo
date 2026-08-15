@@ -65,6 +65,13 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(PlayerAppeared), "appeared")]
 [JsonDerivedType(typeof(AppearanceChanged), "looks")]
 [JsonDerivedType(typeof(WearRequest), "wear")]
+[JsonDerivedType(typeof(TradeRequest), "tradeask")]
+[JsonDerivedType(typeof(TradeOffer), "tradeoffer")]
+[JsonDerivedType(typeof(TradeConfirm), "tradeyes")]
+[JsonDerivedType(typeof(TradeCancel), "tradestop")]
+[JsonDerivedType(typeof(TradeUpdated), "tradestate")]
+[JsonDerivedType(typeof(TradeAsked), "tradeasked")]
+[JsonDerivedType(typeof(TradeEnded), "tradedone")]
 [JsonDerivedType(typeof(PlayerMoved), "moved")]
 [JsonDerivedType(typeof(PlayerHopped), "hopped")]
 [JsonDerivedType(typeof(PlayerLeft), "left")]
@@ -593,6 +600,50 @@ public sealed record PlayerAppeared(int PlayerId, string Name, int X, int Y, Dir
     /// </summary>
     public Appearance Looks { get; init; } = Appearance.Bare;
 }
+
+/// <summary>
+/// Asking somebody to trade, or agreeing to trade with somebody who asked you.
+/// <para>
+/// One message for both, because they are the same act: two requests pointing at each other
+/// is the whole handshake, and a separate "yes" would be a second way to say a thing that is
+/// already unambiguous.
+/// </para>
+/// </summary>
+public sealed record TradeRequest(int WithPlayerId) : NetMessage;
+
+/// <summary>Putting a party slot up, or −1 to take it back down.</summary>
+public sealed record TradeOffer(int Slot) : NetMessage;
+
+/// <summary>Saying yes to what is on the table, or taking that back.</summary>
+public sealed record TradeConfirm(bool Ready) : NetMessage;
+
+/// <summary>Walking away.</summary>
+public sealed record TradeCancel : NetMessage;
+
+/// <summary>
+/// Everything about a trade in progress, in one message.
+/// <para>
+/// One state message rather than half a dozen events, because a client that assembled the
+/// state from events would be a client that can be one event behind — and being one event
+/// behind about what is on the table is exactly the thing a trade cannot afford.
+/// </para>
+/// </summary>
+public sealed record TradeUpdated(
+    int WithPlayerId,
+    string WithName,
+    SavedMon? Yours,
+    SavedMon? Theirs,
+    bool YouAgreed,
+    bool TheyAgreed) : NetMessage;
+
+/// <summary>
+/// Somebody has asked to trade. Not the same as a trade being open — nothing is on the
+/// table until it is answered.
+/// </summary>
+public sealed record TradeAsked(int FromPlayerId, string FromName) : NetMessage;
+
+/// <summary>A trade is over, done or not, with whatever the party is now.</summary>
+public sealed record TradeEnded(string Reason, IReadOnlyList<SavedMon> Party) : NetMessage;
 
 /// <summary>Somebody put something on or took it off.</summary>
 public sealed record AppearanceChanged(int PlayerId, Appearance Looks) : NetMessage;
