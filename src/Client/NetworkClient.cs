@@ -172,6 +172,16 @@ public sealed class NetworkClient : IDisposable
     /// <summary>Asks to wear something. Asking, because owning it is the server's to know.</summary>
     public void SendWear(int cosmeticId, CosmeticSlot slot) => Send(new WearRequest(cosmeticId, slot));
 
+    /// <summary>
+    /// Anything a screen has already built.
+    /// <para>
+    /// The trade screen produces whole messages rather than fields — an offer, an
+    /// agreement, a cancellation — and wrapping each of them in its own method here would
+    /// be three names for "send the thing you just made".
+    /// </para>
+    /// </summary>
+    public void SendMessage(NetMessage message) => Send(message);
+
     public void SendNameMon(int slot, string name) => Send(new NameMonRequest(slot, name));
 
     public void SendHeal() => Send(new HealRequest());

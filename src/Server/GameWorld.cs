@@ -3282,6 +3282,27 @@ public sealed class GameWorld
     /// <summary>What the last thing anybody did about a trade came to.</summary>
     public string? LastTrade { get; private set; }
 
+    /// <summary>
+    /// Every change of state a trade goes through, for the server to print.
+    /// <para>
+    /// Separate from <see cref="LastTrade"/>, which is what to tell the player who acted.
+    /// This is what to tell whoever is reading the log afterwards, and it exists because a
+    /// live run ended with the trade simply gone and nothing anywhere saying why.
+    /// </para>
+    /// </summary>
+    public string? TradeLog { get; private set; }
+
+    /// <summary>The last transition, once. Taken rather than read, so nothing prints twice.</summary>
+    public string? TakeTradeLog()
+    {
+        lock (_gate)
+        {
+            string? said = TradeLog;
+            TradeLog = null;
+            return said;
+        }
+    }
+
     /// <summary>How many trades are open, for reporting and for tests.</summary>
     public int OpenTrades => _trades.Count;
 
@@ -3329,6 +3350,7 @@ public sealed class GameWorld
             if (_trades.Ask(playerId, withPlayerId) is { } started)
             {
                 LastTrade = $"{asking.Name} and {asked.Name} are trading";
+                TradeLog = $"#{playerId} and #{withPlayerId}: opened";
 
                 return [.. Both(started)];
             }
@@ -3348,6 +3370,7 @@ public sealed class GameWorld
 
             if (_trades.For(playerId) is not { } trade) return [];
             if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
+            if (StillTogether(trade) is { } apart) return apart;
 
             if (slot >= player.Party.Count)
             {
@@ -3384,6 +3407,7 @@ public sealed class GameWorld
             LastTrade = null;
 
             if (_trades.For(playerId) is not { } trade) return [];
+            if (StillTogether(trade) is { } apart) return apart;
 
             trade.Ready(playerId, ready);
 
@@ -3412,6 +3436,8 @@ public sealed class GameWorld
             _trades.Finish(trade);
 
             LastTrade = $"{one.Name} and {two.Name} swapped";
+            TradeLog =
+                $"#{one.Id} and #{two.Id}: swapped slot {trade.OfferedByOne} for slot {trade.OfferedByTwo}";
 
             return
             [
@@ -3436,8 +3462,39 @@ public sealed class GameWorld
         }
     }
 
+    /// <summary>
+    /// Ends a trade whose two people have wandered apart, and returns what to say — or
+    /// nothing at all when they are still together.
+    /// <para>
+    /// Reach was a condition for starting a trade and then never asked again, so two players
+    /// could agree to trade and stroll to opposite ends of a route without either of them
+    /// leaving it. If being within reach is the reason a trade is a thing you can see
+    /// happening, it has to be true for the whole of it and not only the first moment.
+    /// </para>
+    /// </summary>
+    private List<Outgoing>? StillTogether(Trade trade)
+    {
+        if (!_players.TryGetValue(trade.One, out ServerPlayer? one)
+            || !_players.TryGetValue(trade.Two, out ServerPlayer? two))
+        {
+            return Close(trade, "Somebody left.");
+        }
+
+        if (one.MapId == two.MapId && (WithinReach(one, two.Square) || WithinReach(two, one.Square)))
+            return null;
+
+        LastTrade = "ended: they are not within reach any more";
+
+        return Close(trade, "Too far apart.");
+    }
+
     private List<Outgoing> Close(Trade trade, string reason)
     {
+        // Said out loud, because a trade that ends is a trade somebody was in the middle
+        // of, and "it stopped" is not a thing anybody can act on. A live run of this ended
+        // once with no explanation at all and cost the milestone its ending.
+        TradeLog = $"#{trade.One} and #{trade.Two}: {reason}";
+
         _trades.Finish(trade);
 
         var said = new List<Outgoing>();
@@ -3478,11 +3535,28 @@ public sealed class GameWorld
     private static SavedMon? Put(ServerPlayer who, int slot) =>
         slot >= 0 && slot < who.Party.Count ? who.Party[slot] : null;
 
-    /// <summary>By the same rule that decides whether somebody can be spoken to.</summary>
-    private bool WithinReach(ServerPlayer player, GridPosition square) =>
-        Interaction
-            .Reachable(player.Square, player.Facing, at => !GridFor(player.MapId).IsWalkable(at))
-            .Contains(square);
+    /// <summary>
+    /// Close enough to trade: the same square, or one step from it.
+    /// <para>
+    /// Not the talking rule, which is what this started as and was wrong twice over. That
+    /// rule is <em>directional</em> — it asks what is in front of you — and it made a trade
+    /// need two people facing each other, so accepting an offer meant turning round first.
+    /// Nobody should have to face somebody to say yes to them.
+    /// </para>
+    /// <para>
+    /// And it excluded the square you are standing on, which since milestone 93 is exactly
+    /// where the person you walked up to is: players pass through each other, so "walk up to
+    /// somebody" walks onto them. That refused the first live trade this project ever tried
+    /// and cost it its ending.
+    /// </para>
+    /// <para>
+    /// So: near, and not facing. The reason reach is a condition at all is that a trade
+    /// should be a thing two people can see happening, and standing together is the whole
+    /// of that.
+    /// </para>
+    /// </summary>
+    private static bool WithinReach(ServerPlayer player, GridPosition square) =>
+        Math.Abs(player.Square.X - square.X) + Math.Abs(player.Square.Y - square.Y) <= 1;
 
     /// <summary>
     /// Puts something on, or takes a slot off, if this account owns the thing.

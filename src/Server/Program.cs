@@ -935,27 +935,34 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                             List<Outgoing> asked = world.AskToTrade(playerId, asking.WithPlayerId);
 
                             if (world.LastTrade is { } about) Console.WriteLine($"= #{playerId} trade: {about}");
+                            if (world.TakeTradeLog() is { } opened) Console.WriteLine($"= trade {opened}");
 
                             await DispatchAsync(asked, playerId, cancellationToken).ConfigureAwait(false);
                             break;
 
                         case TradeOffer offering when playerId != 0:
-                            await DispatchAsync(
-                                world.OfferInTrade(playerId, offering.Slot), playerId, cancellationToken)
-                                .ConfigureAwait(false);
+                            List<Outgoing> tabled = world.OfferInTrade(playerId, offering.Slot);
+
+                            if (world.TakeTradeLog() is { } moved) Console.WriteLine($"= trade {moved}");
+
+                            await DispatchAsync(tabled, playerId, cancellationToken).ConfigureAwait(false);
                             break;
 
                         case TradeConfirm agreeing when playerId != 0:
                             List<Outgoing> agreed = world.ConfirmTrade(playerId, agreeing.Ready);
 
                             if (world.LastTrade is { } swapped) Console.WriteLine($"= #{playerId} trade: {swapped}");
+                            if (world.TakeTradeLog() is { } settled) Console.WriteLine($"= trade {settled}");
 
                             await DispatchAsync(agreed, playerId, cancellationToken).ConfigureAwait(false);
                             break;
 
                         case TradeCancel when playerId != 0:
-                            await DispatchAsync(world.CancelTrade(playerId), playerId, cancellationToken)
-                                .ConfigureAwait(false);
+                            List<Outgoing> off = world.CancelTrade(playerId);
+
+                            if (world.TakeTradeLog() is { } stopped) Console.WriteLine($"= trade {stopped}");
+
+                            await DispatchAsync(off, playerId, cancellationToken).ConfigureAwait(false);
                             break;
 
                         case WearRequest wearing when playerId != 0:
@@ -1059,6 +1066,12 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                                 .ConfigureAwait(false);
 
                             if (world.LastConsole is { } logged) Console.WriteLine($"$ {logged}");
+
+                            // The console deserves the same line the wire gets. Without it a
+                            // trade driven from /trade was invisible in the log, which is
+                            // twice now that a live ask has vanished with no explanation.
+                            if (world.LastTrade is { } console) Console.WriteLine($"= trade: {console}");
+                            if (world.TakeTradeLog() is { } byHand) Console.WriteLine($"= trade {byHand}");
                             break;
 
                         case NameMonRequest named when playerId != 0:

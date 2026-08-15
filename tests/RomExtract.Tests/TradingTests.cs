@@ -113,6 +113,62 @@ public class TradingTests
         Assert.Contains("within reach", world.LastTrade ?? "");
     }
 
+    /// <summary>
+    /// Somebody standing on your own square can be traded with, which is not an edge case:
+    /// since players walk through each other, walking up to somebody walks onto them.
+    /// </summary>
+    [Fact]
+    public void SomebodyStandingOnYouIsCloseEnough()
+    {
+        (GameWorld world, ServerPlayer one, ServerPlayer two) = Facing();
+
+        two.Square = one.Square;
+
+        world.AskToTrade(one.Id, two.Id);
+        world.AskToTrade(two.Id, one.Id);
+
+        Assert.Equal(1, world.OpenTrades);
+    }
+
+    /// <summary>
+    /// And nobody has to face anybody. The rule started as the talking rule, which asks what
+    /// is in front of you — so accepting an offer meant turning round first, and saying yes
+    /// to somebody should not require looking at them.
+    /// </summary>
+    [Fact]
+    public void NobodyHasToTurnRoundToSayYes()
+    {
+        (GameWorld world, ServerPlayer one, ServerPlayer two) = Facing();
+
+        one.Facing = Direction.Left;
+        two.Facing = Direction.Left;
+
+        world.AskToTrade(one.Id, two.Id);
+        world.AskToTrade(two.Id, one.Id);
+
+        Assert.Equal(1, world.OpenTrades);
+    }
+
+    /// <summary>
+    /// And a trade ends when the two of them wander apart. Reach was a condition for
+    /// starting one and then never asked again, so two people could agree and stroll to
+    /// opposite ends of a route while still holding a table between them.
+    /// </summary>
+    [Fact]
+    public void WanderingApartEndsIt()
+    {
+        (GameWorld world, ServerPlayer one, ServerPlayer two) = Facing();
+
+        Trading(world, one, two);
+
+        two.Square = new GridPosition(7, 7);
+
+        List<Outgoing> said = world.OfferInTrade(one.Id, 0);
+
+        Assert.Equal(0, world.OpenTrades);
+        Assert.Contains(said.Select(o => o.Message).OfType<TradeEnded>(), e => e.Reason == "Too far apart.");
+    }
+
     // ---- what is on the table -----------------------------------------------------
 
     [Fact]

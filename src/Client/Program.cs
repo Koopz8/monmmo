@@ -312,6 +312,11 @@ public static class Program
         Appearance looks = Appearance.Bare;
         IReadOnlyList<int> owned = [];
         WardrobeScreen? dressing = null;
+        TradeScreen? trading = null;
+
+        // Somebody has asked, and has not been answered. Kept so the offer can be
+        // accepted with a key rather than by typing a player id.
+        int askedBy = 0;
         BattleScreen? battle = null;
         DialogueBox? talking = null;
 
@@ -461,7 +466,7 @@ public static class Program
             ApplyServerMessages(
                 network, others, player, view, data, trainers, items, script, carrying, storing, looking,
                 ref talking, ref battle, ref shop, ref bag, ref party, ref box, ref boxSize, ref money,
-                ref correction, ref looks, ref owned, ref watching, ref exclaimFor, ref scene, ref arrived, ref fadingIn, ref holdInput,
+                ref correction, ref looks, ref owned, ref trading, ref askedBy, ref watching, ref exclaimFor, ref scene, ref arrived, ref fadingIn, ref holdInput,
                 ref afterTheFight, ref cameOut, outcomes, rival, console);
 
             // A battle suspends the overworld entirely: the server is running it, and
@@ -604,6 +609,28 @@ public static class Program
                 && talking is null && !console.IsOpen && Raylib.IsKeyPressed(KeyboardKey.O))
             {
                 dressing = new WardrobeScreen(owned, looks);
+            }
+
+            if (trading is not null)
+            {
+                trading.Apply(party);
+                trading.Update();
+
+                if (trading.TakePending() is { } move) network.SendMessage(move);
+
+                trading.Draw();
+
+                if (trading.IsClosed) trading = null;
+
+                Raylib.EndDrawing();
+                continue;
+            }
+
+            // Saying yes to somebody who asked, which is the same message they sent.
+            if (askedBy != 0 && talking is null && !console.IsOpen && Raylib.IsKeyPressed(KeyboardKey.Y))
+            {
+                network.SendMessage(new TradeRequest(askedBy));
+                askedBy = 0;
             }
 
             if (dressing is not null)
@@ -1746,6 +1773,8 @@ public static class Program
         ref (string MapId, GridPosition Square)? correction,
         ref Appearance looks,
         ref IReadOnlyList<int> owned,
+        ref TradeScreen? trading,
+        ref int askedBy,
         ref int? watching,
         ref float exclaimFor,
         ref Cutscene? scene,
@@ -1972,6 +2001,26 @@ public static class Program
                 case AppearanceChanged dressed when dressed.PlayerId != network.PlayerId:
                     if (others.TryGetValue(dressed.PlayerId, out RemoteCharacter? wearer))
                         wearer.Looks = dressed.Looks;
+                    break;
+
+                case TradeAsked asked:
+                    askedBy = asked.FromPlayerId;
+                    Note($"{asked.FromName} wants to trade — Y to agree");
+                    break;
+
+                case TradeUpdated table:
+                    askedBy = 0;
+
+                    if (trading is null) trading = new TradeScreen(party, table, data);
+                    else trading.Apply(table);
+                    break;
+
+                case TradeEnded over:
+                    party = over.Party;
+                    trading?.Apply(party);
+                    trading?.Finish(over.Reason);
+                    looking?.Apply(party);
+                    storing?.Apply(party);
                     break;
 
                 case AppearanceChanged mine when mine.PlayerId == network.PlayerId:
