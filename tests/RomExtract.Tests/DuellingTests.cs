@@ -316,6 +316,71 @@ public class DuellingTests
         Assert.Equal(0, world.OpenDuels);
     }
 
+    /// <summary>
+    /// Switching costs the turn and nothing else: the one who comes out arrives to
+    /// whatever the other side had already decided to do.
+    /// </summary>
+    [Fact]
+    public void SwitchingSendsSomebodyElseOut()
+    {
+        (GameWorld world, ServerPlayer one, ServerPlayer two) = Facing();
+
+        List<Outgoing> opened = Fighting(world, one, two);
+
+        int before = opened.Where(o => o.OnlyTo == one.Id)
+            .Select(o => o.Message).OfType<BattleStarted>().Single().You.Species;
+
+        world.TakeBattleTurn(one.Id, new BattleAction.SwitchTo(1));
+
+        List<Outgoing> said = world.TakeBattleTurn(two.Id, new BattleAction.UseMove(0));
+
+        BattlerSentOut sent = said.Where(o => o.OnlyTo == one.Id)
+            .Select(o => o.Message).OfType<BattlerSentOut>().Single();
+
+        Assert.Equal(Side.Player, sent.Side);
+        Assert.NotEqual(before, sent.Battler.Species);
+    }
+
+    /// <summary>And the other side is told who came out, on their side of the screen.</summary>
+    [Fact]
+    public void AndTheOtherSideIsToldWhoCameOut()
+    {
+        (GameWorld world, ServerPlayer one, ServerPlayer two) = Facing();
+
+        Fighting(world, one, two);
+
+        world.TakeBattleTurn(one.Id, new BattleAction.SwitchTo(1));
+
+        List<Outgoing> said = world.TakeBattleTurn(two.Id, new BattleAction.UseMove(0));
+
+        BattlerSentOut seen = said.Where(o => o.OnlyTo == two.Id)
+            .Select(o => o.Message).OfType<BattlerSentOut>().Single();
+
+        Assert.Equal(Side.Opponent, seen.Side);
+    }
+
+    /// <summary>
+    /// A switch nobody could make becomes a move rather than a refusal, because a turn
+    /// left waiting on a decision the player believes they have made is a duel that hangs.
+    /// </summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(9)]
+    [InlineData(-1)]
+    public void ASwitchNobodyCouldMakeIsJustATurn(int slot)
+    {
+        (GameWorld world, ServerPlayer one, ServerPlayer two) = Facing();
+
+        Fighting(world, one, two);
+
+        world.TakeBattleTurn(one.Id, new BattleAction.SwitchTo(slot));
+
+        List<Outgoing> said = world.TakeBattleTurn(two.Id, new BattleAction.UseMove(0));
+
+        Assert.Empty(said.Select(o => o.Message).OfType<BattlerSentOut>());
+        Assert.NotEmpty(said.Select(o => o.Message).OfType<BattleUpdate>());
+    }
+
     /// <summary>One fight at a time, so a challenge cannot interrupt one.</summary>
     [Fact]
     public void OneFightAtATime()

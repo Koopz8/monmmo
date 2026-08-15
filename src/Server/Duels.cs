@@ -101,6 +101,30 @@ public sealed class Duel
     public bool IsBeaten(int playerId) => Team(playerId).All(b => b.HasFainted);
 
     /// <summary>
+    /// Sends somebody out by choice rather than because somebody fainted.
+    /// <para>
+    /// Refused for a slot that is not in the team, the one already out, and anybody who
+    /// cannot fight — all three are things a client could ask for and none of them is
+    /// something a player could do, which is why they are decided here.
+    /// </para>
+    /// <para>
+    /// It costs the turn. The engine is handed the switch and finds no move on it, which
+    /// is what a switch is from the arithmetic's point of view: the one who comes out
+    /// arrives to whatever the other side had already decided to do.
+    /// </para>
+    /// </summary>
+    public Battler? SwitchTo(int playerId, int slot)
+    {
+        List<Battler> team = Team(playerId);
+
+        if (slot < 0 || slot >= team.Count) return null;
+        if (slot == SlotOf(playerId)) return null;
+        if (team[slot].HasFainted) return null;
+
+        return SendOut(playerId, slot);
+    }
+
+    /// <summary>
     /// Sends out the next one who can fight, because somebody fainted.
     /// <para>
     /// Chosen here rather than asked for. A duel that stopped to ask would need a third
@@ -116,21 +140,37 @@ public sealed class Duel
         {
             if (team[slot].HasFainted) continue;
 
-            if (playerId == One)
-            {
-                _oneSlot = slot;
-                Current = new Battle(team[slot], Current.Opponent, Current.State) { IsWild = false };
-            }
-            else
-            {
-                _twoSlot = slot;
-                Current = new Battle(Current.Player, team[slot], Current.State) { IsWild = false };
-            }
-
-            return team[slot];
+            return SendOut(playerId, slot);
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Rebuilds the fight around one side's new creature, carrying the dice and the other
+    /// side's exactly as they are.
+    /// <para>
+    /// A fresh battle has no stat stages in it, so stages go with the one who left. That
+    /// falls out of the arrangement rather than needing a rule of its own — and it is the
+    /// same arrangement a trainer fight has used since the beginning.
+    /// </para>
+    /// </summary>
+    private Battler SendOut(int playerId, int slot)
+    {
+        List<Battler> team = Team(playerId);
+
+        if (playerId == One)
+        {
+            _oneSlot = slot;
+            Current = new Battle(team[slot], Current.Opponent, Current.State) { IsWild = false };
+        }
+        else
+        {
+            _twoSlot = slot;
+            Current = new Battle(Current.Player, team[slot], Current.State) { IsWild = false };
+        }
+
+        return team[slot];
     }
 
     private List<Battler> Team(int playerId) => playerId == One ? _ones : _twos;

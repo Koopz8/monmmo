@@ -81,6 +81,20 @@ public sealed record FerryDock(int Number, int Attendant, int ArrivalX, int Arri
         $"dock {Number}, attendant {Attendant}, arriving at ({ArrivalX},{ArrivalY})";
 }
 
+/// <summary>
+/// A ticket the boat asks for: a flag, and the item that flag says you were given.
+/// <para>
+/// The ferry's script asks twice, and both questions have the same shape — is this flag
+/// set, and is this item in the bag. Either answer opens the boat. Which places each one
+/// is worth is inside the routine that draws the menu and cannot be read from here; that
+/// it is asked at all is plain in the script.
+/// </para>
+/// </summary>
+public sealed record FerryPass(int Flag, int ItemId)
+{
+    public override string ToString() => $"flag 0x{Flag:X4} and item {ItemId}";
+}
+
 public sealed record Warp(int X, int Y, int TargetWarpId, string TargetMapId)
 {
     /// <summary>

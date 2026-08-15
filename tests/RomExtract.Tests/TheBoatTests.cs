@@ -194,6 +194,113 @@ public class TheBoatTests
         Assert.Equal(Island, player.MapId);
     }
 
+    /// <summary>
+    /// Two rooms, a boat, and a ticket the boat asks for — with somebody on the map who
+    /// hands that ticket over, so the gate is a gate rather than a wall.
+    /// </summary>
+    private static (GameWorld World, ServerPlayer Player) WithAGate(bool obtainable)
+    {
+        MapObject sailor = new(2, 5, 3, 4, Direction.Up, 0, false) { Talks = true };
+
+        MapObject clerk = new(3, 5, 6, 6, Direction.Down, 0, false)
+        {
+            Talks = true,
+            CanGive = obtainable ? [Ticket] : [],
+        };
+
+        MapData here = new(Harbour, "VERMILION CITY", 8, 8, new byte[64])
+        {
+            Objects = [sailor, clerk],
+            Ferry = new FerryDock(0, 2, 3, 3),
+        };
+
+        MapData there = new(Island, "ONE ISLAND", 8, 8, new byte[64])
+        {
+            Ferry = new FerryDock(1, 2, 5, 6),
+        };
+
+        var world = new GameWorld(
+            new WorldData([here, there]) { FerryPasses = [new FerryPass(TicketFlag, Ticket)] },
+            Harbour,
+            TestRules.All);
+
+        (ServerPlayer player, _) = world.Join(1, "Mason", SavedCharacter.Fresh(Harbour, 3, 5));
+
+        player.Square = new GridPosition(3, 5);
+        player.Facing = Direction.Up;
+
+        return (world, player);
+    }
+
+    private const int Ticket = 370;
+    private const int TicketFlag = 0x084A;
+
+    /// <summary>
+    /// A gate whose key exists is a gate. Somebody on the map can hand the ticket over,
+    /// so the sailor is entitled to ask for it — and does.
+    /// </summary>
+    [Fact]
+    public void AGateWhoseKeyExistsIsEnforced()
+    {
+        (GameWorld world, ServerPlayer player) = WithAGate(obtainable: true);
+
+        Assert.Empty(world.StartTalking(player.Id, 2).Select(o => o.Message).OfType<FerryOpened>());
+        Assert.Contains("no pass", world.LastFerry);
+    }
+
+    /// <summary>And opens for somebody holding the ticket, flag and item both.</summary>
+    [Fact]
+    public void AndOpensForSomebodyCarryingTheTicket()
+    {
+        (GameWorld world, ServerPlayer player) = WithAGate(obtainable: true);
+
+        player.Script.Set(TicketFlag);
+        player.Bag.Add(Ticket, 1);
+
+        Assert.NotEmpty(world.StartTalking(player.Id, 2).Select(o => o.Message).OfType<FerryOpened>());
+    }
+
+    /// <summary>Half a ticket is not a ticket: the flag without the item does not open it.</summary>
+    [Fact]
+    public void AndNotForHalfOfOne()
+    {
+        (GameWorld world, ServerPlayer player) = WithAGate(obtainable: true);
+
+        player.Script.Set(TicketFlag);
+
+        Assert.Empty(world.StartTalking(player.Id, 2).Select(o => o.Message).OfType<FerryOpened>());
+    }
+
+    /// <summary>
+    /// A gate whose key is nowhere in the world is a wall, and this project does not build
+    /// walls it cannot open. The cartridge's own ferry is exactly this: three of its 2681
+    /// map scripts mention a pass and all three are the sailor asking for one.
+    /// </summary>
+    [Fact]
+    public void AGateWithNoKeyAnywhereIsNotEnforced()
+    {
+        (GameWorld world, ServerPlayer player) = WithAGate(obtainable: false);
+
+        Assert.NotEmpty(world.StartTalking(player.Id, 2).Select(o => o.Message).OfType<FerryOpened>());
+    }
+
+    [Fact]
+    public void TheTicketTravelsInTheWorldFile()
+    {
+        MapData map = new(Harbour, "VERMILION CITY", 8, 8, new byte[64]);
+
+        using var buffer = new MemoryStream();
+
+        new WorldData([map]) { FerryPasses = [new FerryPass(0x084A, 370), new FerryPass(0x084B, 371)] }
+            .Save(buffer);
+
+        buffer.Position = 0;
+
+        Assert.Equal(
+            [new FerryPass(0x084A, 370), new FerryPass(0x084B, 371)],
+            WorldData.Load(buffer).FerryPasses);
+    }
+
     [Fact]
     public void TheDockTravelsInTheWorldFile()
     {

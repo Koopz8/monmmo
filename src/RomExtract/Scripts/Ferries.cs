@@ -123,6 +123,56 @@ public static class Ferries
         return new FerryDock(stop.Number, sailor.LocalId, arrival.X, arrival.Y);
     }
 
+    /// <summary>
+    /// What the boat asks for, read off the dock that asks.
+    /// <para>
+    /// Only one of the ten does. VERMILION's sailor runs two sub-routines of the same
+    /// shape — <c>checkflag F</c>, and within a few commands <c>checkitem I</c> — and
+    /// either answer opens the boat. Both questions are in plain sight; which places
+    /// each ticket is worth is inside the routine that draws the menu, and is not.
+    /// </para>
+    /// <para>
+    /// Paired by proximity rather than by a table, because the pairing is what the
+    /// script does: the flag is asked first and the item immediately after it, on the
+    /// branch that the flag being set leads to. A flag with no item near it is not a
+    /// ticket and is not reported as one.
+    /// </para>
+    /// </summary>
+    public static List<FerryPass> Passes(
+        Rom rom, MapHeaderRecord header, int width, int height, Action<string>? log = null)
+    {
+        var found = new List<FerryPass>();
+
+        foreach ((string _, uint address) in ScriptsOn(rom, header, width, height, log))
+        {
+            List<ScriptCommand> commands = [.. ScriptReader.ReadAll(rom, address).OrderBy(c => c.Offset)];
+
+            for (int i = 0; i < commands.Count; i++)
+            {
+                if (commands[i].Code != CheckFlag) continue;
+
+                for (int j = i + 1; j < commands.Count && j <= i + Nearby; j++)
+                {
+                    if (commands[j].Code != CheckItem) continue;
+
+                    var pass = new FerryPass(commands[i].Word(0), commands[j].Word(0));
+
+                    if (!found.Contains(pass)) found.Add(pass);
+
+                    break;
+                }
+            }
+        }
+
+        return found;
+    }
+
+    private const byte CheckFlag = 0x2B;
+    private const byte CheckItem = 0x47;
+
+    /// <summary>How many commands apart the two halves of one question may be.</summary>
+    private const int Nearby = 4;
+
     private static IEnumerable<(string What, uint Address)> ScriptsOn(
         Rom rom, MapHeaderRecord header, int width, int height, Action<string>? log)
     {

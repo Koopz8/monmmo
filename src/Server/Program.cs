@@ -465,6 +465,21 @@ public static class Program
 
             foreach (MapData dock in docks)
                 Console.WriteLine($"      {dock.Ferry!.Number,2}  {dock.Id,-6} {dock.Name}");
+
+            // And the ticket it asks for, which is a gate with no key anywhere in this
+            // cartridge — so it is carried and reported rather than enforced. See
+            // GameWorld.HasAPass, where the reason is written down.
+            foreach (FerryPass pass in world.FerryPasses)
+            {
+                bool obtainable = world.ItemsHandedOut.Contains(pass.ItemId);
+
+                Console.WriteLine(
+                    $"      it asks for {pass} — " +
+                    (obtainable ? "which something on a map hands over" : "which nothing anywhere hands over"));
+            }
+
+            if (world.FerryPasses.Count > 0 && !world.AnyPassCanBeHadHere)
+                Console.WriteLine("      so the boat is not gated: a gate with no key is a wall");
         }
 
         if (reach.Beyond.Count > 0)

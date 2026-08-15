@@ -360,9 +360,24 @@ public static class WorldExporter
                 $"by the {opening.Flags.Count} flags a new game sets");
         }
 
+        // The ferry's ticket, read off the one dock that checks for one.
+        var passes = new List<FerryPass>();
+
+        foreach ((int bank, int number, MapHeaderRecord header) in banks.AllMaps)
+        {
+            if (maps.FirstOrDefault(m => m.Id == MapId(bank, number)) is not { Ferry: not null } dock) continue;
+
+            foreach (FerryPass pass in Ferries.Passes(rom, header, dock.Width, dock.Height, log))
+                if (!passes.Contains(pass)) passes.Add(pass);
+        }
+
         return new WorldData(maps)
         {
             FlagsAtStart = opening?.Flags ?? [],
+
+            // What the boat asks for. Read from whichever dock asks — only one of the
+            // ten does, and it asks on behalf of all of them.
+            FerryPasses = passes,
             VariablesAtStart = [.. (opening?.Variables ?? []).Select(v => new StartingVariable(v.Variable, v.Value))],
         };
     }

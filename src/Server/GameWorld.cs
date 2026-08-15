@@ -1588,10 +1588,45 @@ public sealed class GameWorld
         if (_world.Find(player.MapId)?.Ferry is not { } dock) return [];
         if (dock.Attendant != sailor.LocalId) return [];
 
+        if (!HasAPass(player))
+        {
+            LastFerry = "refused: no pass";
+            return [];
+        }
+
         player.AtTheDock = dock.Number;
+
+        LastFerry = $"a boat, from dock {dock.Number}";
 
         return [new Outgoing(new FerryOpened(dock.Number, Ports), OnlyTo: player.Id)];
     }
+
+    /// <summary>
+    /// Whether the boat will carry this player.
+    /// <para>
+    /// The ferry asks for a ticket — a flag, and the item that flag says you were given —
+    /// and either of the two opens it. That much is plainly in VERMILION's script.
+    /// </para>
+    /// <para>
+    /// What is also plainly in the cartridge is that nothing hands one over. Three of this
+    /// image's 2681 map scripts mention a pass and all three of them are this same sailor
+    /// <em>asking</em> for one: nobody gives one, no shop sells one, and no script sets
+    /// either flag. A gate whose key exists is a gate; a gate whose key is nowhere in the
+    /// world is a wall, and this one would seal 152 maps behind it.
+    /// </para>
+    /// <para>
+    /// So the gate is carried, reported at startup, and enforced only when the world can
+    /// supply a key. An operator handing over item 370 with <c>/item</c> and setting its
+    /// flag with <c>/flag</c> makes it real for that save; and the day anything in the
+    /// world hands one over, this starts refusing on its own with no edit here.
+    /// </para>
+    /// </summary>
+    public bool HasAPass(ServerPlayer player) =>
+        !_world.AnyPassCanBeHadHere
+        || _world.FerryPasses.Any(p => player.Script.Has(p.Flag) && player.Bag.Has(p.ItemId, 1));
+
+    /// <summary>What the last thing anybody did about the boat came to.</summary>
+    public string? LastFerry { get; private set; }
 
     /// <summary>
     /// Sails, if the boat is open and the place asked for is one it calls at.
@@ -3579,13 +3614,22 @@ public sealed class GameWorld
                 return [];
             }
 
+            // Both switches before either action, because a switch is not a turn — it is
+            // the pair the turn is about to happen to. Applied one at a time, and each
+            // rebuild carries the other side exactly as it stands.
+            var next = new List<(int Who, Battler Sent)>();
+
+            foreach (int side in new[] { duel.One, duel.Two })
+            {
+                if (duel.ChoiceOf(side) is not BattleAction.SwitchTo going) continue;
+                if (duel.SwitchTo(side, going.Slot) is { } sent) next.Add((side, sent));
+            }
+
             List<BattleEvent> events = duel.Resolve();
 
             // Somebody who fainted is replaced before the turn is reported, so both
             // clients are told about the next one in the same breath as the last one
             // going down.
-            var next = new List<(int Who, Battler Sent)>();
-
             foreach (int side in new[] { duel.One, duel.Two })
             {
                 if (!duel.ActiveFor(side).HasFainted) continue;
@@ -3671,14 +3715,29 @@ public sealed class GameWorld
     /// <summary>
     /// What a player is actually allowed to do in a duel.
     /// <para>
-    /// Balls and items are not offered and are refused here as well, because a hidden
-    /// option is a courtesy and not a rule. A switch is refused too, for now: the engine
-    /// takes one action per side per turn and a duel has no place to put "and then wait
-    /// for the other one to finish deciding about the creature that is no longer there".
+    /// A move or a switch, and nothing else. Balls and items are not offered by the client
+    /// and are refused here as well, because a hidden option is a courtesy and not a rule
+    /// — and running away from a person is not a thing this game has ever allowed.
+    /// </para>
+    /// <para>
+    /// A switch that could not be made becomes a move, rather than a refusal. Refusing it
+    /// would leave the turn waiting on a decision the player believes they have already
+    /// made, and a duel that hangs is worse than a duel that attacks.
     /// </para>
     /// </summary>
     private static BattleAction Allowed(Duel duel, int playerId, BattleAction action) =>
-        action is BattleAction.UseMove ? action : new BattleAction.UseMove(0);
+        action switch
+        {
+            BattleAction.UseMove => action,
+
+            BattleAction.SwitchTo going
+                when going.Slot >= 0
+                    && going.Slot != duel.SlotOf(playerId)
+                    && going.Slot < duel.TeamOf(playerId).Count
+                    && !duel.TeamOf(playerId)[going.Slot].HasFainted => action,
+
+            _ => new BattleAction.UseMove(0),
+        };
 
     /// <summary>Called off, by either side or by walking away.</summary>
     public List<Outgoing> CancelDuel(int playerId, string reason)

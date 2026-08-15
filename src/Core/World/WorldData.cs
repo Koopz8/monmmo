@@ -272,7 +272,7 @@ public sealed class WorldData
     /// <summary>Identifies the format, so a wrong or stale file fails loudly.</summary>
     private static readonly byte[] Magic = "MONWORLD"u8.ToArray();
 
-    private const int Version = 26;
+    private const int Version = 27;
 
     private readonly Dictionary<string, MapData> _maps;
 
@@ -300,6 +300,45 @@ public sealed class WorldData
 
     /// <summary>Variables a new character starts holding, as (id, value).</summary>
     public IReadOnlyList<StartingVariable> VariablesAtStart { get; init; } = [];
+
+    /// <summary>
+    /// What the boat asks for, if it asks for anything.
+    /// <para>
+    /// Either pass opens it. Carried here rather than on a dock because it is the ferry's
+    /// question and not one harbour's — only VERMILION asks it, and it asks on behalf of
+    /// all ten.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<FerryPass> FerryPasses { get; init; } = [];
+
+    /// <summary>
+    /// Whether anything anywhere in this world can put a pass in a bag.
+    /// <para>
+    /// The reason this is asked at all: a gate whose key exists is a gate, and a gate
+    /// whose key does not exist is a wall. Three of this cartridge's 2681 map scripts
+    /// mention a pass and all three of them are the ferry <em>asking</em> for one —
+    /// nothing gives one, no shop sells one, and nothing sets either flag. Enforcing it
+    /// would seal 152 maps behind a door with no key anywhere in the world.
+    /// </para>
+    /// <para>
+    /// So the gate is carried, reported, and enforced only when it can be opened. An
+    /// operator handing over item 370 with <c>/item</c> and setting its flag makes it
+    /// real; nothing else does.
+    /// </para>
+    /// </summary>
+    public bool AnyPassCanBeHadHere =>
+        FerryPasses.Count > 0 && FerryPasses.Any(p => ItemsHandedOut.Contains(p.ItemId));
+
+    /// <summary>Every item id something on a map hands over or sells.</summary>
+    public IReadOnlySet<int> ItemsHandedOut =>
+        _handedOut ??=
+        [
+            .. Maps.SelectMany(m => m.Objects)
+                .SelectMany(o => o.CanGive.Append(o.GivesItemId).Append(o.WinsItemId).Concat(o.Stock)),
+            .. Maps.SelectMany(m => m.OnEntry).Select(e => e.GivesItemId),
+        ];
+
+    private HashSet<int>? _handedOut;
 
     public int Count => _maps.Count;
 
@@ -338,6 +377,14 @@ public sealed class WorldData
 
         writer.Write(FlagsAtStart.Count);
         foreach (int flag in FlagsAtStart) writer.Write(flag);
+
+        writer.Write(FerryPasses.Count);
+
+        foreach (FerryPass pass in FerryPasses)
+        {
+            writer.Write(pass.Flag);
+            writer.Write(pass.ItemId);
+        }
 
         writer.Write(VariablesAtStart.Count);
 
@@ -426,6 +473,16 @@ public sealed class WorldData
 
         for (int i = 0; i < flagCount; i++) flags.Add(reader.ReadInt32());
 
+        int passCount = reader.ReadInt32();
+
+        if (passCount is < 0 or > 64)
+            throw new InvalidDataException($"World file claims {passCount} ferry passes.");
+
+        var passes = new List<FerryPass>(passCount);
+
+        for (int i = 0; i < passCount; i++)
+            passes.Add(new FerryPass(reader.ReadInt32(), reader.ReadInt32()));
+
         int variableCount = reader.ReadInt32();
 
         if (variableCount < 0)
@@ -436,7 +493,12 @@ public sealed class WorldData
         for (int i = 0; i < variableCount; i++)
             variables.Add(new StartingVariable(reader.ReadInt32(), reader.ReadInt32()));
 
-        return new WorldData(maps) { FlagsAtStart = flags, VariablesAtStart = variables };
+        return new WorldData(maps)
+        {
+            FlagsAtStart = flags,
+            VariablesAtStart = variables,
+            FerryPasses = passes,
+        };
     }
 
     private static void WriteLinks(BinaryWriter writer, MapData map)

@@ -223,8 +223,13 @@ The lesson that keeps recurring, in the words it was learned in:
 
 ## Next
 
-Player-versus-player is in. What is left, in order: the passes that gate the ferry
-(two flags and two items, all of them plainly in the VERMILION script and none of
-them derived yet), the battle engine's silent half (127 move-effect groups the
-engine steps over without saying so), and art — twelve cosmetic slots with nothing
-drawn in them, and a shop to buy from.
+Player-versus-player is in, switching included. What is left, in order: the battle
+engine's silent half (127 move-effect groups the engine steps over without saying
+so), and art — twelve cosmetic slots with nothing drawn in them, and a shop to buy
+from.
+
+The ferry's ticket is derived and carried, and deliberately not enforced: three of
+this cartridge's 2681 map scripts mention a pass and all three are the sailor asking
+for one. Nothing gives one, no shop sells one, and no script sets either flag. A gate
+whose key exists is a gate; a gate whose key is nowhere in the world is a wall, so the
+server enforces it only when the world can supply a key — and says which at startup.
