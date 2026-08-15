@@ -14,7 +14,7 @@ namespace PokeMmo.Server.Storage;
 /// readers out during every save, and saves happen while people are playing.
 /// </para>
 /// </summary>
-public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
+public sealed class SqlitePlayerStore : IPlayerStore, IMarketStore, IDisposable
 {
     /// <summary>Where the database lives unless told otherwise.</summary>
     public const string DefaultFileName = "players.db";
@@ -168,6 +168,42 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
                 PRIMARY KEY (account_id, variable)
             );
 
+            CREATE TABLE IF NOT EXISTS market_listings (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                seller_id  INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+
+                -- The escrowed row while it is for sale, and nothing once it is sold. No
+                -- foreign key on purpose: after a sale that row belongs to its buyer and
+                -- is theirs to rewrite, and a cascade from it would delete the listing —
+                -- taking the seller's unpaid money with it the first time the buyer saved.
+                member_id  INTEGER NULL,
+
+                -- Copied at the moment of listing rather than looked up, so a sold listing
+                -- still says what it was. This is also what a market is searched by.
+                species    INTEGER NOT NULL,
+                level      INTEGER NOT NULL,
+                sex        INTEGER NOT NULL DEFAULT 0,
+                iv_hp      INTEGER NOT NULL DEFAULT 0,
+                iv_attack  INTEGER NOT NULL DEFAULT 0,
+                iv_defense INTEGER NOT NULL DEFAULT 0,
+                iv_speed   INTEGER NOT NULL DEFAULT 0,
+                iv_spattack INTEGER NOT NULL DEFAULT 0,
+                iv_spdefense INTEGER NOT NULL DEFAULT 0,
+
+                price      INTEGER NOT NULL,
+
+                -- Nought is for sale, one is sold and owing. There is no third: a listing
+                -- whose money has been collected is deleted, because nothing here is kept
+                -- for its own sake.
+                state      INTEGER NOT NULL DEFAULT 0,
+                buyer_id   INTEGER NULL,
+                listed_at  TEXT NOT NULL,
+                sold_at    TEXT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS market_for_sale ON market_listings (state, id DESC);
+            CREATE INDEX IF NOT EXISTS market_by_seller ON market_listings (seller_id);
+
             CREATE TABLE IF NOT EXISTS party_moves (
                 member_id INTEGER NOT NULL REFERENCES party_members(id) ON DELETE CASCADE,
                 slot      INTEGER NOT NULL,
@@ -288,6 +324,22 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
 
     /// <summary>The highest <c>in_box</c> value that is still one of this character's lists.</summary>
     public const int LastOwnList = AtTheDaycare;
+
+    /// <summary>
+    /// The slot number an escrowed row carries.
+    /// <para>
+    /// A slot is only row order within a character's own lists, and a creature on the
+    /// market is in none of them — so the number means nothing here and is parked well
+    /// clear of any real one rather than left at nought, where it would collide with
+    /// somebody's lead creature under the table's own uniqueness rule.
+    /// </para>
+    /// </summary>
+    private const int MarketSlot = 9000;
+
+    /// <summary>Nought is for sale; one is sold and the price is owed to its seller.</summary>
+    private const int ForSale = 0;
+
+    private const int Sold = 1;
 
     /// <summary>The six effort columns, in the six-stat order.</summary>
     private static readonly string[] EffortColumns =
@@ -792,62 +844,86 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
         for (int slot = 0; slot < stored.Count; slot++)
         {
             (SavedMon mon, int where) = stored[slot];
-            long memberId;
 
-            await using (SqliteCommand insert = connection.CreateCommand())
-            {
-                insert.Transaction = transaction;
-                insert.CommandText =
-                    """
-                    INSERT INTO party_members
-                        (account_id, slot, species, level, nickname, current_hp, status, nature, experience, held_item, in_box,
-                         ev_hp, ev_attack, ev_defense, ev_speed, ev_spattack, ev_spdefense,
-                         iv_hp, iv_attack, iv_defense, iv_speed, iv_spattack, iv_spdefense, sex, ability_slot)
-                    VALUES ($account, $slot, $species, $level, $nickname, $hp, $status, $nature, $experience, $held, $box,
-                            $ev0, $ev1, $ev2, $ev3, $ev4, $ev5,
-                            $iv0, $iv1, $iv2, $iv3, $iv4, $iv5, $sex, $ability)
-                    RETURNING id;
-                    """;
-
-                insert.Parameters.AddWithValue("$account", accountId);
-                insert.Parameters.AddWithValue("$slot", slot);
-                insert.Parameters.AddWithValue("$species", mon.Species);
-                insert.Parameters.AddWithValue("$level", mon.Level);
-                insert.Parameters.AddWithValue("$nickname", (object?)mon.Nickname ?? DBNull.Value);
-                insert.Parameters.AddWithValue("$hp", mon.CurrentHp);
-                insert.Parameters.AddWithValue("$status", (int)mon.Status);
-                insert.Parameters.AddWithValue("$nature", (int)mon.Nature);
-                insert.Parameters.AddWithValue("$experience", mon.Experience);
-                insert.Parameters.AddWithValue("$held", mon.HeldItem);
-                insert.Parameters.AddWithValue("$box", where);
-
-                for (int stat = 0; stat < EffortColumns.Length; stat++)
-                    insert.Parameters.AddWithValue($"$ev{stat}", stat < mon.Evs.Count ? mon.Evs[stat] : 0);
-
-                for (int stat = 0; stat < GeneColumns.Length; stat++)
-                    insert.Parameters.AddWithValue($"$iv{stat}", stat < mon.Ivs.Count ? mon.Ivs[stat] : Genes.Best);
-
-                insert.Parameters.AddWithValue("$sex", (int)mon.Sex);
-                insert.Parameters.AddWithValue("$ability", mon.AbilitySlot);
-
-                memberId = (long)(await insert.ExecuteScalarAsync(cancellationToken))!;
-            }
-
-            for (int moveSlot = 0; moveSlot < mon.Moves.Count; moveSlot++)
-            {
-                await using SqliteCommand move = connection.CreateCommand();
-                move.Transaction = transaction;
-                move.CommandText =
-                    "INSERT INTO party_moves (member_id, slot, move_id, pp) VALUES ($member, $slot, $move, $pp);";
-                move.Parameters.AddWithValue("$member", memberId);
-                move.Parameters.AddWithValue("$slot", moveSlot);
-                move.Parameters.AddWithValue("$move", mon.Moves[moveSlot]);
-                move.Parameters.AddWithValue("$pp", moveSlot < mon.Pp.Count ? mon.Pp[moveSlot] : -1);
-
-                await move.ExecuteNonQueryAsync(cancellationToken);
-            }
+            await WriteMemberAsync(connection, transaction, accountId, slot, mon, where, cancellationToken);
         }
         }
+    }
+
+    /// <summary>
+    /// Writes one creature and its moves, and says which row it became.
+    /// <para>
+    /// Its own method because the market needs exactly this and nothing else around it:
+    /// escrowing a creature is writing one of these rows in the fourth state, inside
+    /// somebody else's transaction. Before this existed the only way to write a creature
+    /// was to write a whole character, which is not a thing a market has.
+    /// </para>
+    /// </summary>
+    private static async Task<long> WriteMemberAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        long accountId,
+        int slot,
+        SavedMon mon,
+        int where,
+        CancellationToken cancellationToken)
+    {
+        long memberId;
+
+        await using (SqliteCommand insert = connection.CreateCommand())
+        {
+            insert.Transaction = transaction;
+            insert.CommandText =
+                """
+                INSERT INTO party_members
+                    (account_id, slot, species, level, nickname, current_hp, status, nature, experience, held_item, in_box,
+                     ev_hp, ev_attack, ev_defense, ev_speed, ev_spattack, ev_spdefense,
+                     iv_hp, iv_attack, iv_defense, iv_speed, iv_spattack, iv_spdefense, sex, ability_slot)
+                VALUES ($account, $slot, $species, $level, $nickname, $hp, $status, $nature, $experience, $held, $box,
+                        $ev0, $ev1, $ev2, $ev3, $ev4, $ev5,
+                        $iv0, $iv1, $iv2, $iv3, $iv4, $iv5, $sex, $ability)
+                RETURNING id;
+                """;
+
+            insert.Parameters.AddWithValue("$account", accountId);
+            insert.Parameters.AddWithValue("$slot", slot);
+            insert.Parameters.AddWithValue("$species", mon.Species);
+            insert.Parameters.AddWithValue("$level", mon.Level);
+            insert.Parameters.AddWithValue("$nickname", (object?)mon.Nickname ?? DBNull.Value);
+            insert.Parameters.AddWithValue("$hp", mon.CurrentHp);
+            insert.Parameters.AddWithValue("$status", (int)mon.Status);
+            insert.Parameters.AddWithValue("$nature", (int)mon.Nature);
+            insert.Parameters.AddWithValue("$experience", mon.Experience);
+            insert.Parameters.AddWithValue("$held", mon.HeldItem);
+            insert.Parameters.AddWithValue("$box", where);
+
+            for (int stat = 0; stat < EffortColumns.Length; stat++)
+                insert.Parameters.AddWithValue($"$ev{stat}", stat < mon.Evs.Count ? mon.Evs[stat] : 0);
+
+            for (int stat = 0; stat < GeneColumns.Length; stat++)
+                insert.Parameters.AddWithValue($"$iv{stat}", stat < mon.Ivs.Count ? mon.Ivs[stat] : Genes.Best);
+
+            insert.Parameters.AddWithValue("$sex", (int)mon.Sex);
+            insert.Parameters.AddWithValue("$ability", mon.AbilitySlot);
+
+            memberId = (long)(await insert.ExecuteScalarAsync(cancellationToken))!;
+        }
+
+        for (int moveSlot = 0; moveSlot < mon.Moves.Count; moveSlot++)
+        {
+            await using SqliteCommand move = connection.CreateCommand();
+            move.Transaction = transaction;
+            move.CommandText =
+                "INSERT INTO party_moves (member_id, slot, move_id, pp) VALUES ($member, $slot, $move, $pp);";
+            move.Parameters.AddWithValue("$member", memberId);
+            move.Parameters.AddWithValue("$slot", moveSlot);
+            move.Parameters.AddWithValue("$move", mon.Moves[moveSlot]);
+            move.Parameters.AddWithValue("$pp", moveSlot < mon.Pp.Count ? mon.Pp[moveSlot] : -1);
+
+            await move.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        return memberId;
     }
 
     private static async Task<SavedCharacter?> ReadCharacterAsync(
@@ -1091,6 +1167,270 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
             Looks = new Appearance(worn),
             Variables = variables,
         };
+    }
+
+    // ---- the market ------------------------------------------------------------------
+    //
+    // Every one of these takes the whole character as well as what is being done, and
+    // that shape is the safety rather than an awkwardness. A character's creatures are
+    // rewritten wholesale from an in-memory snapshot on every save, so anything this
+    // store changed about them on its own would be undone by whichever save happened
+    // next. Listing is therefore not "escrow this" but "write this character down
+    // without it, and escrow it, and do both or neither".
+
+    /// <summary>The six gene columns as a listing carries them, in the six-stat order.</summary>
+    private static readonly string[] ListingGeneColumns =
+        ["iv_hp", "iv_attack", "iv_defense", "iv_speed", "iv_spattack", "iv_spdefense"];
+
+    public async Task<long> ListAsync(
+        long sellerId,
+        SavedCharacter withoutIt,
+        SavedMon offered,
+        int price,
+        CancellationToken cancellationToken = default)
+    {
+        await using SqliteConnection connection = Open();
+
+        await using SqliteTransaction transaction =
+            (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+
+        // The seller, already missing it. Written first so that if anything below throws,
+        // the rollback leaves a character who still has their creature — which is the
+        // failure worth having.
+        await WriteCharacterAsync(connection, transaction, sellerId, withoutIt, cancellationToken);
+
+        long memberId = await WriteMemberAsync(
+            connection, transaction, sellerId, MarketSlot, offered, OnTheMarket, cancellationToken);
+
+        long listingId;
+
+        await using (SqliteCommand insert = connection.CreateCommand())
+        {
+            insert.Transaction = transaction;
+            insert.CommandText =
+                $"""
+                INSERT INTO market_listings
+                    (seller_id, member_id, species, level, sex, {string.Join(", ", ListingGeneColumns)},
+                     price, state, listed_at)
+                VALUES ($seller, $member, $species, $level, $sex, $iv0, $iv1, $iv2, $iv3, $iv4, $iv5,
+                        $price, {ForSale}, $now)
+                RETURNING id;
+                """;
+
+            insert.Parameters.AddWithValue("$seller", sellerId);
+            insert.Parameters.AddWithValue("$member", memberId);
+            insert.Parameters.AddWithValue("$species", offered.Species);
+            insert.Parameters.AddWithValue("$level", offered.Level);
+            insert.Parameters.AddWithValue("$sex", (int)offered.Sex);
+            insert.Parameters.AddWithValue("$price", price);
+            insert.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
+
+            for (int stat = 0; stat < ListingGeneColumns.Length; stat++)
+            {
+                insert.Parameters.AddWithValue(
+                    $"$iv{stat}", stat < offered.Ivs.Count ? offered.Ivs[stat] : Genes.Best);
+            }
+
+            listingId = (long)(await insert.ExecuteScalarAsync(cancellationToken))!;
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+
+        return listingId;
+    }
+
+    public async Task<IReadOnlyList<Listing>> BrowseAsync(
+        int most = 50, CancellationToken cancellationToken = default)
+    {
+        await using SqliteConnection connection = Open();
+
+        return await ReadListingsAsync(
+            connection,
+            $"WHERE l.state = {ForSale} ORDER BY l.id DESC LIMIT {Math.Clamp(most, 1, 500)}",
+            [],
+            cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<Listing>> MineAsync(
+        long sellerId, CancellationToken cancellationToken = default)
+    {
+        await using SqliteConnection connection = Open();
+
+        return await ReadListingsAsync(
+            connection,
+            "WHERE l.seller_id = $seller ORDER BY l.state DESC, l.id DESC",
+            [("$seller", sellerId)],
+            cancellationToken);
+    }
+
+    public async Task<SavedMon?> CancelAsync(
+        long sellerId,
+        long listingId,
+        SavedCharacter current,
+        CancellationToken cancellationToken = default)
+    {
+        await using SqliteConnection connection = Open();
+
+        await using SqliteTransaction transaction =
+            (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+
+        long memberId;
+
+        await using (SqliteCommand find = connection.CreateCommand())
+        {
+            find.Transaction = transaction;
+
+            // Theirs, and still for sale. Both conditions in the query rather than in a
+            // check beforehand, because "still for sale" stops being true the instant
+            // somebody else buys it and a check would be reading the past.
+            find.CommandText =
+                $"SELECT member_id FROM market_listings " +
+                $"WHERE id = $id AND seller_id = $seller AND state = {ForSale} AND member_id IS NOT NULL;";
+
+            find.Parameters.AddWithValue("$id", listingId);
+            find.Parameters.AddWithValue("$seller", sellerId);
+
+            if (await find.ExecuteScalarAsync(cancellationToken) is not long found) return null;
+
+            memberId = found;
+        }
+
+        SavedMon? coming = await ReadMemberAsync(connection, transaction, memberId, cancellationToken);
+
+        if (coming is null) return null;
+
+        // The escrowed row goes, the listing goes, and the creature comes back inside the
+        // character written below. Moving the row instead would leave it holding a slot
+        // number that means nothing and a state the next save disagrees with.
+        await using (SqliteCommand clear = connection.CreateCommand())
+        {
+            clear.Transaction = transaction;
+            clear.CommandText =
+                "DELETE FROM party_members WHERE id = $member; DELETE FROM market_listings WHERE id = $listing;";
+            clear.Parameters.AddWithValue("$member", memberId);
+            clear.Parameters.AddWithValue("$listing", listingId);
+
+            await clear.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await WriteCharacterAsync(
+            connection,
+            transaction,
+            sellerId,
+            current with { Box = [.. current.Box, coming] },
+            cancellationToken);
+
+        await transaction.CommitAsync(cancellationToken);
+
+        return coming;
+    }
+
+    /// <summary>Reads one creature back out of its row, moves and all.</summary>
+    private static async Task<SavedMon?> ReadMemberAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        long memberId,
+        CancellationToken cancellationToken)
+    {
+        var moves = new List<int>();
+        var left = new List<int>();
+
+        await using (SqliteCommand known = connection.CreateCommand())
+        {
+            known.Transaction = transaction;
+            known.CommandText = "SELECT move_id, pp FROM party_moves WHERE member_id = $id ORDER BY slot;";
+            known.Parameters.AddWithValue("$id", memberId);
+
+            await using SqliteDataReader reading = await known.ExecuteReaderAsync(cancellationToken);
+
+            while (await reading.ReadAsync(cancellationToken))
+            {
+                moves.Add(reading.GetInt32(0));
+                left.Add(reading.GetInt32(1));
+            }
+        }
+
+        await using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText =
+            """
+            SELECT species, level, nickname, current_hp, status, nature, experience, held_item,
+                   ev_hp, ev_attack, ev_defense, ev_speed, ev_spattack, ev_spdefense,
+                   iv_hp, iv_attack, iv_defense, iv_speed, iv_spattack, iv_spdefense, sex, ability_slot
+            FROM party_members WHERE id = $id;
+            """;
+
+        command.Parameters.AddWithValue("$id", memberId);
+
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        if (!await reader.ReadAsync(cancellationToken)) return null;
+
+        return new SavedMon(
+            Species: reader.GetInt32(0),
+            Level: reader.GetInt32(1),
+            Nickname: reader.IsDBNull(2) ? null : reader.GetString(2),
+            CurrentHp: reader.GetInt32(3),
+            Status: (StatusCondition)reader.GetInt32(4),
+            Nature: (Nature)reader.GetInt32(5),
+            Moves: moves,
+            Experience: reader.GetInt32(6))
+        {
+            HeldItem = reader.GetInt32(7),
+            Pp = [.. left.Where(p => p >= 0)],
+
+            Evs = Effort.Of([.. Enumerable.Range(8, 6).Select(reader.GetInt32)]) is { IsNone: false } earned
+                ? [.. earned.Values]
+                : [],
+
+            Ivs = Genes.Of([.. Enumerable.Range(14, 6).Select(reader.GetInt32)]) is { IsPerfect: false } born
+                ? [.. born.Values]
+                : [],
+
+            Sex = (Gender)reader.GetInt32(20),
+            AbilitySlot = reader.GetInt32(21),
+        };
+    }
+
+    private static async Task<IReadOnlyList<Listing>> ReadListingsAsync(
+        SqliteConnection connection,
+        string where,
+        IReadOnlyList<(string Name, object Value)> parameters,
+        CancellationToken cancellationToken)
+    {
+        await using SqliteCommand command = connection.CreateCommand();
+
+        command.CommandText =
+            $"""
+            SELECT l.id, a.username, l.species, l.level, l.price, l.state, l.sex,
+                   l.{string.Join(", l.", ListingGeneColumns)}
+            FROM market_listings l
+            JOIN accounts a ON a.id = l.seller_id
+            {where};
+            """;
+
+        foreach ((string name, object value) in parameters) command.Parameters.AddWithValue(name, value);
+
+        var listings = new List<Listing>();
+
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            listings.Add(new Listing(
+                reader.GetInt64(0),
+                reader.GetString(1),
+                reader.GetInt32(2),
+                reader.GetInt32(3),
+                reader.GetInt32(4))
+            {
+                Sold = reader.GetInt32(5) != ForSale,
+                Sex = (Gender)reader.GetInt32(6),
+                Ivs = [.. Enumerable.Range(7, 6).Select(reader.GetInt32)],
+            });
+        }
+
+        return listings;
     }
 
     /// <summary>
