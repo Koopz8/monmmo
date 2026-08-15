@@ -29,7 +29,11 @@ public enum CosmeticSlot
 /// <param name="Id">Its number, which is what travels and what is owned.</param>
 /// <param name="Slot">Where it goes.</param>
 /// <param name="Name">What it is called, for a shop and a wardrobe to print.</param>
-public sealed record Cosmetic(int Id, CosmeticSlot Slot, string Name);
+/// <param name="Price">
+/// What it costs, in the game's own money. <b>Invented</b>, like everything else in this
+/// namespace — there is no such thing on the cartridge to read.
+/// </param>
+public sealed record Cosmetic(int Id, CosmeticSlot Slot, string Name, int Price);
 
 /// <summary>
 /// What one character looks like: at most one cosmetic in each slot.

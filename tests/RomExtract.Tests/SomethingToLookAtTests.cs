@@ -1,4 +1,5 @@
 using PokeMmo.Core.Cosmetics;
+using PokeMmo.Core.Save;
 using Xunit;
 
 namespace PokeMmo.RomExtract.Tests;
@@ -144,5 +145,59 @@ public class SomethingToLookAtTests
     public void AndEverySlotHasSomethingToPutInIt(CosmeticSlot slot)
     {
         Assert.NotEmpty(Wardrobe.All.Where(c => c.Slot == slot));
+    }
+}
+
+/// <summary>
+/// What the wardrobe costs.
+/// <para>
+/// Invented, like the art it prices, and in the namespace where that is allowed. The
+/// argument is about the game rather than about money: a new character is handed three
+/// thousand, and the cheapest thing here is a fifteenth of that — so somebody who buys
+/// nothing else can leave the first town looking different, and somebody who wants the
+/// cape is saving for it.
+/// </para>
+/// <para>
+/// These are the assertions worth having about a price list: that everything has one,
+/// that they are all inside the band the band claims, and that nothing is free. What a
+/// hat ought to cost relative to a scarf is taste, and a test of somebody's taste is a
+/// test that breaks the first time anybody disagrees.
+/// </para>
+/// </summary>
+public class WhatTheWardrobeCostsTests
+{
+    [Theory]
+    [MemberData(nameof(SomethingToLookAtTests.Everything), MemberType = typeof(SomethingToLookAtTests))]
+    public void EverythingHasAPriceInsideTheBand(int id)
+    {
+        int price = Wardrobe.PriceOf(id);
+
+        Assert.InRange(price, Wardrobe.Cheapest, Wardrobe.Dearest);
+    }
+
+    /// <summary>And a round number, because a shop that asks for 437 is a shop nobody wrote.</summary>
+    [Theory]
+    [MemberData(nameof(SomethingToLookAtTests.Everything), MemberType = typeof(SomethingToLookAtTests))]
+    public void AndItIsARoundNumber(int id)
+    {
+        Assert.Equal(0, Wardrobe.PriceOf(id) % 100);
+    }
+
+    /// <summary>Something this game has never heard of costs nothing, and asking is not an error.</summary>
+    [Fact]
+    public void AndSomethingUnknownHasNoPrice()
+    {
+        Assert.Equal(0, Wardrobe.PriceOf(999_999));
+    }
+
+    /// <summary>
+    /// And a new character can afford something on their first day, which is the only
+    /// claim about the numbers that is about the game rather than about taste.
+    /// </summary>
+    [Fact]
+    public void AndANewCharacterCanAffordSomething()
+    {
+        Assert.True(Wardrobe.All.Any(c => c.Price <= SavedCharacter.StartingMoney / 10));
+        Assert.True(Wardrobe.All.Any(c => c.Price > SavedCharacter.StartingMoney / 2));
     }
 }

@@ -14,7 +14,7 @@ src/Server          the authoritative server. Core only
 src/Client          the game: window, input, drawing, screens
 src/Tools/RomDump   the extractor's command line, and every instrument built for it
 src/Tools/Crowd     a crowd of real clients, for measuring what the server does at scale
-tests/              1568 tests, no cartridge required
+tests/              1614 tests, no cartridge required
 tools/rig/          the headless play rig — Xvfb, two clients, screenshots
 ```
 
@@ -67,7 +67,7 @@ Experience, levels, learnsets, evolution and catching all work.
 walk through each other on purpose — a game where standing still is a wall is a game
 where one person can shut a door for everybody.
 
-**Cosmetics.** Twelve slots, a wardrobe with a mirror in it, and a catalogue that is
+**Cosmetics.** Twelve slots with prices, a wardrobe with a mirror in it, and a catalogue that is
 the one place in this project where invented numbers are allowed. What somebody is
 wearing is drawn on them, facing the way they face, and a cape hangs behind its
 wearer from the front and covers them from behind. The art is placed against the
