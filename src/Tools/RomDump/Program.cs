@@ -4952,6 +4952,70 @@ public static class Program
                           $"{Math.Abs(nurse.X - square.X) + Math.Abs(nurse.Y - square.Y)}"));
             }
         }
+
+        WriteMachinesThatAreNotTiles(rom, library, maps);
+    }
+
+    /// <summary>
+    /// The other kind of machine, and why there is no byte to find for it.
+    /// <para>
+    /// Every machine above is a behaviour byte and nothing else — no sign, no person, no
+    /// script anywhere on the map. That is what made a behaviour test the only way to
+    /// find one, and it is what makes them the only machines this client can open.
+    /// </para>
+    /// <para>
+    /// The one in the player's bedroom is the opposite in every respect: behaviour 0x00,
+    /// a sign, and a script that says one line and hands the rest of itself to special
+    /// routines. Nothing about it can be read except how alone those routines are.
+    /// </para>
+    /// </summary>
+    private static void WriteMachinesThatAreNotTiles(Rom rom, MapLibrary library, List<LoadedMap> maps)
+    {
+        Console.WriteLine();
+        Console.WriteLine("  And the machines that are not tiles.");
+
+        List<OneOfAKind> alone = ScriptedMachines.Find(SpecialCalls.All(rom, library));
+
+        Console.WriteLine(
+            $"    {alone.Count} scripts in the world call a routine no other script calls; " +
+            $"the ten most alone:");
+
+        Console.WriteLine();
+
+        foreach (OneOfAKind machine in alone.Take(10))
+        {
+            LoadedMap? on = maps.FirstOrDefault(m => WorldExporter.MapId(m.Bank, m.Number) == machine.MapId);
+
+            // The byte on its own square, when the site names one — which is the whole
+            // question for anything that looks like a machine.
+            string behaviour = Square(machine.What) is { } square && on is not null
+                && square.Y * on.Collision.Width + square.X is var at
+                && at >= 0 && at < on.Behaviours.Length
+                    ? $"0x{on.Behaviours[at]:X2}"
+                    : "  -";
+
+            Console.WriteLine(
+                $"    {machine.MapId,-6} {on?.Name ?? "?",-16} {machine.What,-16} behaviour {behaviour}   " +
+                $"only caller of {string.Join(", ", machine.Alone.Select(r => $"0x{r:X4}"))}");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine(
+            "    A machine this client can open is a byte with no script. One with a script " +
+            "and no byte is a line of text and then code, and there is nothing further to read.");
+    }
+
+    /// <summary>The square a site names, for the ones that name one at all.</summary>
+    private static GridPosition? Square(string what)
+    {
+        int open = what.IndexOf('('), comma = what.IndexOf(','), close = what.IndexOf(')');
+
+        if (open < 0 || comma < open || close < comma) return null;
+
+        return int.TryParse(what[(open + 1)..comma], out int x)
+            && int.TryParse(what[(comma + 1)..close], out int y)
+                ? new GridPosition(x, y)
+                : null;
     }
 
     /// <summary>
