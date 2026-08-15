@@ -1059,7 +1059,10 @@ public sealed class GameWorld
 
             if (person.Template.GivesItem && _rules is not null)
             {
-                string what = $"{player.MapId}:{person.LocalId}";
+                // The same line in the ledger that the script's own account of this
+                // conversation writes — see ScriptGave, which is where the reason is.
+                string what = TakenKey(
+                    player.MapId, person.LocalId, person.Template, person.Template.GivesItemId);
 
                 if (player.ItemsTaken.Add(what))
                 {
@@ -2994,6 +2997,32 @@ public sealed class GameWorld
     /// </para>
     /// </summary>
     /// <summary>
+    /// One line in the ledger for one thing handed over, whichever of the two accounts of
+    /// the same conversation gets here first.
+    /// <para>
+    /// A ball on the ground is reported twice. The client says "I am talking to object 4"
+    /// and this server hands the item over off the world file, which is the half it can
+    /// make on its own; then the client runs the ball's script, sees it hand something
+    /// over, and says so — and that is checked against the same world file and handed over
+    /// again. Every one of the hundred and eighty-six objects in this game that gives
+    /// something is both: a hundred and seventy silent balls and sixteen people who talk.
+    /// Every ground item in the world was worth two.
+    /// </para>
+    /// <para>
+    /// So the two accounts share a line. Where the script's gift is the one the world file
+    /// already knows this object hands over silently, the key is the one the talk writes —
+    /// which also leaves saves written before this alone. Anything else is keyed by item,
+    /// because two people in this game hand over two different things each and the old key
+    /// named no item at all: the man in CERULEAN and the one on ROUTE 12 could each give
+    /// the first of their two and never the second, for good.
+    /// </para>
+    /// </summary>
+    private static string TakenKey(string mapId, int localId, MapObject template, int itemId) =>
+        template.GivesItem && itemId == template.GivesItemId
+            ? $"{mapId}:{localId}"
+            : $"{mapId}:{localId}:{itemId}";
+
+    /// <summary>
     /// Hands over what a script says it handed over, once the world agrees it could have.
     /// <para>
     /// The client runs the script and knows which branch was taken; this side has never
@@ -3034,7 +3063,7 @@ public sealed class GameWorld
                 return [];
             }
 
-            if (!player.ItemsTaken.Add($"{player.MapId}:{localId}:gift"))
+            if (!player.ItemsTaken.Add(TakenKey(player.MapId, localId, person.Template, itemId)))
             {
                 LastGift = "an item that has already been handed over";
                 return [];
