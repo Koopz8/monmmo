@@ -14,7 +14,7 @@ src/Server          the authoritative server. Core only
 src/Client          the game: window, input, drawing, screens
 src/Tools/RomDump   the extractor's command line, and every instrument built for it
 src/Tools/Crowd     a crowd of real clients, for measuring what the server does at scale
-tests/              1559 tests, no cartridge required
+tests/              1564 tests, no cartridge required
 tools/rig/          the headless play rig — Xvfb, two clients, screenshots
 ```
 
@@ -291,7 +291,15 @@ The alternatives were capping how many people are drawn or shrinking the circle,
 both leave a crowd standing there that the player cannot see and can walk into. A copy
 has no crowd in it that anybody is being lied to about. What it costs is honest too:
 every copy walks its own townsfolk, and two people who want to be together have to be
-put in the same one — which is the next rule to write.
+put in the same one.
+
+That last rule is written. Walking through a door keeps your copy number when the
+copy on the other side has room, so two people going through together arrive together;
+and `/with <name>` moves you into the copy somebody else is in, on the map you are
+already standing on. It never carries anybody across the world — that is a different
+feature, and one that would make every locked door optional — and a full copy does not
+refuse, because somebody who asked to be with a friend would rather stand in a copy of
+forty-one than be told no.
 
 The third measurement is the disk. A save happens on anything a player does that is
 not walking, at most once a second each, and it rewrites the whole character. At a

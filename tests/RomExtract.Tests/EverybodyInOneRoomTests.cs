@@ -545,3 +545,112 @@ public class MoreThanOneCopyTests
         Assert.Equal(2, Instances.CopyWithRoom(copy => copy < 2 ? Instances.RoomFor : 0));
     }
 }
+
+/// <summary>
+/// Being in the same copy as somebody.
+/// <para>
+/// The rule instancing owes. Copies are what make a busy place affordable, and they are
+/// also the one thing in this server that can put two people who want to be together in
+/// rooms that cannot see each other — which, from inside, looks exactly like the other
+/// person not being there.
+/// </para>
+/// </summary>
+public class BeingWithSomebodyTests
+{
+    private const string Room = "1.0";
+    private const string Next = "1.1";
+
+    private static GameWorld Somewhere() => new(
+        new WorldData(
+        [
+            new MapData(Room, "ROOM", 32, 32, new byte[32 * 32]),
+            new MapData(Next, "NEXT", 32, 32, new byte[32 * 32]),
+        ]),
+        Room,
+        TestRules.All);
+
+    private static List<ServerPlayer> Crowd(GameWorld world, int howMany) =>
+        [.. Enumerable.Range(1, howMany).Select(i => world.Join(i, $"P{i}", world.FreshCharacter()).Player)];
+
+    /// <summary>Going to somebody puts you in their copy, standing beside them.</summary>
+    [Fact]
+    public void GoingToSomebodyPutsYouInTheirCopy()
+    {
+        GameWorld world = Somewhere();
+
+        List<ServerPlayer> people = Crowd(world, Instances.RoomFor + 1);
+
+        ServerPlayer alone = people[^1];
+        ServerPlayer friend = people[0];
+
+        Assert.NotEqual(friend.Copy, alone.Copy);
+
+        world.GoTo(alone.Id, friend.Name);
+
+        Assert.Equal(friend.Copy, alone.Copy);
+        Assert.True(Sight.CanSee(alone.Square, friend.Square));
+    }
+
+    /// <summary>And everybody is told, in the words a doorway already uses.</summary>
+    [Fact]
+    public void AndEverybodyIsToldInTheUsualWords()
+    {
+        GameWorld world = Somewhere();
+
+        List<ServerPlayer> people = Crowd(world, Instances.RoomFor + 1);
+
+        ServerPlayer alone = people[^1];
+        ServerPlayer friend = people[0];
+
+        string was = alone.Where;
+
+        List<Outgoing> send = world.GoTo(alone.Id, friend.Name);
+
+        Assert.Contains(send, o => o.OnMap == was && o.Message is PlayerLeft);
+        Assert.Contains(send, o => o.OnMap == friend.Where && o.Message is PlayerAppeared);
+        Assert.Contains(send, o => o.OnlyTo == alone.Id && o.Message is MapChanged);
+    }
+
+    /// <summary>
+    /// A full copy does not refuse. Somebody who asked to be with a friend would rather
+    /// stand in a copy of forty-one than be told no.
+    /// </summary>
+    [Fact]
+    public void AndAFullCopyDoesNotRefuse()
+    {
+        GameWorld world = Somewhere();
+
+        List<ServerPlayer> people = Crowd(world, Instances.RoomFor + 1);
+
+        world.GoTo(people[^1].Id, people[0].Name);
+
+        Assert.Equal(Instances.RoomFor + 1, world.WhoIsOn(people[0].Where).Count);
+    }
+
+    /// <summary>And it does not carry anybody across the world.</summary>
+    [Fact]
+    public void AndItDoesNotCarryAnybodyAcrossTheWorld()
+    {
+        GameWorld world = Somewhere();
+
+        ServerPlayer here = world.Join(1, "Here", world.FreshCharacter()).Player;
+        ServerPlayer far = world.Join(2, "Far", world.FreshCharacter() with { MapId = Next }).Player;
+
+        world.GoTo(here.Id, far.Name);
+
+        Assert.Equal(Room, here.MapId);
+        Assert.Contains("not on this map", world.LastGoTo);
+    }
+
+    /// <summary>And a name nobody has is said out loud rather than doing nothing quietly.</summary>
+    [Fact]
+    public void AndANameNobodyHasSaysSo()
+    {
+        GameWorld world = Somewhere();
+
+        ServerPlayer alone = world.Join(1, "Alone", world.FreshCharacter()).Player;
+
+        Assert.Empty(world.GoTo(alone.Id, "Nobody"));
+        Assert.Contains("nobody here is called", world.LastGoTo);
+    }
+}

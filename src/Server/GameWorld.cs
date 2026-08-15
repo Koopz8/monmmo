@@ -3217,10 +3217,114 @@ public sealed class GameWorld
     /// them.
     /// </para>
     /// </summary>
-    private int CopyWithRoom(string mapId) => Instances.CopyWithRoom(copy =>
-        _crowd.TryGetValue(Instances.Key(mapId, copy), out ConcurrentDictionary<int, byte>? there)
-            ? there.Count
-            : 0);
+    private int CopyWithRoom(string mapId, int? preferred = null)
+    {
+        int HowManyIn(int copy) =>
+            _crowd.TryGetValue(Instances.Key(mapId, copy), out ConcurrentDictionary<int, byte>? there)
+                ? there.Count
+                : 0;
+
+        // The copy you were already in, if it has room. Two people walking through the
+        // same door together are the commonest way to be separated by this feature, and
+        // keeping your own number across a doorway is what stops it: they arrive in the
+        // same copy of the next place because they were in the same copy of the last.
+        if (preferred is { } already && HowManyIn(already) < Instances.RoomFor) return already;
+
+        return Instances.CopyWithRoom(HowManyIn);
+    }
+
+    /// <summary>
+    /// Puts one player in the same copy of a place as another, by name.
+    /// <para>
+    /// The rule instancing owes. Copies are what make a busy place affordable and they
+    /// are also the one thing in this server that can put two people who want to be
+    /// together in rooms that cannot see each other — and from inside, that looks
+    /// exactly like the other person not being there.
+    /// </para>
+    /// <para>
+    /// It only ever moves somebody within the place they are already standing in. Being
+    /// carried across the world by typing a name is a different feature with different
+    /// rules, and one that would make every locked door in the game optional.
+    /// </para>
+    /// <para>
+    /// A full copy does not refuse. Somebody who has asked to be with a friend would
+    /// rather stand in a copy of forty-one than be told no, and the count is a target
+    /// for arrivals rather than a wall — arrivals are the thing there are thousands of.
+    /// </para>
+    /// </summary>
+    public List<Outgoing> GoTo(int playerId, string name)
+    {
+        lock (_gate)
+        {
+            if (!_players.TryGetValue(playerId, out ServerPlayer? player))
+                return [new Outgoing(new Rejected("Not in the world."), OnlyTo: playerId)];
+
+            ServerPlayer? friend = _players.Values.FirstOrDefault(p =>
+                p.Id != playerId && string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
+
+            if (friend is null)
+            {
+                LastGoTo = $"nobody here is called {name}";
+                return [];
+            }
+
+            if (friend.MapId != player.MapId)
+            {
+                LastGoTo = $"{friend.Name} is not on this map";
+                return [];
+            }
+
+            if (friend.Copy == player.Copy)
+            {
+                LastGoTo = $"already with {friend.Name}";
+                return [];
+            }
+
+            string leaving = player.Where;
+
+            // Gone from the copy they were in, and arrived in the other — the same pair
+            // of messages walking through a door produces, because to everybody watching
+            // that is exactly what happened.
+            var send = new List<Outgoing>
+            {
+                new(new PlayerLeft(player.Id), Except: player.Id, OnMap: leaving) { Near = player.Square },
+            };
+
+            player.Copy = friend.Copy;
+            player.Square = Beside(player.Where, friend.Square);
+
+            StandsAt(player.Id, player.Where, player.Square);
+
+            foreach (ServerPlayer existing in _players.Values
+                         .Where(p => p.Id != player.Id
+                                     && p.Where == player.Where
+                                     && Sight.CanSee(p.Square, player.Square)))
+            {
+                send.Add(new Outgoing(existing.ToAppeared(), OnlyTo: player.Id));
+            }
+
+            send.Add(new Outgoing(player.ToAppeared(), Except: player.Id, OnMap: player.Where)
+            {
+                Near = player.Square,
+            });
+
+            // And the ground under them, which is the same ground — but the people
+            // walking about on it are this copy's people and not the other copy's.
+            if (Populate(player.Where, LastTickAt) is { } people)
+                send.Add(new Outgoing(new ObjectsPlaced([.. VisibleTo(player, people)]), OnlyTo: player.Id));
+
+            send.Add(new Outgoing(
+                new MapChanged(player.MapId, player.Square.X, player.Square.Y, player.Facing),
+                OnlyTo: player.Id));
+
+            LastGoTo = $"{player.Name} is with {friend.Name} now";
+
+            return send;
+        }
+    }
+
+    /// <summary>What the last attempt to go to somebody did, for the report and the tests.</summary>
+    public string? LastGoTo { get; private set; }
 
     /// <summary>Standing still, announced so everyone still sees the turn.</summary>
     private Outgoing Stay(ServerPlayer player) =>
@@ -3402,7 +3506,7 @@ public sealed class GameWorld
         player.Shifted.Clear();
 
         player.MapId = mapId;
-        player.Copy = CopyWithRoom(mapId);
+        player.Copy = CopyWithRoom(mapId, player.Copy);
         player.Square = arrival;
         StandsAt(player.Id, player.Where, arrival);
         player.Facing = facing;
@@ -4754,6 +4858,15 @@ public sealed class GameWorld
                 [
                     Said(player, player.Owns.Add(giving) ? $"granted {bought.Name}" : $"already owned {bought.Name}"),
                 ];
+            }
+
+            case "with":
+            {
+                if (line.Word(0) is not { Length: > 0 } friend) return [Said(player, "/with <player name>")];
+
+                List<Outgoing> moved = GoTo(player.Id, friend);
+
+                return [.. moved, Said(player, LastGoTo ?? "nothing happened")];
             }
 
             case "duel":
