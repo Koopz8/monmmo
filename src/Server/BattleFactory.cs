@@ -40,6 +40,7 @@ public sealed class BattleFactory(GameRules rules)
             species, saved.Level, saved.Nature, saved.Nickname, Effort.Of(saved.Evs), Genes.Of(saved.Ivs))
         {
             Sex = saved.Sex,
+            AbilitySlot = saved.AbilitySlot,
         };
 
         foreach (int moveId in saved.Moves)
@@ -112,6 +113,9 @@ public sealed class BattleFactory(GameRules rules)
             // Rolled once, here, and written down from now on. A sex worked out from the
             // ratio each time it is asked is a sex that changes between questions.
             Sex = rng is null ? Gender.None : Breeding.SexOf(record, rng),
+
+            // Rolled once, here, for the same reason the sex is rolled once here.
+            AbilitySlot = rng is null ? 0 : Abilities.SlotFor(record, rng),
         };
 
         battler.Moves.AddRange(rules.MovesKnownAt(species, level));
@@ -213,6 +217,7 @@ public sealed class BattleFactory(GameRules rules)
         // was — and what a creature this server has no dice for still is.
         Ivs = battler.Born.IsPerfect ? [] : [.. battler.Born.Values],
         Sex = battler.Sex,
+        AbilitySlot = battler.AbilitySlot,
     };
 
     /// <summary>

@@ -91,6 +91,23 @@ public sealed record SavedMon(
     public Gender Sex { get; init; }
 
     /// <summary>
+    /// Which of its species' two abilities this one was born with, as a slot rather than
+    /// as the ability itself.
+    /// <para>
+    /// Stored for the reason the sex is stored: the slot is what the dice decided, and a
+    /// creature asked twice would be immune to a move on one turn and not on the next. The
+    /// ability it comes to is a lookup against the species record, and keeping the lookup
+    /// as well would be a second copy of one fact — the copy that goes stale.
+    /// </para>
+    /// <para>
+    /// Nought is both "the first one" and "written down before anybody asked", which this
+    /// cannot tell apart and does not need to: the first slot is what every creature in
+    /// every save written before this existed effectively had.
+    /// </para>
+    /// </summary>
+    public int AbilitySlot { get; init; }
+
+    /// <summary>
     /// Compares move lists by their contents.
     /// <para>
     /// A record compares its members with <c>Equals</c>, and for a list that is
@@ -115,7 +132,8 @@ public sealed record SavedMon(
         Pp.SequenceEqual(other.Pp) &&
         Evs.SequenceEqual(other.Evs) &&
         Ivs.SequenceEqual(other.Ivs) &&
-        Sex == other.Sex;
+        Sex == other.Sex &&
+        AbilitySlot == other.AbilitySlot;
 
     public override int GetHashCode()
     {
@@ -135,6 +153,7 @@ public sealed record SavedMon(
         foreach (int born in Ivs) hash.Add(born);
 
         hash.Add(Sex);
+        hash.Add(AbilitySlot);
 
         return hash.ToHashCode();
     }

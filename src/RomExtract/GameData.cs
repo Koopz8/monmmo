@@ -143,6 +143,26 @@ public sealed class GameData
     /// </summary>
     public IReadOnlyList<string> SuggestedNames { get; private init; } = [];
 
+    /// <summary>
+    /// What the abilities are called, index nought first.
+    /// <para>
+    /// On the client because the client owns the cartridge. The server is told which
+    /// ability a creature has as a number and never learns what it is called, which is the
+    /// same arrangement every other name in this project has.
+    /// </para>
+    /// <para>
+    /// Empty when the table was not found, and the screens fall back to the number. A
+    /// missing name is a cosmetic loss; refusing to start the game over one would not be.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<string> Abilities { get; private init; } = [];
+
+    /// <summary>What ability <paramref name="index"/> is called, or a number when unknown.</summary>
+    public string AbilityNamed(int index) =>
+        index >= 0 && index < Abilities.Count && Abilities[index].Length > 0
+            ? Abilities[index]
+            : $"ABILITY {index}";
+
     public static GameData Load(string romPath, Action<string>? log = null)
     {
         Rom rom = Rom.Load(romPath);
@@ -175,6 +195,7 @@ public sealed class GameData
         return new GameData(rom, extractor, species, moves, learnsets, items, machineItems, machines)
         {
             SuggestedNames = NameSuggestions.Locate(rom, log),
+            Abilities = AbilityNames.Extract(rom, log),
         };
     }
 

@@ -66,6 +66,19 @@ public sealed class Battler
     /// <summary>Which sex this one is, as its save recorded it.</summary>
     public Gender Sex { get; init; }
 
+    /// <summary>
+    /// Which of its species' two abilities this one was born with, as a slot.
+    /// <para>
+    /// The slot rather than the ability, because the slot is what the dice decided and the
+    /// ability is a lookup. Storing the lookup as well would be two copies of one fact,
+    /// and the second copy is the one that goes stale.
+    /// </para>
+    /// </summary>
+    public int AbilitySlot { get; init; }
+
+    /// <summary>What that comes to, which is the number every rule in the fight asks for.</summary>
+    public int Ability => Abilities.Of(Species, AbilitySlot);
+
     public SpeciesData Species { get; }
 
     /// <summary>
@@ -388,6 +401,11 @@ public sealed class Battler
     public bool TryApplyStatus(StatusCondition status, int sleepTurns = 0)
     {
         if (Status != StatusCondition.None || HasFainted) return false;
+
+        // And what this one's ability says about it. Checked here rather than at each of
+        // the four places a status is handed out, because there are four of them and the
+        // fifth would be the one that forgot.
+        if (Abilities.Refuses(Ability, status)) return false;
 
         Status = status;
         if (status == StatusCondition.Sleep) SleepTurns = Math.Max(1, sleepTurns);

@@ -211,6 +211,11 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
         // before anybody asked", which this column cannot tell apart and does not try to.
         AddColumnIfMissing(connection, "party_members", "sex", "INTEGER NOT NULL DEFAULT 0");
 
+        // And which of its two abilities it was born with. Nought for everything already
+        // stored, which is the first slot — what every creature written before this column
+        // existed effectively had, since nothing was asking.
+        AddColumnIfMissing(connection, "party_members", "ability_slot", "INTEGER NOT NULL DEFAULT 0");
+
         // The balls column is what the bag used to be, back when a player could carry
         // exactly one kind of thing. It is left in place and written as zero rather than
         // dropped, because dropping a column in SQLite means rebuilding the table and
@@ -760,10 +765,10 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
                     INSERT INTO party_members
                         (account_id, slot, species, level, nickname, current_hp, status, nature, experience, held_item, in_box,
                          ev_hp, ev_attack, ev_defense, ev_speed, ev_spattack, ev_spdefense,
-                         iv_hp, iv_attack, iv_defense, iv_speed, iv_spattack, iv_spdefense, sex)
+                         iv_hp, iv_attack, iv_defense, iv_speed, iv_spattack, iv_spdefense, sex, ability_slot)
                     VALUES ($account, $slot, $species, $level, $nickname, $hp, $status, $nature, $experience, $held, $box,
                             $ev0, $ev1, $ev2, $ev3, $ev4, $ev5,
-                            $iv0, $iv1, $iv2, $iv3, $iv4, $iv5, $sex)
+                            $iv0, $iv1, $iv2, $iv3, $iv4, $iv5, $sex, $ability)
                     RETURNING id;
                     """;
 
@@ -786,6 +791,7 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
                     insert.Parameters.AddWithValue($"$iv{stat}", stat < mon.Ivs.Count ? mon.Ivs[stat] : Genes.Best);
 
                 insert.Parameters.AddWithValue("$sex", (int)mon.Sex);
+                insert.Parameters.AddWithValue("$ability", mon.AbilitySlot);
 
                 memberId = (long)(await insert.ExecuteScalarAsync(cancellationToken))!;
             }
@@ -876,7 +882,7 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
                 """
                 SELECT id, species, level, nickname, current_hp, status, nature, experience, held_item, in_box,
                        ev_hp, ev_attack, ev_defense, ev_speed, ev_spattack, ev_spdefense,
-                       iv_hp, iv_attack, iv_defense, iv_speed, iv_spattack, iv_spdefense, sex
+                       iv_hp, iv_attack, iv_defense, iv_speed, iv_spattack, iv_spdefense, sex, ability_slot
                 FROM party_members
                 WHERE account_id = $id
                 ORDER BY slot;
@@ -923,6 +929,7 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
                         : [],
 
                     Sex = (Gender)reader.GetInt32(22),
+                    AbilitySlot = reader.GetInt32(23),
                 };
 
                 (reader.GetInt32(9) switch { 0 => party, 1 => box, _ => daycare }).Add(mon);

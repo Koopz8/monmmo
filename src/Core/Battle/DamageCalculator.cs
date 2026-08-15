@@ -85,6 +85,16 @@ public static class DamageCalculator
     {
         int effectiveness = TypeChart.Effectiveness(move.Type, defender.Type1, defender.Type2);
 
+        // What the defender's ability says about being hit by this at all. Asked before
+        // anything is worked out, because the four immunities and WONDER GUARD are answers
+        // to "does this land", not adjustments to how hard it lands.
+        //
+        // The type chart's own answer is passed in rather than recomputed, because WONDER
+        // GUARD's rule is about that answer: only what is already super effective gets
+        // through.
+        if (Abilities.Against(defender.Ability, move, effectiveness) is { } refused)
+            effectiveness = refused;
+
         if (move.Category == DamageCategory.Status || move.Power == 0 || effectiveness == 0)
             return new DamageResult(0, false, effectiveness, false);
 
@@ -98,9 +108,20 @@ public static class DamageCalculator
             physical ? Stat.Defense : Stat.SpDefense,
             ignoreUnfavourableStages: critical);
 
+        // What the attacker's own ability is worth, applied to the stat rather than to the
+        // damage. That is where the games put it and it is also where it composes: a
+        // doubled Attack and a halved one are the same arithmetic in either order, and a
+        // multiplier on the far end of the division is not.
+        attack = attack * Abilities.Attacking(attacker.Ability, attacker, move, physical) / 100;
+
         // Burn halves physical damage, and does so by halving Attack here rather than
         // in the battler, so a burned attacker's Speed and displayed stats are untouched.
-        if (physical && attacker.Status == StatusCondition.Burn) attack /= 2;
+        //
+        // Except for GUTS, which is the ability whose whole point is that being ill helps.
+        // Halving its Attack for the burn it is being rewarded for would leave it doing
+        // three quarters of what an unburned one does, which is the opposite of the rule.
+        if (physical && attacker.Status == StatusCondition.Burn && attacker.Ability != Abilities.Guts)
+            attack /= 2;
 
         int damage = 2 * attacker.Level / 5 + 2;
         damage = damage * move.Power;
@@ -118,6 +139,10 @@ public static class DamageCalculator
         if (stab) damage = damage * 15 / 10;
 
         damage = TypeChart.Apply(damage, move.Type, defender.Type1, defender.Type2);
+
+        // And what the defender's ability takes off the end. Last, because it is a
+        // reduction of the finished number rather than of any part of the sum.
+        damage = damage * Abilities.Defending(defender.Ability, move) / 100;
 
         // A hit that connects always does something, unless the type chart said the
         // move does not affect the target at all.

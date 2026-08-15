@@ -1185,7 +1185,10 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
                 return;
             }
 
-            if (target.IsConfused || target.HasFainted)
+            // OWN TEMPO, which refuses to be muddled at all. Said as "nothing happened"
+            // rather than silently, because a move that does nothing and says nothing is
+            // the failure this project's narrator guardrail exists to catch.
+            if (target.IsConfused || target.HasFainted || Abilities.RefusesConfusion(target.Ability))
             {
                 if (!rolled) events.Add(new BattleEvent.NothingHappened(at));
                 return;

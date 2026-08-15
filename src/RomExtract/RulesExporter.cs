@@ -121,6 +121,29 @@ public static class RulesExporter
                 : $"  rules: {carrying.Count} of {trainers.Sum(t => t.Members.Count)} party members carry something, " +
                   $"across {carrying.Select(m => m.HeldItem).Distinct().Count()} different items");
 
+        // Abilities, and the honest split. Half of this is read — the two bytes on every
+        // species record, extracted since that table was first located and used by nothing
+        // — and half is not in the image at all, because what an ability does is code.
+        //
+        // So the number that matters is not "abilities: yes" but how many of the ones this
+        // cartridge actually fields have a rule written for them. The rest are carried,
+        // named and shown, and do nothing. Printed rather than rounded, the way the move
+        // effects are.
+        int[] fielded =
+        [
+            .. anonymousSpecies
+                .Where(s => s.Index > 0)
+                .SelectMany(s => new[] { (int)s.Ability1, (int)s.Ability2 })
+                .Where(a => a != 0)
+                .Distinct(),
+        ];
+
+        int modelled = fielded.Count(Core.Battle.Abilities.DoesSomething);
+
+        log?.Invoke(
+            $"  rules: {fielded.Length} abilities are fielded by somebody; " +
+            $"{modelled} of them do something here and {fielded.Length - modelled} are carried and silent");
+
         ReportUsableness(rules, log);
 
         return rules;
@@ -315,6 +338,12 @@ public static class RulesExporter
         EggGroup1 = species.EggGroup1,
         EggGroup2 = species.EggGroup2,
         EggCycles = species.EggCycles,
+
+        // The two abilities this species can have. Numbers, like everything else that
+        // travels — what an ability is called stays on the cartridge with the client that
+        // owns it, and what an ability *does* is not in the cartridge's data at all.
+        Ability1 = species.Ability1,
+        Ability2 = species.Ability2,
 
         EvHp = species.EvHp,
         EvAttack = species.EvAttack,

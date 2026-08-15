@@ -359,6 +359,12 @@ public sealed class GameRules
             writer.Write((byte)species.EggGroup2);
             writer.Write(species.EggCycles);
 
+            // Which two abilities one of these can have. The fourth field to be extracted
+            // since the species table was first read and used by nothing — and the last
+            // one on that list that changes a fight.
+            writer.Write(species.Ability1);
+            writer.Write(species.Ability2);
+
             writer.Write(species.EvHp);
             writer.Write(species.EvAttack);
             writer.Write(species.EvDefense);
@@ -515,6 +521,8 @@ public sealed class GameRules
                 EggGroup1 = (EggGroup)reader.ReadByte(),
                 EggGroup2 = (EggGroup)reader.ReadByte(),
                 EggCycles = reader.ReadByte(),
+                Ability1 = reader.ReadByte(),
+                Ability2 = reader.ReadByte(),
                 EvHp = reader.ReadByte(),
                 EvAttack = reader.ReadByte(),
                 EvDefense = reader.ReadByte(),
