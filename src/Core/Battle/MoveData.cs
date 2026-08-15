@@ -36,6 +36,31 @@ public sealed record MoveData(
     public const int SizeBytes = 12;
 
     /// <summary>
+    /// True when using this move means touching whoever it is aimed at.
+    /// <para>
+    /// Bit nought of the flags byte, which this project has been carrying past for as long
+    /// as it has read move records. What it means was worked out from its membership rather
+    /// than remembered, and the membership is unusually decisive: <b>111 moves carry it and
+    /// every single one of them deals damage.</b> Not one status move has it. A flag never
+    /// set on a move that does no damage is a flag about hitting somebody.
+    /// </para>
+    /// <para>
+    /// The corroboration is the two dozen that sit on the special side of this generation's
+    /// type-based split — FIRE PUNCH, ICE PUNCH, VINE WHIP, BITE, CRUNCH, DRAGON CLAW, LEAF
+    /// BLADE. They are punches, kicks, bites and whips with an elemental type on them, and
+    /// no other reading of this byte would collect exactly those. Meanwhile FLAMETHROWER,
+    /// THUNDERBOLT, SURF, RAZOR LEAF, PSYCHIC and EARTHQUAKE — every one of them a thing
+    /// that arrives from somewhere else — do not have it.
+    /// </para>
+    /// </summary>
+    public bool MakesContact { get; init; }
+
+    /// <summary>Which bit of the flags byte says so, and which byte that is.</summary>
+    private const int FlagsByte = 8;
+
+    private const int ContactBit = 1;
+
+    /// <summary>
     /// The target byte's values, counted off this cartridge rather than remembered.
     /// <para>
     /// Every move on the image falls into one of seven values, and the membership of each
@@ -107,7 +132,10 @@ public sealed record MoveData(
             src[4],
             src[5],
             src[6],
-            unchecked((sbyte)src[7]));
+            unchecked((sbyte)src[7]))
+        {
+            MakesContact = (src[FlagsByte] & ContactBit) != 0,
+        };
     }
 
     /// <summary>True when a record's fields are all within their possible ranges.</summary>

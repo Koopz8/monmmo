@@ -66,6 +66,7 @@ public enum Side
 [JsonDerivedType(typeof(Protected), "protected")]
 [JsonDerivedType(typeof(CannotUse), "cannotuse")]
 [JsonDerivedType(typeof(CanUseAgain), "canuseagain")]
+[JsonDerivedType(typeof(Grazed), "grazed")]
 [JsonDerivedType(typeof(WeatherBegan), "weatheron")]
 [JsonDerivedType(typeof(WeatherEnded), "weatheroff")]
 [JsonDerivedType(typeof(WeatherHurt), "weatherhurt")]
@@ -246,6 +247,9 @@ public abstract record BattleEvent
 
     /// <summary>And it stopped.</summary>
     public sealed record WeatherEnded(Weather Weather) : BattleEvent;
+
+    /// <summary>Touching somebody cost the toucher.</summary>
+    public sealed record Grazed(Side Side, int Damage, int RemainingHp) : BattleEvent;
 
     /// <summary>Somebody is standing in weather that does not suit them.</summary>
     public sealed record WeatherHurt(Side Side, Weather Weather, int Damage, int RemainingHp) : BattleEvent;
@@ -481,6 +485,43 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         }
 
         return events;
+    }
+
+    /// <summary>
+    /// What touching somebody costs the toucher.
+    /// <para>
+    /// Five abilities answer being hit by something that reaches them, and none of them
+    /// could do anything at all until the flag on a move record was read. Bit nought of the
+    /// flags byte has been on every move this project has ever parsed and had never been
+    /// looked at.
+    /// </para>
+    /// <para>
+    /// Nothing happens when the attacker is already down: an ability that finished somebody
+    /// who was already finished would be the one thing in this engine that could kill twice.
+    /// </para>
+    /// </summary>
+    private void Touching(Side side, Battler attacker, Battler defender, List<BattleEvent> events)
+    {
+        if (attacker.HasFainted) return;
+
+        if (Abilities.Grazes(defender.Ability))
+        {
+            int cost = attacker.TakeDamage(Math.Max(1, attacker.MaxHp / Abilities.SkinShare));
+
+            events.Add(new BattleEvent.Grazed(side, cost, attacker.CurrentHp));
+
+            if (attacker.HasFainted) events.Add(new BattleEvent.Fainted(side));
+
+            return;
+        }
+
+        // TryApplyStatus is the one door a condition goes through, so an attacker who is
+        // already ill, or whose own ability refuses this, is refused here too without this
+        // method having to know either rule.
+        if (Abilities.Touched(defender.Ability, _rng) is not { } caught) return;
+
+        if (attacker.TryApplyStatus(caught, sleepTurns: _rng.Next(3) + 1))
+            events.Add(new BattleEvent.StatusInflicted(side, caught));
     }
 
     /// <summary>Starts weather, or starts it again, and says so.</summary>
@@ -985,6 +1026,13 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         }
 
         if (times > 1) events.Add(new BattleEvent.HitSeveralTimes(side, landed));
+
+        // And what the thing that was touched does about being touched. After the damage,
+        // because it is an answer to a hit that landed rather than a condition on it, and
+        // once for the whole move rather than once per hit — DOUBLESLAP is one act of
+        // touching somebody five times, and a five-times-more-dangerous DOUBLESLAP is not
+        // a thing anybody would call this rule.
+        if (move.MakesContact && landed > 0) Touching(side, attacker, defender, events);
 
         // What the user gets back, or pays, for what it dealt. Both happen whether or not
         // the target fainted — a knockout does not un-hurt the thing that took the hit,

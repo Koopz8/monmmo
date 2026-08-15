@@ -199,6 +199,8 @@ public static class BattleNarrator
 
         BattleEvent.WeatherHealed e => $"{names.Of(e.Side)} drinks it in!",
 
+        BattleEvent.Grazed e => $"{names.Of(e.Side)} is hurt reaching them!",
+
         BattleEvent.BrokeFree e => $"{names.Of(e.Side)} got free of {names.MoveNamed(e.MoveId)}!",
 
         BattleEvent.OneHitKnockout e => $"It was a one-hit knockout on {names.Of(e.Side)}!",

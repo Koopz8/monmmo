@@ -340,7 +340,15 @@ public class AbilityTests
             // fifth way and was a fifth blind spot.
             bool arrives = Abilities.Brings(ability) != Weather.None || Abilities.Cows(ability) != 0;
 
-            if (!refuses && !changesDamage && !changesAttack && !readsTheSky && !arrives)
+            // And the ones that answer being touched, which is a sixth way. Rolled many
+            // times rather than once, because what is being asked is whether the ability
+            // has a rule at all and the cheapest of these fires one time in ten.
+            var dice = new BattleRng(19);
+
+            bool answersATouch = Abilities.Grazes(ability)
+                || Enumerable.Range(0, 500).Any(_ => Abilities.Touched(ability, dice) is not null);
+
+            if (!refuses && !changesDamage && !changesAttack && !readsTheSky && !arrives && !answersATouch)
                 inert.Add(ability);
         }
 

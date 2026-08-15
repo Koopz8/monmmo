@@ -34,6 +34,11 @@ public static class Abilities
     // Read off the cartridge's own name table rather than remembered. Every one of these
     // was printed with its index before it was written down here.
     public const int Drizzle = 2;
+    public const int Static = 9;
+    public const int RoughSkin = 24;
+    public const int EffectSpore = 27;
+    public const int PoisonPoint = 38;
+    public const int FlameBody = 49;
     public const int SandVeil = 8;
     public const int Intimidate = 22;
     public const int SandStream = 45;
@@ -89,7 +94,58 @@ public static class Abilities
         // And the ones that happen when somebody arrives, which needed an event this
         // engine did not have until there was a sky to hang the first three on.
         Drizzle, Drought, SandStream, Intimidate,
+
+        // And the ones that answer being touched, which needed the flag on a move record
+        // that this project had been reading past since it first read a move record.
+        Static, RoughSkin, EffectSpore, PoisonPoint, FlameBody,
     ];
+
+    /// <summary>
+    /// How often an ability that answers a touch actually answers. <b>Modelled.</b>
+    /// <para>
+    /// Nothing in a move's record or a species' says. Three in ten is the games' figure for
+    /// the three that hand over a condition, and it is the same number for all three, which
+    /// is at least one number rather than three.
+    /// </para>
+    /// </summary>
+    public const int TouchChance = 30;
+
+    /// <summary>
+    /// EFFECT SPORE's, which is lower because it has three things it might do.
+    /// <b>Modelled</b>, and the games' figure.
+    /// </summary>
+    public const int SporeChance = 10;
+
+    /// <summary>
+    /// The share of an attacker's own health ROUGH SKIN costs them. <b>Modelled</b>, and
+    /// the same sixteenth that everything else which bites once takes.
+    /// </summary>
+    public const int SkinShare = 16;
+
+    /// <summary>
+    /// What touching this one may do to whoever touched it, or nothing.
+    /// <para>
+    /// The dice are rolled here rather than by the caller so that every one of these
+    /// answers the same question the same way, and so a reader can see all four chances in
+    /// one place.
+    /// </para>
+    /// </summary>
+    public static StatusCondition? Touched(int ability, BattleRng rng) => ability switch
+    {
+        Static when rng.Chance(TouchChance) => StatusCondition.Paralysis,
+        PoisonPoint when rng.Chance(TouchChance) => StatusCondition.Poison,
+        FlameBody when rng.Chance(TouchChance) => StatusCondition.Burn,
+
+        // Three things, each as likely as the others and none of them likely.
+        EffectSpore when rng.Chance(SporeChance) => StatusCondition.Poison,
+        EffectSpore when rng.Chance(SporeChance) => StatusCondition.Paralysis,
+        EffectSpore when rng.Chance(SporeChance) => StatusCondition.Sleep,
+
+        _ => null,
+    };
+
+    /// <summary>True when touching this one simply costs the toucher health.</summary>
+    public static bool Grazes(int ability) => ability == RoughSkin;
 
     /// <summary>
     /// What sky this one brings with it when it takes the field, or nothing.

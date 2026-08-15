@@ -386,6 +386,12 @@ public sealed class GameRules
             writer.Write(move.SecondaryChance);
             writer.Write(move.Target);
             writer.Write(move.Priority);
+
+            // Whether using it means touching them. The flags byte has been on every move
+            // record this project has ever read and had never been looked at — and a field
+            // left off this write is a field the server never hears about, which is the
+            // trap that swallowed every EV yield once and every ability once since.
+            writer.Write(move.MakesContact);
         }
 
         writer.Write(_learnsets.Count);
@@ -548,7 +554,10 @@ public sealed class GameRules
                 reader.ReadByte(),
                 reader.ReadByte(),
                 reader.ReadByte(),
-                reader.ReadSByte()));
+                reader.ReadSByte())
+            {
+                MakesContact = reader.ReadBoolean(),
+            });
         }
 
         var learnsets = new List<Learnset>();
