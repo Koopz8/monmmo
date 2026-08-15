@@ -218,6 +218,27 @@ public static class MoveEffects
         // a group of exactly two. What it costs is not a number that has to be modelled:
         // it is everything.
         0x07 => new MoveEffect(EffectKind.UserFaints, OnUser: true),
+        //
+        // Four groups this engine settled by having already settled a type. Every FIRE
+        // group it applies a status to burns and is FIRE the whole way through; every
+        // POISON group it applies a status to poisons and is POISON the whole way
+        // through. These four are damaging, one type throughout, and carry a secondary
+        // chance in every record — the same claim asked a second time, of the same
+        // engine, about the same types.
+        //
+        // Not read off the cartridge, which says only which group a move is in. Derived
+        // from what this engine had already committed to, and derived by a rule rather
+        // than by hand: RidersByType.Accounted names exactly these four and refuses
+        // everything else, including the groups whose evidence is a mixed-type precedent
+        // — THUNDER carries a thirty percent rider that stays unnamed here, because the
+        // only group that would name it also holds BODY SLAM, LICK and DRAGONBREATH and
+        // so is evidence for four contradictory things.
+        //
+        // The chance is the record's own. SACRED FIRE burns half the time and FLAME
+        // WHEEL one time in ten, because that is what their records say and nothing here
+        // has to know it.
+        0x7D or 0xC8 => new MoveEffect(EffectKind.Status, OnUser: false, Status: StatusCondition.Burn),
+        0xCA or 0xD1 => new MoveEffect(EffectKind.Status, OnUser: false, Status: StatusCondition.Poison),
         0x2B => new MoveEffect(EffectKind.HighCritical, OnUser: false),
         0x1F or 0x96 => new MoveEffect(EffectKind.Flinch, OnUser: false),
         0x03 => new MoveEffect(EffectKind.Drain, OnUser: true),

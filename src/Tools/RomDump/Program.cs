@@ -1272,6 +1272,57 @@ public static class Program
     /// script widths were derived by, applied to a table this project already extracts.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// The silence that did not have to be silence.
+    /// <para>
+    /// Nothing in a record says what a group does. But this engine has already committed
+    /// to a status for some groups, and where every one of a type's committed groups is
+    /// that type the whole way through and they all agree, the type is settled — and a
+    /// silent damaging group that is one type throughout and carries a secondary chance in
+    /// every record is the same claim asked again.
+    /// </para>
+    /// <para>
+    /// Both halves are printed because the refusals are the point. A type settled by a
+    /// mixed-type group is not settled at all, and a group this engine already answers is
+    /// not the rule's to speak about.
+    /// </para>
+    /// </summary>
+    private static void WriteRidersByType(List<MoveData> moves)
+    {
+        List<TypeRider> settled = RidersByType.Settled(moves, MoveEffects.Of);
+        List<RiderGroup> accounted = RidersByType.Accounted(moves, MoveEffects.Of);
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  What a type already means. {settled.Count} types are settled — every group this " +
+            "engine gives");
+        Console.WriteLine(
+            "  a status to for that type is that type the whole way through, and they agree:");
+
+        foreach (TypeRider rider in settled)
+        {
+            Console.WriteLine(
+                $"    {rider.Type,-9} -> {rider.Status,-9} from " +
+                $"{string.Join(", ", rider.From.Select(f => $"0x{f:X2}"))}");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  {accounted.Count} damaging groups follow from those: one type throughout, and a " +
+            "secondary chance in");
+        Console.WriteLine(
+            $"  every record. This engine agrees with {accounted.Count(a => a.EngineAgrees)} of them.");
+
+        Console.WriteLine();
+
+        foreach (RiderGroup group in accounted)
+        {
+            Console.WriteLine(
+                $"    0x{group.Effect:X2}  {group.Type,-9} -> {group.Status,-9} " +
+                $"{(group.EngineAgrees ? "agreed " : "SILENT ")} {string.Join(", ", group.Moves)}");
+        }
+    }
+
     private static void WriteMoveEffects(Rom rom)
     {
         List<MoveData> moves = MoveExtractor.Extract(rom);
@@ -1356,6 +1407,8 @@ public static class Program
             $"{inTheRecord.Count} more are quiet on purpose,");
         Console.WriteLine(
             $"  and effect 0 — {byEffect.First(g => g.Key == 0).Count()} moves — has nothing to say beyond hitting.");
+
+        WriteRidersByType(moves);
 
         // The other marker in a record, and the sharper of the two. Printed in full
         // because the claim is a strong one — no group mixes it — and a claim like that
