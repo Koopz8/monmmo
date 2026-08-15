@@ -56,6 +56,31 @@ public sealed record ScriptedDoor(string What, string TargetMapId, int TargetWar
     public override string ToString() => $"{What} -> {TargetMapId} warp {TargetWarpId} at ({X},{Y})";
 }
 
+/// <summary>
+/// A place a boat calls at, and the number the cartridge knows it by.
+/// <para>
+/// The one door in this game that is neither a square nor a script. The ferry's script
+/// writes down where it is standing, hands the screen to the game's own code and ends —
+/// and what that code does was, for a dozen milestones, the far side of the only boundary
+/// this project cannot read across.
+/// </para>
+/// <para>
+/// It did not have to be read. What a routine does is unreadable; what the scripts around
+/// it say is not, and they say everything: ten places in this cartridge write a number
+/// into the same argument slot and then hand over to the same routine as the last thing
+/// they ever do, and no two of them write the same number. That is a table of destinations
+/// written in plain sight by the scripts that use it.
+/// </para>
+/// </summary>
+public sealed record FerryDock(int Number, int Attendant, int ArrivalX, int ArrivalY)
+{
+    /// <summary>Where somebody arriving by sea is put down.</summary>
+    public GridPosition Arrival => new(ArrivalX, ArrivalY);
+
+    public override string ToString() =>
+        $"dock {Number}, attendant {Attendant}, arriving at ({ArrivalX},{ArrivalY})";
+}
+
 public sealed record Warp(int X, int Y, int TargetWarpId, string TargetMapId)
 {
     /// <summary>

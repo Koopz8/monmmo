@@ -190,6 +190,9 @@ public sealed class NetworkClient : IDisposable
 
     public void SendBuy(int itemId, int count) => Send(new BuyRequest(itemId, count));
 
+    /// <summary>Take me there. Which places exist came from the server in the first place.</summary>
+    public void SendSail(int number) => Send(new SailRequest(number));
+
     public void SendSell(int itemId, int count) => Send(new SellRequest(itemId, count));
 
     public void SendUseItem(int itemId, int slot) => Send(new UseItemRequest(itemId, slot));

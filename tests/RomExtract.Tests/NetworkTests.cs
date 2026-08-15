@@ -109,6 +109,8 @@ public class MessageChannelTests
             new BuyRequest(4, 5),
             new SellRequest(13, 2),
             new ShopOpened([new ShopEntry(4, 200)], 5000, [new BagEntry(4, 3)]),
+            new FerryOpened(0, [new FerryPort(1, "32.4", "ONE ISLAND")]),
+            new SailRequest(1),
             new ShopUpdated(4800, [new BagEntry(4, 4)], "Bought 1."),
             new MapChanged("3.1", 4, 9, Direction.Down),
             new ObjectsPlaced([new ObjectView(1, 5, 3, 3, Direction.Left)]),

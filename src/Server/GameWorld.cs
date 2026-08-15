@@ -191,6 +191,9 @@ public sealed record ServerPlayer(int Id, long AccountId, string Name)
     /// </summary>
     public IReadOnlyList<int> Shopping { get; set; } = [];
 
+    /// <summary>The dock number of the sailor being asked, if one is being asked.</summary>
+    public int? AtTheDock { get; set; }
+
     /// <summary>
     /// The party, stored as the numbers a save holds rather than as battlers. The
     /// server has no cartridge and so cannot build a battler at all — it has no base
@@ -1197,15 +1200,24 @@ public sealed class GameWorld
 
                 // A shop opens on top of the hold rather than instead of it: the shopkeeper
                 // still has to stand still while somebody is buying from them.
-                List<Outgoing> shop = OpenShop(player, person.Template);
+                //
+                // The boat first, because a sailor is not a shopkeeper and the two lists
+                // would otherwise both be offered to somebody who asked one question.
+                List<Outgoing> shop = OpenFerry(player, person.Template);
+
+                bool boat = shop.Count > 0;
+
+                if (!boat) shop = OpenShop(player, person.Template);
 
                 person.HeldBy = playerId;
 
-                LastTalkOutcome = person.Template.IsShopkeeper && shop.Count == 0
-                    ? $"object {localId} sells {person.Template.Stock.Count} things, none of which this server has an item for"
-                    : shop.Count > 0
-                        ? $"a shop with {person.Template.Stock.Count} things in it"
-                        : $"object {localId} held still; they sell nothing";
+                LastTalkOutcome =
+                    boat ? $"a boat, from dock {player.AtTheDock}"
+                    : person.Template.IsShopkeeper && shop.Count == 0
+                        ? $"object {localId} sells {person.Template.Stock.Count} things, none of which this server has an item for"
+                        : shop.Count > 0
+                            ? $"a shop with {person.Template.Stock.Count} things in it"
+                            : $"object {localId} held still; they sell nothing";
 
                 if (shop.Count > 0)
                 {
@@ -1538,6 +1550,94 @@ public sealed class GameWorld
     /// which is why a Poké Ball is the same price in every town.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Every place the boat calls at, in the order the cartridge numbers them.
+    /// <para>
+    /// Built once from the world file rather than asked of it per conversation: it is ten
+    /// rows and it never changes while a server is running.
+    /// </para>
+    /// </summary>
+    private IReadOnlyList<FerryPort> Ports =>
+        _ports ??=
+        [
+            .. _world.Maps
+                .Where(m => m.Ferry is not null)
+                .OrderBy(m => m.Ferry!.Number)
+                .Select(m => new FerryPort(m.Ferry!.Number, m.Id, m.Name)),
+        ];
+
+    private IReadOnlyList<FerryPort>? _ports;
+
+    /// <summary>The map a dock number names, if any map does.</summary>
+    private MapData? DockNumbered(int number) =>
+        _world.Maps.FirstOrDefault(m => m.Ferry?.Number == number);
+
+    /// <summary>
+    /// The sailor was asked where he goes.
+    /// <para>
+    /// Built like a shop and for the same reasons: the list is this side's, the choosing
+    /// is the client's, and the crossing is checked again here when it comes back. What
+    /// is different is that a shop is a person's own property and a dock is the map's —
+    /// the cartridge names the place, not the man standing in it.
+    /// </para>
+    /// </summary>
+    private List<Outgoing> OpenFerry(ServerPlayer player, MapObject sailor)
+    {
+        if (_world.Find(player.MapId)?.Ferry is not { } dock) return [];
+        if (dock.Attendant != sailor.LocalId) return [];
+
+        player.AtTheDock = dock.Number;
+
+        return [new Outgoing(new FerryOpened(dock.Number, Ports), OnlyTo: player.Id)];
+    }
+
+    /// <summary>
+    /// Sails, if the boat is open and the place asked for is one it calls at.
+    /// <para>
+    /// Nothing is taken on trust. That the sailor was asked, that the number is a dock,
+    /// and that it is not the one already being stood on: a client sends a number and has
+    /// no say in any of the rest.
+    /// </para>
+    /// </summary>
+    public List<Outgoing> Sail(int playerId, int number, double nowSeconds = 0)
+    {
+        lock (_gate)
+        {
+            LastSail = null;
+
+            if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
+
+            if (player.AtTheDock is not { } from)
+            {
+                LastSail = "refused: nobody asked a sailor";
+                return [];
+            }
+
+            if (from == number)
+            {
+                LastSail = "refused: already there";
+                return [Told(player, "You are already here.")];
+            }
+
+            if (DockNumbered(number) is not { Ferry: { } dock } target)
+            {
+                LastSail = $"refused: no dock numbered {number}";
+                return [];
+            }
+
+            player.AtTheDock = null;
+
+            LastSail = $"{from} -> {number}, {target.Name} at {dock.Arrival}";
+
+            return
+            [
+                .. Transfer(player, target.Id, dock.Arrival, Direction.Up, nowSeconds),
+            ];
+        }
+    }
+
+    public string? LastSail { get; private set; }
+
     private List<Outgoing> OpenShop(ServerPlayer player, MapObject keeper)
     {
         if (_rules is null || !keeper.IsShopkeeper) return [];
@@ -2615,6 +2715,7 @@ public sealed class GameWorld
             if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
 
             player.Shopping = [];
+            player.AtTheDock = null;
 
             foreach (MapPopulation people in _populated.Values)
                 people.Release(holder => holder == playerId);
@@ -3963,6 +4064,32 @@ public sealed class GameWorld
                 [
                     Said(player, player.Owns.Add(giving) ? $"granted {bought.Name}" : $"already owned {bought.Name}"),
                 ];
+            }
+
+            case "sail":
+            {
+                if (line.Number(0) is not { } number) return [Said(player, "/sail <dock number>")];
+
+                // The console does not need a sailor. Everything else about the crossing
+                // is the same rule, checked in the same place.
+                player.AtTheDock ??= _world.Find(player.MapId)?.Ferry?.Number ?? -1;
+
+                List<Outgoing> sailed = Sail(player.Id, number, nowSeconds);
+
+                return sailed.Count == 0
+                    ? [Said(player, LastSail ?? "no such dock")]
+                    : [.. sailed, Said(player, LastSail ?? "sailed")];
+            }
+
+            case "docks":
+            {
+                var said = new List<Outgoing> { Said(player, $"{Ports.Count} places the boat calls at") };
+
+                said.AddRange(Ports.Select(p => Said(player,
+                    $"  {p.Number,2}  {p.MapId,-6} {p.Name}" +
+                    (p.MapId == player.MapId ? "   <- here" : ""))));
+
+                return said;
             }
 
             case "reach":

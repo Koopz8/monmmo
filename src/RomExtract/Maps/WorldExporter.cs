@@ -72,6 +72,13 @@ public static class WorldExporter
                     // boats and lifts do, and until now nothing on the server's side of
                     // the split had ever been told they existed.
                     Doors = ScriptedDoors.On(rom, header, grid.Width, grid.Height, log),
+
+                    // And the boat, if this map is a stop on it. The one door in this
+                    // game that is neither a square nor a script — see Ferries, where the
+                    // reason it can be read at all is written down.
+                    Ferry = Ferries.DockOn(
+                        rom, header, id, grid.Width, grid.Height,
+                        MapLinkExtractor.ReadObjects(rom, header, grid.Width, grid.Height, log), log),
                 });
             }
             catch (Exception ex)

@@ -350,6 +350,7 @@ public static class Program
         var console = new ConsoleBox();
 
         ShopScreen? shop = null;
+        FerryScreen? boat = null;
         IReadOnlyList<BagEntry> bag = [];
         int money = 0;
 
@@ -465,7 +466,7 @@ public static class Program
 
             ApplyServerMessages(
                 network, others, player, view, data, trainers, items, script, carrying, storing, looking,
-                ref talking, ref battle, ref shop, ref bag, ref party, ref box, ref boxSize, ref money,
+                ref talking, ref battle, ref shop, ref boat, ref bag, ref party, ref box, ref boxSize, ref money,
                 ref correction, ref looks, ref owned, ref trading, ref askedBy, ref watching, ref exclaimFor, ref scene, ref arrived, ref fadingIn, ref holdInput,
                 ref afterTheFight, ref cameOut, outcomes, rival, console);
 
@@ -709,6 +710,29 @@ public static class Program
                 Raylib.EndDrawing();
 
                 if (carrying.IsClosed) carrying = null;
+
+                continue;
+            }
+
+            // The boat, on the same terms as the shop and just above it: a sailor who was
+            // asked where he goes has been asked instead of talked to.
+            if (boat is not null)
+            {
+                talking = null;
+
+                boat.Update();
+
+                if (boat.TakePending() is SailRequest sailing) network.SendSail(sailing.Number);
+
+                Raylib.BeginDrawing();
+                boat.Draw();
+                Raylib.EndDrawing();
+
+                if (boat.IsClosed)
+                {
+                    boat = null;
+                    network.SendTalkFinished();
+                }
 
                 continue;
             }
@@ -1765,6 +1789,7 @@ public static class Program
         ref DialogueBox? said,
         ref BattleScreen? battle,
         ref ShopScreen? shop,
+        ref FerryScreen? boat,
         ref IReadOnlyList<BagEntry> bag,
         ref IReadOnlyList<SavedMon> party,
         ref IReadOnlyList<SavedMon> box,
@@ -2140,6 +2165,10 @@ public static class Program
 
                 case ShopOpened opened:
                     shop = new ShopScreen(opened, items);
+                    break;
+
+                case FerryOpened asked:
+                    boat = new FerryScreen(asked);
                     break;
 
                 case ShopUpdated updated:

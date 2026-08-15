@@ -56,6 +56,8 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(BuyRequest), "buy")]
 [JsonDerivedType(typeof(SellRequest), "sell")]
 [JsonDerivedType(typeof(ShopOpened), "shop")]
+[JsonDerivedType(typeof(FerryOpened), "ferry")]
+[JsonDerivedType(typeof(SailRequest), "sail")]
 [JsonDerivedType(typeof(ShopUpdated), "shopupdate")]
 [JsonDerivedType(typeof(Welcome), "welcome")]
 [JsonDerivedType(typeof(AuthFailed), "authfailed")]
@@ -872,6 +874,27 @@ public sealed record ShopOpened(
 /// </para>
 /// </summary>
 public sealed record ShopUpdated(int Money, IReadOnlyList<BagEntry> Bag, string Message) : NetMessage;
+
+/// <summary>One place the boat calls at, as the client is told about it.</summary>
+public sealed record FerryPort(int Number, string MapId, string Name);
+
+/// <summary>
+/// The sailor was asked, and this is where he can take you.
+/// <para>
+/// Built like a shop and for the same reason: the list is the server's, the choosing is
+/// the client's, and the crossing is checked again on this side when it comes back.
+/// </para>
+/// <para>
+/// Which places appear is not yet the cartridge's question. The real ferry asks for a
+/// pass — two flags and two items, all of them in the VERMILION script — and until that
+/// is derived properly this offers everywhere the boat calls, and says so out loud rather
+/// than pretending to a gate it has not read.
+/// </para>
+/// </summary>
+public sealed record FerryOpened(int From, IReadOnlyList<FerryPort> Ports) : NetMessage;
+
+/// <summary>Take me there.</summary>
+public sealed record SailRequest(int Number) : NetMessage;
 
 /// <summary>The request could not be honoured at all.</summary>
 public sealed record Rejected(string Reason) : NetMessage;

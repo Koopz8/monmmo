@@ -426,11 +426,45 @@ public static class Program
 
         if (pieces.Count > 0)
         {
-            Console.WriteLine(
-                $"    the rest is {pieces.Count} separate pieces, none of which anything sails to");
+            Console.WriteLine($"    the rest is {pieces.Count} separate pieces on foot");
 
             foreach ((string id, string name, int size) in pieces.OrderByDescending(p => p.Size).Take(4))
                 Console.WriteLine($"      {size,3} maps from {id} {name}");
+        }
+
+        // And the boat, which is the only thing that joins any of them. Ten docks,
+        // numbered by the scripts that call them and nothing else — see Ferries.
+        List<MapData> docks = [.. world.Maps.Where(m => m.Ferry is not null).OrderBy(m => m.Ferry!.Number)];
+
+        if (docks.Count > 0)
+        {
+            Reach byBoat = WorldWalker.Walk(
+                world, startingMapId, field, throughPeople: true, surfing: true,
+                throughScriptedDoors: true);
+
+            var everywhere = new HashSet<string>(byBoat.Maps);
+
+            // Every dock is one crossing from every other, so the moment one of them is
+            // reachable all of them are — which makes this a single pass rather than a
+            // search.
+            if (docks.Any(d => everywhere.Contains(d.Id)))
+            {
+                foreach (MapData dock in docks)
+                {
+                    Reach from = WorldWalker.Walk(
+                        world, dock.Id, field, throughPeople: true, surfing: true,
+                        throughScriptedDoors: true, startSquare: dock.Ferry!.Arrival);
+
+                    foreach (string id in from.Maps) everywhere.Add(id);
+                }
+            }
+
+            Console.WriteLine(
+                $"    the boat calls at {docks.Count} of them; with it, {everywhere.Count} of {world.Count} " +
+                $"maps are reachable — {everywhere.Count - byBoat.Maps.Count} more");
+
+            foreach (MapData dock in docks)
+                Console.WriteLine($"      {dock.Ferry!.Number,2}  {dock.Id,-6} {dock.Name}");
         }
 
         if (reach.Beyond.Count > 0)
@@ -1133,6 +1167,14 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                         case BuyRequest buy when playerId != 0:
                             await DispatchAsync(world.Buy(playerId, buy.ItemId, buy.Count), playerId, cancellationToken)
                                 .ConfigureAwait(false);
+                            break;
+
+                        case SailRequest sail when playerId != 0:
+                            List<Outgoing> sailed = world.Sail(playerId, sail.Number, Now);
+
+                            if (world.LastSail is { } crossing) Console.WriteLine($"~ #{playerId} sails {crossing}");
+
+                            await DispatchAsync(sailed, playerId, cancellationToken).ConfigureAwait(false);
                             break;
 
                         case SellRequest sell when playerId != 0:

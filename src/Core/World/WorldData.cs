@@ -25,6 +25,9 @@ public sealed record MapData(string Id, string Name, int Width, int Height, byte
     /// <summary>Doors the scripts on this map can make, which are on no square.</summary>
     public IReadOnlyList<ScriptedDoor> Doors { get; init; } = [];
 
+    /// <summary>The boat this map is a stop on, if it is one.</summary>
+    public FerryDock? Ferry { get; init; }
+
     /// <summary>People and other things standing on this map.</summary>
     public IReadOnlyList<MapObject> Objects { get; init; } = [];
 
@@ -269,7 +272,7 @@ public sealed class WorldData
     /// <summary>Identifies the format, so a wrong or stale file fails loudly.</summary>
     private static readonly byte[] Magic = "MONWORLD"u8.ToArray();
 
-    private const int Version = 25;
+    private const int Version = 26;
 
     private readonly Dictionary<string, MapData> _maps;
 
@@ -398,6 +401,7 @@ public sealed class WorldData
             IReadOnlyList<MapTrigger> triggers = ReadTriggers(reader);
             IReadOnlyList<MapEntryScript> onEntry = ReadEntryScripts(reader);
             IReadOnlyList<ScriptedDoor> doors = ReadDoors(reader, id);
+            FerryDock? ferry = ReadFerry(reader);
 
             maps.Add(new MapData(id, name, width, height, collision)
             {
@@ -409,6 +413,7 @@ public sealed class WorldData
                 Triggers = triggers,
                 OnEntry = onEntry,
                 Doors = doors,
+                Ferry = ferry,
             });
         }
 
@@ -561,7 +566,24 @@ public sealed class WorldData
             writer.Write(door.X);
             writer.Write(door.Y);
         }
+
+        // And the boat, if this map is a stop on it.
+        writer.Write(map.Ferry is not null);
+
+        if (map.Ferry is { } dock)
+        {
+            writer.Write(dock.Number);
+            writer.Write(dock.Attendant);
+            writer.Write(dock.ArrivalX);
+            writer.Write(dock.ArrivalY);
+        }
     }
+
+    private static FerryDock? ReadFerry(BinaryReader reader) =>
+        reader.ReadBoolean()
+            ? new FerryDock(
+                reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32())
+            : null;
 
     /// <summary>The doors this map's scripts can make.</summary>
     private static List<ScriptedDoor> ReadDoors(BinaryReader reader, string mapId)
