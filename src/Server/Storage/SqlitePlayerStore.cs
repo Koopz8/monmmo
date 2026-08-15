@@ -216,6 +216,13 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
         // dropped, because dropping a column in SQLite means rebuilding the table and
         // there is nothing to gain by it.
         AddColumnIfMissing(connection, "characters", "money", $"INTEGER NOT NULL DEFAULT {SavedCharacter.StartingMoney}");
+
+        // How far this character has walked, and the step their egg is due on. Nought for
+        // everything already stored, which is the truthful answer rather than a convenient
+        // one: nothing written before this column existed had walked a step that anything
+        // was counting, and no egg was owed to anybody.
+        AddColumnIfMissing(connection, "characters", "steps", "INTEGER NOT NULL DEFAULT 0");
+        AddColumnIfMissing(connection, "characters", "egg_at", "INTEGER NOT NULL DEFAULT 0");
     }
 
     /// <summary>
@@ -560,14 +567,16 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
             upsert.Transaction = transaction;
             upsert.CommandText =
                 """
-                INSERT INTO characters (account_id, map_id, x, y, facing, balls, money, saved_at)
-                VALUES ($id, $map, $x, $y, $facing, 0, $money, $now)
+                INSERT INTO characters (account_id, map_id, x, y, facing, balls, money, steps, egg_at, saved_at)
+                VALUES ($id, $map, $x, $y, $facing, 0, $money, $steps, $egg, $now)
                 ON CONFLICT(account_id) DO UPDATE SET
                     map_id = excluded.map_id,
                     x = excluded.x,
                     y = excluded.y,
                     facing = excluded.facing,
                     money = excluded.money,
+                    steps = excluded.steps,
+                    egg_at = excluded.egg_at,
                     saved_at = excluded.saved_at;
                 """;
 
@@ -577,6 +586,8 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
             upsert.Parameters.AddWithValue("$y", character.Y);
             upsert.Parameters.AddWithValue("$facing", (int)character.Facing);
             upsert.Parameters.AddWithValue("$money", character.Money);
+            upsert.Parameters.AddWithValue("$steps", character.Steps);
+            upsert.Parameters.AddWithValue("$egg", character.EggAt);
             upsert.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
 
             await upsert.ExecuteNonQueryAsync(cancellationToken);
@@ -800,12 +811,13 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
         SqliteConnection connection, long accountId, CancellationToken cancellationToken)
     {
         string mapId;
-        int x, y, money;
+        int x, y, money, steps, eggAt;
         Direction facing;
 
         await using (SqliteCommand command = connection.CreateCommand())
         {
-            command.CommandText = "SELECT map_id, x, y, facing, money FROM characters WHERE account_id = $id;";
+            command.CommandText =
+                "SELECT map_id, x, y, facing, money, steps, egg_at FROM characters WHERE account_id = $id;";
             command.Parameters.AddWithValue("$id", accountId);
 
             await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -816,6 +828,8 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
             y = reader.GetInt32(2);
             facing = (Direction)reader.GetInt32(3);
             money = reader.GetInt32(4);
+            steps = reader.GetInt32(5);
+            eggAt = reader.GetInt32(6);
         }
 
         var moves = new Dictionary<long, List<int>>();
@@ -1026,6 +1040,8 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
             DefeatedTrainers = defeated,
             Items = carried,
             Money = money,
+            Steps = steps,
+            EggAt = eggAt,
             Flags = flags,
             Cosmetics = owned,
             Looks = new Appearance(worn),

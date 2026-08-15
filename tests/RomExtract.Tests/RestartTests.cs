@@ -129,8 +129,32 @@ public class RestartTests : IDisposable
             // question about where the party originally came from.
             Assert.Empty(welcome.Party);
 
+            // One step, so that the save this test waits for can be told apart from the
+            // one registration already wrote. That distinction is the whole of what was
+            // wrong here, and it cost roughly one run in five for several milestones.
+            //
+            // The wait used to be "has a character been written at all?", which was
+            // already true the instant the account existed — so it returned immediately,
+            // the test wrote its party, and the server's own save-on-disconnect landed
+            // afterwards with the empty party it had snapshotted, wiping it. The test then
+            // failed on the far side of a restart looking exactly like a storage bug, and
+            // passed on a re-run whenever the disconnect happened to win the race.
+            //
+            // A square the server can only know about because somebody walked to it is a
+            // condition registration cannot satisfy. And the disconnect save is the last
+            // word the server has on this account — the scribe is told to forget whatever
+            // it was still holding first — so once that square is on disk, nothing else is
+            // coming and the party below is safe to write.
+            await channel.SendAsync(new MoveRequest(Direction.Down));
+
+            PlayerMoved moved = await ExpectAsync<PlayerMoved>(channel);
+
+            Assert.NotEqual((welcome.X, welcome.Y), (moved.X, moved.Y));
+
             socket.Close();
-            await WaitForSaveAsync(store, c => c.MapId.Length > 0, "been written at all");
+
+            await WaitForSaveAsync(
+                store, c => c.X == moved.X && c.Y == moved.Y, "recorded the disconnect");
 
             AuthOutcome outcome = await store.LoginAsync("Mason", "a-good-password");
             AuthOutcome.Success success = Assert.IsType<AuthOutcome.Success>(outcome);

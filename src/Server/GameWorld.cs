@@ -234,6 +234,37 @@ public sealed record ServerPlayer(int Id, long AccountId, string Name)
     /// </summary>
     public List<SavedMon> Box { get; set; } = [];
 
+    /// <summary>
+    /// The two left at the daycare, if any are.
+    /// <para>
+    /// A third list rather than a place with a lock on it. What makes this one different
+    /// from the other two is time: a party and a box are looked at when somebody opens
+    /// them, and a daycare is a promise that something will happen while nobody is
+    /// looking. The promise is only worth making if it survives a restart, which is why
+    /// the save has the matching list and the store has the third value in its column.
+    /// </para>
+    /// </summary>
+    public List<SavedMon> Daycare { get; set; } = [];
+
+    /// <summary>
+    /// How many steps this player has taken, ever.
+    /// <para>
+    /// Theirs rather than the world's. See <see cref="SavedCharacter.Steps"/> for why that
+    /// is a decision and not an implementation detail.
+    /// </para>
+    /// </summary>
+    public int Steps { get; set; }
+
+    /// <summary>
+    /// The step an egg is due on, or nought when none is coming.
+    /// <para>
+    /// See <see cref="SavedCharacter.EggAt"/>. Held here as well as in the save for the
+    /// same reason the party is: this is the copy that changes, and the save is a
+    /// photograph of it.
+    /// </para>
+    /// </summary>
+    public int EggAt { get; set; }
+
     public PlayerAppeared ToAppeared() =>
         new(Id, Name, Square.X, Square.Y, Facing) { Looks = Looks };
 }
@@ -583,6 +614,9 @@ public sealed class GameWorld
                 Money = saved.Money,
                 Party = [.. saved.Party],
                 Box = [.. saved.Box],
+                Daycare = [.. saved.Daycare],
+                Steps = saved.Steps,
+                EggAt = saved.EggAt,
                 Script = new ScriptState(
                     saved.Flags,
                     saved.Variables.Select(v => new KeyValuePair<int, int>(v.Id, v.Value))),
@@ -2309,6 +2343,201 @@ public sealed class GameWorld
     }
 
     /// <summary>
+    /// How many one daycare holds. Two, because two is what it takes to make a third.
+    /// </summary>
+    public const int DaycareSize = 2;
+
+    /// <summary>
+    /// Leaves a party member at the daycare.
+    /// <para>
+    /// The last one able to fight never goes, for the same reason it never goes in the
+    /// box: a player with nothing standing cannot start a battle, cannot be challenged out
+    /// of it, and has no way back except a walk to a centre. The daycare makes that worse
+    /// rather than better — a box can be opened again the moment somebody reaches a
+    /// machine, and what is left here is meant to stay left.
+    /// </para>
+    /// <para>
+    /// Nowhere in particular, yet. The place this happens at is the next piece of this
+    /// feature and the console is the only door to it today — which is a door already shut
+    /// to everyone who is not an operator.
+    /// </para>
+    /// </summary>
+    public List<Outgoing> LeaveAtDaycare(int playerId, int slot)
+    {
+        lock (_gate)
+        {
+            LastDaycare = null;
+
+            if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
+
+            if (player.InBattle)
+                return [new Outgoing(new Rejected("Not in the middle of a battle."), OnlyTo: playerId)];
+
+            if (slot < 0 || slot >= player.Party.Count)
+            {
+                LastDaycare = $"refused: there is no party slot {slot}";
+                return [];
+            }
+
+            if (player.Daycare.Count >= DaycareSize)
+            {
+                LastDaycare = "refused: the daycare is full";
+                return [Boxed(player, "There is no room there.")];
+            }
+
+            if (_battles is { } battles
+                && battles.CanFight(player.Party[slot])
+                && player.Party.Count(battles.CanFight) <= 1)
+            {
+                LastDaycare = "refused: that is the last one that can fight";
+                return [Boxed(player, "That's the last one that can fight.")];
+            }
+
+            SavedMon going = player.Party[slot];
+
+            player.Party.RemoveAt(slot);
+            player.Daycare.Add(going);
+
+            SettleTheEgg(player);
+
+            LastDaycare = $"left party slot {slot} at the daycare, {player.Daycare.Count} there" +
+                (player.EggAt > 0 ? $", an egg due on step {player.EggAt}" : "");
+
+            return [Boxed(player, "Left at the daycare.")];
+        }
+    }
+
+    /// <summary>
+    /// Takes one back, if the party has room for them.
+    /// <para>
+    /// Taking either one back stops the clock, and that is the rule rather than a
+    /// side effect: the wait belongs to the pair and not to the building, so a player
+    /// cannot walk the long half of it with one parent, swap in a better one at the end,
+    /// and collect on somebody else's steps.
+    /// </para>
+    /// </summary>
+    public List<Outgoing> TakeFromDaycare(int playerId, int slot)
+    {
+        lock (_gate)
+        {
+            LastDaycare = null;
+
+            if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
+
+            if (player.InBattle)
+                return [new Outgoing(new Rejected("Not in the middle of a battle."), OnlyTo: playerId)];
+
+            if (slot < 0 || slot >= player.Daycare.Count)
+            {
+                LastDaycare = $"refused: there is nobody in daycare slot {slot}";
+                return [];
+            }
+
+            if (player.Party.Count >= Party.MaxSize)
+            {
+                LastDaycare = "refused: the party is full";
+                return [Boxed(player, "The party is full.")];
+            }
+
+            SavedMon coming = player.Daycare[slot];
+
+            player.Daycare.RemoveAt(slot);
+            player.Party.Add(coming);
+
+            SettleTheEgg(player);
+
+            LastDaycare = $"took daycare slot {slot} back, {player.Daycare.Count} left there";
+
+            return [Boxed(player, "Back from the daycare.")];
+        }
+    }
+
+    /// <summary>What the last thing done at a daycare came to.</summary>
+    public string? LastDaycare { get; private set; }
+
+    /// <summary>
+    /// Works out when the pair on the shelf are due, and writes it on the player.
+    /// <para>
+    /// Called after every change to the shelf and nowhere else. A due step recomputed on
+    /// every walk would be a due step that never arrives.
+    /// </para>
+    /// </summary>
+    private void SettleTheEgg(ServerPlayer player) =>
+        player.EggAt = StepsForTheEgg(player) is { } wait ? player.Steps + wait : 0;
+
+    /// <summary>
+    /// How long this pair's egg takes, or nothing when there is no pair or they will not
+    /// have one. <b>Read</b> off the egg cycles on the species record the egg would be.
+    /// </summary>
+    private int? StepsForTheEgg(ServerPlayer player)
+    {
+        if (_battles is not { } battles) return null;
+        if (player.Daycare.Count != DaycareSize) return null;
+
+        SavedMon one = player.Daycare[0];
+        SavedMon two = player.Daycare[1];
+
+        if (battles.Rules.SpeciesAt(one.Species) is not { } left) return null;
+        if (battles.Rules.SpeciesAt(two.Species) is not { } right) return null;
+        if (!Breeding.CanBreed(left, one.Sex, right, two.Sex)) return null;
+
+        // The egg's own cycles, not either parent's. A wound-back species is a different
+        // record with a different number on it, and the games count the one being hatched.
+        return battles.Rules.SpeciesAt(Breeding.EggOf(battles.Rules, left, one.Sex, right)) is { } hatching
+            ? Breeding.StepsToHatch(hatching)
+            : null;
+    }
+
+    /// <summary>
+    /// The egg itself, once the steps have been walked.
+    /// <para>
+    /// Into the box rather than into the party, and that is a decision. A party that fills
+    /// itself while somebody is walking is a party that stops them catching anything, and
+    /// the first they would know of it is a "Gotcha!" with nowhere to go.
+    /// </para>
+    /// <para>
+    /// A full box does not lose the egg. Nothing is made and nothing is announced, the due
+    /// step stays where it is, and the next step after a slot opens up delivers it — which
+    /// is the difference between a player who is waiting and a player who was robbed.
+    /// </para>
+    /// </summary>
+    private void LayAnyEgg(ServerPlayer player, List<Outgoing> send)
+    {
+        if (player.EggAt <= 0 || player.Steps < player.EggAt) return;
+        if (_battles is not { } battles) return;
+
+        // The pair can go while the clock is running — a trade, or an operator. Nothing is
+        // owed by two creatures who are not both there.
+        if (player.Daycare.Count != DaycareSize)
+        {
+            player.EggAt = 0;
+            return;
+        }
+
+        if (BoxSize <= 0 || player.Box.Count >= BoxSize) return;
+
+        SavedMon one = player.Daycare[0];
+        SavedMon two = player.Daycare[1];
+
+        if (Breeding.Egg(battles.Rules, one, one.Sex, two, two.Sex, _rng) is not { } egg)
+        {
+            player.EggAt = 0;
+            return;
+        }
+
+        player.Box.Add(egg);
+
+        // And the clock starts again, because a pair left together goes on producing. That
+        // is what makes a daycare somewhere to leave two creatures rather than somewhere to
+        // visit twice.
+        SettleTheEgg(player);
+
+        LastDaycare = $"an egg of species {egg.Species} into the box on step {player.Steps}";
+
+        send.Add(Boxed(player, "An egg was found at the daycare."));
+    }
+
+    /// <summary>
     /// Puts two party members in each other's places.
     /// <para>
     /// Which one is first is the only thing anybody can decide about a party and, until
@@ -3370,6 +3599,17 @@ public sealed class GameWorld
     /// </summary>
     private void AfterArrival(ServerPlayer player, List<Outgoing> send, double nowSeconds)
     {
+        // Counted here rather than in Move, because Move is only one of the four ways a
+        // player's own legs take them somewhere: there is also a hop over a ledge, a step
+        // off the edge of a map onto its neighbour, and getting onto the water. All four
+        // end here and nothing else does — a warp is reached from inside this method and
+        // so cannot count itself twice, and a scripted walk is somebody else moving you.
+        player.Steps++;
+
+        // And the egg, before the warp: what is owed to a player should not depend on
+        // whether the square they landed on happens to be a door.
+        LayAnyEgg(player, send);
+
         if (_world.Find(player.MapId)?.WarpAt(player.Square) is { } warp)
         {
             send.AddRange(TakeWarp(player, warp, nowSeconds));
@@ -4795,6 +5035,56 @@ public sealed class GameWorld
                 return [Said(player, $"money is {player.Money}"), .. Resend(player)];
             }
 
+            case "daycare":
+            {
+                // Re-entrant on this thread, the same way /wear is: this handler already
+                // holds the gate, and what it calls takes it again.
+                switch (line.Word(0).ToLowerInvariant())
+                {
+                    case "leave":
+                    {
+                        if (line.Number(1) is not { } slot) return [Said(player, "/daycare leave <party slot>")];
+
+                        List<Outgoing> left = LeaveAtDaycare(player.Id, slot);
+
+                        return [Said(player, LastDaycare ?? "nothing happened"), .. left];
+                    }
+
+                    case "take":
+                    {
+                        if (line.Number(1) is not { } slot) return [Said(player, "/daycare take <daycare slot>")];
+
+                        List<Outgoing> taken = TakeFromDaycare(player.Id, slot);
+
+                        return [Said(player, LastDaycare ?? "nothing happened"), .. taken];
+                    }
+                }
+
+                var report = new List<Outgoing>
+                {
+                    Said(player, $"{player.Steps} steps walked, {player.Daycare.Count} at the daycare"),
+                };
+
+                for (int at = 0; at < player.Daycare.Count; at++)
+                {
+                    SavedMon there = player.Daycare[at];
+
+                    report.Add(Said(player, $"  {at}  species {there.Species,3} level {there.Level,3} {there.Sex}"));
+                }
+
+                // Said as a distance rather than as a step number, because "in 3,940 steps"
+                // is something a player can act on and "on step 41,207" is arithmetic
+                // homework. The number it is counting towards is the one on the species
+                // record, so this is also the only place the read value becomes visible.
+                report.Add(Said(player, player.EggAt > 0
+                    ? $"an egg in {player.EggAt - player.Steps} steps"
+                    : player.Daycare.Count < DaycareSize
+                        ? "no egg: it takes two"
+                        : "no egg: those two will not"));
+
+                return report;
+            }
+
             case "hidden":
                 return [.. WhoIsBeingHeldBack(player).Select(said => Said(player, said))];
 
@@ -5633,9 +5923,12 @@ public sealed class GameWorld
                 player.MapId, player.Square.X, player.Square.Y, player.Facing, [.. player.Party])
             {
                 Box = [.. player.Box],
+                Daycare = [.. player.Daycare],
                 DefeatedTrainers = [.. player.DefeatedTrainers],
                 Items = player.Bag.Entries,
                 Money = player.Money,
+                Steps = player.Steps,
+                EggAt = player.EggAt,
                 Flags = [.. player.Script.Flags],
                 Cosmetics = [.. player.Owns.Order()],
                 Looks = player.Looks,

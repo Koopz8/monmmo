@@ -1,5 +1,6 @@
 using PokeMmo.Core.Battle;
 using PokeMmo.Core.Data;
+using PokeMmo.Core.Net;
 using PokeMmo.Core.Save;
 using PokeMmo.Core.World;
 using PokeMmo.Server;
@@ -975,4 +976,346 @@ public class TheDaycareShelfTests
 
         Assert.NotEqual(before, before with { Daycare = [Mon(16, Gender.Female)] });
     }
+}
+
+/// <summary>
+/// The daycare itself: two on a shelf, a counter that only moves when somebody is
+/// playing, and an egg at the end of it.
+/// <para>
+/// The step counter is the part worth arguing about. It counts the player's steps rather
+/// than the world's clock, which means a daycare cannot hatch anything while its owner is
+/// asleep — and that is the whole point. A wait measured in real time rewards logging off,
+/// and a game whose endgame is breeding would then be a game whose endgame is not playing
+/// it.
+/// </para>
+/// <para>
+/// What is <b>read</b> here is how long the wait is: the egg cycles on the species record
+/// the egg would be, which is a field this project extracted long ago and asked nothing
+/// until there was a daycare to ask it.
+/// </para>
+/// </summary>
+public class TheDaycareTests
+{
+    private const string Town = "1.0";
+
+    /// <summary>
+    /// Somewhere flat to walk, with a wall at (4, 4) so a refused step can be told from a
+    /// taken one.
+    /// </summary>
+    private static (GameWorld World, ServerPlayer Player) Walking(params SavedMon[] party)
+    {
+        var collision = new byte[64];
+        collision[(4 * 8) + 4] = 1;
+
+        MapData map = new(Town, "PALLET TOWN", 8, 8, collision);
+
+        var world = new GameWorld(new WorldData([map]), Town, TestRules.All);
+
+        (ServerPlayer player, _) = world.Join(1, "Mason", SavedCharacter.Fresh(Town, 3, 4));
+
+        player.Party = [.. party];
+        world.Operators.Add(player.Name);
+
+        return (world, player);
+    }
+
+    private static SavedMon Mon(int species, Gender sex, int level = 20) =>
+        new(species, level, null, 20, StatusCondition.None, Nature.Hardy, [TestRules.FirstMove])
+        {
+            Sex = sex,
+            Ivs = [31, 31, 31, 31, 31, 31],
+        };
+
+    [Fact]
+    public void EveryStepIsCounted()
+    {
+        (GameWorld world, ServerPlayer player) = Walking(Mon(1, Gender.Male));
+
+        Assert.Equal(0, player.Steps);
+
+        world.Move(player.Id, Direction.Left, 10);
+        world.Move(player.Id, Direction.Left, 20);
+
+        Assert.Equal(2, player.Steps);
+    }
+
+    /// <summary>
+    /// And a step that did not happen is not one. This is the reason the count is taken
+    /// where an arrival is handled rather than where a move is asked for: a player walking
+    /// into a wall is holding a direction down, and a counter that believed them would run
+    /// at the speed of the key repeat.
+    /// </summary>
+    [Fact]
+    public void AndARefusedStepIsNot()
+    {
+        (GameWorld world, ServerPlayer player) = Walking(Mon(1, Gender.Male));
+
+        world.Move(player.Id, Direction.Right, 10);
+        world.Move(player.Id, Direction.Right, 20);
+
+        // (3, 4) to (4, 4) is the wall, so the first one turns and the second is refused.
+        Assert.Equal(new GridPosition(3, 4), player.Square);
+        Assert.Equal(0, player.Steps);
+    }
+
+    [Fact]
+    public void OneLeftThereIsOutOfThePartyAndComesBack()
+    {
+        (GameWorld world, ServerPlayer player) = Walking(Mon(1, Gender.Male), Mon(2, Gender.Female));
+
+        world.LeaveAtDaycare(player.Id, 1);
+
+        Assert.Equal([1], player.Party.Select(m => m.Species));
+        Assert.Equal([2], player.Daycare.Select(m => m.Species));
+
+        world.TakeFromDaycare(player.Id, 0);
+
+        Assert.Equal([1, 2], player.Party.Select(m => m.Species));
+        Assert.Empty(player.Daycare);
+    }
+
+    /// <summary>
+    /// The last one able to fight never goes. A daycare makes this worse than a box does:
+    /// a box can be opened at the next machine, and what is left here is meant to stay.
+    /// </summary>
+    [Fact]
+    public void TheLastOneThatCanFightStays()
+    {
+        (GameWorld world, ServerPlayer player) = Walking(Mon(1, Gender.Male));
+
+        world.LeaveAtDaycare(player.Id, 0);
+
+        Assert.Single(player.Party);
+        Assert.Empty(player.Daycare);
+        Assert.Contains("last one that can fight", world.LastDaycare ?? "");
+    }
+
+    [Fact]
+    public void AThirdOneWillNotFit()
+    {
+        (GameWorld world, ServerPlayer player) = Walking(
+            Mon(1, Gender.Male), Mon(2, Gender.Female), Mon(3, Gender.Male), Mon(4, Gender.Female));
+
+        world.LeaveAtDaycare(player.Id, 3);
+        world.LeaveAtDaycare(player.Id, 2);
+        world.LeaveAtDaycare(player.Id, 1);
+
+        Assert.Equal(TheDaycareSize, player.Daycare.Count);
+        Assert.Contains("full", world.LastDaycare ?? "");
+    }
+
+    private static int TheDaycareSize => GameWorld.DaycareSize;
+
+    /// <summary>
+    /// A pair who can breed start a clock, and the length of it is read off the species
+    /// record rather than chosen here.
+    /// </summary>
+    [Fact]
+    public void APairStartsAClockOfTheLengthTheirEggTakes()
+    {
+        (GameWorld world, ServerPlayer player) = Walking(
+            Mon(1, Gender.Male), Mon(2, Gender.Female), Mon(3, Gender.Male));
+
+        world.LeaveAtDaycare(player.Id, 2);
+
+        Assert.Equal(0, player.EggAt);
+
+        world.LeaveAtDaycare(player.Id, 1);
+
+        Assert.Equal(
+            Breeding.StepsToHatch(TestRules.All.SpeciesAt(1)!),
+            player.EggAt - player.Steps);
+    }
+
+    /// <summary>Two of the same sex are two creatures sharing a room and nothing more.</summary>
+    [Fact]
+    public void TwoWhoCannotBreedStartNothing()
+    {
+        (GameWorld world, ServerPlayer player) = Walking(
+            Mon(1, Gender.Male), Mon(2, Gender.Male), Mon(3, Gender.Male));
+
+        world.LeaveAtDaycare(player.Id, 2);
+        world.LeaveAtDaycare(player.Id, 1);
+
+        Assert.Equal(TheDaycareSize, player.Daycare.Count);
+        Assert.Equal(0, player.EggAt);
+    }
+
+    /// <summary>
+    /// And taking either one back stops the clock, so the wait belongs to the pair rather
+    /// than to the building. Without this a player could walk the long half of it with one
+    /// parent and swap a better one in at the end.
+    /// </summary>
+    [Fact]
+    public void TakingOneBackStopsTheClock()
+    {
+        (GameWorld world, ServerPlayer player) = Walking(
+            Mon(1, Gender.Male), Mon(2, Gender.Female), Mon(3, Gender.Male));
+
+        world.LeaveAtDaycare(player.Id, 2);
+        world.LeaveAtDaycare(player.Id, 1);
+
+        Assert.True(player.EggAt > 0);
+
+        world.TakeFromDaycare(player.Id, 0);
+
+        Assert.Equal(0, player.EggAt);
+    }
+
+    /// <summary>
+    /// The egg, on the step it is due: in the box, at level one, and wound back to what
+    /// the mother was before she was anything else.
+    /// </summary>
+    [Fact]
+    public void TheEggArrivesOnTheStepItIsDue()
+    {
+        // The mother is species 2, which species 1 becomes. So the egg is a 1.
+        (GameWorld world, ServerPlayer player) = Walking(
+            Mon(1, Gender.Male), Mon(2, Gender.Female), Mon(3, Gender.Male));
+
+        world.LeaveAtDaycare(player.Id, 2);
+        world.LeaveAtDaycare(player.Id, 1);
+
+        // Walked rather than waited. Setting the counter one short of the due step is the
+        // same arithmetic as five thousand steps and does not take five thousand steps.
+        player.Steps = player.EggAt - 1;
+
+        List<Outgoing> stepped = world.Move(player.Id, Direction.Left, 10);
+
+        SavedMon egg = Assert.Single(player.Box);
+
+        Assert.Equal(1, egg.Species);
+        Assert.Equal(1, egg.Level);
+        Assert.Contains("egg", Said(stepped), StringComparison.OrdinalIgnoreCase);
+
+        // And the clock starts again, because a pair left together goes on producing.
+        Assert.True(player.EggAt > player.Steps);
+    }
+
+    /// <summary>
+    /// Three of the six come from the parents. Both are perfect here, so a child of theirs
+    /// has at least three thirty-ones however the dice fall — which is the property that
+    /// makes a chain of these worth running, and the one an inheritance that quietly
+    /// rolled everything fresh would fail.
+    /// </summary>
+    [Fact]
+    public void AndItIsBornWithSomeOfWhatItsParentsHad()
+    {
+        (GameWorld world, ServerPlayer player) = Walking(
+            Mon(1, Gender.Male), Mon(2, Gender.Female), Mon(3, Gender.Male));
+
+        world.LeaveAtDaycare(player.Id, 2);
+        world.LeaveAtDaycare(player.Id, 1);
+
+        player.Steps = player.EggAt - 1;
+        world.Move(player.Id, Direction.Left, 10);
+
+        Assert.True(Assert.Single(player.Box).Ivs.Count(v => v == 31) >= Breeding.Inherited);
+    }
+
+    /// <summary>
+    /// A full box does not lose the egg. Nothing is made, nothing is said, the due step
+    /// stays where it is, and the next step after a slot opens delivers it — which is the
+    /// difference between a player who is waiting and a player who was robbed.
+    /// </summary>
+    [Fact]
+    public void AFullBoxDoesNotLoseTheEgg()
+    {
+        (GameWorld world, ServerPlayer player) = Walking(
+            Mon(1, Gender.Male), Mon(2, Gender.Female), Mon(3, Gender.Male));
+
+        world.LeaveAtDaycare(player.Id, 2);
+        world.LeaveAtDaycare(player.Id, 1);
+
+        player.Box = [.. Enumerable.Range(10, world.BoxSize).Select(s => Mon(s, Gender.Male))];
+
+        int due = player.EggAt;
+
+        player.Steps = due - 1;
+        world.Move(player.Id, Direction.Left, 10);
+
+        Assert.Equal(world.BoxSize, player.Box.Count);
+        Assert.Equal(due, player.EggAt);
+
+        // Room, and then the very next step.
+        player.Box.RemoveAt(0);
+        world.Move(player.Id, Direction.Left, 20);
+
+        Assert.Equal(world.BoxSize, player.Box.Count);
+        Assert.True(player.EggAt > due);
+    }
+
+    /// <summary>
+    /// And the counter and the clock survive a restart, which is the whole reason they are
+    /// numbers on a save rather than numbers on a session. A wait measured in thousands of
+    /// steps that resets when somebody closes the game is a wait nobody would ever finish.
+    /// </summary>
+    [Fact]
+    public async Task TheCounterAndTheClockSurviveARestart()
+    {
+        string path = TempDatabase.Path();
+
+        try
+        {
+            SavedCharacter character = new("1.0", 3, 4, Direction.Down, [Mon(1, Gender.Male)])
+            {
+                Daycare = [Mon(2, Gender.Female), Mon(3, Gender.Male)],
+                Steps = 4_312,
+                EggAt = 9_000,
+            };
+
+            using (var writing = new SqlitePlayerStore(path))
+                await writing.RegisterAsync("Mason", "a-good-password", character);
+
+            using (var reading = new SqlitePlayerStore(path))
+            {
+                var login = Assert.IsType<AuthOutcome.Success>(
+                    await reading.LoginAsync("Mason", "a-good-password"));
+
+                Assert.Equal(4_312, login.Character.Steps);
+                Assert.Equal(9_000, login.Character.EggAt);
+            }
+        }
+        finally
+        {
+            TempDatabase.Delete(path);
+        }
+    }
+
+    /// <summary>And a save written before either column existed reads back as nought.</summary>
+    [Fact]
+    public void AndWalkingIsAChangeWorthWritingDown()
+    {
+        SavedCharacter before = new("1.0", 3, 4, Direction.Down, [Mon(1, Gender.Male)]);
+
+        Assert.Equal(0, before.Steps);
+        Assert.Equal(0, before.EggAt);
+        Assert.NotEqual(before, before with { Steps = 1 });
+        Assert.NotEqual(before, before with { EggAt = 5_100 });
+    }
+
+    /// <summary>The console is the only door onto any of this today, so it is tested.</summary>
+    [Fact]
+    public void TheConsoleCanLeaveOneAndTakeItBack()
+    {
+        (GameWorld world, ServerPlayer player) = Walking(
+            Mon(1, Gender.Male), Mon(2, Gender.Female), Mon(3, Gender.Male));
+
+        world.RunConsole(player.Id, "/daycare leave 2");
+        world.RunConsole(player.Id, "/daycare leave 1");
+
+        Assert.Equal(TheDaycareSize, player.Daycare.Count);
+
+        Assert.Contains("an egg in", Said(world.RunConsole(player.Id, "/daycare")));
+
+        world.RunConsole(player.Id, "/daycare take 0");
+
+        Assert.Single(player.Daycare);
+        Assert.Contains("it takes two", Said(world.RunConsole(player.Id, "/daycare")));
+    }
+
+    private static string Said(IEnumerable<Outgoing> from) =>
+        string.Join("\n", from.Select(o => o.Message).OfType<ConsoleReply>().Select(r => r.Text)) +
+        "\n" +
+        string.Join("\n", from.Select(o => o.Message).OfType<BoxUpdated>().Select(b => b.Message));
 }

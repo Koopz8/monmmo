@@ -55,6 +55,7 @@ public static class ConsoleHelp
         "/give <species> <level>    one more in the party",
         "/item <id> [count]         something for the bag",
         "/flag <id> [on|off]        set or clear a story flag, e.g. /flag 0x082C",
+        "/daycare [leave|take] <n>  who is on the shelf, and how far off an egg is",
         "/hidden                    who this map is holding back, and on which flag",
         "/reach                     how much of the world this save can get to",
         "/trade <player id>         ask somebody, or agree with somebody who asked",

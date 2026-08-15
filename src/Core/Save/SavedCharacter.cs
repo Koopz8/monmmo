@@ -255,6 +255,38 @@ public sealed record SavedCharacter(
     public int Money { get; init; } = StartingMoney;
 
     /// <summary>
+    /// How many steps this character has taken, ever.
+    /// <para>
+    /// The player's own steps rather than the world's clock, and that is a decision rather
+    /// than a convenience. A daycare that hatched while its owner was asleep would make
+    /// walking pointless, which is the opposite of what a step counter is for — the whole
+    /// value of the number is that it only goes up when somebody is playing.
+    /// </para>
+    /// <para>
+    /// Persisted like money, and for the same reason: a counter that resets on a
+    /// disconnect is a counter that rewards staying logged in and punishes closing the
+    /// game, which is the wrong thing to pay people for.
+    /// </para>
+    /// </summary>
+    public int Steps { get; init; }
+
+    /// <summary>
+    /// The step this character's egg is due on, or nought when none is coming.
+    /// <para>
+    /// A due date rather than a countdown, because <see cref="Steps"/> only ever goes up:
+    /// a target compared against a monotonic counter cannot drift, and a counter that is
+    /// decremented once per step can be decremented twice by any code path that forgets
+    /// it is not the only one.
+    /// </para>
+    /// <para>
+    /// Nought means the pair at the daycare cannot breed, or there is no pair. It is set
+    /// when the second one is left there and cleared when either is taken back, so the
+    /// clock belongs to the pair rather than to the place.
+    /// </para>
+    /// </summary>
+    public int EggAt { get; init; }
+
+    /// <summary>
     /// Compares everything by its contents, the way <see cref="SavedMon"/> does and for
     /// the same reason — one the sibling type closed and this one did not.
     /// <para>
@@ -273,6 +305,8 @@ public sealed record SavedCharacter(
         Y == other.Y &&
         Facing == other.Facing &&
         Money == other.Money &&
+        Steps == other.Steps &&
+        EggAt == other.EggAt &&
         Looks == other.Looks &&
         Party.SequenceEqual(other.Party) &&
         Box.SequenceEqual(other.Box) &&
