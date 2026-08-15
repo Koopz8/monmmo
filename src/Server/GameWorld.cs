@@ -469,6 +469,38 @@ public sealed class GameWorld
         get { lock (_gate) return _players.Values.ToList(); }
     }
 
+    /// <summary>
+    /// Does something to one player, under the same lock everything else here holds.
+    /// <para>
+    /// Here for the market, which is the first thing in this project that has to talk to
+    /// the disk in the middle of changing somebody. Everything else the world does is
+    /// decided and applied inside one locked method; a purchase cannot be, because the
+    /// part in the middle is a database transaction and holding a lock across it would
+    /// stop the whole world for the length of a write.
+    /// </para>
+    /// <para>
+    /// So the market reads, goes away and commits, and comes back through here to apply
+    /// what it agreed. Returns false when the player left while it was away, which is a
+    /// thing that happens and is not an error — the disk has the truth either way, and
+    /// they will find it when they log back in.
+    /// </para>
+    /// </summary>
+    public bool Locked(int playerId, Action<ServerPlayer> act)
+    {
+        lock (_gate)
+        {
+            if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return false;
+
+            act(player);
+
+            return true;
+        }
+    }
+
+    /// <summary>True when this player may use the operator console.</summary>
+    public bool IsOperator(int playerId) =>
+        Find(playerId) is { } player && Operators.Contains(player.Name);
+
     public ServerPlayer? Find(int id)
     {
         lock (_gate) return _players.GetValueOrDefault(id);

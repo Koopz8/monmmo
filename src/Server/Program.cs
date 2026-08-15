@@ -783,6 +783,9 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
 
     /// <summary>Writes characters down behind the players rather than in front of them.</summary>
     private Scribe? _scribe;
+
+    /// <summary>The market, when the store behind this server can keep one.</summary>
+    private Market? _market;
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private readonly TaskCompletionSource<int> _listening =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -822,6 +825,11 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
         Console.WriteLine($"  {_door.Rate(MeasuredCheckMilliseconds)}");
 
         _scribe = new Scribe(store, cancellationToken);
+
+        // A market only exists when the store behind it can hold one. The in-memory store
+        // the tests use cannot, and a server running on it simply has no market rather
+        // than a market that loses things.
+        _market = store is IMarketStore selling ? new Market(selling, _scribe.Forget) : null;
 
         _ = TickAsync(cancellationToken);
 
@@ -1268,6 +1276,32 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                                 .ConfigureAwait(false);
 
                             if (world.LastHeal is { } rested) Console.WriteLine($"+ #{playerId} {rested}");
+                            break;
+
+                        // The market's verbs are taken here rather than passed to the
+                        // world, and that split needs a reason. Every one of them is a
+                        // database transaction, and the world's console runs inside the
+                        // lock that everything else on the server waits on — going to disk
+                        // under it would stop every player for the length of a write.
+                        //
+                        // The operator gate is the same gate, asked here instead. Without
+                        // that line this would be the one console command anybody could
+                        // run, which is not a thing to discover later.
+                        case ConsoleCommand market
+                            when playerId != 0
+                                && _market is not null
+                                && Market.Handles(ConsoleLine.Of(market.Text).Verb)
+                                && world.IsOperator(playerId):
+
+                            await DispatchAsync(
+                                    await _market
+                                        .RunAsync(world, playerId, accountId, ConsoleLine.Of(market.Text), cancellationToken)
+                                        .ConfigureAwait(false),
+                                    playerId,
+                                    cancellationToken)
+                                .ConfigureAwait(false);
+
+                            if (_market.Last is { } traded) Console.WriteLine($"~ #{playerId} {traded}");
                             break;
 
                         case ConsoleCommand typed when playerId != 0:
