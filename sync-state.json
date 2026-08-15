@@ -106,5 +106,9 @@
       "channel": "devlog",
       "messageId": "1538060451743797269"
     }
+  },
+  "routing": {
+    "testCount": 1394,
+    "at": "2026-08-15T15:15:12.192Z"
   }
 }
