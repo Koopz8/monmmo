@@ -305,6 +305,18 @@ public sealed record Welcome(
     /// </summary>
     public IReadOnlyList<int> Flags { get; init; } = [];
 
+    /// <summary>
+    /// What this account owns and what it has on.
+    /// <para>
+    /// Owned travels because a wardrobe screen with no list is not a wardrobe. It is still
+    /// the server's — this is a copy for drawing, and every choice made from it comes back
+    /// as a request the server is free to refuse.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<int> Cosmetics { get; init; } = [];
+
+    public Appearance Looks { get; init; } = Appearance.Bare;
+
     public IReadOnlyList<SavedVariable> Variables { get; init; } = [];
 
     /// <summary>Who this character has already beaten, so their scripts run correctly.</summary>

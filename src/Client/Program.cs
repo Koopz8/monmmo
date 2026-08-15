@@ -310,6 +310,8 @@ public static class Program
 
         // What this player is wearing, as the server last said it.
         Appearance looks = Appearance.Bare;
+        IReadOnlyList<int> owned = [];
+        WardrobeScreen? dressing = null;
         BattleScreen? battle = null;
         DialogueBox? talking = null;
 
@@ -459,7 +461,7 @@ public static class Program
             ApplyServerMessages(
                 network, others, player, view, data, trainers, items, script, carrying, storing, looking,
                 ref talking, ref battle, ref shop, ref bag, ref party, ref box, ref boxSize, ref money,
-                ref correction, ref looks, ref watching, ref exclaimFor, ref scene, ref arrived, ref fadingIn, ref holdInput,
+                ref correction, ref looks, ref owned, ref watching, ref exclaimFor, ref scene, ref arrived, ref fadingIn, ref holdInput,
                 ref afterTheFight, ref cameOut, outcomes, rival, console);
 
             // A battle suspends the overworld entirely: the server is running it, and
@@ -596,6 +598,33 @@ public static class Program
 
             // The party, on the key the box used to take. Nothing else is going on, the
             // console is shut, and this is the one screen that needs no machine.
+            // The wardrobe, which needs no machine and nobody to talk to — getting dressed
+            // is the one thing in this game that is entirely your own business.
+            if (carrying is null && storing is null && looking is null && dressing is null
+                && talking is null && !console.IsOpen && Raylib.IsKeyPressed(KeyboardKey.O))
+            {
+                dressing = new WardrobeScreen(owned, looks);
+            }
+
+            if (dressing is not null)
+            {
+                // Refreshed every frame from the two things the server owns, rather than
+                // pushed at it from the message handler. One place to be right.
+                dressing.Apply(owned);
+                dressing.Apply(looks);
+
+                dressing.Update();
+
+                if (dressing.TakePending() is WearRequest asked) network.SendWear(asked.CosmeticId, asked.Slot);
+
+                dressing.Draw();
+
+                if (dressing.IsClosed) dressing = null;
+
+                Raylib.EndDrawing();
+                continue;
+            }
+
             if (carrying is null && storing is null && looking is null && talking is null && !console.IsOpen
                 && Raylib.IsKeyPressed(KeyboardKey.P))
             {
@@ -1712,6 +1741,7 @@ public static class Program
         ref int money,
         ref (string MapId, GridPosition Square)? correction,
         ref Appearance looks,
+        ref IReadOnlyList<int> owned,
         ref int? watching,
         ref float exclaimFor,
         ref Cutscene? scene,
@@ -1751,6 +1781,9 @@ public static class Program
                     // of it, and a flag that has been turned off has to actually go —
                     // adding to what was already here would make "clear" mean nothing.
                     script.Forget();
+
+                    owned = welcome.Cosmetics;
+                    looks = welcome.Looks;
 
                     foreach (int flag in welcome.Flags) script.Set(flag);
                     foreach (SavedVariable variable in welcome.Variables) script.Write(variable.Id, variable.Value);

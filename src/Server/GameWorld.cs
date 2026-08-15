@@ -3355,6 +3355,8 @@ public sealed class GameWorld
             Beaten = [.. player.DefeatedTrainers],
             Box = [.. player.Box],
             BoxSize = BoxSize,
+            Cosmetics = [.. player.Owns.Order()],
+            Looks = player.Looks,
         };
 
     /// <summary>
