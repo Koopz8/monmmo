@@ -310,6 +310,12 @@ public static class RulesExporter
         // the yields were read, stored, serialised and awarded, and every one of them
         // was nought by the time it left this method. The startup line said so on the
         // first run.
+        // What it can breed with and how long its eggs take. Named here or it does not
+        // travel, which is the lesson milestone 108 learned the hard way.
+        EggGroup1 = species.EggGroup1,
+        EggGroup2 = species.EggGroup2,
+        EggCycles = species.EggCycles,
+
         EvHp = species.EvHp,
         EvAttack = species.EvAttack,
         EvDefense = species.EvDefense,

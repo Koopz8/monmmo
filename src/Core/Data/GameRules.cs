@@ -23,7 +23,7 @@ public sealed class GameRules
 {
     private static readonly byte[] Magic = "MONRULES"u8.ToArray();
 
-    private const int Version = 14;
+    private const int Version = 15;
 
     private readonly Dictionary<int, SpeciesData> _species;
     private readonly Dictionary<int, MoveData> _moves;
@@ -174,6 +174,24 @@ public sealed class GameRules
     /// The alternative is a creature that missed its moment and can never have it back.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// What this species was before it was this, or nought when it was always this.
+    /// <para>
+    /// The evolution table read backwards. An egg is the bottom of a chain and nothing in
+    /// this project has a list of which species those are — this finds it by asking which
+    /// species turns into the one in hand.
+    /// </para>
+    /// </summary>
+    public int WhatBecomes(int species)
+    {
+        foreach ((int from, List<Evolution> ways) in _evolutions)
+            foreach (Evolution way in ways)
+                if (way.Into == species)
+                    return from;
+
+        return 0;
+    }
+
     public Evolution? EvolutionAt(int species, int level) =>
         EvolveByLevel == 0
             ? null
@@ -334,6 +352,13 @@ public sealed class GameRules
             // And what beating one leaves behind. Six two-bit fields in the cartridge,
             // six bytes here — the packing is the cartridge's business and this file has
             // no reason to repeat it.
+            // What it can breed with, how long its eggs take, and which sex it is. Three
+            // fields extracted since the species table was first read and used by nothing
+            // — and the three an egg cannot be worked out without.
+            writer.Write((byte)species.EggGroup1);
+            writer.Write((byte)species.EggGroup2);
+            writer.Write(species.EggCycles);
+
             writer.Write(species.EvHp);
             writer.Write(species.EvAttack);
             writer.Write(species.EvDefense);
@@ -487,6 +512,9 @@ public sealed class GameRules
                 GrowthRate = (GrowthRate)reader.ReadInt32(),
                 Item1 = (ushort)reader.ReadInt32(),
                 Item2 = (ushort)reader.ReadInt32(),
+                EggGroup1 = (EggGroup)reader.ReadByte(),
+                EggGroup2 = (EggGroup)reader.ReadByte(),
+                EggCycles = reader.ReadByte(),
                 EvHp = reader.ReadByte(),
                 EvAttack = reader.ReadByte(),
                 EvDefense = reader.ReadByte(),

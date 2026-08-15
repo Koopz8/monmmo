@@ -14,7 +14,7 @@ src/Server          the authoritative server. Core only
 src/Client          the game: window, input, drawing, screens
 src/Tools/RomDump   the extractor's command line, and every instrument built for it
 src/Tools/Crowd     a crowd of real clients, for measuring what the server does at scale
-tests/              1622 tests, no cartridge required
+tests/              1634 tests, no cartridge required
 tools/rig/          the headless play rig — Xvfb, two clients, screenshots
 ```
 
@@ -64,6 +64,13 @@ restarts. Every creature is also born with six numbers of its own, nought to thi
 a stat, fixed for life: what makes one PIDGEY worth having and another not, and the
 thing every market in a game like this one is really a market in. Trainer fights are a run of one-on-one battles with the dice carried over.
 Experience, levels, learnsets, evolution and catching all work.
+
+**Breeding.** Two creatures of a shared egg group and opposite sexes make an egg —
+which is the mother's species wound back down its own evolution chain, carrying three
+of its six numbers from its parents. Every part of that is read off the cartridge
+except two: how many of the six are inherited, and how long an egg cycle is. Checked
+against the real image: 336 species can be bred, 49 cannot, and exactly one breeds
+with anything.
 
 **Multiplayer, in three verbs.** Seeing each other, trading, and duelling. Players
 walk through each other on purpose — a game where standing still is a wall is a game

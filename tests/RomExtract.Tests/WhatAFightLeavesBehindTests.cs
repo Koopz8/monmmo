@@ -576,3 +576,178 @@ public class WhatItWasBornWithTests
         }
     }
 }
+
+/// <summary>
+/// Two creatures, and what comes of leaving them together.
+/// <para>
+/// What genes are for. Six numbers nobody can change are a curiosity; six numbers a
+/// player can work towards over generations are the reason to keep playing, the reason
+/// one creature is worth more than another, and therefore the reason a market can exist.
+/// </para>
+/// <para>
+/// Three fields make it possible and all three were already in the data and read by
+/// nothing: the egg groups, the gender ratio, and how many cycles a species' eggs take.
+/// What is modelled is the inheritance rule and the length of a cycle.
+/// </para>
+/// </summary>
+public class LeavingThemTogetherTests
+{
+    private static SpeciesData Species(int index, EggGroup one, EggGroup two = EggGroup.None, byte ratio = 127) => new()
+    {
+        Index = index,
+        Name = string.Empty,
+        BaseHp = 60, BaseAttack = 60, BaseDefense = 60,
+        BaseSpeed = 60, BaseSpAttack = 60, BaseSpDefense = 60,
+        Type1 = PokemonType.Normal, Type2 = PokemonType.Normal,
+        CatchRate = 255, ExpYield = 64, GrowthRate = GrowthRate.MediumFast,
+        EggGroup1 = one, EggGroup2 = two,
+        EggCycles = 20,
+        GenderRatio = ratio,
+    };
+
+    private static SavedMon Mon(int species, params int[] ivs) =>
+        new(species, 20, null, 20, StatusCondition.None, Nature.Hardy, [1]) { Ivs = ivs };
+
+    private static GameRules Rules(params SpeciesData[] species) =>
+        new(species, [new MoveData(1, "", 0, 40, PokemonType.Normal, 100, 20, 0, 0, 0)], [], [], []);
+
+    [Fact]
+    public void TwoOfAGroupAndOppositeSexesCan()
+    {
+        SpeciesData field = Species(1, EggGroup.Field);
+
+        Assert.True(Breeding.CanBreed(field, Gender.Male, field, Gender.Female));
+    }
+
+    [Fact]
+    public void AndTwoOfTheSameSexCannot()
+    {
+        SpeciesData field = Species(1, EggGroup.Field);
+
+        Assert.False(Breeding.CanBreed(field, Gender.Male, field, Gender.Male));
+    }
+
+    [Fact]
+    public void AndNothingInCommonCannot()
+    {
+        Assert.False(Breeding.CanBreed(
+            Species(1, EggGroup.Field), Gender.Male,
+            Species(2, EggGroup.Mineral), Gender.Female));
+    }
+
+    /// <summary>Anything breeds with the one that breeds with anything, and it cannot with itself.</summary>
+    [Fact]
+    public void AndTheOneThatBreedsWithAnythingDoes()
+    {
+        SpeciesData ditto = Species(132, EggGroup.Ditto, ratio: 255);
+        SpeciesData field = Species(1, EggGroup.Field);
+
+        Assert.True(Breeding.CanBreed(ditto, Gender.None, field, Gender.Male));
+        Assert.True(Breeding.CanBreed(field, Gender.Female, ditto, Gender.None));
+        Assert.False(Breeding.CanBreed(ditto, Gender.None, ditto, Gender.None));
+    }
+
+    /// <summary>And nothing in the group that has no eggs breeds at all, whatever it is put with.</summary>
+    [Fact]
+    public void AndNothingUndiscoveredBreedsAtAll()
+    {
+        SpeciesData legend = Species(150, EggGroup.Undiscovered, ratio: 255);
+
+        Assert.False(Breeding.CanBreed(legend, Gender.None, Species(132, EggGroup.Ditto), Gender.None));
+        Assert.False(Breeding.CanBreed(legend, Gender.None, legend, Gender.None));
+    }
+
+    /// <summary>Sex comes off the ratio, and the two ends of it are certainties.</summary>
+    [Fact]
+    public void SexComesOffTheRatio()
+    {
+        Assert.Equal(Gender.None, Breeding.SexOf(Species(1, EggGroup.Field, ratio: 255), new BattleRng(1)));
+        Assert.Equal(Gender.Male, Breeding.SexOf(Species(1, EggGroup.Field, ratio: 0), new BattleRng(1)));
+        Assert.Equal(Gender.Female, Breeding.SexOf(Species(1, EggGroup.Field, ratio: 254), new BattleRng(1)));
+
+        var seen = new HashSet<Gender>();
+
+        for (uint seed = 1; seed <= 60; seed++)
+            seen.Add(Breeding.SexOf(Species(1, EggGroup.Field, ratio: 127), new BattleRng(seed)));
+
+        Assert.Equal(2, seen.Count);
+    }
+
+    /// <summary>The egg is the mother's line wound back to the bottom of it.</summary>
+    [Fact]
+    public void TheEggIsTheBottomOfTheMothersLine()
+    {
+        GameRules rules = new(
+            [Species(1, EggGroup.Field), Species(2, EggGroup.Field), Species(3, EggGroup.Field)],
+            [new MoveData(1, "", 0, 40, PokemonType.Normal, 100, 20, 0, 0, 0)],
+            [], [], [],
+            [new Evolution(1, 1, 16, 2), new Evolution(2, 1, 32, 3)]);
+
+        // The mother is the fully grown one; the egg is what she started as.
+        Assert.Equal(1, Breeding.EggOf(rules, rules.SpeciesAt(3)!, Gender.Female, rules.SpeciesAt(1)!));
+    }
+
+    /// <summary>Three of the six come from the parents, and the rest is dice.</summary>
+    [Fact]
+    public void ThreeOfTheSixComeFromTheParents()
+    {
+        Genes mother = Genes.Of([31, 31, 31, 31, 31, 31]);
+        Genes father = Genes.Of([31, 31, 31, 31, 31, 31]);
+
+        for (uint seed = 1; seed <= 50; seed++)
+        {
+            Genes child = Breeding.Inherit(mother, father, new BattleRng(seed));
+
+            Assert.True(child.Perfectly >= Breeding.Inherited, $"{child} took less than three from two perfect parents");
+        }
+    }
+
+    /// <summary>And a child can be better than either parent, which is why anybody does it twice.</summary>
+    [Fact]
+    public void AndAChildCanBeatBothParents()
+    {
+        Genes mother = Genes.Of([31, 31, 31, 0, 0, 0]);
+        Genes father = Genes.Of([0, 0, 0, 31, 31, 31]);
+
+        bool better = false;
+
+        for (uint seed = 1; seed <= 300 && !better; seed++)
+            better = Breeding.Inherit(mother, father, new BattleRng(seed)).Perfectly > 3;
+
+        Assert.True(better);
+    }
+
+    /// <summary>An egg is a creature at level one with the moves that species starts with.</summary>
+    [Fact]
+    public void AnEggIsACreatureAtLevelOne()
+    {
+        GameRules rules = Rules(Species(1, EggGroup.Field));
+
+        SavedMon egg = Breeding.Egg(
+            rules,
+            Mon(1, 31, 31, 31, 0, 0, 0), Gender.Female,
+            Mon(1, 0, 0, 0, 31, 31, 31), Gender.Male,
+            new BattleRng(7))!;
+
+        Assert.Equal(1, egg.Species);
+        Assert.Equal(1, egg.Level);
+        Assert.Equal(0, egg.Experience);
+        Assert.Equal(6, egg.Ivs.Count);
+    }
+
+    /// <summary>And two that cannot breed make nothing rather than something.</summary>
+    [Fact]
+    public void AndTwoThatCannotMakeNothing()
+    {
+        GameRules rules = Rules(Species(1, EggGroup.Field), Species(2, EggGroup.Mineral));
+
+        Assert.Null(Breeding.Egg(rules, Mon(1), Gender.Female, Mon(2), Gender.Male, new BattleRng(1)));
+    }
+
+    /// <summary>How long it takes is read off the record, times a modelled cycle.</summary>
+    [Fact]
+    public void HowLongItTakesIsRead()
+    {
+        Assert.Equal(20 * Breeding.StepsPerCycle, Breeding.StepsToHatch(Species(1, EggGroup.Field)));
+    }
+}
