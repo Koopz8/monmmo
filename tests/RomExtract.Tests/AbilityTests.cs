@@ -336,7 +336,12 @@ public class AbilityTests
                 || Abilities.DrinksFrom(ability, w))
                 || Abilities.Ignores(ability);
 
-            if (!refuses && !changesDamage && !changesAttack && !readsTheSky) inert.Add(ability);
+            // And the ones that do something the moment their owner arrives, which is a
+            // fifth way and was a fifth blind spot.
+            bool arrives = Abilities.Brings(ability) != Weather.None || Abilities.Cows(ability) != 0;
+
+            if (!refuses && !changesDamage && !changesAttack && !readsTheSky && !arrives)
+                inert.Add(ability);
         }
 
         Assert.Empty(inert);

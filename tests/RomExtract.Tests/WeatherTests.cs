@@ -321,4 +321,108 @@ public class WeatherTests
         Assert.Equal(Weather.None, Skies.Of(0));
         Assert.Equal(Weather.None, Skies.Of(Skies.Thunder));
     }
+
+    // ---- arriving ------------------------------------------------------------------------
+
+    /// <summary>
+    /// The event this engine did not have. Everything else an ability does is asked at the
+    /// moment it matters; these four happen <em>because</em> a creature arrived, and an
+    /// arrival was not a thing that happened to anybody.
+    /// </summary>
+    [Theory]
+    [InlineData(Abilities.Drizzle, Weather.Rain)]
+    [InlineData(Abilities.Drought, Weather.Sun)]
+    [InlineData(Abilities.SandStream, Weather.Sandstorm)]
+    public void ArrivingWithOneOfTheThreeBringsItsSky(int ability, Weather weather)
+    {
+        Battle battle = Fight(
+            Species(PokemonType.Rock, ability: ability), Species(PokemonType.Rock));
+
+        Assert.Equal(Weather.None, battle.Sky);
+
+        List<BattleEvent> arrived = battle.Arrival(Side.Player);
+
+        Assert.Equal(weather, battle.Sky);
+        Assert.Equal(Skies.Turns, battle.SkyTurns);
+        Assert.Contains(arrived.OfType<BattleEvent.WeatherBegan>(), e => e.Weather == weather);
+    }
+
+    /// <summary>And arriving into weather it was already bringing does not restart it.</summary>
+    [Fact]
+    public void AndItDoesNotRestartWhatIsAlreadyThere()
+    {
+        Battle battle = Fight(
+            Species(PokemonType.Rock, ability: Abilities.Drizzle),
+            Species(PokemonType.Rock, ability: Abilities.Drizzle));
+
+        battle.Arrival(Side.Player);
+
+        battle.ResolveTurn(new BattleAction.UseMove(0), new BattleAction.UseMove(0));
+
+        int left = battle.SkyTurns;
+
+        Assert.Empty(battle.Arrival(Side.Opponent).OfType<BattleEvent.WeatherBegan>());
+        Assert.Equal(left, battle.SkyTurns);
+    }
+
+    /// <summary>INTIMIDATE, which frightens the other side rather than helping its own.</summary>
+    [Fact]
+    public void IntimidateTakesTheOtherSidesAttackDown()
+    {
+        Battle battle = Fight(
+            Species(PokemonType.Rock, ability: Abilities.Intimidate), Species(PokemonType.Rock));
+
+        int before = battle.Opponent.StageOf(Stat.Attack);
+
+        List<BattleEvent> arrived = battle.Arrival(Side.Player);
+
+        Assert.Equal(before - 1, battle.Opponent.StageOf(Stat.Attack));
+
+        BattleEvent.StageChanged cowed = Assert.Single(arrived.OfType<BattleEvent.StageChanged>());
+
+        Assert.Equal(Side.Opponent, cowed.Side);
+        Assert.Equal(Stat.Attack, cowed.Stat);
+        Assert.True(cowed.Moved);
+    }
+
+    /// <summary>And an ordinary arrival is silent, which is most of them.</summary>
+    [Fact]
+    public void AndArrivingWithNothingToSaySaysNothing()
+    {
+        Battle battle = Fight(Species(PokemonType.Rock), Species(PokemonType.Rock));
+
+        Assert.Empty(battle.Arrival(Side.Player));
+        Assert.Equal(Weather.None, battle.Sky);
+    }
+
+    // ---- and across a switch ---------------------------------------------------------------
+
+    /// <summary>
+    /// The bug the switch-in work turned up. Sending somebody out builds a whole new
+    /// battle, so weather — the one thing that belongs to the room rather than to either
+    /// creature — would have stopped the moment anybody swapped. A five-turn rule anybody
+    /// can cancel for free is not a rule.
+    /// </summary>
+    [Fact]
+    public void TheSkyOutlivesASwitch()
+    {
+        Battle battle = Fight(
+            Species(PokemonType.Rock), Species(PokemonType.Rock), Bringing(Weather.Rain));
+
+        battle.ResolveTurn(new BattleAction.UseMove(0), new BattleAction.UseMove(0));
+
+        Assert.Equal(Weather.Rain, battle.Sky);
+
+        int left = battle.SkyTurns;
+
+        // What a switch does: a new battle around one creature who did not move.
+        var swapped = new Battle(new Battler(Species(PokemonType.Rock), 50), battle.Opponent, battle.State);
+
+        Assert.Equal(Weather.None, swapped.Sky);
+
+        swapped.ContinueFrom(battle);
+
+        Assert.Equal(Weather.Rain, swapped.Sky);
+        Assert.Equal(left, swapped.SkyTurns);
+    }
 }

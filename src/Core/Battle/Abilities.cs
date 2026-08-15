@@ -33,7 +33,11 @@ public static class Abilities
 
     // Read off the cartridge's own name table rather than remembered. Every one of these
     // was printed with its index before it was written down here.
+    public const int Drizzle = 2;
     public const int SandVeil = 8;
+    public const int Intimidate = 22;
+    public const int SandStream = 45;
+    public const int Drought = 70;
     public const int CloudNine = 13;
     public const int SwiftSwim = 33;
     public const int Chlorophyll = 34;
@@ -81,7 +85,37 @@ public static class Abilities
         // SAND STREAM all happen when somebody arrives, and this engine has no such event
         // to hang them on. They stay silent and stay counted.
         SandVeil, CloudNine, SwiftSwim, Chlorophyll, RainDish, AirLock,
+
+        // And the ones that happen when somebody arrives, which needed an event this
+        // engine did not have until there was a sky to hang the first three on.
+        Drizzle, Drought, SandStream, Intimidate,
     ];
+
+    /// <summary>
+    /// What sky this one brings with it when it takes the field, or nothing.
+    /// <para>
+    /// These three are why an arrival had to become an event. Weather from a move is a
+    /// thing somebody spent a turn on; weather from an ability is a thing that is simply
+    /// true the moment a creature is standing there, and there was nowhere to say so.
+    /// </para>
+    /// </summary>
+    public static Weather Brings(int ability) => ability switch
+    {
+        Drizzle => Weather.Rain,
+        Drought => Weather.Sun,
+        SandStream => Weather.Sandstorm,
+        _ => Weather.None,
+    };
+
+    /// <summary>
+    /// How many stages this one takes off the other side's Attack on arrival.
+    /// <para>
+    /// One, and only INTIMIDATE. A number rather than a flag because it is the shape the
+    /// stage machinery already speaks, and because the next ability of this kind will want
+    /// a different one.
+    /// </para>
+    /// </summary>
+    public static int Cows(int ability) => ability == Intimidate ? -1 : 0;
 
     /// <summary>
     /// True when this one ignores the weather entirely, and makes everybody else ignore it

@@ -413,6 +413,76 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
     private int SpeedOf(Battler battler) =>
         battler.EffectiveStat(Stat.Speed) * Abilities.Speed(battler.Ability, Overhead) / 100;
 
+    /// <summary>
+    /// Carries what is already true across a switch.
+    /// <para>
+    /// Sending somebody out builds a whole new battle, keeping only where the dice had got
+    /// to — which is right for everything that belongs to a creature and wrong for the one
+    /// thing that does not. Weather belongs to the room, and a rain that stopped because
+    /// somebody swapped a creature would be a five-turn rule anybody could cancel for free.
+    /// </para>
+    /// <para>
+    /// Explicit rather than a constructor argument, because every caller that builds a
+    /// battle from a previous one should have to say that it is doing so.
+    /// </para>
+    /// </summary>
+    public void ContinueFrom(Battle previous)
+    {
+        Sky = previous.Sky;
+        SkyTurns = previous.SkyTurns;
+    }
+
+    /// <summary>
+    /// Somebody has taken the field, and whatever their ability does about that.
+    /// <para>
+    /// The event this engine did not have. Everything else an ability does is asked at the
+    /// moment it matters — when damage is worked out, when a status is handed over — and
+    /// asking is enough because the ability is a property of a creature that is already
+    /// standing there. These four are different: they happen <em>because</em> the creature
+    /// arrived, and an arrival was not a thing that happened to anybody.
+    /// </para>
+    /// <para>
+    /// Called by whoever sends somebody out rather than by the constructor, because a
+    /// constructor that had side effects would fire them again every time a switch rebuilt
+    /// the battle around the creature who had not moved.
+    /// </para>
+    /// </summary>
+    public List<BattleEvent> Arrival(Side side)
+    {
+        var events = new List<BattleEvent>();
+
+        Battler arriving = Of(side);
+
+        if (arriving.HasFainted) return events;
+
+        if (Abilities.Brings(arriving.Ability) is not Weather.None and var sky && Sky != sky)
+            BeginWeather(sky, events);
+
+        if (Abilities.Cows(arriving.Ability) is not 0 and var stages)
+        {
+            Side at = side.Other();
+            Battler cowed = Of(at);
+
+            // The same shield a move's stat drop respects. Being frightened by somebody
+            // walking in is still somebody else lowering your Attack.
+            if (cowed.HasFainted || cowed.IsMisted)
+            {
+                if (!cowed.HasFainted) events.Add(new BattleEvent.Shielded(at));
+
+                return events;
+            }
+
+            int before = cowed.StageOf(Stat.Attack);
+
+            cowed.ChangeStage(Stat.Attack, stages);
+
+            events.Add(new BattleEvent.StageChanged(
+                at, Stat.Attack, stages, cowed.StageOf(Stat.Attack) != before));
+        }
+
+        return events;
+    }
+
     /// <summary>Starts weather, or starts it again, and says so.</summary>
     private void BeginWeather(Weather weather, List<BattleEvent> events)
     {

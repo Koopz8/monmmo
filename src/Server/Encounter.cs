@@ -88,11 +88,19 @@ public sealed class Encounter
 
         // Carried on from where the dice had got to, not restarted from the seed.
         // Restarting would replay the same rolls against everyone they send out.
+        Battle before = Current;
+
         Current = new Battle(Current.Player, _opponents[_opponentSlot], Current.State)
         {
             IsWild = !IsTrainerBattle,
             Struggle = _struggle,
         };
+
+        // The sky belongs to the room rather than to either creature, so it does not stop
+        // because somebody sent out somebody else.
+        Current.ContinueFrom(before);
+
+        Arriving = Current.Arrival(Side.Opponent);
 
         return Current.Opponent;
     }
@@ -101,10 +109,28 @@ public sealed class Encounter
     public void SendPlayer(int slot, Battler battler)
     {
         PlayerSlot = slot;
+
+        Battle before = Current;
+
         Current = new Battle(battler, Current.Opponent, Current.State)
         {
             IsWild = !IsTrainerBattle,
             Struggle = _struggle,
         };
+
+        Current.ContinueFrom(before);
+
+        Arriving = Current.Arrival(Side.Player);
     }
+
+    /// <summary>
+    /// What the last arrival came to, for whoever is dispatching events.
+    /// <para>
+    /// Held rather than returned, because both of the methods that send somebody out
+    /// already return the thing their callers wanted before abilities had anything to say
+    /// about arriving — and changing both signatures would change every caller to carry a
+    /// value most of them have nothing to do with.
+    /// </para>
+    /// </summary>
+    public List<BattleEvent> Arriving { get; private set; } = [];
 }
