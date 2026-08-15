@@ -27,10 +27,18 @@ public sealed class Duel
     private int _oneSlot;
     private int _twoSlot;
 
+    private readonly MoveData? _struggle;
+
     private BattleAction? _oneChose;
     private BattleAction? _twoChose;
 
-    public Duel(int one, int two, IReadOnlyList<Battler> ones, IReadOnlyList<Battler> twos, uint seed)
+    public Duel(
+        int one,
+        int two,
+        IReadOnlyList<Battler> ones,
+        IReadOnlyList<Battler> twos,
+        uint seed,
+        MoveData? struggle = null)
     {
         if (ones.Count == 0 || twos.Count == 0)
             throw new ArgumentException("A duel needs somebody on both sides.");
@@ -40,7 +48,9 @@ public sealed class Duel
         _ones = [.. ones];
         _twos = [.. twos];
 
-        Current = new Battle(_ones[0], _twos[0], seed) { IsWild = false };
+        _struggle = struggle;
+
+        Current = new Battle(_ones[0], _twos[0], seed) { IsWild = false, Struggle = struggle };
     }
 
     /// <summary>Whoever is <see cref="Side.Player"/> in the engine.</summary>
@@ -162,12 +172,12 @@ public sealed class Duel
         if (playerId == One)
         {
             _oneSlot = slot;
-            Current = new Battle(team[slot], Current.Opponent, Current.State) { IsWild = false };
+            Current = new Battle(team[slot], Current.Opponent, Current.State) { IsWild = false, Struggle = _struggle };
         }
         else
         {
             _twoSlot = slot;
-            Current = new Battle(Current.Player, team[slot], Current.State) { IsWild = false };
+            Current = new Battle(Current.Player, team[slot], Current.State) { IsWild = false, Struggle = _struggle };
         }
 
         return team[slot];

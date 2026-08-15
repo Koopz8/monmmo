@@ -64,6 +64,13 @@ public static class RulesExporter
         // name at all.
         int surf = moves.FirstOrDefault(m => string.Equals(m.Name, "SURF", StringComparison.OrdinalIgnoreCase))?.Id ?? 0;
 
+        // And the one a creature is left with when every move it knows is spent. Located
+        // the same way and for the same reason: it is a move in this cartridge's own
+        // table, with its own power, type and recoil, so nothing about it has to be
+        // invented — only found.
+        int struggle = moves
+            .FirstOrDefault(m => string.Equals(m.Name, "STRUGGLE", StringComparison.OrdinalIgnoreCase))?.Id ?? 0;
+
         // What turns into what, which nothing in this game has ever done. Located here
         // rather than in the world export because it is arithmetic about creatures, and
         // this is the file the server decides fights with.
@@ -77,6 +84,7 @@ public static class RulesExporter
             machineSets?.Masks)
         {
             SurfMove = surf,
+            StruggleMove = struggle,
             BoxSize = boxSize,
             EvolveByLevel = evolutions?.ByLevel ?? 0,
             EvolveByItem = evolutions?.ByItem ?? 0,
@@ -85,6 +93,10 @@ public static class RulesExporter
         log?.Invoke(surf > 0
             ? $"  rules: the move called SURF is {surf}"
             : "  rules: no move on this cartridge is called SURF, so this server has no surfing");
+
+        log?.Invoke(struggle > 0
+            ? $"  rules: the move called STRUGGLE is {struggle}"
+            : "  rules: no move on this cartridge is called STRUGGLE, so nothing here runs out of moves");
 
         log?.Invoke(
             $"  rules: {rules.SpeciesCount} species, {rules.MoveCount} moves, " +

@@ -20,6 +20,16 @@ public sealed class BattleFactory(GameRules rules)
     public GameRules Rules => rules;
 
     /// <summary>Rebuilds a party member exactly as it was saved.</summary>
+    /// <summary>
+    /// The move a spent creature is left with, or nothing when this cartridge has none.
+    /// <para>
+    /// A number in the rules file, found at export off the cartridge's own move names.
+    /// Handed to every battle this factory has anything to do with, because a battle
+    /// cannot look one up: it has two creatures and some dice.
+    /// </para>
+    /// </summary>
+    public MoveData? Struggle => rules.StruggleMove > 0 ? rules.MoveAt(rules.StruggleMove) : null;
+
     public Battler? Restore(SavedMon saved)
     {
         if (rules.SpeciesAt(saved.Species) is not { } species) return null;
@@ -97,14 +107,26 @@ public sealed class BattleFactory(GameRules rules)
     }
 
     /// <summary>What a battler looks like to the other end: numbers, no names.</summary>
-    public static BattlerView View(Battler battler) => new(
+    /// <summary>
+    /// What one side looks like to a client.
+    /// <para>
+    /// <paramref name="own"/> decides whether what is left of each move goes with it. The
+    /// games show a player their own PP and never the other side's, and a view that
+    /// carried both would be a client that could be asked not to display something it
+    /// already has.
+    /// </para>
+    /// </summary>
+    public static BattlerView View(Battler battler, bool own = false) => new(
         battler.Species.Index,
         battler.Level,
         battler.Nickname,
         battler.CurrentHp,
         battler.MaxHp,
         battler.Status,
-        battler.Moves.Select(m => m.Id).ToList());
+        battler.Moves.Select(m => m.Id).ToList())
+    {
+        Pp = own ? [.. Enumerable.Range(0, battler.Moves.Count).Select(battler.PpLeft)] : [],
+    };
 
     /// <summary>
     /// What to write down for a battler.

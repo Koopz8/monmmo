@@ -731,7 +731,18 @@ public sealed record BattlerView(
     int CurrentHp,
     int MaxHp,
     StatusCondition Status,
-    IReadOnlyList<int> Moves);
+    IReadOnlyList<int> Moves)
+{
+    /// <summary>
+    /// What is left of each move, in the same order as <see cref="Moves"/>.
+    /// <para>
+    /// So a client can grey out a move with nothing left in it rather than offering one
+    /// the server will refuse. Empty for the other side, whose PP is not the player's
+    /// business — the games do not show it and neither does this.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<int> Pp { get; init; } = [];
+}
 
 /// <summary>
 /// A battle has begun. Sent only to the player in it.

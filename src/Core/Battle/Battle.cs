@@ -379,6 +379,16 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
     /// </summary>
     public bool IsWild { get; init; } = true;
 
+    /// <summary>
+    /// The move to fall back on when everything is spent, or nothing.
+    /// <para>
+    /// Handed in rather than looked up, because a battle has no rules file — it has two
+    /// creatures and some dice. A battle built without one simply lets a spent creature
+    /// do nothing, which is worse than struggling and better than inventing a move.
+    /// </para>
+    /// </summary>
+    public MoveData? Struggle { get; init; }
+
     public bool IsOver => OpponentCaught || Escaped || Player.HasFainted || Opponent.HasFainted;
 
     public Side? Winner => OpponentCaught
@@ -556,6 +566,32 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         if (!CanAct(side, attacker, events)) return;
 
         MoveData? move = action is BattleAction.UseMove use ? attacker.MoveAt(use.Slot) : null;
+
+        // Nothing left to swing with. The move a creature is left with is a move in the
+        // cartridge's own table — its power, its type and its recoil are all read — so
+        // this is a substitution rather than an invention. What it costs is what its own
+        // record says it costs.
+        //
+        // Checked before the slot is spent and before anything is announced, because a
+        // creature that has run dry never used the move it chose.
+        if (move is not null && attacker.IsSpent && Struggle is { } struggling)
+        {
+            move = struggling;
+            action = new BattleAction.Struggle();
+        }
+        else if (move is not null && !attacker.ForcedSlot.HasValue)
+        {
+            // And the ordinary case: one use, spent as the move is made rather than as it
+            // lands. A miss costs the same as a hit, which is the games' own rule and the
+            // only sane one — otherwise missing would be free.
+            if (action is BattleAction.UseMove spending && !attacker.Spend(spending.Slot))
+            {
+                events.Add(new BattleEvent.NothingHappened(side));
+
+                return;
+            }
+        }
+
         if (move is null) return;
 
         MoveEffect kind = MoveEffects.Of(move.Effect);

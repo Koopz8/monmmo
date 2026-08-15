@@ -67,6 +67,48 @@ public sealed class Battler
     /// <summary>The moves this battler knows, in slot order.</summary>
     public List<MoveData> Moves { get; } = [];
 
+    /// <summary>
+    /// What is left of each move, in the same order as <see cref="Moves"/>.
+    /// <para>
+    /// Read, not modelled: every move record on the cartridge carries its own PP, and
+    /// that field has travelled in the rules file since there was one without anything
+    /// ever spending it. A move with none left cannot be chosen, and a creature with
+    /// nothing left struggles.
+    /// </para>
+    /// <para>
+    /// Filled lazily from the moves themselves, because a battler is built by adding
+    /// moves to a list and there is no moment afterwards that is obviously "now it is
+    /// ready" — one that has never been asked has full PP, which is the same answer.
+    /// </para>
+    /// </summary>
+    private readonly Dictionary<int, int> _spent = [];
+
+    /// <summary>How many uses of one slot are left.</summary>
+    public int PpLeft(int slot) =>
+        MoveAt(slot) is { } move ? Math.Max(0, move.Pp - _spent.GetValueOrDefault(slot)) : 0;
+
+    /// <summary>Spends one use of a slot, if there is one to spend.</summary>
+    public bool Spend(int slot)
+    {
+        if (PpLeft(slot) <= 0) return false;
+
+        _spent[slot] = _spent.GetValueOrDefault(slot) + 1;
+
+        return true;
+    }
+
+    /// <summary>Puts every use back, which is what resting anywhere does.</summary>
+    public void RefillPp() => _spent.Clear();
+
+    /// <summary>
+    /// True when nothing this one knows has a use left in it.
+    /// <para>
+    /// A creature with no moves at all counts as spent too. That is not a state the
+    /// cartridge can produce, and it is one a rules file with a gap in it can.
+    /// </para>
+    /// </summary>
+    public bool IsSpent => Moves.Count == 0 || Enumerable.Range(0, Moves.Count).All(s => PpLeft(s) <= 0);
+
     public StatusCondition Status { get; set; }
 
     /// <summary>

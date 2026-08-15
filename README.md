@@ -13,7 +13,7 @@ src/RomExtract      cartridge reading. Client-only, and enforced by a test
 src/Server          the authoritative server. Core only
 src/Client          the game: window, input, drawing, screens
 src/Tools/RomDump   the extractor's command line, and every instrument built for it
-tests/              1372 tests, no cartridge required
+tests/              1381 tests, no cartridge required
 tools/rig/          the headless play rig — Xvfb, two clients, screenshots
 ```
 
@@ -54,8 +54,10 @@ did; the server checks every claim against what that person is allowed to do.
 
 **Battles.** A one-on-one engine with the damage, accuracy, status, priority, trap,
 recharge, multi-hit, drain, recoil and one-hit-knockout rules read out of the
-cartridge's own tables. Trainer fights are a run of one-on-one battles with the dice
-carried over. Experience, levels, learnsets, evolution and catching all work.
+cartridge's own tables. Moves have their own PP and run out; a creature with nothing
+left struggles, using the cartridge's own STRUGGLE record. Trainer fights are a run of
+one-on-one battles with the dice carried over. Experience, levels, learnsets,
+evolution and catching all work.
 
 **Multiplayer, in three verbs.** Seeing each other, trading, and duelling. Players
 walk through each other on purpose — a game where standing still is a wall is a game

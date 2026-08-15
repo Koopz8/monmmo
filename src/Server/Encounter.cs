@@ -23,7 +23,15 @@ public sealed class Encounter
 
     private int _opponentSlot;
 
-    public Encounter(int playerSlot, Battler player, IReadOnlyList<Battler> opponents, uint seed, int? trainerId = null)
+    private readonly MoveData? _struggle;
+
+    public Encounter(
+        int playerSlot,
+        Battler player,
+        IReadOnlyList<Battler> opponents,
+        uint seed,
+        int? trainerId = null,
+        MoveData? struggle = null)
     {
         if (opponents.Count == 0) throw new ArgumentException("An encounter needs somebody to fight.", nameof(opponents));
 
@@ -31,7 +39,9 @@ public sealed class Encounter
         TrainerId = trainerId;
         _opponents = [.. opponents];
 
-        Current = new Battle(player, _opponents[0], seed) { IsWild = trainerId is null };
+        _struggle = struggle;
+
+        Current = new Battle(player, _opponents[0], seed) { IsWild = trainerId is null, Struggle = struggle };
     }
 
     /// <summary>Which trainer started this, or null when something walked out of the grass.</summary>
@@ -78,7 +88,11 @@ public sealed class Encounter
 
         // Carried on from where the dice had got to, not restarted from the seed.
         // Restarting would replay the same rolls against everyone they send out.
-        Current = new Battle(Current.Player, _opponents[_opponentSlot], Current.State) { IsWild = !IsTrainerBattle };
+        Current = new Battle(Current.Player, _opponents[_opponentSlot], Current.State)
+        {
+            IsWild = !IsTrainerBattle,
+            Struggle = _struggle,
+        };
 
         return Current.Opponent;
     }
@@ -87,6 +101,10 @@ public sealed class Encounter
     public void SendPlayer(int slot, Battler battler)
     {
         PlayerSlot = slot;
-        Current = new Battle(battler, Current.Opponent, Current.State) { IsWild = !IsTrainerBattle };
+        Current = new Battle(battler, Current.Opponent, Current.State)
+        {
+            IsWild = !IsTrainerBattle,
+            Struggle = _struggle,
+        };
     }
 }

@@ -1270,13 +1270,13 @@ public sealed class GameWorld
         // would start a fight that was already lost before its first turn.
         if (LeadBattler(player) is not { } lead) return [];
 
-        player.Battle = new Encounter(lead.Slot, lead.Battler, party, _rng.State, trainer.TrainerId);
+        player.Battle = new Encounter(lead.Slot, lead.Battler, party, _rng.State, trainer.TrainerId, _battles.Struggle);
 
         return
         [
             new Outgoing(
                 new BattleStarted(
-                    BattleFactory.View(lead.Battler),
+                    BattleFactory.View(lead.Battler, own: true),
                     BattleFactory.View(party[0]),
                     BallsOf(player),
                     MedicineOf(player),
@@ -3357,7 +3357,7 @@ public sealed class GameWorld
                 return [];
             }
 
-            player.Battle = new Encounter(lead.Slot, lead.Battler, [wild], _rng.State);
+            player.Battle = new Encounter(lead.Slot, lead.Battler, [wild], _rng.State, struggle: _battles.Struggle);
 
             LastScriptFight = $"species {species} at level {level}, set up by object {localId}";
 
@@ -3365,7 +3365,7 @@ public sealed class GameWorld
             [
                 new Outgoing(
                     new BattleStarted(
-                        BattleFactory.View(lead.Battler), BattleFactory.View(wild),
+                        BattleFactory.View(lead.Battler, own: true), BattleFactory.View(wild),
                         BallsOf(player), MedicineOf(player), Slot: lead.Slot),
                     OnlyTo: playerId),
             ];
@@ -3541,7 +3541,7 @@ public sealed class GameWorld
             return [];
         }
 
-        var duel = new Duel(oneId, twoId, ones, twos, _rng.State);
+        var duel = new Duel(oneId, twoId, ones, twos, _rng.State, _battles.Struggle);
 
         _duels.Begin(duel);
 
@@ -3559,7 +3559,7 @@ public sealed class GameWorld
     private Outgoing Opening(Duel duel, ServerPlayer who, ServerPlayer other) =>
         new(
             new BattleStarted(
-                BattleFactory.View(duel.ActiveFor(who.Id)),
+                BattleFactory.View(duel.ActiveFor(who.Id), own: true),
                 BattleFactory.View(duel.ActiveFor(other.Id)),
 
                 // No balls and no medicine. A duel is a fight, not a shopping trip, and
@@ -4656,11 +4656,11 @@ public sealed class GameWorld
         // was over before its first turn — which is exactly the freeze this fixes.
         if (LeadBattler(player) is not { } lead) return;
 
-        player.Battle = new Encounter(lead.Slot, lead.Battler, [wild], _rng.State);
+        player.Battle = new Encounter(lead.Slot, lead.Battler, [wild], _rng.State, struggle: _battles.Struggle);
 
         send.Add(new Outgoing(
             new BattleStarted(
-                BattleFactory.View(lead.Battler), BattleFactory.View(wild),
+                BattleFactory.View(lead.Battler, own: true), BattleFactory.View(wild),
                 BallsOf(player), MedicineOf(player), Slot: lead.Slot),
             OnlyTo: player.Id));
     }
@@ -4724,7 +4724,7 @@ public sealed class GameWorld
 
         encounter.SendPlayer(slot, coming);
 
-        return BattleFactory.View(coming);
+        return BattleFactory.View(coming, own: true);
     }
 
     /// <summary>

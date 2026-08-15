@@ -23,7 +23,7 @@ public sealed class GameRules
 {
     private static readonly byte[] Magic = "MONRULES"u8.ToArray();
 
-    private const int Version = 11;
+    private const int Version = 12;
 
     private readonly Dictionary<int, SpeciesData> _species;
     private readonly Dictionary<int, MoveData> _moves;
@@ -58,6 +58,7 @@ public sealed class GameRules
         // reason: this file carries no text, so anything that has to be read off the
         // cartridge's own words has to be read on the machine that has the cartridge.
         SurfMove = MoveNamed("SURF")?.Id ?? 0;
+        StruggleMove = MoveNamed("STRUGGLE")?.Id ?? 0;
 
         _machineSets = [.. machineSets ?? []];
 
@@ -88,6 +89,22 @@ public sealed class GameRules
     /// </para>
     /// </summary>
     public int SurfMove { get; init; }
+
+    /// <summary>
+    /// The move a creature is left with when everything it knows is spent.
+    /// <para>
+    /// A move in the cartridge's own table like any other, with its own power, type and
+    /// recoil — so this is a number to find rather than a rule to invent. Located at
+    /// export off the name, exactly as <see cref="SurfMove"/> is, because that is the last
+    /// moment anything knows what a move is called.
+    /// </para>
+    /// <para>
+    /// A rules file whose cartridge has no move by that name has nought here, and a server
+    /// reading one simply lets a spent creature do nothing — which is worse than
+    /// struggling and better than inventing a move.
+    /// </para>
+    /// </summary>
+    public int StruggleMove { get; init; }
 
     /// <summary>
     /// Which method number means "on reaching a level".
@@ -386,6 +403,7 @@ public sealed class GameRules
         // Derived from this cartridge's own move names at export, for the same reason
         // the ball kinds are: the server never sees a name.
         writer.Write(SurfMove);
+        writer.Write(StruggleMove);
 
         // And out of a sentence, which is stranger and the same principle.
         writer.Write(BoxSize);
@@ -541,6 +559,7 @@ public sealed class GameRules
         }
 
         int surf = reader.ReadInt32();
+        int struggle = reader.ReadInt32();
         int boxSize = reader.ReadInt32();
         int byLevel = reader.ReadInt32();
         int byItem = reader.ReadInt32();
@@ -563,6 +582,7 @@ public sealed class GameRules
         return new GameRules(species, moves, learnsets, trainers, items, evolutions, machineSets)
         {
             SurfMove = surf,
+            StruggleMove = struggle,
             BoxSize = boxSize,
             EvolveByLevel = byLevel,
             EvolveByItem = byItem,
