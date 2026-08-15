@@ -469,7 +469,7 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
 
             // The same shield a move's stat drop respects. Being frightened by somebody
             // walking in is still somebody else lowering your Attack.
-            if (cowed.HasFainted || cowed.IsMisted)
+            if (cowed.HasFainted || cowed.IsMisted || Abilities.Protects(cowed.Ability, Stat.Attack))
             {
                 if (!cowed.HasFainted) events.Add(new BattleEvent.Shielded(at));
 
@@ -1244,6 +1244,12 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
 
         if (effect.Kind == EffectKind.None) return;
 
+        // SHIELD DUST, which is about the riders rather than the move. A rider is exactly
+        // the thing that rolled against the move's secondary chance, and one aimed at
+        // somebody else is the only kind this refuses — a move whose whole point is its
+        // effect is not a rider, and neither is anything the user does to itself.
+        if (rolled && !effect.OnUser && Abilities.ShrugsOffRiders(defender.Ability)) return;
+
         // The ones that are about turns rather than about the hit. They were settled
         // where the turn was taken, and falling through to here gave them the default
         // effect — a stage change of nothing, to a stat that has no stages — so WRAP
@@ -1516,7 +1522,11 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
 
         // Refused while mist holds, and only from outside: a move that trades one of its
         // user's own stats for something is not somebody else lowering it.
-        if (effect.Stages < 0 && !effect.OnUser && target.IsMisted)
+        // Somebody else lowering it, which is the only kind either shield answers. Using
+        // your own stats for something is not somebody else lowering them, and an ability
+        // that refused BELLY DRUM would be refusing a move its owner chose.
+        if (effect.Stages < 0 && !effect.OnUser
+            && (target.IsMisted || Abilities.Protects(target.Ability, effect.Stat)))
         {
             if (!rolled) events.Add(new BattleEvent.Shielded(at));
 

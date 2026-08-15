@@ -348,8 +348,19 @@ public class AbilityTests
             bool answersATouch = Abilities.Grazes(ability)
                 || Enumerable.Range(0, 500).Any(_ => Abilities.Touched(ability, dice) is not null);
 
-            if (!refuses && !changesDamage && !changesAttack && !readsTheSky && !arrives && !answersATouch)
+            // And the ones that refuse to be made worse at something, which is a seventh
+            // way. Seven limbs now, one for each kind of ability this project has learned
+            // about — which is the whole point of the test rather than a sign it is
+            // getting unwieldy.
+            bool refusesToBeWorsened =
+                Enum.GetValues<Stat>().Any(st => Abilities.Protects(ability, st))
+                || Abilities.ShrugsOffRiders(ability);
+
+            if (!refuses && !changesDamage && !changesAttack && !readsTheSky && !arrives
+                && !answersATouch && !refusesToBeWorsened)
+            {
                 inert.Add(ability);
+            }
         }
 
         Assert.Empty(inert);

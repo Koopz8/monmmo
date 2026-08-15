@@ -35,9 +35,14 @@ public static class Abilities
     // was printed with its index before it was written down here.
     public const int Drizzle = 2;
     public const int Static = 9;
+    public const int ShieldDust = 19;
     public const int RoughSkin = 24;
     public const int EffectSpore = 27;
+    public const int ClearBody = 29;
     public const int PoisonPoint = 38;
+    public const int KeenEye = 51;
+    public const int HyperCutter = 52;
+    public const int WhiteSmoke = 73;
     public const int FlameBody = 49;
     public const int SandVeil = 8;
     public const int Intimidate = 22;
@@ -98,7 +103,44 @@ public static class Abilities
         // And the ones that answer being touched, which needed the flag on a move record
         // that this project had been reading past since it first read a move record.
         Static, RoughSkin, EffectSpore, PoisonPoint, FlameBody,
+
+        // And the ones that refuse to be made worse at something, which needed no new
+        // machinery at all — the engine has had a shield on stat drops since MIST, and
+        // these are four more reasons to raise it.
+        ShieldDust, ClearBody, KeenEye, HyperCutter, WhiteSmoke,
     ];
+
+    /// <summary>
+    /// True when this ability refuses to let somebody else lower that stat.
+    /// <para>
+    /// Somebody <em>else</em>, which is the whole of the rule and the easy half to get
+    /// wrong. Every one of these leaves its owner free to spend its own stats — BELLY DRUM
+    /// and OVERHEAT are things you do to yourself, and an ability that stopped them would
+    /// be an ability that refused a move its owner chose.
+    /// </para>
+    /// <para>
+    /// Two of them are the same rule under two names, which is the games' doing rather than
+    /// a simplification here.
+    /// </para>
+    /// </summary>
+    public static bool Protects(int ability, Stat stat) => ability switch
+    {
+        ClearBody or WhiteSmoke => true,
+        HyperCutter => stat == Stat.Attack,
+        KeenEye => stat == Stat.Accuracy,
+        _ => false,
+    };
+
+    /// <summary>
+    /// True when this one is left alone by whatever a move carries as well as its damage.
+    /// <para>
+    /// The riders rather than the move: SHIELD DUST does not stop a FLAMETHROWER, it stops
+    /// the burn that sometimes comes with one. The engine already tells those two apart —
+    /// a rider is the thing that rolls against a move's secondary chance — so this is a
+    /// rule with no machinery behind it.
+    /// </para>
+    /// </summary>
+    public static bool ShrugsOffRiders(int ability) => ability == ShieldDust;
 
     /// <summary>
     /// How often an ability that answers a touch actually answers. <b>Modelled.</b>
