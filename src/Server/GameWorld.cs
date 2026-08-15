@@ -3480,6 +3480,9 @@ public sealed class GameWorld
                 return [Said(player, $"money is {player.Money}"), .. Resend(player)];
             }
 
+            case "hidden":
+                return [.. WhoIsBeingHeldBack(player).Select(said => Said(player, said))];
+
             case "forget":
                 player.Script.Forget();
                 return [Said(player, "every flag and variable, gone"), .. Resend(player)];
@@ -3487,6 +3490,48 @@ public sealed class GameWorld
             default:
                 return [Said(player, $"no command \"{line.Verb}\" — try /help")];
         }
+    }
+
+    /// <summary>
+    /// Everyone on this map who carries a flag, whether that flag is set, and whether this
+    /// player is being told about them.
+    /// <para>
+    /// Written for a specific hour. GIOVANNI was missing from the ROCKET HIDEOUT, the save
+    /// said his flag was clear, and a <c>/flag 0x38 off</c> that should have been a no-op
+    /// put him back — and answering "which of those two records is lying" took a session of
+    /// forensics and did not finish. All three facts are on one line here.
+    /// </para>
+    /// <para>
+    /// The third column is the one that was missing. A flag being set explains an absence;
+    /// a flag being clear <em>and</em> the player not being told is a different fault
+    /// entirely, and until now nothing could tell them apart from the outside.
+    /// </para>
+    /// </summary>
+    public List<string> WhoIsBeingHeldBack(ServerPlayer player)
+    {
+        if (_world.Find(player.MapId) is not { } map) return ["no such map"];
+
+        List<MapObject> carrying = [.. map.Objects.Where(o => o.HiddenBy != 0)];
+
+        if (carrying.Count == 0) return [$"{map.Name}: nobody here carries a flag"];
+
+        List<string> said =
+        [
+            $"{map.Name}: {carrying.Count} carry a flag, {player.Seeing.Count} being drawn",
+        ];
+
+        foreach (MapObject who in carrying)
+        {
+            bool set = player.Script.Has(who.HiddenBy);
+            bool told = player.Seeing.Contains(who.LocalId);
+
+            said.Add(
+                $"  {who.LocalId,2} ({who.X},{who.Y}) 0x{who.HiddenBy:X4} " +
+                $"{(set ? "set  " : "clear")} {(told ? "drawn" : "not drawn")}" +
+                (set == told ? "   <- disagrees" : ""));
+        }
+
+        return said;
     }
 
     /// <summary>

@@ -941,10 +941,19 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
 
                             if (ran.Set.Count + ran.Cleared.Count + ran.Written.Count > 0)
                             {
+                                // Named rather than counted. "1 flags set" is true of every
+                                // flag in the game, and an hour went into working out which
+                                // one had hidden GIOVANNI from a line that could have said.
+                                static string Flags(string what, IReadOnlyList<int> which) =>
+                                    which.Count == 0
+                                        ? ""
+                                        : $" {what} {string.Join(",", which.Select(f => $"0x{f:X4}"))}";
+
                                 Console.WriteLine(
-                                    $"* #{playerId} ran a script: " +
-                                    $"{ran.Set.Count} flags set, {ran.Cleared.Count} cleared, " +
-                                    $"{ran.Written.Count} variables written");
+                                    $"* #{playerId} ran a script:" +
+                                    Flags("set", ran.Set) +
+                                    Flags("cleared", ran.Cleared) +
+                                    (ran.Written.Count > 0 ? $" wrote {ran.Written.Count} variables" : ""));
                             }
 
                             break;
