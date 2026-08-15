@@ -3458,6 +3458,10 @@ public sealed class GameWorld
 
             LastTrade = reason;
 
+            // Who ended it, not just that it ended. "Called off" with nobody's name on it
+            // was two runs of guessing which of two windows had done it.
+            TradeLog = $"#{trade.One} and #{trade.Two}: {reason} (by #{playerId})";
+
             return [.. Close(trade, reason)];
         }
     }
@@ -3493,7 +3497,7 @@ public sealed class GameWorld
         // Said out loud, because a trade that ends is a trade somebody was in the middle
         // of, and "it stopped" is not a thing anybody can act on. A live run of this ended
         // once with no explanation at all and cost the milestone its ending.
-        TradeLog = $"#{trade.One} and #{trade.Two}: {reason}";
+        TradeLog ??= $"#{trade.One} and #{trade.Two}: {reason}";
 
         _trades.Finish(trade);
 
