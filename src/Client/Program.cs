@@ -548,6 +548,22 @@ public static class Program
                 }
                 else if (pending.Square != player.Square)
                 {
+                    // A square out is ordinary — it is one optimistic step the server did
+                    // not agree with, which is what this exists to undo. More than that is
+                    // not a correction, it is a disagreement, and it is worth saying so.
+                    //
+                    // The S.S. ANNE is why. The client had the player three squares north
+                    // of where the server had them, so the captain was not in front of
+                    // them, so he could not be talked to, so HM01 could not be got — and
+                    // from the outside all of that looked like a missing person. It cost
+                    // two milestones of looking at flags.
+                    int apart =
+                        Math.Abs(pending.Square.X - player.Square.X) +
+                        Math.Abs(pending.Square.Y - player.Square.Y);
+
+                    if (apart > 1)
+                        Note($"put back {apart} squares, from {player.Square} to {pending.Square} — that is a disagreement, not a step");
+
                     player.Place(view.Collision, pending.Square, HopsOn(view));
                 }
 

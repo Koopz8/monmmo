@@ -3571,12 +3571,18 @@ public sealed class GameWorld
 
         List<MapObject> carrying = [.. map.Objects.Where(o => o.HiddenBy != 0)];
 
-        if (carrying.Count == 0) return [$"{map.Name}: nobody here carries a flag"];
-
+        // Everybody, not only the flag-carriers. The first version of this listed the
+        // carriers and nothing else, and the first time it was asked in anger — a captain
+        // missing from the S.S. ANNE — it answered "nobody here carries a flag", which was
+        // true, useless, and read like an all-clear. How many people this map has and how
+        // many are being drawn is the line that would have said something.
         List<string> said =
         [
-            $"{map.Name}: {carrying.Count} carry a flag, {player.Seeing.Count} being drawn",
+            $"{map.Name}: {map.Objects.Count} people, {player.Seeing.Count} being drawn, " +
+            $"{carrying.Count} carry a flag  (you: {player.Square})",
         ];
+
+        if (carrying.Count == 0) return said;
 
         foreach (MapObject who in carrying)
         {

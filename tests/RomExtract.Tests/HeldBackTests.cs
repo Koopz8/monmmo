@@ -38,13 +38,23 @@ public class HeldBackTests
         return (world, player);
     }
 
+    /// <summary>
+    /// A room where nobody carries a flag still says how many people it has and how many
+    /// are being drawn. The first version of this said "nobody here carries a flag" and
+    /// stopped — true, useless, and read like an all-clear the first time it was asked in
+    /// anger about a captain who was not on the S.S. ANNE.
+    /// </summary>
     [Fact]
-    public void ARoomWithNobodyCarryingAFlagSaysSo()
+    public void ARoomWithNobodyCarryingAFlagStillCountsThePeople()
     {
         (GameWorld world, ServerPlayer player) = Standing(
             new MapObject(1, 5, 1, 2, Direction.Down, 0, false) { Talks = true });
 
-        Assert.Contains("nobody here carries a flag", Assert.Single(world.WhoIsBeingHeldBack(player)));
+        string only = Assert.Single(world.WhoIsBeingHeldBack(player));
+
+        Assert.Contains("1 people", only);
+        Assert.Contains("1 being drawn", only);
+        Assert.Contains("0 carry a flag", only);
     }
 
     /// <summary>
