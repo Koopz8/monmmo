@@ -66,6 +66,12 @@ public static class WorldExporter
                     // The fifth list. Only the conditions travel — the addresses stay on
                     // the cartridge, exactly as they do for a trigger.
                     OnEntry = MapScripts.OnEntry(rom, header),
+
+                    // And the doors that are on no square, read out of the same scripts.
+                    // A map's warp records say where its doorways go; these say where its
+                    // boats and lifts do, and until now nothing on the server's side of
+                    // the split had ever been told they existed.
+                    Doors = ScriptedDoors.On(rom, header, grid.Width, grid.Height, log),
                 });
             }
             catch (Exception ex)

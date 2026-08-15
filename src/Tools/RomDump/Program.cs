@@ -172,6 +172,8 @@ public static class Program
 
         if (options.Specials) WriteSpecials(rom);
 
+        if (options.ScriptedDoors) WriteScriptedDoors(rom);
+
         if (options.Special is { } routine) WriteSpecial(rom, routine);
 
         if (options.Answers is { } answering) WriteAnswers(rom, answering);
@@ -4015,6 +4017,74 @@ public static class Program
     /// A degenerate answer given confidently is worse than no answer.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// The doors that are not on any map, and which of the unreachable maps they open.
+    /// <para>
+    /// The world file's warps are squares: stand on this one, arrive there. That is every
+    /// door the walker has ever known about, and it leaves 179 maps of 425 with nothing
+    /// leading in — a whole archipelago, five department store floors, and the caves and
+    /// towers behind them.
+    /// </para>
+    /// <para>
+    /// A <c>warp</c> is also a script command, and a script can run one from anywhere.
+    /// This asks every script on every map for the ones it contains, and then asks the
+    /// walker which of the maps they name it had given up on.
+    /// </para>
+    /// </summary>
+    private static void WriteScriptedDoors(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("doors a script makes, which are on no square");
+
+        WorldData world = WorldExporter.Export(rom);
+
+        Dictionary<string, MapData> maps = world.Maps.ToDictionary(m => m.Id);
+
+        List<(MapData From, ScriptedDoor Door)> doors =
+        [
+            .. world.Maps.OrderBy(m => m.Id).SelectMany(m => m.Doors.Select(d => (m, d))),
+        ];
+
+        // Which maps have a doorway leading in, by the only kind of door the world file
+        // has ever carried. Everything else is somewhere no square anywhere reaches.
+        HashSet<string> byASquare =
+        [
+            .. world.Maps.SelectMany(m => m.Warps.Where(w => !w.IsDynamic).Select(w => w.TargetMapId)),
+            .. world.Maps.SelectMany(m => m.Connections.Select(c => c.MapId)),
+            world.Maps.First().Id,
+        ];
+
+        Console.WriteLine(
+            $"  {doors.Count} of them, on {doors.Select(d => d.From.Id).Distinct().Count()} maps, " +
+            $"naming {doors.Select(d => d.Door.TargetMapId).Distinct().Count()} different places");
+
+        List<(MapData From, ScriptedDoor Door)> only =
+        [
+            .. doors.Where(d => !byASquare.Contains(d.Door.TargetMapId)),
+        ];
+
+        Console.WriteLine(
+            $"  {only.Count} of them lead somewhere no doorway and no map edge does, " +
+            $"{only.Select(d => d.Door.TargetMapId).Distinct().Count()} different maps");
+
+        Console.WriteLine();
+
+        foreach ((MapData from, ScriptedDoor door) in doors)
+        {
+            bool known = maps.TryGetValue(door.TargetMapId, out MapData? target);
+
+            string note =
+                !known ? "   <- no such map"
+                : !byASquare.Contains(door.TargetMapId) ? "   <- NO DOORWAY LEADS HERE"
+                : "";
+
+            Console.WriteLine(
+                $"    {from.Id,-7} {from.Name,-18} {door.What,-16} -> " +
+                $"{door.TargetMapId,-7} {target?.Name ?? "?",-18} warp {door.TargetWarpId} " +
+                $"at ({door.X},{door.Y}){note}");
+        }
+    }
+
     private static void WriteSpecials(Rom rom, int top = 24)
     {
         Console.WriteLine();
@@ -6851,6 +6921,9 @@ public static class Program
         /// <summary>Count which special routines get called, and on which maps.</summary>
         public bool Specials { get; private init; }
 
+        /// <summary>The doors scripts make, which are on no map.</summary>
+        public bool ScriptedDoors { get; private init; }
+
         public int? Special { get; private init; }
 
         public byte? Answers { get; private init; }
@@ -6957,6 +7030,7 @@ public static class Program
             string waterMap = "";
             bool rivalFights = false;
             bool specials = false;
+            bool scriptedDoors = false;
             int? special = null;
             byte? answers = null;
             bool answerSweep = false;
@@ -7145,6 +7219,9 @@ public static class Program
                     case "--specials":
                         specials = true;
                         break;
+                    case "--scripted-doors":
+                        scriptedDoors = true;
+                        break;
                     case "--shared":
                         shared = true;
                         break;
@@ -7313,6 +7390,7 @@ public static class Program
                 WaterMap = waterMap,
                 RivalFights = rivalFights,
                 Specials = specials,
+                ScriptedDoors = scriptedDoors,
                 Special = special,
                 Answers = answers,
                 AnswerSweep = answerSweep,

@@ -383,6 +383,56 @@ public static class Program
             }
         }
 
+        // And the doors that are on no square at all. A script can warp somebody
+        // anywhere, so the boats and the lifts are doors this walk has never had — and
+        // the "none at all" figure above was only ever a statement about map records.
+        //
+        // The answer is a negative one and is printed anyway. All the scripted doors in
+        // this cartridge lead somewhere a doorway already leads, so whatever carries a
+        // player to the islands is not a warp written in script: it is one written in
+        // code, which is the boundary this project cannot read across.
+        Reach sailing = WorldWalker.Walk(
+            world, startingMapId, field, throughPeople: true, surfing: true, throughScriptedDoors: true);
+
+        int scripted = world.Maps.Sum(m => m.Doors.Count);
+
+        Console.WriteLine(
+            $"    {scripted} doors are made by scripts rather than by squares; walking those as well " +
+            $"reaches {sailing.Maps.Count} — {sailing.Maps.Count - everything.Maps.Count} more");
+
+        // What the unreached maps are, once. They are not a list of odds and ends: they
+        // are other worlds, and counting them as such is the difference between "some
+        // maps are missing" and "there is an archipelago nothing sails to".
+        //
+        // One walk per piece rather than one per map: whatever the first unassigned map
+        // reaches is a piece, and everything it reached is answered for.
+        var accounted = new HashSet<string>(sailing.Maps);
+        var pieces = new List<(string Id, string Name, int Size)>();
+
+        foreach (MapData island in world.Maps)
+        {
+            if (accounted.Contains(island.Id)) continue;
+
+            Reach piece = WorldWalker.Walk(
+                world, island.Id, field, throughPeople: true, surfing: true, throughScriptedDoors: true);
+
+            // Only what this piece adds. A walk starting inside one piece can still see
+            // out into the first world through a one-way door, and counting those again
+            // would make the pieces add up to more than the world.
+            foreach (string id in piece.Maps) accounted.Add(id);
+
+            pieces.Add((island.Id, island.Name, piece.Maps.Count));
+        }
+
+        if (pieces.Count > 0)
+        {
+            Console.WriteLine(
+                $"    the rest is {pieces.Count} separate pieces, none of which anything sails to");
+
+            foreach ((string id, string name, int size) in pieces.OrderByDescending(p => p.Size).Take(4))
+                Console.WriteLine($"      {size,3} maps from {id} {name}");
+        }
+
         if (reach.Beyond.Count > 0)
             Console.WriteLine($"    {reach.Beyond.Count} doors lead to maps this world file does not have");
     }

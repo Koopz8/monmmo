@@ -22,6 +22,9 @@ public sealed record MapData(string Id, string Name, int Width, int Height, byte
     /// <summary>Doors, stairs and cave mouths on this map.</summary>
     public IReadOnlyList<Warp> Warps { get; init; } = [];
 
+    /// <summary>Doors the scripts on this map can make, which are on no square.</summary>
+    public IReadOnlyList<ScriptedDoor> Doors { get; init; } = [];
+
     /// <summary>People and other things standing on this map.</summary>
     public IReadOnlyList<MapObject> Objects { get; init; } = [];
 
@@ -266,7 +269,7 @@ public sealed class WorldData
     /// <summary>Identifies the format, so a wrong or stale file fails loudly.</summary>
     private static readonly byte[] Magic = "MONWORLD"u8.ToArray();
 
-    private const int Version = 24;
+    private const int Version = 25;
 
     private readonly Dictionary<string, MapData> _maps;
 
@@ -394,6 +397,7 @@ public sealed class WorldData
             IReadOnlyList<MapObject> objects = ReadObjects(reader, id);
             IReadOnlyList<MapTrigger> triggers = ReadTriggers(reader);
             IReadOnlyList<MapEntryScript> onEntry = ReadEntryScripts(reader);
+            IReadOnlyList<ScriptedDoor> doors = ReadDoors(reader, id);
 
             maps.Add(new MapData(id, name, width, height, collision)
             {
@@ -404,6 +408,7 @@ public sealed class WorldData
                 Objects = objects,
                 Triggers = triggers,
                 OnEntry = onEntry,
+                Doors = doors,
             });
         }
 
@@ -543,6 +548,39 @@ public sealed class WorldData
             writer.Write(entry.GivesItemId);
             writer.Write(entry.GivesCount);
         }
+
+        // The doors that are on no square. Nineteen of them across the world, and they
+        // are what four hundred maps' worth of "nothing leads in here" was always about.
+        writer.Write(map.Doors.Count);
+
+        foreach (ScriptedDoor door in map.Doors)
+        {
+            writer.Write(door.What);
+            writer.Write(door.TargetMapId);
+            writer.Write(door.TargetWarpId);
+            writer.Write(door.X);
+            writer.Write(door.Y);
+        }
+    }
+
+    /// <summary>The doors this map's scripts can make.</summary>
+    private static List<ScriptedDoor> ReadDoors(BinaryReader reader, string mapId)
+    {
+        int count = reader.ReadInt32();
+
+        if (count is < 0 or > 256)
+            throw new InvalidDataException($"Map '{mapId}' claims {count} scripted doors.");
+
+        var doors = new List<ScriptedDoor>(count);
+
+        for (int i = 0; i < count; i++)
+        {
+            doors.Add(new ScriptedDoor(
+                reader.ReadString(), reader.ReadString(),
+                reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32()));
+        }
+
+        return doors;
     }
 
     private static List<MapEntryScript> ReadEntryScripts(BinaryReader reader)

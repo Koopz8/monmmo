@@ -29,6 +29,33 @@ public sealed record MapConnection(ConnectionSide Side, int Offset, string MapId
 /// is edited.
 /// </para>
 /// </summary>
+/// <summary>
+/// A door a script makes, rather than one a square is.
+/// <para>
+/// Every warp above is a record on a map: stand here, arrive there. Those are the doors
+/// this project has ever walked through, and they leave 179 of 425 maps with nothing
+/// leading in — a whole archipelago, five department store floors, and everything behind
+/// them. That was written down for a dozen milestones as a fact about geometry.
+/// </para>
+/// <para>
+/// It never was. <c>warp</c> is also a script command — a bank and a map, a warp id and a
+/// square — and a script can run one from anywhere, for any reason, with no square on any
+/// map to say so. A boat is a door of this kind. So is a lift, and so is being thrown out
+/// of somewhere.
+/// </para>
+/// <para>
+/// Carried in the world file for the ordinary reason: reading it means reading scripts,
+/// an operator's cartridge is the only thing that can, and a server with no cartridge
+/// cannot invent one. The cartridge address it was read from stays on the cartridge.
+/// </para>
+/// </summary>
+public sealed record ScriptedDoor(string What, string TargetMapId, int TargetWarpId, int X, int Y)
+{
+    public GridPosition Square => new(X, Y);
+
+    public override string ToString() => $"{What} -> {TargetMapId} warp {TargetWarpId} at ({X},{Y})";
+}
+
 public sealed record Warp(int X, int Y, int TargetWarpId, string TargetMapId)
 {
     /// <summary>

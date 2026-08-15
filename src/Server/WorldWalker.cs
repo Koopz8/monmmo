@@ -89,7 +89,8 @@ public static class WorldWalker
         IReadOnlyDictionary<byte, Direction>? hops = null,
         IReadOnlyCollection<(string MapId, int LocalId)>? asIfGone = null,
         IReadOnlyCollection<int>? flagsSet = null,
-        GridPosition? startSquare = null)
+        GridPosition? startSquare = null,
+        bool throughScriptedDoors = false)
     {
         IReadOnlyCollection<int> known = moves ?? [];
 
@@ -155,6 +156,7 @@ public static class WorldWalker
             : GridOf(start).FirstWalkable()));
 
         var seen = new HashSet<(string, GridPosition)>();
+        var doorsWalked = new HashSet<string>();
 
         while (queue.Count > 0)
         {
@@ -163,6 +165,38 @@ public static class WorldWalker
             if (!seen.Add((map.Id, from))) continue;
 
             reached.Add(map.Id);
+
+            // Doors a script makes rather than a square is: the boats, the lifts, and
+            // being thrown out of somewhere. Off by default, because they are not doors
+            // a walk can be sure of — whatever the script wants first is not readable
+            // from here — and on when the question is which maps are cut off by geometry
+            // rather than by a story.
+            //
+            // Walked from the map rather than from a square, which makes it an upper
+            // bound and is said out loud rather than hidden: a boat is somewhere on the
+            // map, and whether the player can reach the jetty is a question this cannot
+            // ask. "Cut off by geometry, or by a script" is the only thing it answers.
+            if (throughScriptedDoors && doorsWalked.Add(map.Id))
+            {
+                foreach (ScriptedDoor door in map.Doors)
+                {
+                    if (!maps.TryGetValue(door.TargetMapId, out MapData? behind))
+                    {
+                        beyond.Add(door.TargetMapId);
+                        continue;
+                    }
+
+                    CollisionGrid there = GridOf(behind);
+
+                    GridPosition landing =
+                        there.IsWalkable(door.Square) ? door.Square
+                        : door.TargetWarpId >= 0 && door.TargetWarpId < behind.Warps.Count
+                            ? Arrival(behind, behind.Warps[door.TargetWarpId], there)
+                            : there.FirstWalkable();
+
+                    if (there.IsWalkable(landing)) queue.Enqueue((behind, landing));
+                }
+            }
 
             CollisionGrid grid = GridOf(map);
 
