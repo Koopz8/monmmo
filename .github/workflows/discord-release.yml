@@ -37,6 +37,9 @@ jobs:
         working-directory: discord
         run: npm ci --omit=dev || npm install --omit=dev
 
+      - name: Load state
+        run: bash discord/state.sh load
+
       - name: Count the tests
         id: tests
         continue-on-error: true
@@ -109,3 +112,6 @@ jobs:
         run: |
           node post.js build-drops /tmp/release.md   --once "release:${TAG}"
           node post.js changelog   /tmp/changelog.md --once "changelog:${TAG}"
+
+      - name: Save state
+        run: bash discord/state.sh save "state after build drop"

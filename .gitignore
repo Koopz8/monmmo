@@ -57,3 +57,6 @@ client.json
 # the folder by tooling that cannot then remove it. Ignored rather than tidied up by
 # hand each time.
 *.bundle
+
+# The working copy's own archive of superseded material.
+OLD UPDATES DONT USE/

@@ -64,9 +64,34 @@ Then in the repo on GitHub, **Settings → Secrets and variables → Actions**:
 | Secret | `GUILD_ID` | the server id |
 | Variable | `PROJECT_NAME` | e.g. `Overworld` |
 
-Commit `.sync-state.json` — it is not secret, and the workflows push updates to
-it so runs on different days know what has already gone out. Keep `.env`
-untracked; `.gitignore` already handles that.
+Keep `.env` untracked; `.gitignore` already handles that.
+
+### Where state lives
+
+What has already been posted is tracked in `.sync-state.json`. **The live copy
+lives on a branch of its own — `discord-state` — which nothing ever checks
+out.** Workflows read it at the start of a run and write it at the end, so
+`main` only ever moves when *you* move it. No `[skip ci]` commits, no losing a
+race to a robot between `git commit` and `git push`.
+
+The write uses git plumbing (`hash-object`, `mktree`, `commit-tree`) rather than
+a checkout, so the working tree is never touched and two workflows finishing at
+once cannot corrupt each other — the second one refetches and retries, up to
+three times. A state failure never fails the run; the worst case is a repeated
+post next time.
+
+The copy of `.sync-state.json` committed on `main` is only a **seed**. It is
+used once, when the `discord-state` branch does not exist yet. After that the
+branch wins and edits to main's copy are ignored.
+
+**To reset state** — after a history rewrite, or to stop a stale baseline
+producing a nonsense delta — delete the `discord-state` branch on GitHub. The
+next run recreates it from main's copy.
+
+```bash
+git push origin --delete discord-state     # next run re-seeds from main
+git fetch origin discord-state && git show origin/discord-state:sync-state.json   # read it
+```
 
 ---
 

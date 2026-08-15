@@ -26,7 +26,7 @@ jobs:
   route:
     runs-on: ubuntu-latest
     permissions:
-      contents: write        # to remember the test count between runs
+      contents: write        # to push the discord-state branch
     steps:
       - uses: actions/checkout@v4
         with:
@@ -43,6 +43,9 @@ jobs:
       - name: Install
         working-directory: discord
         run: npm ci --omit=dev || npm install --omit=dev
+
+      - name: Load state
+        run: bash discord/state.sh load
 
       - name: Run the tests
         id: tests
@@ -68,13 +71,5 @@ jobs:
           COMPARE_URL: ${{ github.event.compare }}
         run: node route.js
 
-      - name: Remember the count
-        run: |
-          set -euo pipefail
-          cd discord
-          if git diff --quiet .sync-state.json 2>/dev/null; then exit 0; fi
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .sync-state.json
-          git commit -m "discord: test count after routing [skip ci]"
-          git push
+      - name: Save state
+        run: bash discord/state.sh save "state after subsystem routing"

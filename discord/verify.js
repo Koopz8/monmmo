@@ -497,5 +497,42 @@ t('the prompt forbids inventing significance and hiding a test drop', () => {
   assert(/test count fell/i.test(p), 'nothing stops the model smoothing over a regression');
 });
 
+console.log('\nWorkflows');
+
+const fsw = require('fs');
+const pathw = require('path');
+const wfDir = fsw.existsSync('./workflows') ? './workflows'
+  : fsw.existsSync('../.github/workflows') ? '../.github/workflows' : null;
+
+t('every workflow loads state before running and saves it after', () => {
+  if (!wfDir) return;                       // not laid out for checking here
+  for (const f of fsw.readdirSync(wfDir).filter((n) => n.endsWith('.yml'))) {
+    const y = fsw.readFileSync(pathw.join(wfDir, f), 'utf8');
+    assert(y.includes('state.sh load'), `${f} never loads state — it would run against a stale file`);
+    assert(y.includes('state.sh save'), `${f} never saves state — its work would be repeated next run`);
+    const load = y.indexOf('state.sh load');
+    const firstNode = y.search(/run:.*node \w+\.js/);
+    if (firstNode !== -1) assert(load < firstNode, `${f} loads state AFTER running a script`);
+  }
+});
+
+t('no workflow commits to the checked-out branch any more', () => {
+  if (!wfDir) return;
+  for (const f of fsw.readdirSync(wfDir).filter((n) => n.endsWith('.yml'))) {
+    const y = fsw.readFileSync(pathw.join(wfDir, f), 'utf8');
+    assert(!/git commit -m .*\[skip ci\]/.test(y), `${f} still commits back to main — that is the race we removed`);
+    assert(!/git add \.sync-state\.json/.test(y), `${f} still stages state onto main`);
+  }
+});
+
+t('state.sh never fails a run', () => {
+  const sh = fsw.readFileSync('./state.sh', 'utf8');
+  // Every error path must exit 0; a state problem is not a reason to go red.
+  const badExits = (sh.match(/exit [1-9]/g) || []).filter((e) => e !== 'exit 2');
+  assert(badExits.length === 0, `state.sh has non-zero exits: ${badExits.join(', ')}`);
+  assert(sh.includes('commit-tree'), 'state.sh should use plumbing, not checkout');
+  assert(!/git checkout|git stash/.test(sh), 'state.sh touches the working tree — it must not');
+});
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);
