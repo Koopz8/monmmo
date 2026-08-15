@@ -109,6 +109,11 @@
       "at": "2026-08-15T05:43:07.888Z",
       "channel": "devlog",
       "messageId": "1538060451743797269"
+    },
+    "discord/posts/2026-08-15-the-scaling-run.md": {
+      "at": "2026-08-15T19:49:35.444Z",
+      "channel": "devlog",
+      "messageId": "1538273467340947526"
     }
   },
   "routing": {
