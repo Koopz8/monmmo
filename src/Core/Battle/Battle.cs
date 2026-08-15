@@ -524,6 +524,25 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             events.Add(new BattleEvent.StatusInflicted(side, caught));
     }
 
+    /// <summary>
+    /// True when the creature on this side may not leave the field at all.
+    /// <para>
+    /// Here as well as inside the run because leaving happens two ways and the engine only
+    /// ever knew about one of them. Running away is a move the engine resolves; switching
+    /// is done by the server, which builds a new battle around somebody else — so the rule
+    /// has to be askable from outside or it is a rule about half of leaving.
+    /// </para>
+    /// </summary>
+    public bool MayNotLeave(Side side)
+    {
+        Battler leaving = Of(side);
+        Battler opposite = Of(side.Other());
+
+        return leaving.CannotEscape
+            || leaving.TrappedTurns > 0
+            || Abilities.Traps(opposite.Ability, leaving.Type1, leaving.Type2, leaving.Ability);
+    }
+
     /// <summary>Starts weather, or starts it again, and says so.</summary>
     private void BeginWeather(Weather weather, List<BattleEvent> events)
     {
@@ -1120,7 +1139,10 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             return;
         }
 
-        if (runner.CannotEscape)
+        // What is standing opposite, as well as what is holding on. The only rule in this
+        // engine where somebody else's ability decides what you may do rather than what
+        // happens to you.
+        if (runner.CannotEscape || Abilities.Traps(from.Ability, runner.Type1, runner.Type2, runner.Ability))
         {
             events.Add(new BattleEvent.CouldNotGetAway(side));
             return;
@@ -1300,7 +1322,9 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         // somebody else's party is not a thing this engine can do.
         if (effect.Kind == EffectKind.BlowAway)
         {
-            if (!IsWild || defender.CannotEscape)
+            // SUCTION CUPS with the others, because being blown off the field is a way of
+            // being made to leave and this is the ability that refuses to be.
+            if (!IsWild || defender.CannotEscape || Abilities.HoldsGround(defender.Ability))
             {
                 events.Add(new BattleEvent.NothingHappened(Other(side)));
                 return;

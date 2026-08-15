@@ -356,8 +356,14 @@ public class AbilityTests
                 Enum.GetValues<Stat>().Any(st => Abilities.Protects(ability, st))
                 || Abilities.ShrugsOffRiders(ability);
 
+            // And the ones about leaving — an eighth way, and the only kind where an
+            // ability decides something about somebody else's options rather than about
+            // what happens to its owner.
+            bool aboutLeaving = Abilities.HoldsGround(ability)
+                || Enum.GetValues<PokemonType>().Any(t => Abilities.Traps(ability, t, t, 0));
+
             if (!refuses && !changesDamage && !changesAttack && !readsTheSky && !arrives
-                && !answersATouch && !refusesToBeWorsened)
+                && !answersATouch && !refusesToBeWorsened && !aboutLeaving)
             {
                 inert.Add(ability);
             }

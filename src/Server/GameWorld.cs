@@ -5756,6 +5756,11 @@ public sealed class GameWorld
 
         if (_battles.Restore(player.Party[slot]) is not { HasFainted: false } coming) return null;
 
+        // And whether they are allowed to leave, which the engine could not previously be
+        // asked. Running away and switching are two ways of doing the same thing and only
+        // one of them was ever a question.
+        if (encounter.Current.MayNotLeave(Side.Player)) return null;
+
         WriteBackActive(player, encounter);
 
         encounter.SendPlayer(slot, coming);

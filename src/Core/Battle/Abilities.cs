@@ -36,12 +36,16 @@ public static class Abilities
     public const int Drizzle = 2;
     public const int Static = 9;
     public const int ShieldDust = 19;
+    public const int SuctionCups = 21;
+    public const int ShadowTag = 23;
     public const int RoughSkin = 24;
     public const int EffectSpore = 27;
     public const int ClearBody = 29;
+    public const int MagnetPull = 42;
     public const int PoisonPoint = 38;
     public const int KeenEye = 51;
     public const int HyperCutter = 52;
+    public const int ArenaTrap = 71;
     public const int WhiteSmoke = 73;
     public const int FlameBody = 49;
     public const int SandVeil = 8;
@@ -108,7 +112,40 @@ public static class Abilities
         // machinery at all — the engine has had a shield on stat drops since MIST, and
         // these are four more reasons to raise it.
         ShieldDust, ClearBody, KeenEye, HyperCutter, WhiteSmoke,
+
+        // And the ones about not being allowed to leave, which turned up a gap rather than
+        // needing one filled: this engine has blocked running away since WRAP, and has
+        // never once blocked switching.
+        SuctionCups, ShadowTag, MagnetPull, ArenaTrap,
     ];
+
+    /// <summary>
+    /// True when the creature opposite may not leave, because of what is standing there.
+    /// <para>
+    /// Asked of the <em>other</em> side's ability, which is what makes this different from
+    /// every other rule in this file: it is the only one where a creature's ability decides
+    /// something about somebody else's options rather than about what happens to it.
+    /// </para>
+    /// <para>
+    /// Three of them, each holding a different thing. One holds anybody. One holds anybody
+    /// standing on the ground, which is why it asks about Flying and about LEVITATE — the
+    /// two ways of not being on it. One holds only what it can stick to.
+    /// </para>
+    /// </summary>
+    public static bool Traps(int ability, PokemonType first, PokemonType second, int theirs) => ability switch
+    {
+        ShadowTag => true,
+
+        ArenaTrap =>
+            first != PokemonType.Flying && second != PokemonType.Flying && theirs != Levitate,
+
+        MagnetPull => first == PokemonType.Steel || second == PokemonType.Steel,
+
+        _ => false,
+    };
+
+    /// <summary>True when this one cannot be dragged off the field against its will.</summary>
+    public static bool HoldsGround(int ability) => ability == SuctionCups;
 
     /// <summary>
     /// True when this ability refuses to let somebody else lower that stat.
