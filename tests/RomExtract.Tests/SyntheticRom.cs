@@ -1293,7 +1293,7 @@ public sealed class SyntheticRom
         r[0] = 45; r[1] = 49; r[2] = 49; r[3] = 45; r[4] = 65; r[5] = 65;
         r[6] = 12; r[7] = 3;
         r[8] = 45; r[9] = 64;
-        r[10] = 0x01; r[11] = 0x00;   // 1 SpA EV... packed low bits
+        r[10] = 0x01; r[11] = 0x00;   // one point of HP, the lowest two bits of the pair
         r[16] = 31;                   // gender ratio
         r[17] = 20;                   // egg cycles
         r[18] = 70;                   // base friendship

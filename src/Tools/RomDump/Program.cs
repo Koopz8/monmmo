@@ -160,6 +160,7 @@ public static class Program
         if (options.DoorSteps) WriteDoorSteps(rom);
 
         if (options.MoveEffects) WriteMoveEffects(rom);
+        if (options.Efforts) WriteEfforts(rom);
         if (options.FifthMove) WriteFifthMove(rom);
         if (options.Water) WriteWater(rom);
         if (options.Doors2) WriteDoors(rom);
@@ -1323,6 +1324,135 @@ public static class Program
                 $"    0x{group.Effect:X2}  {group.Type,-9} -> {group.Status,-9} " +
                 $"{(group.EngineAgrees ? "agreed " : "SILENT ")} {string.Join(", ", group.Moves)}");
         }
+    }
+
+    /// <summary>
+    /// Where the six effort yields live in a species record, and which slice is which
+    /// stat — both read off the table rather than remembered.
+    /// <para>
+    /// This is the instrument the effort-value work was built on, and it settles two
+    /// separate questions. The <b>packing</b>: try all 27 byte pairs a 28-byte record
+    /// has, read each as six two-bit fields, and count the records whose six add up to
+    /// between one and three. One pair wins outright, and the only records where it
+    /// fails are the placeholder run this cartridge never fields. The <b>order</b>: a
+    /// species that yields in one slice only should be a species whose highest base
+    /// stat is the stat that slice means, and the diagonal says whether it is.
+    /// </para>
+    /// </summary>
+    private static void WriteEfforts(Rom rom)
+    {
+        RomTables tables = TableLocator.Locate(rom);
+
+        if (tables.BaseStats is not { } table)
+        {
+            Console.WriteLine("Skipping effort yields: base-stat table not found.");
+            return;
+        }
+
+        int count = table.EntryCount;
+
+        var records = new byte[count][];
+
+        for (int i = 0; i < count; i++)
+            records[i] = rom.Slice(table.Offset + i * SpeciesData.SizeBytes, SpeciesData.SizeBytes).ToArray();
+
+        // A record of all noughts is a row the table has and the game does not.
+        List<byte[]> live = [.. records.Where(r => r[0] != 0)];
+
+        Console.WriteLine();
+        Console.WriteLine("Which two bytes hold six two-bit yields");
+        Console.WriteLine();
+        Console.WriteLine($"  Of {live.Count} records with base stats, how many read as six slices");
+        Console.WriteLine("  totalling one to three — which is what an effort yield can be.");
+        Console.WriteLine();
+
+        static int TotalAt(byte[] record, int at)
+        {
+            int packed = record[at] | (record[at + 1] << 8);
+            int total = 0;
+
+            for (int slice = 0; slice < 6; slice++) total += (packed >> (2 * slice)) & 3;
+
+            return total;
+        }
+
+        var scores = new List<(int At, int Ok, int None, int Over)>();
+
+        for (int at = 0; at + 1 < SpeciesData.SizeBytes; at++)
+        {
+            int ok = live.Count(r => TotalAt(r, at) is >= 1 and <= 3);
+            int none = live.Count(r => TotalAt(r, at) == 0);
+
+            scores.Add((at, ok, none, live.Count - ok - none));
+        }
+
+        foreach ((int at, int ok, int none, int over) in scores.OrderByDescending(s => s.Ok).Take(5))
+            Console.WriteLine($"  bytes {at,2} and {at + 1,-2}   one to three: {ok,4}   none: {none,4}   impossible: {over,4}");
+
+        int best = scores.OrderByDescending(s => s.Ok).First().At;
+
+        // The exceptions, named. A run of consecutive indices is a block the cartridge
+        // keeps and never uses; anything scattered would mean the reading is wrong.
+        List<int> impossible =
+            [.. Enumerable.Range(0, count).Where(i => records[i][0] != 0 && TotalAt(records[i], best) > 3)];
+
+        Console.WriteLine();
+
+        if (impossible.Count == 0)
+        {
+            Console.WriteLine($"  Bytes {best} and {best + 1} hold them, with no exceptions at all.");
+        }
+        else
+        {
+            bool run = impossible[^1] - impossible[0] + 1 == impossible.Count;
+
+            Console.WriteLine(
+                $"  Bytes {best} and {best + 1} hold them. The {impossible.Count} records where that " +
+                $"reading is impossible are {impossible[0]} to {impossible[^1]}, " +
+                (run ? "one unbroken run — a block of the table, not a scatter of misreadings."
+                     : "scattered, which is a reason to doubt this."));
+        }
+
+        // ---- and which slice is which stat --------------------------------------------
+        string[] names = ["HP", "attack", "defence", "speed", "sp. attack", "sp. defence"];
+
+        Console.WriteLine();
+        Console.WriteLine("Which slice is which stat");
+        Console.WriteLine();
+        Console.WriteLine("  Each row is the species yielding in that slice and nothing else. The columns");
+        Console.WriteLine("  are how often each base stat is that species' highest. A slice that means a");
+        Console.WriteLine("  stat should agree with itself and with nothing else.");
+        Console.WriteLine();
+        Console.WriteLine("        " + string.Join("", names.Select(n => n.PadLeft(12))));
+
+        for (int slice = 0; slice < 6; slice++)
+        {
+            var hits = new int[6];
+            int n = 0;
+
+            foreach (byte[] r in live)
+            {
+                int packed = r[best] | (r[best + 1] << 8);
+
+                if (((packed >> (2 * slice)) & 3) == 0) continue;
+                if (Enumerable.Range(0, 6).Any(o => o != slice && ((packed >> (2 * o)) & 3) != 0)) continue;
+
+                n++;
+
+                int[] bases = [r[0], r[1], r[2], r[3], r[4], r[5]];
+                int highest = bases.Max();
+
+                for (int stat = 0; stat < 6; stat++)
+                    if (bases[stat] == highest) hits[stat]++;
+            }
+
+            Console.WriteLine(
+                $"  {slice} n={n,3}" + string.Join("", hits.Select(h => $"{(n == 0 ? 0 : h * 100 / n),11}%")));
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("  The order that reads off the diagonal is the six-stat order this project");
+        Console.WriteLine("  already uses everywhere: HP, attack, defence, speed, sp. attack, sp. defence.");
     }
 
     private static void WriteMoveEffects(Rom rom)
@@ -6930,6 +7060,9 @@ public static class Program
         /// <summary>Every move grouped by the effect byte in its record.</summary>
         public bool MoveEffects { get; private init; }
 
+        /// <summary>Where the six effort yields are in a species record, and which is which.</summary>
+        public bool Efforts { get; private init; }
+
         public bool FifthMove { get; private init; }
 
         public bool Challenges { get; private init; }
@@ -7049,6 +7182,7 @@ public static class Program
             bool fightKinds = false;
             bool doorSteps = false;
             bool moveEffects = false;
+            bool efforts = false;
             bool fifthMove = false;
             bool challenges = false;
             bool water = false;
@@ -7186,6 +7320,9 @@ public static class Program
 
                     case "--move-effects":
                         moveEffects = true;
+                        break;
+                    case "--evs":
+                        efforts = true;
                         break;
                     case "--door-steps":
                         doorSteps = true;
@@ -7409,6 +7546,7 @@ public static class Program
                 FightKinds = fightKinds,
                 DoorSteps = doorSteps,
                 MoveEffects = moveEffects,
+                Efforts = efforts,
                 FifthMove = fifthMove,
                 Challenges = challenges,
                 Water = water,

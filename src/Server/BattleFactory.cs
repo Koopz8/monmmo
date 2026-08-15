@@ -34,7 +34,9 @@ public sealed class BattleFactory(GameRules rules)
     {
         if (rules.SpeciesAt(saved.Species) is not { } species) return null;
 
-        var battler = new Battler(species, saved.Level, saved.Nature, saved.Nickname);
+        // And what it has to show for its fights, which is an argument the stat
+        // calculation has always taken and nothing ever supplied.
+        var battler = new Battler(species, saved.Level, saved.Nature, saved.Nickname, Effort.Of(saved.Evs));
 
         foreach (int moveId in saved.Moves)
             if (rules.MoveAt(moveId) is { } move) battler.Moves.Add(move);
@@ -191,6 +193,7 @@ public sealed class BattleFactory(GameRules rules)
     {
         HeldItem = battler.Holding,
         Pp = [.. Enumerable.Range(0, battler.Moves.Count).Select(battler.PpLeft)],
+        Evs = battler.Effort.IsNone ? [] : [.. battler.Effort.Values],
     };
 
     /// <summary>

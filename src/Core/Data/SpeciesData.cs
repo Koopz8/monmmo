@@ -1,3 +1,5 @@
+using PokeMmo.Core.Battle;
+
 namespace PokeMmo.Core.Data;
 
 /// <summary>
@@ -36,12 +38,42 @@ public sealed class SpeciesData
     public byte CatchRate { get; init; }
     public byte ExpYield { get; init; }
 
+    /// <summary>
+    /// What beating one of these leaves behind, per stat.
+    /// <para>
+    /// Six two-bit fields packed into bytes 10 and 11, and both the packing and the order
+    /// are read off the table rather than remembered. The packing: of the 27 byte pairs a
+    /// 28-byte record has, exactly one gives six slices whose total is between one and
+    /// three for every record the cartridge uses — and the 25 records where it does not
+    /// are 252 to 276, which is the placeholder run this cartridge never fields. The
+    /// order: a species yielding only its second slice has attack as its highest base
+    /// stat 100 times in 100, only its fourth speed 100 in 100, and so on down the same
+    /// six-stat order every other table in this project is already in. Nothing else in
+    /// the record comes close.
+    /// </para>
+    /// </summary>
     public byte EvHp { get; init; }
+
     public byte EvAttack { get; init; }
     public byte EvDefense { get; init; }
     public byte EvSpeed { get; init; }
     public byte EvSpAttack { get; init; }
     public byte EvSpDefense { get; init; }
+
+    /// <summary>What this species yields for one stat, in the order the six stats are in.</summary>
+    public byte EvYield(Stat stat) => stat switch
+    {
+        Stat.Hp => EvHp,
+        Stat.Attack => EvAttack,
+        Stat.Defense => EvDefense,
+        Stat.Speed => EvSpeed,
+        Stat.SpAttack => EvSpAttack,
+        Stat.SpDefense => EvSpDefense,
+        _ => 0,
+    };
+
+    /// <summary>Everything this species yields, added up. One, two or three, always.</summary>
+    public int EvTotal => EvHp + EvAttack + EvDefense + EvSpeed + EvSpAttack + EvSpDefense;
 
     public ushort Item1 { get; init; }
     public ushort Item2 { get; init; }

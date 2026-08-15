@@ -13,7 +13,7 @@ src/RomExtract      cartridge reading. Client-only, and enforced by a test
 src/Server          the authoritative server. Core only
 src/Client          the game: window, input, drawing, screens
 src/Tools/RomDump   the extractor's command line, and every instrument built for it
-tests/              1400 tests, no cartridge required
+tests/              1419 tests, no cartridge required
 tools/rig/          the headless play rig — Xvfb, two clients, screenshots
 ```
 
@@ -57,9 +57,10 @@ recharge, multi-hit, drain, recoil and one-hit-knockout rules read out of the
 cartridge's own tables. Moves have their own PP, run out, and stay spent across
 fights and across restarts; a creature with nothing left struggles, using the
 cartridge's own STRUGGLE record, and a counter puts every use back. Wild creatures
-come out carrying what their own species record says they might. Trainer fights are a run of
-one-on-one battles with the dice carried over. Experience, levels, learnsets,
-evolution and catching all work.
+come out carrying what their own species record says they might, and beating one leaves
+behind the effort its own record says it is worth — kept across fights, centres and
+restarts. Trainer fights are a run of one-on-one battles with the dice carried over.
+Experience, levels, learnsets, evolution and catching all work.
 
 **Multiplayer, in three verbs.** Seeing each other, trading, and duelling. Players
 walk through each other on purpose — a game where standing still is a wall is a game
@@ -147,6 +148,13 @@ Worked examples, all of them in the code as comments:
   sharing one value are exactly the moves whose whole effect is on the creature using
   them, and no move outside that group is. A byte whose members are exactly one idea
   means that idea.
+- The six effort yields are two bytes of a species record, and both the packing and the
+  order come off a census. Of the 27 byte pairs a 28-byte record has, exactly one reads
+  as six two-bit fields totalling one to three for every species this cartridge fields,
+  and the 25 where it does not are 252 to 276 — one unbroken run, the block the game
+  keeps and never uses. Then: a species yielding in one slice only should have the stat
+  that slice means as its highest, and the diagonal is 94, 100, 97, 100, 100, 97 per cent
+  with nothing off it above 20.
 - The ferry's destination table was read without reading the routine that uses it:
   sixteen scripts write a number into an argument slot and then hand the screen to
   the same routine as the last thing they ever do, and no two of them write the same

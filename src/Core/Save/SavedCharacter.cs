@@ -44,6 +44,21 @@ public sealed record SavedMon(
     public IReadOnlyList<int> Pp { get; init; } = [];
 
     /// <summary>
+    /// What this one has to show for the fights it has won, in the six-stat order.
+    /// <para>
+    /// Empty means none, which is what everything written before this existed comes back
+    /// as and what something just caught is. It belongs to the save rather than to the
+    /// battle for the same reason PP does: it is earned in a fight and spent nowhere, so
+    /// a creature that could only hold it for the length of one battle would be a
+    /// creature that never got stronger for having fought.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<int> Evs { get; init; } = [];
+
+    /// <summary>The same six numbers as something that knows what they mean.</summary>
+    public Effort Earned => Effort.Of(Evs);
+
+    /// <summary>
     /// Compares move lists by their contents.
     /// <para>
     /// A record compares its members with <c>Equals</c>, and for a list that is
@@ -65,7 +80,8 @@ public sealed record SavedMon(
         Experience == other.Experience &&
         HeldItem == other.HeldItem &&
         Moves.SequenceEqual(other.Moves) &&
-        Pp.SequenceEqual(other.Pp);
+        Pp.SequenceEqual(other.Pp) &&
+        Evs.SequenceEqual(other.Evs);
 
     public override int GetHashCode()
     {
@@ -81,6 +97,7 @@ public sealed record SavedMon(
 
         foreach (int move in Moves) hash.Add(move);
         foreach (int left in Pp) hash.Add(left);
+        foreach (int earned in Evs) hash.Add(earned);
 
         return hash.ToHashCode();
     }

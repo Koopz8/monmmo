@@ -184,6 +184,13 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
         // run out, and read as "full" — which is what those creatures were.
         AddColumnIfMissing(connection, "party_moves", "pp", "INTEGER NOT NULL DEFAULT -1");
 
+        // What a creature has to show for its fights, one column per stat and in the
+        // order the six stats are in everywhere else. Added to the existing table rather
+        // than only to a fresh one, so a party saved yesterday reads back as having
+        // earned nothing — which is exactly what it had earned.
+        foreach (string stat in EffortColumns)
+            AddColumnIfMissing(connection, "party_members", stat, "INTEGER NOT NULL DEFAULT 0");
+
         // The balls column is what the bag used to be, back when a player could carry
         // exactly one kind of thing. It is left in place and written as zero rather than
         // dropped, because dropping a column in SQLite means rebuilding the table and
@@ -201,6 +208,10 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
     /// is treated as the truth and the curve is entered at the bottom of it.
     /// </para>
     /// </summary>
+    /// <summary>The six effort columns, in the six-stat order.</summary>
+    private static readonly string[] EffortColumns =
+        ["ev_hp", "ev_attack", "ev_defense", "ev_speed", "ev_spattack", "ev_spdefense"];
+
     private static void AddColumnIfMissing(SqliteConnection connection, string table, string column, string definition)
     {
         using (SqliteCommand check = connection.CreateCommand())
@@ -629,8 +640,10 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
                 insert.CommandText =
                     """
                     INSERT INTO party_members
-                        (account_id, slot, species, level, nickname, current_hp, status, nature, experience, held_item, in_box)
-                    VALUES ($account, $slot, $species, $level, $nickname, $hp, $status, $nature, $experience, $held, $box)
+                        (account_id, slot, species, level, nickname, current_hp, status, nature, experience, held_item, in_box,
+                         ev_hp, ev_attack, ev_defense, ev_speed, ev_spattack, ev_spdefense)
+                    VALUES ($account, $slot, $species, $level, $nickname, $hp, $status, $nature, $experience, $held, $box,
+                            $ev0, $ev1, $ev2, $ev3, $ev4, $ev5)
                     RETURNING id;
                     """;
 
@@ -645,6 +658,9 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
                 insert.Parameters.AddWithValue("$experience", mon.Experience);
                 insert.Parameters.AddWithValue("$held", mon.HeldItem);
                 insert.Parameters.AddWithValue("$box", inBox ? 1 : 0);
+
+                for (int stat = 0; stat < EffortColumns.Length; stat++)
+                    insert.Parameters.AddWithValue($"$ev{stat}", stat < mon.Evs.Count ? mon.Evs[stat] : 0);
 
                 memberId = (long)(await insert.ExecuteScalarAsync(cancellationToken))!;
             }
@@ -728,7 +744,8 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
         {
             command.CommandText =
                 """
-                SELECT id, species, level, nickname, current_hp, status, nature, experience, held_item, in_box
+                SELECT id, species, level, nickname, current_hp, status, nature, experience, held_item, in_box,
+                       ev_hp, ev_attack, ev_defense, ev_speed, ev_spattack, ev_spdefense
                 FROM party_members
                 WHERE account_id = $id
                 ORDER BY slot;
@@ -758,6 +775,14 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
                     // rather than stored as a number, because empty already means full
                     // and two ways of saying the same thing is one too many.
                     Pp = [.. left.GetValueOrDefault(memberId, []).Where(p => p >= 0)],
+
+                    // Six noughts is a creature that has never won anything, and empty
+                    // already says that. Storing it as six zeroes instead would make a
+                    // save that has been through this table unequal to the one that went
+                    // in, which is the question SavedMon exists to answer.
+                    Evs = Effort.Of([.. Enumerable.Range(10, 6).Select(reader.GetInt32)]) is { IsNone: false } earned
+                        ? [.. earned.Values]
+                        : [],
                 };
 
                 (reader.GetInt32(9) != 0 ? box : party).Add(mon);

@@ -23,7 +23,7 @@ public sealed class GameRules
 {
     private static readonly byte[] Magic = "MONRULES"u8.ToArray();
 
-    private const int Version = 13;
+    private const int Version = 14;
 
     private readonly Dictionary<int, SpeciesData> _species;
     private readonly Dictionary<int, MoveData> _moves;
@@ -251,6 +251,9 @@ public sealed class GameRules
 
     public int SpeciesCount => _species.Count;
 
+    /// <summary>Every species this file knows, for the reports that count things.</summary>
+    public IEnumerable<SpeciesData> AllSpecies => _species.Values;
+
     public int MoveCount => _moves.Count;
 
     public int LearnsetCount => _learnsets.Count;
@@ -327,6 +330,16 @@ public sealed class GameRules
             // there was something that could take an item off somebody.
             writer.Write((int)species.Item1);
             writer.Write((int)species.Item2);
+
+            // And what beating one leaves behind. Six two-bit fields in the cartridge,
+            // six bytes here — the packing is the cartridge's business and this file has
+            // no reason to repeat it.
+            writer.Write(species.EvHp);
+            writer.Write(species.EvAttack);
+            writer.Write(species.EvDefense);
+            writer.Write(species.EvSpeed);
+            writer.Write(species.EvSpAttack);
+            writer.Write(species.EvSpDefense);
         }
 
         writer.Write(_moves.Count);
@@ -474,6 +487,12 @@ public sealed class GameRules
                 GrowthRate = (GrowthRate)reader.ReadInt32(),
                 Item1 = (ushort)reader.ReadInt32(),
                 Item2 = (ushort)reader.ReadInt32(),
+                EvHp = reader.ReadByte(),
+                EvAttack = reader.ReadByte(),
+                EvDefense = reader.ReadByte(),
+                EvSpeed = reader.ReadByte(),
+                EvSpAttack = reader.ReadByte(),
+                EvSpDefense = reader.ReadByte(),
             });
         }
 

@@ -302,6 +302,20 @@ public static class RulesExporter
         // travels — what the numbers are called stays on the cartridge.
         Item1 = species.Item1,
         Item2 = species.Item2,
+
+        // And what beating one is worth. This copy is written by hand rather than taken
+        // wholesale, which is the point of it — nothing reaches the server that was not
+        // named here — and the cost is that a field left off this list is a field the
+        // server never hears about however well it was extracted. That is what happened:
+        // the yields were read, stored, serialised and awarded, and every one of them
+        // was nought by the time it left this method. The startup line said so on the
+        // first run.
+        EvHp = species.EvHp,
+        EvAttack = species.EvAttack,
+        EvDefense = species.EvDefense,
+        EvSpeed = species.EvSpeed,
+        EvSpAttack = species.EvSpAttack,
+        EvSpDefense = species.EvSpDefense,
     };
 
     /// <summary>

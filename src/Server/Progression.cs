@@ -37,6 +37,13 @@ public sealed class Progression(GameRules rules)
 
         if (rules.SpeciesAt(member.Species) is not { } species) return (member, events);
         if (rules.SpeciesAt(faintedSpecies) is not { } fainted) return (member, events);
+
+        // What the fight leaves behind, which is not experience and does not stop at the
+        // level cap. A creature at a hundred earns nothing more from the curve and still
+        // gets stronger for every fight, which is the whole reason this is a separate
+        // number in the first place.
+        member = member with { Evs = [.. member.Earned.Plus(fainted).Values] };
+
         if (member.Level >= Experience.MaxLevel) return (member, events);
 
         int gained = Experience.ForDefeating(fainted.ExpYield, faintedLevel);

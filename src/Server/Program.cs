@@ -584,6 +584,18 @@ public static class Program
                 $"{rules.MoveCount} moves, {rules.LearnsetCount} learnsets, " +
                 $"{rules.TrainerCount} trainers");
 
+            // What beating each one is worth. Said out loud because a rules file exported
+            // before this existed loads perfectly well and quietly hands out nothing —
+            // which from the outside is a party that never gets stronger for its fights.
+            List<SpeciesData> yielding = [.. rules.AllSpecies.Where(s => s.EvTotal > 0)];
+
+            Console.WriteLine(
+                yielding.Count == 0
+                    ? "  none of them yields effort — re-export the rules file to hand any out"
+                    : $"  {yielding.Count} of them yield effort, " +
+                      $"{yielding.Count(s => s.EvTotal > 1)} more than a single point, " +
+                      $"{yielding.Count(s => Effort.Order.Count(t => s.EvYield(t) > 0) > 1)} across more than one stat");
+
             return rules;
         }
         catch (InvalidDataException ex)

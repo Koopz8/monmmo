@@ -21,23 +21,36 @@ public sealed class Battler
 {
     private readonly Dictionary<Stat, int> _stages = [];
 
-    public Battler(SpeciesData species, int level, Nature nature = Nature.Hardy, string? nickname = null)
+    public Battler(
+        SpeciesData species,
+        int level,
+        Nature nature = Nature.Hardy,
+        string? nickname = null,
+        Effort? effort = null)
     {
         Species = species;
         Level = level;
         Nature = nature;
         Nickname = nickname;
         Name = nickname ?? species.Name;
+        Effort = effort ?? Effort.None;
 
-        MaxHp = Stats.Hp(species.BaseHp, level);
+        MaxHp = Stats.Hp(species.BaseHp, level, ev: Effort.In(Stat.Hp));
         CurrentHp = MaxHp;
 
-        Attack = Stats.Other(Stat.Attack, species.BaseAttack, level, nature);
-        Defense = Stats.Other(Stat.Defense, species.BaseDefense, level, nature);
-        Speed = Stats.Other(Stat.Speed, species.BaseSpeed, level, nature);
-        SpAttack = Stats.Other(Stat.SpAttack, species.BaseSpAttack, level, nature);
-        SpDefense = Stats.Other(Stat.SpDefense, species.BaseSpDefense, level, nature);
+        Attack = Stats.Other(Stat.Attack, species.BaseAttack, level, nature, ev: Effort.In(Stat.Attack));
+        Defense = Stats.Other(Stat.Defense, species.BaseDefense, level, nature, ev: Effort.In(Stat.Defense));
+        Speed = Stats.Other(Stat.Speed, species.BaseSpeed, level, nature, ev: Effort.In(Stat.Speed));
+        SpAttack = Stats.Other(Stat.SpAttack, species.BaseSpAttack, level, nature, ev: Effort.In(Stat.SpAttack));
+        SpDefense = Stats.Other(Stat.SpDefense, species.BaseSpDefense, level, nature, ev: Effort.In(Stat.SpDefense));
     }
+
+    /// <summary>
+    /// What this one has done, in the only form a battle can see it: six numbers that
+    /// were already an argument to every stat this class computes and that nothing had
+    /// ever supplied.
+    /// </summary>
+    public Effort Effort { get; }
 
     public SpeciesData Species { get; }
 
