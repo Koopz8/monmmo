@@ -22,9 +22,13 @@ the ROM you already own, on your own machine, at runtime**. The client ships non
 of it. The server never sees any of it.
 
 This is a solo engineering project, built in public, one measured milestone at a
-time. There are currently **1200+ tests**, a working authoritative server, a
-Gen III battle engine accurate down to truncation order, and a story you can play
-from a bedroom to the third gym.
+time. Roughly **1,400 tests**, an authoritative server, a Gen III battle engine
+accurate down to truncation order, and three things two people can do to each
+other: **see each other, trade, and fight**.
+
+A duel runs on the same one-on-one engine that fights every wild encounter in the
+game — not a line of it changed. What was new is that neither side is *you*, so
+each event gets turned round and told to both players in their own terms.
 
 **Where to go**
 
@@ -182,9 +186,15 @@ out of \`Core\`.** Movement is applied locally the instant a key is pressed and 
 server almost never disagrees, so rejection is an exception path, not the normal
 flow. No reconciliation, no rubber-banding.
 
+**Three multiplayer verbs so far:** seeing each other, trading one thing each,
+and fighting. Trade and duel are deliberately the same shape — one at a time,
+an invitation that dies when either side walks away, and asking somebody who has
+already asked you is how it begins. Two verbs that behave the same way are two
+verbs a player only has to learn once.
+
 Open questions worth arguing about, any time:
-- The flag race — a script's flags reach the server from the client, so two
-  conversations inside one round trip both see the old state.
+- A flag set in memory that the save does not have — the sharpest open lead.
+- The flag race — older and vaguer, and one reported sighting was withdrawn.
 - Simulating maps nobody is standing on (walk away and back, and the street
   resets).`,
   ],
@@ -202,7 +212,13 @@ Two Gen III rules that silently poison everything if you get them wrong:
 
 Every division truncates and the order matters.
 
-The long tail still unmodelled: PROTECT, ROLLOUT, FLAIL, FUTURE SIGHT, ERUPTION.`,
+**Recently modelled:** PP, which outlives the fight and cost the save format a
+field. Held items — 112 species name what a wild one may be carrying, and the
+data was extracted long before anything read it. Duels, which needed no engine
+change at all.
+
+**Still silent:** 127 move-effect groups, the largest two moves apiece —
+PROTECT, ROLLOUT, FLAIL, FUTURE SIGHT, ERUPTION and a long tail of ones.`,
   ],
 
   'data-and-extraction': [
@@ -212,13 +228,22 @@ scripts, flags, encounter tables.
 **Data talk, not file talk.** Offsets, formats and findings: yes, always. Files,
 links and "where do I get": see rule 1.
 
-Standing unsolved problems, if you like a puzzle:
-- **The font.** Four mechanical searches have ruled out a bitmap eight pixels
-  wide at 1/2/4 bits deep, 8/12/16 tall, packed or compressed. See the milestone
-  for what's left.
-- **The box count.** How many storage boxes there are is stated nowhere on the
-  cartridge.
-- **The bedroom PC.** Its behaviour byte is not the one the Centers use.`,
+**The most useful question in this project right now is not "what should I build
+next" — it's "what reads this?"** Five milestones running, the next thing built
+turned out to be a field already extracted, already carried, and read by nothing:
+a message with no sender, doors on no square, the byte saying who a move was
+for, PP, and held items.
+
+Still unread in the species table, if you want one: \`Ability1\`, \`Ability2\`, the
+six EV yields, \`SafariZoneFleeRate\`, \`EggCycles\`, \`BaseFriendship\`,
+\`EggGroup1/2\`, \`BodyColor\`. The EV yields are the biggest, and the one with a
+real save-format cost — exactly like PP was.
+
+Standing unsolved problems:
+- **The font.** Four mechanical methods ruled out. The mapping is not identity,
+  the sheet is not one of the four candidates, and the geometry may not be 8×8.
+- **The box count.** Stated nowhere on the cartridge, so more than one box would
+  have to be remembered rather than read.`,
   ],
 
   suggestions: [
@@ -364,23 +389,35 @@ and is extracted at runtime. What's left is pure engineering.`,
 posting in #bug-reports.
 
 **Known and open**
-- **The flag race.** A script's flags reach the server from the client, so two
-  conversations inside one round trip both see the old state. This is the cause
-  behind duplicate key items.
+- **A flag set in memory that the save does not have.** The sharpest lead on this
+  list — it has a reproduction path and an obvious symptom (a named trainer
+  missing from a room).
+- **The flag race.** Older, vaguer, possibly the same animal: a script's flags
+  reach the server from the client. Still without evidence, and one previous
+  sighting was withdrawn after turning out to be two events a second apart read
+  as one.
+- **The battle engine's silent half.** 127 move-effect groups the engine steps
+  over. The largest are two moves apiece — PROTECT, ROLLOUT, FLAIL, FUTURE
+  SIGHT, ERUPTION and a long tail of ones.
 - **Unsimulated maps.** Only maps with a player on them tick. Walk away and back
   and NPCs have reset to their starting positions.
-- **The long tail of moves.** PROTECT, ROLLOUT, FLAIL, FUTURE SIGHT and ERUPTION
-  are not yet modelled.
-- **Text rendering.** The cartridge's font has not been located yet; four
-  mechanical searches have come back empty.
-- **Storage.** More than one box is not implemented — the box count is stated
-  nowhere in the data.
-- **The bedroom PC** behaves differently from the ones in Centers and is not yet
-  wired up.
+- **Text rendering.** The cartridge's font has not been located. Four mechanical
+  methods are ruled out; the mapping is not identity, and the geometry may not
+  even be 8×8.
+- **Storage.** More than one box is not implemented — the count is stated
+  nowhere in the data, so it would have to be remembered rather than read.
+- **Switching in a duel** is refused, and says so in the code rather than
+  hiding it.
+
+**Closed, so please stop reporting them**
+- ~~The bedroom PC's behaviour byte.~~ There is no byte. The bedroom machine is
+  scripted, not a tile — proved, not assumed.
 
 **Not bugs**
 - The client refusing a ROM whose SHA-1 doesn't match. Working as intended.
-- Story content past the third gym being absent or inert. Not built yet.`,
+- A duel costing you nothing — no experience, no money, no black-out, and your
+  copies arriving on their feet however the real party is doing. All deliberate:
+  a fight that could cost an afternoon is a fight nobody agrees to twice.`,
   ],
 
   // ────────────────────────────────────────────────────────────── THE BACK ROOM
