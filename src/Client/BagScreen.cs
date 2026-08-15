@@ -362,6 +362,19 @@ public sealed class BagScreen
                 Font.DrawRight("can't learn it", party.X + party.Width - 20, y + 34, 2, Skin.HpPoor);
         }
 
+        // And when the whole party has gone grey, where to look instead. Six refusals in
+        // a column read as a broken game; the number that can learn it reads as an errand.
+        if (_choosingWho && _row < lines.Count && _data.IsMachine(lines[_row].ItemId)
+            && _party.Count > 0
+            && _party.All(m => !_data.CanBeTaught(m.Species, lines[_row].ItemId)))
+        {
+            int anywhere = _data.SpeciesThatCanLearn(lines[_row].ItemId);
+
+            Font.Draw(
+                anywhere == 0 ? "and nothing anywhere can" : $"{anywhere} species can, elsewhere",
+                party.X + 24, party.Y + party.Height - 40, 2, Skin.HpPoor);
+        }
+
         if (_message.Length > 0) Font.Draw(_message, 40, Height - 74, 2, Skin.HpGood);
 
         // The give key is offered only for things that can be carried, so the line does

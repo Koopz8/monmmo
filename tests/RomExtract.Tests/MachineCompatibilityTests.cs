@@ -324,3 +324,43 @@ public class MachineCompatibilityTests
         Assert.Empty(player.MovesOffered);
     }
 }
+
+/// <summary>
+/// The inverse question: not which machines work on this one, but how many of anything a
+/// machine works on at all.
+/// <para>
+/// HM01 asked it. Six party members refused it in a column, which looked exactly like the
+/// compatibility table being misread — and the table was right. A hundred and thirteen
+/// species can learn CUT and not one of them was in that party; three of them were in the
+/// box. "Can't learn it" six times says a game is broken; a number says go and find one.
+/// </para>
+/// </summary>
+public class HowManyCanLearnItTests
+{
+    private static MachineSets Sets(params ulong[] masks) => new(0x08252BC8, masks, masks.Length, 0);
+
+    /// <summary>Counted across every species the table has a word for.</summary>
+    [Fact]
+    public void ItCountsTheSpeciesAMachineWorksOn()
+    {
+        // Three species; the first and third allow machine 0, the second does not.
+        MachineSets sets = Sets(0b001, 0b010, 0b101);
+
+        Assert.Equal(2, Enumerable.Range(0, 3).Count(s => sets.Allows(s, 0)));
+        Assert.Equal(1, Enumerable.Range(0, 3).Count(s => sets.Allows(s, 1)));
+        Assert.Equal(1, Enumerable.Range(0, 3).Count(s => sets.Allows(s, 2)));
+    }
+
+    /// <summary>
+    /// A machine nothing can learn counts nought rather than throwing, because a bit that
+    /// belongs to no species is exactly what a machine this cartridge does not really have
+    /// would look like.
+    /// </summary>
+    [Fact]
+    public void AMachineNobodyCanLearnCountsNought()
+    {
+        MachineSets sets = Sets(0b001, 0b001, 0b001);
+
+        Assert.Equal(0, Enumerable.Range(0, 3).Count(s => sets.Allows(s, 5)));
+    }
+}

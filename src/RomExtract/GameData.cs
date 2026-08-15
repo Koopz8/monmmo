@@ -113,6 +113,28 @@ public sealed class GameData
     public bool IsMachine(int itemId) => _machineAt.ContainsKey(itemId);
 
     /// <summary>
+    /// How many species in the world this machine works on.
+    /// <para>
+    /// The inverse question, and the one a player is actually asking when every name in
+    /// their party has gone grey. "Can't learn it" six times over reads as a broken game;
+    /// "a hundred and thirteen species can learn this, and none of yours is one" reads as
+    /// a game telling you to go and find one.
+    /// </para>
+    /// <para>
+    /// HM01 is what asked it. Six party members refused it, which looked exactly like the
+    /// compatibility table being misread — and the table was right: BULBASAUR, CHARMANDER
+    /// and RATTATA can all learn CUT and all three were sitting in the box.
+    /// </para>
+    /// </summary>
+    public int SpeciesThatCanLearn(int itemId)
+    {
+        if (Machines is not { } sets) return 0;
+        if (!_machineAt.TryGetValue(itemId, out int machine)) return 0;
+
+        return Enumerable.Range(0, sets.Masks.Count).Count(species => sets.Allows(species, machine));
+    }
+
+    /// <summary>
     /// The names this cartridge offers when it asks somebody to name a character.
     /// <para>
     /// Read at load because locating them walks the whole image, and because the first
