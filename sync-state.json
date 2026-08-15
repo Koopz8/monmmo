@@ -1,0 +1,110 @@
+{
+  "pins": {
+    "welcome": {
+      "hash": "58b7e964606a",
+      "at": "2026-08-15T14:39:33.153Z",
+      "messageId": "1538195447166935090"
+    },
+    "rules": {
+      "hash": "4d849a035ae9",
+      "at": "2026-08-15T14:39:34.367Z",
+      "messageId": "1538195449985503374"
+    },
+    "announcements": {
+      "hash": "5e5238fbc6ef",
+      "at": "2026-08-15T04:35:57.786Z"
+    },
+    "changelog": {
+      "hash": "109974c08c74",
+      "at": "2026-08-15T04:35:57.786Z"
+    },
+    "general": {
+      "hash": "1f45cab7b44c",
+      "at": "2026-08-15T04:35:57.786Z"
+    },
+    "introductions": {
+      "hash": "c7ac98b97c75",
+      "at": "2026-08-15T04:35:57.786Z"
+    },
+    "screenshots": {
+      "hash": "4836d1796c9c",
+      "at": "2026-08-15T04:35:57.786Z"
+    },
+    "devlog": {
+      "hash": "e6131450c7f2",
+      "at": "2026-08-15T04:35:57.786Z"
+    },
+    "milestones": {
+      "hash": "33d4606761de",
+      "at": "2026-08-15T04:35:57.786Z"
+    },
+    "engine-and-netcode": {
+      "hash": "76a74172623e",
+      "at": "2026-08-15T04:35:57.786Z"
+    },
+    "battle-engine": {
+      "hash": "b74dc4c76fc4",
+      "at": "2026-08-15T04:35:57.786Z"
+    },
+    "data-and-extraction": {
+      "hash": "7ff520fa118a",
+      "at": "2026-08-15T04:35:57.786Z"
+    },
+    "suggestions": {
+      "hash": "bec587d9b77d",
+      "at": "2026-08-15T04:35:57.786Z"
+    },
+    "commits": {
+      "hash": "7822acb02c98",
+      "at": "2026-08-15T14:39:35.509Z",
+      "messageId": "1538195454053843014"
+    },
+    "build-drops": {
+      "hash": "b589bd85bf33",
+      "at": "2026-08-15T04:35:57.786Z"
+    },
+    "bug-reports": {
+      "hash": "4dc879513629",
+      "at": "2026-08-15T04:35:57.786Z"
+    },
+    "playtest-coordination": {
+      "hash": "15e340f97108",
+      "at": "2026-08-15T04:35:57.786Z"
+    },
+    "tester-lounge": {
+      "hash": "f30071ba5008",
+      "at": "2026-08-15T04:35:57.786Z"
+    },
+    "setup-help": {
+      "hash": "60fba6f7df16",
+      "at": "2026-08-15T04:35:57.787Z"
+    },
+    "faq": {
+      "hash": "eb062853fa14",
+      "at": "2026-08-15T04:35:57.787Z"
+    },
+    "known-issues": {
+      "hash": "4fb19807ea0f",
+      "at": "2026-08-15T04:35:57.787Z"
+    },
+    "staff-chat": {
+      "hash": "4fcbaa3b05b2",
+      "at": "2026-08-15T04:35:57.787Z"
+    },
+    "triage": {
+      "hash": "9659109a06f7",
+      "at": "2026-08-15T04:35:57.787Z"
+    },
+    "mod-log": {
+      "hash": "d6c3ae995c9a",
+      "at": "2026-08-15T04:35:57.787Z"
+    }
+  },
+  "posted": {
+    "discord/posts/EXAMPLE-2026-09-01-the-three-flags.md": {
+      "at": "2026-08-15T05:43:07.888Z",
+      "channel": "devlog",
+      "messageId": "1538060451743797269"
+    }
+  }
+}
