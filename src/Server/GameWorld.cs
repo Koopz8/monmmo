@@ -1144,8 +1144,20 @@ public sealed class GameWorld
                     // It costs nothing to say it from here, and it is said whether or
                     // not this was the pickup that did it, so a save that already lost
                     // the flag is repaired the next time somebody walks up to the ball.
+                    //
+                    // And told to the client, which is the half that was missing. The
+                    // repair above set the flag here and reconciled the map, and a map
+                    // is not what a flag is for: the client keeps its own script state
+                    // and every branch it reads is read against that. A ball repaired on
+                    // this side and not on that one is a WARDEN who goes on asking for
+                    // teeth that are already in the bag.
                     if (person.Template.HiddenBy != 0 && player.Script.Set(person.Template.HiddenBy))
+                    {
+                        given.Add(new Outgoing(
+                            new FlagsChanged([person.Template.HiddenBy]), OnlyTo: playerId));
+
                         given.AddRange(Reconcile(player));
+                    }
 
                     LastTalkOutcome = gift;
                     return given;
@@ -3791,6 +3803,12 @@ public sealed class GameWorld
                 // And whoever that flag was hiding or holding back arrives or leaves,
                 // which is the only visible thing a flag does. Without this the operator
                 // sets a flag, is told it is set, and watches nothing happen.
+                //
+                // The flag itself goes with them, in the Resend: a whole save, flags and
+                // all, which the client takes as the truth and replaces its own copy
+                // with. That is why the console never suffered from what the ball
+                // pickup suffered from — and why finding this bug took a WARDEN rather
+                // than an operator, since every hand-set flag had always landed.
                 return
                 [
                     Said(player, $"flag 0x{flag:X4} is {(on ? "set" : "clear")}"),

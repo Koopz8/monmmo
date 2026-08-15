@@ -345,7 +345,24 @@ public sealed record Welcome(
 /// </summary>
 public sealed record MapChanged(string MapId, int X, int Y, Direction Facing) : NetMessage;
 
-/// <summary>Flags the server set without being asked.</summary>
+/// <summary>
+/// Flags the server set or cleared without being asked.
+/// <para>
+/// The other direction of <see cref="ScriptRan"/>, and for a long time the direction
+/// nothing ever went. This message existed, the client handled it, and the wire guardrail
+/// carried a sample of it — and no line of the server ever built one. Every flag the
+/// server changed on its own initiative was therefore a fact only one side of the split
+/// knew, and the two sides went on answering the same question differently until somebody
+/// noticed: the WARDEN kept asking for teeth that were already in the bag, because the
+/// server had marked them picked up and the client had never been told.
+/// </para>
+/// <para>
+/// Only setting, and no clearing. The console can turn a flag off, but it does that by
+/// sending the whole save back — which is why the console half of this always worked and
+/// the ball half never did. A field for clearing would be a field with no sender, and a
+/// thing with no sender is what this message spent its life being.
+/// </para>
+/// </summary>
 public sealed record FlagsChanged(IReadOnlyList<int> Flags) : NetMessage;
 
 /// <summary>
