@@ -36,6 +36,18 @@ public sealed class Scribe : IAsyncDisposable
 {
     private readonly IPlayerStore _store;
     private readonly ConcurrentDictionary<long, SavedCharacter> _latest = new();
+
+    /// <summary>
+    /// What was last written for each account, so the store can skip the parts that have
+    /// not changed since.
+    /// <para>
+    /// Held here rather than in the store because this is the only thing that knows a
+    /// write finished. A wrong answer here is a section silently not written, so it is
+    /// set only after a write returns, dropped the moment anything else writes that
+    /// account by hand, and never guessed at.
+    /// </para>
+    /// </summary>
+    private readonly ConcurrentDictionary<long, SavedCharacter> _onDisk = new();
     private readonly Channel<long> _queue = Channel.CreateUnbounded<long>(new UnboundedChannelOptions
     {
         SingleReader = true,
@@ -95,7 +107,15 @@ public sealed class Scribe : IAsyncDisposable
     /// Forgets anything queued for one account, because something newer is being written
     /// by hand — which is what a disconnect does.
     /// </summary>
-    public void Forget(long accountId) => _latest.TryRemove(accountId, out _);
+    public void Forget(long accountId)
+    {
+        _latest.TryRemove(accountId, out _);
+
+        // And what is on disk, because somebody else is about to write it: the next
+        // write through here must be a whole one rather than a difference against a
+        // state this no longer knows.
+        _onDisk.TryRemove(accountId, out _);
+    }
 
     private async Task WriteAsync()
     {
@@ -111,7 +131,13 @@ public sealed class Scribe : IAsyncDisposable
 
                     try
                     {
-                        await _store.SaveAsync(accountId, state, _stopping.Token).ConfigureAwait(false);
+                        _onDisk.TryGetValue(accountId, out SavedCharacter? already);
+
+                        await _store
+                            .SaveAsync(accountId, state, _stopping.Token, already)
+                            .ConfigureAwait(false);
+
+                        _onDisk[accountId] = state;
 
                         Interlocked.Increment(ref _written);
                     }

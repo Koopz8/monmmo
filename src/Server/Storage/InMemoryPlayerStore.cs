@@ -69,7 +69,11 @@ public sealed class InMemoryPlayerStore : IPlayerStore
         }
     }
 
-    public Task SaveAsync(long accountId, SavedCharacter character, CancellationToken cancellationToken = default)
+    public Task SaveAsync(
+        long accountId,
+        SavedCharacter character,
+        CancellationToken cancellationToken = default,
+        SavedCharacter? previous = null)
     {
         lock (_gate)
         {

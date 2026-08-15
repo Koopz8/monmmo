@@ -362,7 +362,10 @@ public class WritingBehindTests
         }
 
         public async Task SaveAsync(
-            long accountId, SavedCharacter character, CancellationToken cancellationToken = default)
+            long accountId,
+            SavedCharacter character,
+            CancellationToken cancellationToken = default,
+            SavedCharacter? previous = null)
         {
             if (Slow > TimeSpan.Zero) await Task.Delay(Slow, cancellationToken);
 
@@ -389,5 +392,166 @@ public class WritingBehindTests
         public Task<bool> WipeAsync(
             string username, SavedCharacter fresh, CancellationToken cancellationToken = default) =>
             Task.FromResult(false);
+    }
+}
+
+/// <summary>
+/// Writing only what changed.
+/// <para>
+/// A save is a full rewrite: the character's row, the bag, every flag, every party
+/// member and every move each of them knows. For the commonest save there is — somebody
+/// did something and is standing one square further along — every one of those is
+/// identical to what is already on disk.
+/// </para>
+/// <para>
+/// The comparison is by section and never by row. A section is skipped whole or written
+/// whole, so there is nowhere for a half-written party to exist, and the ordering bug a
+/// row-level diff would hide has nowhere to hide either. These tests are about the only
+/// thing that matters: that what comes back out is what went in, whichever parts were
+/// skipped on the way.
+/// </para>
+/// </summary>
+public class WritingOnlyWhatChangedTests
+{
+    private static SavedCharacter Character(int x, int level = 5, params int[] flags) => new(
+        "1.0", x, 5, Direction.Down,
+        [new SavedMon(1, level, null, 20, StatusCondition.None, Nature.Hardy, [33])])
+    {
+        Money = 3000,
+        Items = [new BagEntry(4, 2)],
+        Flags = flags.Length == 0 ? [7, 9] : flags,
+    };
+
+    /// <summary>A step, saved against what is already there, still reads back whole.</summary>
+    [Fact]
+    public async Task AStepSavedAgainstWhatIsThereReadsBackWhole()
+    {
+        string path = TempDatabase.Path();
+
+        try
+        {
+            SavedCharacter first = Character(4);
+            SavedCharacter second = Character(5);
+
+            using (var store = new SqlitePlayerStore(path))
+            {
+                await store.RegisterAsync("Mason", "a-good-password", first);
+                await store.SaveAsync(1, second, CancellationToken.None, previous: first);
+            }
+
+            using (var reading = new SqlitePlayerStore(path))
+            {
+                var login = Assert.IsType<AuthOutcome.Success>(
+                    await reading.LoginAsync("Mason", "a-good-password"));
+
+                Assert.Equal(5, login.Character.X);
+                Assert.Equal([new BagEntry(4, 2)], login.Character.Items);
+                Assert.Equal([7, 9], login.Character.Flags);
+                Assert.Equal(5, Assert.Single(login.Character.Party).Level);
+            }
+        }
+        finally
+        {
+            TempDatabase.Delete(path);
+        }
+    }
+
+    /// <summary>
+    /// And a party that did change is written, even though everything around it did not.
+    /// This is the test that would fail if the sections were compared wrongly, and it is
+    /// the reason the comparison is on the whole party rather than on anything cleverer.
+    /// </summary>
+    [Fact]
+    public async Task AndAPartyThatChangedIsWritten()
+    {
+        string path = TempDatabase.Path();
+
+        try
+        {
+            SavedCharacter before = Character(4);
+            SavedCharacter after = Character(4, level: 6);
+
+            using (var store = new SqlitePlayerStore(path))
+            {
+                await store.RegisterAsync("Mason", "a-good-password", before);
+                await store.SaveAsync(1, after, CancellationToken.None, previous: before);
+            }
+
+            using (var reading = new SqlitePlayerStore(path))
+            {
+                var login = Assert.IsType<AuthOutcome.Success>(
+                    await reading.LoginAsync("Mason", "a-good-password"));
+
+                Assert.Equal(6, Assert.Single(login.Character.Party).Level);
+            }
+        }
+        finally
+        {
+            TempDatabase.Delete(path);
+        }
+    }
+
+    /// <summary>And a flag that was cleared is cleared, which an insert-only table could not do.</summary>
+    [Fact]
+    public async Task AndAFlagThatWasClearedIsCleared()
+    {
+        string path = TempDatabase.Path();
+
+        try
+        {
+            SavedCharacter before = Character(4, 5, 7, 9);
+            SavedCharacter after = Character(4, 5, 7);
+
+            using (var store = new SqlitePlayerStore(path))
+            {
+                await store.RegisterAsync("Mason", "a-good-password", before);
+                await store.SaveAsync(1, after, CancellationToken.None, previous: before);
+            }
+
+            using (var reading = new SqlitePlayerStore(path))
+            {
+                var login = Assert.IsType<AuthOutcome.Success>(
+                    await reading.LoginAsync("Mason", "a-good-password"));
+
+                Assert.Equal([7], login.Character.Flags);
+            }
+        }
+        finally
+        {
+            TempDatabase.Delete(path);
+        }
+    }
+
+    /// <summary>
+    /// And a save with nothing to compare against writes everything, which is what a
+    /// server that has just started up has and what every caller had before this.
+    /// </summary>
+    [Fact]
+    public async Task AndKnowingNothingWritesEverything()
+    {
+        string path = TempDatabase.Path();
+
+        try
+        {
+            using (var store = new SqlitePlayerStore(path))
+            {
+                await store.RegisterAsync("Mason", "a-good-password", Character(4));
+                await store.SaveAsync(1, Character(9, level: 11, 1, 2, 3));
+            }
+
+            using (var reading = new SqlitePlayerStore(path))
+            {
+                var login = Assert.IsType<AuthOutcome.Success>(
+                    await reading.LoginAsync("Mason", "a-good-password"));
+
+                Assert.Equal(9, login.Character.X);
+                Assert.Equal(11, Assert.Single(login.Character.Party).Level);
+                Assert.Equal([1, 2, 3], login.Character.Flags);
+            }
+        }
+        finally
+        {
+            TempDatabase.Delete(path);
+        }
     }
 }

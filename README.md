@@ -14,7 +14,7 @@ src/Server          the authoritative server. Core only
 src/Client          the game: window, input, drawing, screens
 src/Tools/RomDump   the extractor's command line, and every instrument built for it
 src/Tools/Crowd     a crowd of real clients, for measuring what the server does at scale
-tests/              1564 tests, no cartridge required
+tests/              1568 tests, no cartridge required
 tools/rig/          the headless play rig — Xvfb, two clients, screenshots
 ```
 
@@ -353,8 +353,13 @@ after:   1258 saves ( 1 ms average, 156 worst),  a step 2.5 /  8.3 /  36.4 ms
 ```
 
 A save costs a sixteenth of what it did, because it no longer fights the connection
-loops for the same lock and the same core. What is left is structural: a save writes
-everything about a character every time, and it should write what changed.
+loops for the same lock and the same core. And it writes what changed. A save is a full rewrite — the row, the bag, every flag,
+every party member and every move each of them knows — and for the commonest save
+there is, somebody standing one square further along, every one of those is identical
+to what is already on disk. The writer remembers what it last wrote for each account
+and hands it to the store, which skips the sections that match. By section and never
+by row: a section is skipped whole or written whole, so there is nowhere for a
+half-written party to exist.
 
 ## Playing it headlessly
 

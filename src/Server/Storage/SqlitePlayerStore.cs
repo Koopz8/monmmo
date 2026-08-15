@@ -478,7 +478,11 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
         return true;
     }
 
-    public async Task SaveAsync(long accountId, SavedCharacter character, CancellationToken cancellationToken = default)
+    public async Task SaveAsync(
+        long accountId,
+        SavedCharacter character,
+        CancellationToken cancellationToken = default,
+        SavedCharacter? previous = null)
     {
         long started = System.Diagnostics.Stopwatch.GetTimestamp();
 
@@ -486,7 +490,7 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
         await using (SqliteTransaction transaction =
                      (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken))
         {
-            await WriteCharacterAsync(connection, transaction, accountId, character, cancellationToken);
+            await WriteCharacterAsync(connection, transaction, accountId, character, cancellationToken, previous);
             await transaction.CommitAsync(cancellationToken);
         }
 
@@ -498,13 +502,44 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
         if (took > _slowestSave) Volatile.Write(ref _slowestSave, took);
     }
 
+    /// <summary>
+    /// Writes a character, skipping the parts of it that have not changed.
+    /// <para>
+    /// <paramref name="previous"/> is what this store last wrote for this account, or
+    /// nothing when it does not know — and not knowing means writing everything, which is
+    /// what every save did until this argument existed. A save is a full rewrite: the row,
+    /// the bag, every flag, every party member and every move each of them knows. For the
+    /// commonest save of all — somebody did something and is standing one square further
+    /// along — every one of those is identical to what is already there.
+    /// </para>
+    /// <para>
+    /// The comparison is by section and never by row. A section is skipped whole or
+    /// written whole, so there is nowhere for a half-written party to exist, and the
+    /// ordering bug a row-level diff would hide has nowhere to hide.
+    /// </para>
+    /// </summary>
     private static async Task WriteCharacterAsync(
         SqliteConnection connection,
         SqliteTransaction transaction,
         long accountId,
         SavedCharacter character,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        SavedCharacter? previous = null)
     {
+        // What has changed since this store last wrote this account. Everything is
+        // "changed" when there is nothing to compare against.
+        bool bagChanged = previous is null || !character.Items.SequenceEqual(previous.Items);
+
+        bool scriptChanged = previous is null
+            || !character.Flags.SequenceEqual(previous.Flags)
+            || !character.Variables.SequenceEqual(previous.Variables)
+            || !character.Cosmetics.SequenceEqual(previous.Cosmetics)
+            || character.Looks != previous.Looks;
+
+        bool partyChanged = previous is null
+            || !character.Party.SequenceEqual(previous.Party)
+            || !character.Box.SequenceEqual(previous.Box);
+
         await using (SqliteCommand upsert = connection.CreateCommand())
         {
             upsert.Transaction = transaction;
@@ -532,6 +567,8 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
             await upsert.ExecuteNonQueryAsync(cancellationToken);
         }
 
+        if (bagChanged)
+        {
         // The bag is rewritten wholesale, unlike the beaten trainers: a bag genuinely
         // does shrink, and an insert-only bag would be one nothing could ever leave.
         await using (SqliteCommand clear = connection.CreateCommand())
@@ -551,6 +588,7 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
             item.Parameters.AddWithValue("$item", entry.ItemId);
             item.Parameters.AddWithValue("$count", entry.Count);
             await item.ExecuteNonQueryAsync(cancellationToken);
+        }
         }
 
         // Inserted rather than rewritten, because a beaten trainer is never unbeaten.
@@ -594,6 +632,8 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
             await rest.ExecuteNonQueryAsync(cancellationToken);
         }
 
+        if (scriptChanged)
+        {
         // Rewritten wholesale, unlike the beaten trainers. A script can clear a flag as
         // readily as set one — that is what makes a door lock behind you — so an
         // insert-only table would be one nothing could ever come back out of.
@@ -654,7 +694,10 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
             row.Parameters.AddWithValue("$value", variable.Value);
             await row.ExecuteNonQueryAsync(cancellationToken);
         }
+        }
 
+        if (partyChanged)
+        {
         // The party is rewritten wholesale rather than diffed. Six rows is nothing,
         // and a diff is where an ordering bug would hide.
         await using (SqliteCommand clear = connection.CreateCommand())
@@ -723,6 +766,7 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
 
                 await move.ExecuteNonQueryAsync(cancellationToken);
             }
+        }
         }
     }
 

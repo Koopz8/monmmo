@@ -30,7 +30,20 @@ public interface IPlayerStore
     Task<AuthOutcome> LoginAsync(string username, string password, CancellationToken cancellationToken = default);
 
     /// <summary>Writes a character back. Called on disconnect and after anything worth keeping.</summary>
-    Task SaveAsync(long accountId, SavedCharacter character, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Writes a character down.
+    /// <para>
+    /// <paramref name="previous"/> is what this store last wrote for this account, if the
+    /// caller knows — a store is free to use it to skip the parts that have not changed,
+    /// and free to ignore it. Passing nothing means "write everything", which is always
+    /// correct and is what every caller did before this existed.
+    /// </para>
+    /// </summary>
+    Task SaveAsync(
+        long accountId,
+        SavedCharacter character,
+        CancellationToken cancellationToken = default,
+        SavedCharacter? previous = null);
 
     /// <summary>
     /// Throws away everything a character's scripts have remembered, and nothing else.
