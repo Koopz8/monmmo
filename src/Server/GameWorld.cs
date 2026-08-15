@@ -500,6 +500,26 @@ public sealed class GameWorld
         }
     }
 
+    /// <summary>
+    /// The player using a name, or nothing when nobody is.
+    /// <para>
+    /// Only ever true as of the instant it is asked, which is the whole reason a friend
+    /// list does not store it: a list holds who somebody cares about, and this answers
+    /// where they are.
+    /// </para>
+    /// </summary>
+    public ServerPlayer? Named(string name)
+    {
+        lock (_gate)
+        {
+            return _players.Values.FirstOrDefault(p =>
+                string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    /// <summary>What a map is called, for saying where somebody is.</summary>
+    public string NameOfMap(string mapId) => _world.Find(mapId)?.Name ?? mapId;
+
     /// <summary>True when this player may use the operator console.</summary>
     public bool IsOperator(int playerId) =>
         Find(playerId) is { } player && Operators.Contains(player.Name);

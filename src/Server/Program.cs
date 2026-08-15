@@ -786,6 +786,9 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
 
     /// <summary>The market, when the store behind this server can keep one.</summary>
     private Market? _market;
+
+    /// <summary>Friend lists, on the same terms.</summary>
+    private Friends? _friends;
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private readonly TaskCompletionSource<int> _listening =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -830,6 +833,7 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
         // the tests use cannot, and a server running on it simply has no market rather
         // than a market that loses things.
         _market = store is IMarketStore selling ? new Market(selling, _scribe.Forget) : null;
+        _friends = store is IFriendStore listing ? new Friends(listing) : null;
 
         _ = TickAsync(cancellationToken);
 
@@ -1303,6 +1307,26 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                         // The operator gate is the same gate, asked here instead. Without
                         // that line this would be the one console command anybody could
                         // run, which is not a thing to discover later.
+                        // Friend lists are a database call too, for the reason the
+                        // market's are: the world's console holds the lock everybody waits
+                        // on, and reading a list off the disk under it would stop them all.
+                        case ConsoleCommand list
+                            when playerId != 0
+                                && _friends is not null
+                                && Friends.Handles(ConsoleLine.Of(list.Text).Verb)
+                                && world.IsOperator(playerId):
+
+                            await DispatchAsync(
+                                    await _friends
+                                        .RunAsync(world, playerId, accountId, ConsoleLine.Of(list.Text), cancellationToken)
+                                        .ConfigureAwait(false),
+                                    playerId,
+                                    cancellationToken)
+                                .ConfigureAwait(false);
+
+                            if (_friends.Last is { } listed) Console.WriteLine($"& #{playerId} {listed}");
+                            break;
+
                         case ConsoleCommand market
                             when playerId != 0
                                 && _market is not null

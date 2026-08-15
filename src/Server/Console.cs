@@ -77,6 +77,9 @@ public static class ConsoleHelp
         "/money <amount>            set it",
         "/forget                    every flag and variable, gone",
         "T then a line             say it to the room; @name in front whispers",
+        "/friend <player name>      keep track of somebody",
+        "/unfriend <player name>    stop",
+        "/friends                   your list, and who is on",
         "/help                      this",
     ];
 }

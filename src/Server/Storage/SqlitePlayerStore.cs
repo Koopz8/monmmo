@@ -14,7 +14,7 @@ namespace PokeMmo.Server.Storage;
 /// readers out during every save, and saves happen while people are playing.
 /// </para>
 /// </summary>
-public sealed class SqlitePlayerStore : IPlayerStore, IMarketStore, IDisposable
+public sealed class SqlitePlayerStore : IPlayerStore, IMarketStore, IFriendStore, IDisposable
 {
     /// <summary>Where the database lives unless told otherwise.</summary>
     public const string DefaultFileName = "players.db";
@@ -166,6 +166,16 @@ public sealed class SqlitePlayerStore : IPlayerStore, IMarketStore, IDisposable
                 variable   INTEGER NOT NULL,
                 value      INTEGER NOT NULL,
                 PRIMARY KEY (account_id, variable)
+            );
+
+            CREATE TABLE IF NOT EXISTS friends (
+                account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+                friend_id  INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+                added_at   TEXT NOT NULL,
+
+                -- The pair, so adding the same person twice is refused by the table rather
+                -- than by a check that has to be remembered at every call site.
+                PRIMARY KEY (account_id, friend_id)
             );
 
             CREATE TABLE IF NOT EXISTS market_listings (
@@ -1576,6 +1586,93 @@ public sealed class SqlitePlayerStore : IPlayerStore, IMarketStore, IDisposable
         }
 
         return listings;
+    }
+
+    // ---- friends ---------------------------------------------------------------------
+
+    public async Task<bool> BefriendAsync(
+        long accountId, string name, CancellationToken cancellationToken = default)
+    {
+        await using SqliteConnection connection = Open();
+
+        if (await AccountNamedAsync(connection, name, cancellationToken) is not { } friendId) return false;
+
+        // Nobody is their own friend. Harmless if allowed, and it would put a line in
+        // everybody's list saying they are online whenever they are looking at it.
+        if (friendId == accountId) return false;
+
+        await using SqliteCommand insert = connection.CreateCommand();
+
+        // The table's own key refuses a second copy, so the duplicate case is answered by
+        // the database rather than by a check this method has to remember to do first —
+        // and a check first is a check two calls at once can both pass.
+        insert.CommandText =
+            """
+            INSERT OR IGNORE INTO friends (account_id, friend_id, added_at)
+            VALUES ($me, $them, $now);
+            """;
+
+        insert.Parameters.AddWithValue("$me", accountId);
+        insert.Parameters.AddWithValue("$them", friendId);
+        insert.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
+
+        return await insert.ExecuteNonQueryAsync(cancellationToken) > 0;
+    }
+
+    public async Task<bool> ForgetAsync(
+        long accountId, string name, CancellationToken cancellationToken = default)
+    {
+        await using SqliteConnection connection = Open();
+
+        if (await AccountNamedAsync(connection, name, cancellationToken) is not { } friendId) return false;
+
+        await using SqliteCommand remove = connection.CreateCommand();
+        remove.CommandText = "DELETE FROM friends WHERE account_id = $me AND friend_id = $them;";
+        remove.Parameters.AddWithValue("$me", accountId);
+        remove.Parameters.AddWithValue("$them", friendId);
+
+        return await remove.ExecuteNonQueryAsync(cancellationToken) > 0;
+    }
+
+    public async Task<IReadOnlyList<Friend>> FriendsAsync(
+        long accountId, CancellationToken cancellationToken = default)
+    {
+        await using SqliteConnection connection = Open();
+
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT a.id, a.username
+            FROM friends f
+            JOIN accounts a ON a.id = f.friend_id
+            WHERE f.account_id = $me
+            ORDER BY f.added_at;
+            """;
+
+        command.Parameters.AddWithValue("$me", accountId);
+
+        var friends = new List<Friend>();
+
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        while (await reader.ReadAsync(cancellationToken))
+            friends.Add(new Friend(reader.GetInt64(0), reader.GetString(1)));
+
+        return friends;
+    }
+
+    /// <summary>
+    /// The account playing under a name, folded the way logging in folds it — so adding
+    /// somebody works with whatever capitals were read off the top of a head.
+    /// </summary>
+    private static async Task<long?> AccountNamedAsync(
+        SqliteConnection connection, string name, CancellationToken cancellationToken)
+    {
+        await using SqliteCommand find = connection.CreateCommand();
+        find.CommandText = "SELECT id FROM accounts WHERE username_folded = $folded;";
+        find.Parameters.AddWithValue("$folded", UsernameRules.Fold(name));
+
+        return await find.ExecuteScalarAsync(cancellationToken) is long id ? id : null;
     }
 
     /// <summary>
