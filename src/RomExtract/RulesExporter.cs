@@ -98,6 +98,13 @@ public static class RulesExporter
             ? $"  rules: the move called STRUGGLE is {struggle}"
             : "  rules: no move on this cartridge is called STRUGGLE, so nothing here runs out of moves");
 
+        // What wild ones are carrying, which their own records have said all along.
+        log?.Invoke(
+            $"  rules: {anonymousSpecies.Count(s => s.Item1 != 0 || s.Item2 != 0)} species name " +
+            "something a wild one may be carrying " +
+            $"({anonymousSpecies.Count(s => s.Item1 != 0)} a common one, " +
+            $"{anonymousSpecies.Count(s => s.Item2 != 0)} a rare one)");
+
         log?.Invoke(
             $"  rules: {rules.SpeciesCount} species, {rules.MoveCount} moves, " +
             $"{rules.LearnsetCount} learnsets, {rules.TrainerCount} trainers, " +
@@ -290,6 +297,11 @@ public static class RulesExporter
         ExpYield = species.ExpYield,
         GenderRatio = species.GenderRatio,
         GrowthRate = species.GrowthRate,
+
+        // What a wild one of these is carrying. Numbers, like everything else that
+        // travels — what the numbers are called stays on the cartridge.
+        Item1 = species.Item1,
+        Item2 = species.Item2,
     };
 
     /// <summary>

@@ -23,7 +23,7 @@ public sealed class GameRules
 {
     private static readonly byte[] Magic = "MONRULES"u8.ToArray();
 
-    private const int Version = 12;
+    private const int Version = 13;
 
     private readonly Dictionary<int, SpeciesData> _species;
     private readonly Dictionary<int, MoveData> _moves;
@@ -321,6 +321,12 @@ public sealed class GameRules
             writer.Write(species.ExpYield);
             writer.Write(species.GenderRatio);
             writer.Write((int)species.GrowthRate);
+
+            // What one of these is carrying when it walks out of the grass. Two numbers
+            // in its own record, extracted since the beginning and read by nothing until
+            // there was something that could take an item off somebody.
+            writer.Write((int)species.Item1);
+            writer.Write((int)species.Item2);
         }
 
         writer.Write(_moves.Count);
@@ -466,6 +472,8 @@ public sealed class GameRules
                 ExpYield = reader.ReadByte(),
                 GenderRatio = reader.ReadByte(),
                 GrowthRate = (GrowthRate)reader.ReadInt32(),
+                Item1 = (ushort)reader.ReadInt32(),
+                Item2 = (ushort)reader.ReadInt32(),
             });
         }
 

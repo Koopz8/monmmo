@@ -57,13 +57,52 @@ public sealed class BattleFactory(GameRules rules)
         return battler;
     }
 
+    /// <summary>
+    /// How often a wild one is carrying its common item, and its rare one, out of a
+    /// hundred.
+    /// <para>
+    /// <b>Modelled, not read.</b> Every species record on this cartridge names up to two
+    /// items — 105 of the 386 name at least one — and says nothing anywhere about how
+    /// often either turns up. The two numbers are here, in one place, rather than spread
+    /// through the code that uses them.
+    /// </para>
+    /// <para>
+    /// A species naming only its rare slot, which is most of them, therefore carries
+    /// something one time in twenty. A species naming both — RATICATE, PARAS — carries
+    /// the common one about half the time and the rare one rarely.
+    /// </para>
+    /// </summary>
+    private const int OftenOutOfAHundred = 50;
+
+    private const int RarelyOutOfAHundred = 5;
+
+    /// <summary>
+    /// What a wild one of this species walks out of the grass carrying, or nothing.
+    /// <para>
+    /// The rare slot is asked first, so a species naming both can still produce the rarer
+    /// one — asking the common slot first would make the rare one unreachable whenever
+    /// the common roll succeeded.
+    /// </para>
+    /// </summary>
+    public int HeldBy(SpeciesData species, BattleRng rng)
+    {
+        if (species.Item2 != 0 && rng.Next(100) < RarelyOutOfAHundred) return species.Item2;
+        if (species.Item1 != 0 && rng.Next(100) < OftenOutOfAHundred) return species.Item1;
+
+        return 0;
+    }
+
     /// <summary>Builds a wild encounter with the moves that species would know by then.</summary>
-    public Battler? Wild(int species, int level)
+    public Battler? Wild(int species, int level, BattleRng? rng = null)
     {
         if (rules.SpeciesAt(species) is not { } record) return null;
 
         var battler = new Battler(record, level);
         battler.Moves.AddRange(rules.MovesKnownAt(species, level));
+
+        // And whatever it happens to be carrying, which THIEF has been able to take off
+        // somebody since it was written and which nothing has ever been carrying.
+        if (rng is not null) battler.Holding = HeldBy(record, rng);
 
         // A creature with no moves at all cannot take a turn, so it gets the first
         // move in the table rather than standing there.

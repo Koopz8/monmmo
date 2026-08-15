@@ -3345,7 +3345,7 @@ public sealed class GameWorld
                 return [];
             }
 
-            if (_battles.Wild(species, level) is not { } wild)
+            if (_battles.Wild(species, level, _rng) is not { } wild)
             {
                 LastScriptFight = $"refused: species {species} is not one this server can field";
                 return [];
@@ -4661,7 +4661,7 @@ public sealed class GameWorld
         if (WildEncounters.RollStep(_rng, table) is not { } encounter) return;
         if (_battles is null) return;
 
-        if (_battles.Wild(encounter.Species, encounter.Level) is not { } wild) return;
+        if (_battles.Wild(encounter.Species, encounter.Level, _rng) is not { } wild) return;
 
         // No healthy lead, no encounter. Starting one here would start a battle that
         // was over before its first turn — which is exactly the freeze this fixes.
