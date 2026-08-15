@@ -22,6 +22,9 @@ public enum EffectKind
     /// <summary>Cannot be hit this turn.</summary>
     Guard,
 
+    /// <summary>Sleeps, and wakes whole.</summary>
+    Sleeps,
+
     /// <summary>Inflicts a lasting condition.</summary>
     Status,
 
@@ -354,6 +357,18 @@ public static class MoveEffects
         // row, and that share is in their code — so it is modelled as always working and
         // this sentence is the note saying which half is which.
         0x6F => new MoveEffect(EffectKind.Guard, OnUser: true),
+
+        // Sleeps, and wakes whole.
+        //
+        //   0x25   1 move   REST
+        //
+        // Its record aims it at the user — target byte 0x10, the group of 67 whose whole
+        // effect is on whoever used it — so nothing here has to decide who it lands on.
+        // How much it gives back is not modelled either: all of it is the only amount a
+        // move that puts you to sleep to heal could mean, and the record's own zero power
+        // says the number is not in the data. How long the sleep runs is this engine's
+        // ordinary sleep, which is what every other sleep in it already gets.
+        0x25 => new MoveEffect(EffectKind.Sleeps, OnUser: true, Status: StatusCondition.Sleep),
 
         _ => Stages(effect),
     };

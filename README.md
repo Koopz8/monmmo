@@ -13,7 +13,7 @@ src/RomExtract      cartridge reading. Client-only, and enforced by a test
 src/Server          the authoritative server. Core only
 src/Client          the game: window, input, drawing, screens
 src/Tools/RomDump   the extractor's command line, and every instrument built for it
-tests/              1369 tests, no cartridge required
+tests/              1372 tests, no cartridge required
 tools/rig/          the headless play rig — Xvfb, two clients, screenshots
 ```
 
@@ -139,6 +139,10 @@ Worked examples, all of them in the code as comments:
 - Behaviour byte `0x6A` is a staircase, not a storage machine, because every square
   carrying it is at the top or bottom of a flight and none of them is in a corner of
   a healing centre.
+- The move record's target byte was read by counting who is in each group: the 67 moves
+  sharing one value are exactly the moves whose whole effect is on the creature using
+  them, and no move outside that group is. A byte whose members are exactly one idea
+  means that idea.
 - The ferry's destination table was read without reading the routine that uses it:
   sixteen scripts write a number into an argument slot and then hand the screen to
   the same routine as the last thing they ever do, and no two of them write the same
@@ -224,7 +228,7 @@ The lesson that keeps recurring, in the words it was learned in:
 ## Next
 
 Player-versus-player is in, switching included, and the battle engine now says when
-it does nothing: 212 of 354 moves have an effect it can carry out, a fight counts
+it does nothing: 213 of 354 moves have an effect it can carry out, a fight counts
 what it stepped over, and the server prints that count. What is left is the rest of
 that list — around 120 effect groups, ranked by how often they actually turn up in a
 trainer party or a learnset — and art: twelve cosmetic slots with nothing drawn in

@@ -374,6 +374,67 @@ public class CheapGroupTests
         Assert.Empty(battle.SteppedOver);
     }
 
+    /// <summary>
+    /// A guard stops what is aimed at the one who put it up, and nothing else. The target
+    /// byte in the record is what makes that difference, and this is the first thing in
+    /// the project ever to read it — without it, a guard on one side stopped the other
+    /// side sharpening its own claws.
+    /// </summary>
+    [Fact]
+    public void AGuardDoesNotStopWhatSomebodyDoesToThemselves()
+    {
+        // SWORDS DANCE: raises the user's attack, and its record aims it at the user.
+        MoveData sharpen = new(9, "", 0x32, 0, PokemonType.Normal, 0, 20, 0, MoveData.AimedAtSelf, 0);
+
+        Battler you = Make(250, Guard(8));
+        Battler them = Make(1, sharpen);
+
+        List<BattleEvent> events =
+            new Battle(you, them, 7).ResolveTurn(new BattleAction.UseMove(0), new BattleAction.UseMove(0));
+
+        Assert.Contains(events, e => e is BattleEvent.StageChanged { Side: Side.Opponent });
+    }
+
+    // ---- sleeping it off --------------------------------------------------------------
+
+    private const byte RestEffect = 0x25;   // REST
+
+    private static MoveData Rest(int id) =>
+        new(id, "", RestEffect, 0, PokemonType.Normal, 0, 10, 0, MoveData.AimedAtSelf, 0);
+
+    [Fact]
+    public void RestingSleepsAndHeals()
+    {
+        Battler you = Make(250, Rest(9));
+        Battler them = Make(1, Move(Plain, 0x00, 40));
+
+        var battle = new Battle(you, them, 7);
+
+        // Hurt first, or there is nothing to rest for.
+        battle.ResolveTurn(new BattleAction.UseMove(0), new BattleAction.UseMove(0));
+
+        List<BattleEvent> events =
+            battle.ResolveTurn(new BattleAction.UseMove(0), new BattleAction.UseMove(0));
+
+        Assert.Contains(events, e => e is BattleEvent.StatusInflicted { Status: StatusCondition.Sleep });
+        Assert.Contains(events, e => e is BattleEvent.Recovered);
+        Assert.Equal(StatusCondition.Sleep, you.Status);
+    }
+
+    /// <summary>And does nothing at all to somebody who has nothing to rest for.</summary>
+    [Fact]
+    public void AndDoesNothingOnFullHealth()
+    {
+        Battler you = Make(250, Rest(9));
+        Battler them = Make(1, Move(Plain, 0x00, 0));
+
+        List<BattleEvent> events =
+            new Battle(you, them, 7).ResolveTurn(new BattleAction.UseMove(0), new BattleAction.UseMove(0));
+
+        Assert.Contains(events, e => e is BattleEvent.NothingHappened);
+        Assert.Equal(StatusCondition.None, you.Status);
+    }
+
     /// <summary>And an effect nobody has written still says so.</summary>
     [Fact]
     public void AndTheOtherKindOfSilenceSaysSo()

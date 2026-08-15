@@ -1330,6 +1330,33 @@ public static class Program
         List<MoveData> moves = MoveExtractor.Extract(rom);
 
         Console.WriteLine();
+        Console.WriteLine("Moves by the target byte in their record");
+
+        foreach (var aim in moves.Where(m => m.Id > 0).GroupBy(m => m.Target).OrderByDescending(g => g.Count()))
+        {
+            Console.WriteLine(
+                $"  0x{aim.Key:X2}  {aim.Count(),4} moves   " +
+                string.Join(", ", aim.Take(6).Select(m => m.Name)));
+        }
+
+        // The check that makes the byte mean something. Every move whose record aims it at
+        // the user is one whose whole effect is on the user, and no move outside that
+        // group is — so a modelled effect that lands on the other one while its record
+        // aims at the user would be this engine disagreeing with the cartridge.
+        List<MoveData> wrong =
+        [
+            .. moves.Where(m => m.Id > 0 && m.AimsAtSelf)
+                .Where(m => MoveEffects.Of(m.Effect).Kind is not (EffectKind.None or EffectKind.Nothing))
+                .Where(m => !MoveEffects.Of(m.Effect).OnUser),
+        ];
+
+        Console.WriteLine(
+            wrong.Count == 0
+                ? "  every move aimed at the user has its effect applied to the user"
+                : $"  {wrong.Count} moves are aimed at the user and applied to the other one: " +
+                  string.Join(", ", wrong.Select(m => m.Name)));
+
+        Console.WriteLine();
         Console.WriteLine("Moves by the effect byte in their record");
 
         var byEffect = moves

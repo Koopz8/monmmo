@@ -593,7 +593,11 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
 
         // Behind a guard, and nothing else happens. Before accuracy, because PROTECT is
         // not evasion — the move is not missing, it is being stopped.
-        if (defender.IsGuarded)
+        //
+        // Only what is aimed at them, which is what the record's target byte is for and
+        // the first thing in this project ever to read it. Without that, a guard put up
+        // by one side stopped the other side sharpening its own claws.
+        if (defender.IsGuarded && move.AimsAtSomebodyElse)
         {
             events.Add(new BattleEvent.Unaffected(Other(side)));
 
@@ -1077,6 +1081,26 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         {
             if (defender.TryApplyStatus(effect.Status, sleepTurns: _rng.Next(3) + 1))
                 events.Add(new BattleEvent.StatusInflicted(Other(side), effect.Status));
+
+            return;
+        }
+
+        // Sleeps, and wakes whole. Both halves happen or neither does: a creature already
+        // asleep cannot rest, and one on full health has nothing to rest for — which is
+        // the games' own rule and the only one here that is not read off a field.
+        if (effect.Kind == EffectKind.Sleeps)
+        {
+            if (target.CurrentHp >= target.MaxHp || !target.TryApplyStatus(StatusCondition.Sleep, _rng.Next(3) + 1))
+            {
+                events.Add(new BattleEvent.NothingHappened(at));
+
+                return;
+            }
+
+            int back = target.Heal(target.MaxHp);
+
+            events.Add(new BattleEvent.StatusInflicted(at, StatusCondition.Sleep));
+            events.Add(new BattleEvent.Recovered(at, back));
 
             return;
         }
