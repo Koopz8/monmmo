@@ -36,6 +36,10 @@ public static class Program
         // They are very different measurements and this switch is the difference.
         bool returning = args.Contains("--login");
 
+        // Something other than walking, because walking is the one thing the server
+        // deliberately does not write down. A save happens on anything else.
+        int pokesPerMinute = Number(args, "--pokes") ?? 0;
+
         Console.WriteLine(
             $"{players} players, port {port}, {seconds}s, {stepsPerMinute} steps a minute each");
 
@@ -48,7 +52,7 @@ public static class Program
 
         for (int i = 0; i < players; i++)
         {
-            var bot = new Bot($"{prefix}{i:D4}", port, stepsPerMinute, i, returning);
+            var bot = new Bot($"{prefix}{i:D4}", port, stepsPerMinute, i, returning, pokesPerMinute);
 
             bots.Add(bot);
             joining.Add(bot.RunAsync(run.Token));
@@ -85,7 +89,7 @@ public static class Program
             Console.WriteLine($"  first failure: {why}");
 
         Console.WriteLine($"  joining      {At(joins, 0.5):F0} / {At(joins, 0.95):F0} / {At(joins, 1.0):F0} ms  (median, 95th, worst)");
-        Console.WriteLine($"  steps        {steps} asked, {answers} answered");
+        Console.WriteLine($"  steps        {steps} asked, {answers} answered, {bots.Sum(b => (long)b.Pokes)} other things done");
         Console.WriteLine($"  a step took  {At(waits, 0.5):F1} / {At(waits, 0.95):F1} / {At(waits, 0.99):F1} / {At(waits, 1.0):F1} ms  (median, 95th, 99th, worst)");
         Console.WriteLine($"  messages     {received} in, {received / Math.Max(elapsed.TotalSeconds, 0.001):F0} a second across the crowd");
         Console.WriteLine($"  bytes        {bytes / 1024.0 / 1024.0:F1} MiB, {bytes / Math.Max(elapsed.TotalSeconds, 0.001) / 1024.0:F0} KiB a second");
@@ -112,7 +116,7 @@ public static class Program
 }
 
 /// <summary>One player, on one socket, doing the one thing every player does.</summary>
-public sealed class Bot(string name, int port, int stepsPerMinute, int seed, bool returning = false)
+public sealed class Bot(string name, int port, int stepsPerMinute, int seed, bool returning = false, int pokesPerMinute = 0)
 {
     private static readonly Direction[] Ways =
         [Direction.Up, Direction.Down, Direction.Left, Direction.Right];
@@ -127,6 +131,9 @@ public sealed class Bot(string name, int port, int stepsPerMinute, int seed, boo
     public double JoinMilliseconds { get; private set; }
 
     public int Steps { get; private set; }
+
+    /// <summary>How many things other than walking this one did.</summary>
+    public int Pokes { get; private set; }
 
     public int Answers { get; private set; }
 
@@ -211,6 +218,15 @@ public sealed class Bot(string name, int port, int stepsPerMinute, int seed, boo
                     .ConfigureAwait(false);
 
                 Steps++;
+
+                // And every so often, something that is not a step — which is what makes
+                // the server write this character down.
+                if (pokesPerMinute > 0 && Steps % Math.Max(1, stepsPerMinute / pokesPerMinute) == 0)
+                {
+                    await channel.SendAsync(new TalkFinished(), cancellationToken).ConfigureAwait(false);
+
+                    Pokes++;
+                }
             }
 
             await reading.ConfigureAwait(false);

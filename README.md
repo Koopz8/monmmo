@@ -14,7 +14,7 @@ src/Server          the authoritative server. Core only
 src/Client          the game: window, input, drawing, screens
 src/Tools/RomDump   the extractor's command line, and every instrument built for it
 src/Tools/Crowd     a crowd of real clients, for measuring what the server does at scale
-tests/              1544 tests, no cartridge required
+tests/              1548 tests, no cartridge required
 tools/rig/          the headless play rig — Xvfb, two clients, screenshots
 ```
 
@@ -267,7 +267,27 @@ about what it does not do: **a crowd standing in one place still costs what a cr
 standing in one place costs.** 141 of the 425 maps are bigger than the 23-square sight
 box on at least one side, and 74 on both — on those the circle bites, and on a
 starting room 12 squares wide it cannot. What helps there is not putting everybody in
-the same place, which is the next thing.
+the same place, which is still to come.
+
+The third measurement is the disk. A save happens on anything a player does that is
+not walking, at most once a second each, and it rewrites the whole character. At a
+hundred players doing something every two seconds that was **21 ms a save, 458 at
+worst** — and a thousand players at that rate would be five hundred saves a second,
+ten times more writing than those numbers allow.
+
+Half of them were not needed. `SavedCharacter` is a record holding lists, so two
+snapshots of somebody who had not moved a muscle compared unequal — the same trap
+`SavedMon` had already closed on itself, one type up. With value equality and a
+last-written copy per connection, 2370 things done became 1254 saves. `synchronous =
+NORMAL` under the write-ahead log took the average from 21 ms to 16. The server now
+prints what it is costing every half minute:
+
+```
+= 100 online on 2 maps, door 100 in (5554 ms average wait), 1385 saves (16 ms average, 454 worst)
+```
+
+What is left is structural: a save writes everything about a character every time,
+and it should write what changed.
 
 ## Playing it headlessly
 

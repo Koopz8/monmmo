@@ -199,6 +199,56 @@ public sealed record SavedCharacter(
     public int Money { get; init; } = StartingMoney;
 
     /// <summary>
+    /// Compares everything by its contents, the way <see cref="SavedMon"/> does and for
+    /// the same reason — one the sibling type closed and this one did not.
+    /// <para>
+    /// A record compares its members with <c>Equals</c>, and for a list that is reference
+    /// equality. So two snapshots of a character who has not moved a muscle were never
+    /// equal, and "has anything changed since the last save?" — the question this type
+    /// exists to answer — could only ever be answered "yes". Every non-movement message
+    /// any player sent rewrote their entire row, their whole party, every move, every
+    /// item and every flag, whether or not one byte of it differed.
+    /// </para>
+    /// </summary>
+    public bool Equals(SavedCharacter? other) =>
+        other is not null &&
+        MapId == other.MapId &&
+        X == other.X &&
+        Y == other.Y &&
+        Facing == other.Facing &&
+        Money == other.Money &&
+        Looks == other.Looks &&
+        Party.SequenceEqual(other.Party) &&
+        Box.SequenceEqual(other.Box) &&
+        Items.SequenceEqual(other.Items) &&
+        Flags.SequenceEqual(other.Flags) &&
+        Cosmetics.SequenceEqual(other.Cosmetics) &&
+        DefeatedTrainers.SequenceEqual(other.DefeatedTrainers) &&
+        Variables.SequenceEqual(other.Variables);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+
+        hash.Add(MapId);
+        hash.Add(X);
+        hash.Add(Y);
+        hash.Add(Facing);
+        hash.Add(Money);
+
+        // The lists go in by count rather than by contents. A hash has to agree with
+        // equality and does not have to be expensive: this type is compared far more
+        // often than it is put in a dictionary, and hashing a whole party on every
+        // comparison would cost more than the save it is meant to avoid.
+        hash.Add(Party.Count);
+        hash.Add(Box.Count);
+        hash.Add(Items.Count);
+        hash.Add(Flags.Count);
+
+        return hash.ToHashCode();
+    }
+
+    /// <summary>
     /// The centre this character last rested at, and where they stood to do it.
     /// <para>
     /// Persisted rather than kept for the session, because the walk back is the whole

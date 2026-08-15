@@ -1,3 +1,6 @@
+using PokeMmo.Core.Battle;
+using PokeMmo.Core.Save;
+using PokeMmo.Core.World;
 using PokeMmo.Server;
 using PokeMmo.Server.Storage;
 using Xunit;
@@ -151,5 +154,87 @@ public class TheDoorTests
             $"m={memoryKib},t={iterations},p=1",
             Convert.ToBase64String(salt),
             Convert.ToBase64String(argon.GetBytes(32)));
+    }
+}
+
+/// <summary>
+/// Writing everybody down.
+/// <para>
+/// A save is the one thing this server does that touches a disk. It happens on anything
+/// a player does that is not walking, at most once a second each — and it rewrites the
+/// whole character every time: the row, the party, every move, every item, every flag.
+/// </para>
+/// <para>
+/// Measured at a hundred players doing something every two seconds: 21 ms a save on
+/// average and 458 ms at worst. A thousand players at that rate is five hundred saves a
+/// second, which is ten times more writing than those numbers allow. So the first
+/// question is how many of them were needed at all.
+/// </para>
+/// </summary>
+public class WritingEverybodyDownTests
+{
+    private static SavedCharacter Somebody() => new(
+        "1.0", 4, 5, Direction.Down,
+        [new SavedMon(1, 5, null, 20, StatusCondition.None, Nature.Hardy, [33])])
+    {
+        Money = 3000,
+        Items = [new BagEntry(4, 1)],
+        Flags = [7, 9],
+    };
+
+    /// <summary>
+    /// Two snapshots of somebody who has not moved a muscle are the same snapshot.
+    /// <para>
+    /// They were not, and could not have been: a record compares its members with
+    /// <c>Equals</c>, and for a list that is reference equality. <see cref="SavedMon"/>
+    /// closed that trap on itself and said why; the type holding it did not, so the
+    /// question "has anything changed since the last save?" could only ever be answered
+    /// yes — and every non-movement message any player sent rewrote everything about
+    /// them.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TwoSnapshotsOfAnUnchangedCharacterAreEqual()
+    {
+        Assert.Equal(Somebody(), Somebody());
+    }
+
+    /// <summary>And one step apart is not.</summary>
+    [Fact]
+    public void AndOneStepApartIsNot()
+    {
+        Assert.NotEqual(Somebody(), Somebody() with { X = 5 });
+    }
+
+    /// <summary>Nor is one item, one flag, one coin or one creature apart.</summary>
+    [Fact]
+    public void NorIsAnythingElseThatChanged()
+    {
+        Assert.NotEqual(Somebody(), Somebody() with { Money = 2999 });
+        Assert.NotEqual(Somebody(), Somebody() with { Flags = [7] });
+        Assert.NotEqual(Somebody(), Somebody() with { Items = [] });
+
+        Assert.NotEqual(
+            Somebody(),
+            Somebody() with
+            {
+                Party = [new SavedMon(1, 6, null, 20, StatusCondition.None, Nature.Hardy, [33])],
+            });
+    }
+
+    /// <summary>
+    /// And a party member whose health has changed by one point is a different save,
+    /// which is the case that matters: the party is what a fight changes and the party is
+    /// what would silently fail to be written.
+    /// </summary>
+    [Fact]
+    public void AndOneHitPointIsADifferentSave()
+    {
+        SavedCharacter hurt = Somebody() with
+        {
+            Party = [new SavedMon(1, 5, null, 19, StatusCondition.None, Nature.Hardy, [33])],
+        };
+
+        Assert.NotEqual(Somebody(), hurt);
     }
 }

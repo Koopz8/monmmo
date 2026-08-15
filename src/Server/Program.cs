@@ -769,6 +769,9 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
 
     /// <summary>How many people may be having their password checked at once.</summary>
     private readonly Doorway _door = new();
+
+    /// <summary>When the periodic report last said anything.</summary>
+    private double _lastReport;
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private readonly TaskCompletionSource<int> _listening =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -851,6 +854,20 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
 
                 if (moved.Count > 0)
                     await DispatchAsync(moved, 0, cancellationToken).ConfigureAwait(false);
+
+                // What the server is costing, said out loud every half minute while
+                // anybody is on. A number nobody prints is a number nobody has.
+                if (Now - _lastReport > 30 && world.PlayerCount > 0)
+                {
+                    _lastReport = Now;
+
+                    Console.WriteLine(
+                        $"= {world.PlayerCount} online on {world.MapsWithAnybodyOn.Count} maps, " +
+                        $"door {_door.Admitted} in ({_door.AverageWait:F0} ms average wait)" +
+                        (store is Storage.SqlitePlayerStore disk
+                            ? $", {disk.Saves} saves ({disk.AverageSave:F0} ms average, {disk.SlowestSave:F0} worst)"
+                            : string.Empty));
+                }
             }
         }
         catch (OperationCanceledException)
@@ -874,6 +891,12 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
             // When this character was last written down, so that a run of anything does
             // not rewrite the same row several times a second.
             double lastSaved = double.NegativeInfinity;
+
+            // And what was written, so that a character who has not changed is not
+            // written again at all. Every non-movement message used to rewrite a whole
+            // character — the row, the party, every move, every item, every flag —
+            // whether or not one byte of it differed.
+            PokeMmo.Core.Save.SavedCharacter? written = null;
 
             try
             {
@@ -1339,7 +1362,12 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
 
                         try
                         {
-                            await store.SaveAsync(accountId, sinceThen, cancellationToken).ConfigureAwait(false);
+                            if (sinceThen != written)
+                            {
+                                await store.SaveAsync(accountId, sinceThen, cancellationToken).ConfigureAwait(false);
+
+                                written = sinceThen;
+                            }
                         }
                         catch (Exception ex)
                         {
