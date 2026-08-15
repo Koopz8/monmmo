@@ -1,0 +1,111 @@
+name: Discord — build drops
+
+# A published GitHub release posts the build announcement to #build-drops
+# (pinging build pings) and appends a matching entry to #changelog.
+#
+# Also fires on a pushed v* tag, so `git tag v0.9 && git push --tags` is enough
+# if you would rather not use the Releases UI.
+
+on:
+  release:
+    types: [published]
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to announce'
+        required: true
+
+concurrency:
+  group: discord-release
+  cancel-in-progress: false
+
+jobs:
+  announce:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install
+        working-directory: discord
+        run: npm ci --omit=dev || npm install --omit=dev
+
+      - name: Count the tests
+        id: tests
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          if ls **/*.csproj >/dev/null 2>&1 || ls *.sln >/dev/null 2>&1; then
+            dotnet test --nologo --verbosity quiet 2>&1 | tee /tmp/test.log || true
+            # "Passed!  - Failed: 0, Passed: 1203, Skipped: 0, Total: 1203"
+            COUNT=$(grep -oE 'Passed:[[:space:]]*[0-9]+' /tmp/test.log | grep -oE '[0-9]+' | paste -sd+ - | bc 2>/dev/null || echo "")
+            echo "count=${COUNT}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build the announcement
+        id: body
+        env:
+          TAG: ${{ github.event.release.tag_name || github.event.inputs.tag || github.ref_name }}
+          NOTES: ${{ github.event.release.body }}
+          TESTS: ${{ steps.tests.outputs.count }}
+        run: |
+          set -euo pipefail
+          SHA="$(git rev-parse --short HEAD)"
+          PREV="$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || echo '')"
+
+          {
+            echo "---"
+            echo "channel: build-drops"
+            echo "title: ${TAG}"
+            echo "ping: build"
+            echo "thread: true"
+            echo "---"
+            echo ""
+            echo "**Build \`${TAG}\`** · commit \`${SHA}\`${TESTS:+ · **${TESTS}** tests passing}"
+            echo ""
+            if [ -n "${NOTES}" ]; then
+              echo "${NOTES}"
+            elif [ -n "${PREV}" ]; then
+              echo "**Changes since ${PREV}**"
+              echo '```'
+              git log --pretty=format:'%h  %s' "${PREV}..${TAG}" | head -25
+              echo '```'
+            fi
+            echo ""
+            echo "Expected ROM SHA-1 is unchanged. If your client refuses the file, that is the hash check doing its job — see #faq."
+            echo ""
+            echo "Found something broken? **#bug-reports**, one bug per post, with steps to reproduce."
+          } > /tmp/release.md
+
+          # #changelog gets the terse version, no ping.
+          {
+            echo "---"
+            echo "channel: changelog"
+            echo "---"
+            echo ""
+            echo "### ${TAG} — \`${SHA}\`${TESTS:+ — ${TESTS} tests}"
+            if [ -n "${PREV}" ]; then
+              echo '```'
+              git log --pretty=format:'%h  %s' "${PREV}..${TAG}" | head -40
+              echo '```'
+            fi
+          } > /tmp/changelog.md
+
+      - name: Post
+        working-directory: discord
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          GUILD_ID: ${{ secrets.GUILD_ID }}
+          PROJECT_NAME: ${{ vars.PROJECT_NAME }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+          TAG: ${{ github.event.release.tag_name || github.event.inputs.tag || github.ref_name }}
+        run: |
+          node post.js build-drops /tmp/release.md   --once "release:${TAG}"
+          node post.js changelog   /tmp/changelog.md --once "changelog:${TAG}"

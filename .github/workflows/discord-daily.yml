@@ -1,0 +1,82 @@
+name: Discord — daily recap
+
+# Midnight America/Vancouver = 07:00 UTC while PDT is in effect.
+# GitHub cron is UTC and does not follow daylight saving, so from early November
+# to mid-March this fires at 11pm local. Change 7 to 8 if that bothers you.
+
+on:
+  schedule:
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+    inputs:
+      since:
+        description: 'Window to cover (e.g. 1.day, 3.days)'
+        required: false
+        default: '1.day'
+      dry_run:
+        description: 'Build it and print it in the log without posting'
+        type: boolean
+        default: false
+
+concurrency:
+  group: discord-daily
+  cancel-in-progress: false
+
+jobs:
+  recap:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # to remember the test count between days
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0     # the recap looks back a day; shallow clones cannot
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - uses: actions/setup-dotnet@v4
+        continue-on-error: true
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install
+        working-directory: discord
+        run: npm ci --omit=dev || npm install --omit=dev
+
+      - name: Run the tests
+        id: tests
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          dotnet test --nologo --verbosity quiet 2>&1 | tee /tmp/test.log || true
+          COUNT=$(grep -oE 'Passed:[[:space:]]*[0-9]+' /tmp/test.log | grep -oE '[0-9]+' | paste -sd+ - | bc 2>/dev/null || echo "")
+          echo "count=${COUNT}" >> "$GITHUB_OUTPUT"
+          echo "Test count: ${COUNT:-unavailable}"
+
+      - name: Write and post the recap
+        working-directory: discord
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          GUILD_ID: ${{ secrets.GUILD_ID }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PROJECT_NAME: ${{ vars.PROJECT_NAME }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+          TEST_COUNT: ${{ steps.tests.outputs.count }}
+        run: |
+          node daily.js \
+            --since "${{ github.event.inputs.since || '1.day' }}" \
+            ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}
+
+      - name: Remember the count
+        if: github.event.inputs.dry_run != 'true'
+        run: |
+          set -euo pipefail
+          cd discord
+          if git diff --quiet .sync-state.json 2>/dev/null; then exit 0; fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .sync-state.json
+          git commit -m "discord: daily recap state [skip ci]"
+          git push

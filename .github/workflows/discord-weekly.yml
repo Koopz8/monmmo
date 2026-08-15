@@ -1,0 +1,71 @@
+name: Discord — weekly pulse
+
+# Mondays, 10:00 America/Vancouver. Posts commits, churn and the test count with
+# its week-on-week delta to #devlog. Never pings.
+#
+# GitHub cron is UTC and does not follow daylight saving, so this drifts by an
+# hour in winter. That is fine for a heartbeat; if it bothers you, change the
+# hour to 18 between November and March.
+
+on:
+  schedule:
+    - cron: '0 17 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: discord-weekly
+  cancel-in-progress: false
+
+jobs:
+  pulse:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # to remember last week's test count
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0     # the whole point is looking back a week
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - uses: actions/setup-dotnet@v4
+        continue-on-error: true
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install
+        working-directory: discord
+        run: npm ci --omit=dev || npm install --omit=dev
+
+      - name: Run the tests
+        id: tests
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          dotnet test --nologo --verbosity quiet 2>&1 | tee /tmp/test.log || true
+          COUNT=$(grep -oE 'Passed:[[:space:]]*[0-9]+' /tmp/test.log | grep -oE '[0-9]+' | paste -sd+ - | bc 2>/dev/null || echo "")
+          echo "count=${COUNT}" >> "$GITHUB_OUTPUT"
+          echo "Test count: ${COUNT:-unavailable}"
+
+      - name: Post the pulse
+        working-directory: discord
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          GUILD_ID: ${{ secrets.GUILD_ID }}
+          PROJECT_NAME: ${{ vars.PROJECT_NAME }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+          TEST_COUNT: ${{ steps.tests.outputs.count }}
+        run: node weekly.js
+
+      - name: Remember the count
+        run: |
+          set -euo pipefail
+          cd discord
+          if git diff --quiet .sync-state.json 2>/dev/null; then exit 0; fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .sync-state.json
+          git commit -m "discord: weekly pulse state [skip ci]"
+          git push

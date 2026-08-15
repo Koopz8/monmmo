@@ -1,0 +1,80 @@
+name: Discord — route subsystem changes
+
+# When a push changes how many tests pass, say so in the channel that cares.
+#
+# A refactor is not news, so an unchanged test count posts nothing. Only a push
+# that moves the number reaches a topic channel:
+#
+#   src/Core/Battle/**            -> #battle-engine
+#   src/Core/World/**, Server/**  -> #engine-and-netcode
+#   src/RomExtract/**             -> #data-and-extraction
+#
+# One message per push per channel, never one per commit.
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'src/**'
+  workflow_dispatch:
+
+concurrency:
+  group: discord-route
+  cancel-in-progress: false
+
+jobs:
+  route:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # to remember the test count between runs
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0     # need the previous commit to diff against
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install
+        working-directory: discord
+        run: npm ci --omit=dev || npm install --omit=dev
+
+      - name: Run the tests
+        id: tests
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          dotnet test --nologo --verbosity quiet 2>&1 | tee /tmp/test.log || true
+          # "Passed!  - Failed: 0, Passed: 1203, Skipped: 0, Total: 1203"
+          COUNT=$(grep -oE 'Passed:[[:space:]]*[0-9]+' /tmp/test.log | grep -oE '[0-9]+' | paste -sd+ - | bc 2>/dev/null || echo "")
+          echo "count=${COUNT}" >> "$GITHUB_OUTPUT"
+          echo "Test count: ${COUNT:-unavailable}"
+
+      - name: Route it
+        working-directory: discord
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          GUILD_ID: ${{ secrets.GUILD_ID }}
+          PROJECT_NAME: ${{ vars.PROJECT_NAME }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+          TEST_COUNT: ${{ steps.tests.outputs.count }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+          COMPARE_URL: ${{ github.event.compare }}
+        run: node route.js
+
+      - name: Remember the count
+        run: |
+          set -euo pipefail
+          cd discord
+          if git diff --quiet .sync-state.json 2>/dev/null; then exit 0; fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .sync-state.json
+          git commit -m "discord: test count after routing [skip ci]"
+          git push

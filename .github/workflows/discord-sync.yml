@@ -1,0 +1,70 @@
+name: Discord — sync channel copy
+
+# Edit discord/content.js, push, and the changed sections post themselves.
+#
+# The old pinned message is NOT edited or deleted. The new version goes up
+# underneath it and is pinned as well, so #rules and #faq keep a visible record
+# of what they used to say. Only sections whose text actually changed are sent.
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'discord/content.js'
+  workflow_dispatch:
+    inputs:
+      only:
+        description: 'Sync a single section (e.g. faq). Blank = everything changed.'
+        required: false
+      dry_run:
+        description: 'Show the diff without posting'
+        type: boolean
+        default: false
+
+concurrency:
+  group: discord-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # to commit the updated hashes back
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install
+        working-directory: discord
+        run: npm ci --omit=dev || npm install --omit=dev
+
+      - name: Check the copy before sending it
+        working-directory: discord
+        run: node verify.js
+
+      - name: Sync
+        working-directory: discord
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          GUILD_ID: ${{ secrets.GUILD_ID }}
+          PROJECT_NAME: ${{ vars.PROJECT_NAME }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          node sync.js \
+            ${{ github.event.inputs.only && format('--only {0}', github.event.inputs.only) || '' }} \
+            ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}
+
+      - name: Remember what was sent
+        if: github.event.inputs.dry_run != 'true'
+        run: |
+          set -euo pipefail
+          cd discord
+          if git diff --quiet .sync-state.json 2>/dev/null; then exit 0; fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .sync-state.json
+          git commit -m "discord: record synced copy [skip ci]"
+          git push

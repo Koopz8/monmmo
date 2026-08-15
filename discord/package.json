@@ -1,0 +1,23 @@
+{
+  "name": "discord-server-setup",
+  "version": "1.5.0",
+  "private": true,
+  "description": "Discord server builder plus a posting pipeline: roles, channels, permissions, forum tags, pinned copy, AutoMod, and GitHub Actions automation.",
+  "main": "setup-server.js",
+  "scripts": {
+    "setup": "node setup-server.js",
+    "dry-run": "node setup-server.js --dry-run",
+    "verify": "node verify.js",
+    "sync": "node sync.js",
+    "sync:preview": "node sync.js --dry-run",
+    "post": "node post.js",
+    "weekly": "node weekly.js --dry-run",
+    "finish": "node finish-setup.js",
+    "route": "node route.js --dry-run",
+    "daily": "node daily.js --dry-run"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "discord.js": "^14.16.3"
+  }
+}

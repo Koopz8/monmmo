@@ -1,0 +1,102 @@
+name: Discord — post new writeups
+
+# Commit a markdown file, it posts itself. Nothing to run, nothing to remember.
+#
+# Watches two places:
+#   docs/milestones/*.md  → #milestones, threaded, pings devlog
+#   discord/posts/*.md    → whatever the file's front matter says
+#
+# Only ADDED files are posted. Editing an existing file does not repost it, and
+# neither does re-running the workflow — post.js records each file's id in
+# .sync-state.json and refuses to send the same id twice.
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'docs/milestones/**.md'
+      - 'discord/posts/**.md'
+  workflow_dispatch:
+    inputs:
+      file:
+        description: 'Path to a markdown file to post (overrides change detection)'
+        required: false
+
+concurrency:
+  group: discord-posts
+  cancel-in-progress: false
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # to commit the "already posted" record back
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0     # need history to diff against the previous commit
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install
+        working-directory: discord
+        run: npm ci --omit=dev || npm install --omit=dev
+
+      - name: Work out which files are new
+        id: files
+        run: |
+          set -euo pipefail
+          if [ -n "${{ github.event.inputs.file }}" ]; then
+            echo "${{ github.event.inputs.file }}" > /tmp/new-files.txt
+          else
+            BEFORE="${{ github.event.before }}"
+            # First push to a branch, or a force push, gives an all-zero SHA.
+            if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+              BEFORE="$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)"
+            fi
+            git diff --name-status --diff-filter=A "$BEFORE" "${{ github.sha }}" \
+              | awk '$1=="A" {print $2}' \
+              | grep -E '^(docs/milestones/|discord/posts/).*\.md$' > /tmp/new-files.txt || true
+          fi
+          echo "Found:"; cat /tmp/new-files.txt || true
+          echo "count=$(wc -l < /tmp/new-files.txt | tr -d ' ')" >> "$GITHUB_OUTPUT"
+
+      - name: Post them
+        if: steps.files.outputs.count != '0'
+        working-directory: discord
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          GUILD_ID: ${{ secrets.GUILD_ID }}
+          PROJECT_NAME: ${{ vars.PROJECT_NAME }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          set -euo pipefail
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            echo "::group::$f"
+            if [[ "$f" == docs/milestones/* ]]; then
+              # Milestones get a thread and a ping; they are the main event.
+              node post.js milestones "../$f" \
+                --ping devlog \
+                --thread "$(basename "$f" .md | sed 's/^milestone-//; s/-/ /g' | cut -c1-95)" \
+                --once "$f"
+            else
+              # Everything else takes its channel and options from front matter.
+              node post.js "" "../$f" --once "$f"
+            fi
+            echo "::endgroup::"
+          done < /tmp/new-files.txt
+
+      - name: Remember what was posted
+        if: steps.files.outputs.count != '0'
+        run: |
+          set -euo pipefail
+          cd discord
+          if git diff --quiet .sync-state.json 2>/dev/null; then exit 0; fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .sync-state.json
+          git commit -m "discord: record posted writeups [skip ci]"
+          git push
