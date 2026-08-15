@@ -763,7 +763,28 @@ public static class ScriptRunner
                     // games remember a beaten trainer somewhere the script does not say.
                     int id = command.Word(1);
 
-                    if (save.HasBeaten(id)) break;
+                    if (save.HasBeaten(id))
+                    {
+                        // Beaten already, so the fight does nothing — and what runs
+                        // instead is the script the fight leads to, not the bytes that
+                        // happen to follow the command.
+                        //
+                        // Those bytes are usually a line and an end, which is why this
+                        // read as working: the trainer said their second line and the
+                        // script stopped. What it stopped short of, in the ROCKET
+                        // HIDEOUT, is the clearflag that puts the LIFT KEY on the floor
+                        // — sixty-six maps' worth of story behind a pointer nobody
+                        // followed.
+                        //
+                        // The last pointer that reads as a script is the one taken. The
+                        // earlier ones are lines the trainer says, and telling them apart
+                        // is done by reading rather than by trusting the variant.
+                        uint after = ScriptReader.ScriptsAfterAFight(rom, command).LastOrDefault();
+
+                        if (after != 0) jump = after;
+
+                        break;
+                    }
 
                     trainerId = id;
 
