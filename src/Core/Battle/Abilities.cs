@@ -33,6 +33,13 @@ public static class Abilities
 
     // Read off the cartridge's own name table rather than remembered. Every one of these
     // was printed with its index before it was written down here.
+    public const int SandVeil = 8;
+    public const int CloudNine = 13;
+    public const int SwiftSwim = 33;
+    public const int Chlorophyll = 34;
+    public const int RainDish = 44;
+    public const int AirLock = 77;
+
     public const int Sturdy = 5;
     public const int Limber = 7;
     public const int VoltAbsorb = 10;
@@ -69,7 +76,45 @@ public static class Abilities
         Limber, VoltAbsorb, WaterAbsorb, Insomnia, Immunity, FlashFire, OwnTempo,
         WonderGuard, Levitate, HugePower, MagmaArmor, WaterVeil, ThickFat, Guts,
         Overgrow, Blaze, Torrent, Swarm, VitalSpirit, PurePower,
+
+        // The ones that read the sky. Not the three that make it — DRIZZLE, DROUGHT and
+        // SAND STREAM all happen when somebody arrives, and this engine has no such event
+        // to hang them on. They stay silent and stay counted.
+        SandVeil, CloudNine, SwiftSwim, Chlorophyll, RainDish, AirLock,
     ];
+
+    /// <summary>
+    /// True when this one ignores the weather entirely, and makes everybody else ignore it
+    /// too.
+    /// <para>
+    /// Two abilities that do the same thing, which is the games' own doing rather than a
+    /// simplification here. Either of them anywhere in the fight switches the sky off for
+    /// everybody, including its owner.
+    /// </para>
+    /// </summary>
+    public static bool Ignores(int ability) => ability is CloudNine or AirLock;
+
+    /// <summary>
+    /// What this one does to its owner's Speed under a given sky, in hundredths.
+    /// <para>
+    /// The two that make a fight about the weather rather than merely coloured by it: a
+    /// doubled Speed changes who moves first, which changes everything else.
+    /// </para>
+    /// </summary>
+    public static int Speed(int ability, Weather weather) => (ability, weather) switch
+    {
+        (SwiftSwim, Weather.Rain) => 200,
+        (Chlorophyll, Weather.Sun) => 200,
+        _ => 100,
+    };
+
+    /// <summary>True when this one is left alone by weather that would otherwise bite.</summary>
+    public static bool ShrugsOffWeather(int ability, Weather weather) =>
+        ability == SandVeil && weather == Weather.Sandstorm;
+
+    /// <summary>True when this one is healed by the weather rather than hurt by it.</summary>
+    public static bool DrinksFrom(int ability, Weather weather) =>
+        ability == RainDish && weather == Weather.Rain;
 
     /// <summary>True when this one does something here rather than only having a name.</summary>
     public static bool DoesSomething(int ability) => Modelled.Contains(ability);

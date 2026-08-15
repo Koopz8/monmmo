@@ -22,6 +22,9 @@ public enum EffectKind
     /// <summary>Cannot be hit this turn.</summary>
     Guard,
 
+    /// <summary>Changes what the sky is doing.</summary>
+    Weather,
+
     /// <summary>Sleeps, and wakes whole.</summary>
     Sleeps,
 
@@ -293,6 +296,20 @@ public static class MoveEffects
         //   0x31   3 moves  SUPERSONIC, CONFUSE RAY, SWEET KISS
         //   0x4C   6 moves  PSYBEAM, CONFUSION, DIZZY PUNCH, DYNAMICPUNCH, SIGNAL BEAM, WATER PULSE
         0x31 or 0x4C => new MoveEffect(EffectKind.Confuse, OnUser: false),
+
+        // The sky. Four groups of exactly one move each, which is unusual enough in this
+        // table to be worth saying: nothing else in the cartridge shares any of them, so
+        // naming them costs nothing and guesses nothing.
+        //
+        //   0x73  1 move   SANDSTORM
+        //   0x88  1 move   RAIN DANCE
+        //   0x89  1 move   SUNNY DAY
+        //   0xA4  1 move   HAIL
+        //
+        // Which sky each brings is decided by Skies.Of rather than here, because the same
+        // four numbers are wanted by the code that applies it and a second copy of the
+        // mapping is a second thing to keep in step.
+        0x73 or 0x88 or 0x89 or 0xA4 => new MoveEffect(EffectKind.Weather, OnUser: true),
 
         // The four that take more than one turn, and the reason a fight with HYPER BEAM
         // in it played out exactly like a fight without one. Read off membership like

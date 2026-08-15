@@ -38,9 +38,16 @@ public static class DamageCalculator
     /// Whether a move connects. Accuracy and evasion stages cancel out against each
     /// other before the move's own accuracy is applied.
     /// </summary>
-    public static bool RollAccuracy(BattleRng rng, MoveData move, Battler attacker, Battler defender)
+    public static bool RollAccuracy(
+        BattleRng rng, MoveData move, Battler attacker, Battler defender, Weather weather = Weather.None)
     {
         if (move.AlwaysHits) return true;
+
+        // The one move the sky overrules. THUNDER cannot miss in rain and is half as
+        // likely to land in sun — and it is a group of one in the cartridge's own effect
+        // table, so this is a rule about a move rather than about a family.
+        if (Skies.Accuracy(weather, move.Effect) is { } instead)
+            return rng.Next(100) < Math.Clamp(instead, 1, 100);
 
         int combinedStage = Math.Clamp(
             attacker.StageOf(Stat.Accuracy) - defender.StageOf(Stat.Evasion),
@@ -81,7 +88,8 @@ public static class DamageCalculator
         Battler defender,
         MoveData move,
         bool critical,
-        int randomPercent)
+        int randomPercent,
+        Weather weather = Weather.None)
     {
         int effectiveness = TypeChart.Effectiveness(move.Type, defender.Type1, defender.Type2);
 
@@ -144,6 +152,10 @@ public static class DamageCalculator
         // reduction of the finished number rather than of any part of the sum.
         damage = damage * Abilities.Defending(defender.Ability, move) / 100;
 
+        // And what the sky is doing to it. Last, with the other multiplier on the finished
+        // number — rain makes water and unmakes fire, and sun does the reverse.
+        damage = damage * Skies.Damage(weather, move.Type) / 100;
+
         // A hit that connects always does something, unless the type chart said the
         // move does not affect the target at all.
         if (damage < 1 && effectiveness > 0) damage = 1;
@@ -157,10 +169,11 @@ public static class DamageCalculator
         Battler attacker,
         Battler defender,
         MoveData move,
-        bool critical)
+        bool critical,
+        Weather weather = Weather.None)
     {
         // The hardware rolls 0..15 and subtracts, giving 85..100 inclusive.
         int randomPercent = 100 - rng.Next(16);
-        return Calculate(attacker, defender, move, critical, randomPercent);
+        return Calculate(attacker, defender, move, critical, randomPercent, weather);
     }
 }

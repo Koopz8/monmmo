@@ -328,7 +328,15 @@ public class AbilityTests
                 return Abilities.Attacking(ability, ill, Move(t), true) != 100;
             });
 
-            if (!refuses && !changesDamage && !changesAttack) inert.Add(ability);
+            // And the ones that read the sky, which is a fourth way of doing something and
+            // was a fourth way this test could not see until weather existed.
+            bool readsTheSky = Enum.GetValues<Weather>().Any(w =>
+                Abilities.Speed(ability, w) != 100
+                || Abilities.ShrugsOffWeather(ability, w)
+                || Abilities.DrinksFrom(ability, w))
+                || Abilities.Ignores(ability);
+
+            if (!refuses && !changesDamage && !changesAttack && !readsTheSky) inert.Add(ability);
         }
 
         Assert.Empty(inert);

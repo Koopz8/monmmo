@@ -66,6 +66,10 @@ public enum Side
 [JsonDerivedType(typeof(Protected), "protected")]
 [JsonDerivedType(typeof(CannotUse), "cannotuse")]
 [JsonDerivedType(typeof(CanUseAgain), "canuseagain")]
+[JsonDerivedType(typeof(WeatherBegan), "weatheron")]
+[JsonDerivedType(typeof(WeatherEnded), "weatheroff")]
+[JsonDerivedType(typeof(WeatherHurt), "weatherhurt")]
+[JsonDerivedType(typeof(WeatherHealed), "weatherheal")]
 [JsonDerivedType(typeof(MustRepeat), "mustrepeat")]
 [JsonDerivedType(typeof(GotAway), "gotaway")]
 [JsonDerivedType(typeof(CouldNotGetAway), "couldnotgetaway")]
@@ -237,6 +241,18 @@ public abstract record BattleEvent
     /// <summary>The block ran out.</summary>
     public sealed record CanUseAgain(Side Side) : BattleEvent;
 
+    /// <summary>The sky changed.</summary>
+    public sealed record WeatherBegan(Weather Weather) : BattleEvent;
+
+    /// <summary>And it stopped.</summary>
+    public sealed record WeatherEnded(Weather Weather) : BattleEvent;
+
+    /// <summary>Somebody is standing in weather that does not suit them.</summary>
+    public sealed record WeatherHurt(Side Side, Weather Weather, int Damage, int RemainingHp) : BattleEvent;
+
+    /// <summary>And somebody the weather agrees with.</summary>
+    public sealed record WeatherHealed(Side Side, Weather Weather, int Healed, int RemainingHp) : BattleEvent;
+
     /// <summary>Made to do the same thing again.</summary>
     public sealed record MustRepeat(Side Side, int MoveId) : BattleEvent;
 
@@ -361,6 +377,50 @@ public abstract record BattleAction
 public sealed class Battle(Battler player, Battler opponent, uint seed)
 {
     private readonly BattleRng _rng = new(seed);
+
+    /// <summary>
+    /// What the sky is doing, and for how much longer.
+    /// <para>
+    /// The first state in this engine that belongs to the battle rather than to either side
+    /// of it. Everything else that lasts turns hangs off one battler, and there was nowhere
+    /// for a fact about the room to live until now.
+    /// </para>
+    /// </summary>
+    public Weather Sky { get; private set; }
+
+    public int SkyTurns { get; private set; }
+
+    /// <summary>
+    /// The weather as far as anybody in this fight is concerned.
+    /// <para>
+    /// CLOUD NINE and AIR LOCK switch it off for everybody, including their own side. So
+    /// every rule asks this rather than <see cref="Sky"/> — the countdown is still running
+    /// underneath, and if the ability leaves the field the weather is still there.
+    /// </para>
+    /// </summary>
+    public Weather Overhead =>
+        Abilities.Ignores(Player.Ability) || Abilities.Ignores(Opponent.Ability) ? Weather.None : Sky;
+
+    /// <summary>
+    /// How fast somebody is once the sky has had its say.
+    /// <para>
+    /// Applied where the order is decided rather than on the battler, because it is not a
+    /// fact about the creature — the same creature in a different fight is a different
+    /// speed, and a stat that changed when the weather did would show a doubled number on
+    /// every screen that draws one.
+    /// </para>
+    /// </summary>
+    private int SpeedOf(Battler battler) =>
+        battler.EffectiveStat(Stat.Speed) * Abilities.Speed(battler.Ability, Overhead) / 100;
+
+    /// <summary>Starts weather, or starts it again, and says so.</summary>
+    private void BeginWeather(Weather weather, List<BattleEvent> events)
+    {
+        Sky = weather;
+        SkyTurns = Skies.Turns;
+
+        events.Add(new BattleEvent.WeatherBegan(weather));
+    }
 
     public Battler Player { get; } = player;
 
@@ -522,8 +582,8 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         if (playerPriority != opponentPriority)
             return playerPriority > opponentPriority ? [Side.Player, Side.Opponent] : [Side.Opponent, Side.Player];
 
-        int playerSpeed = Player.EffectiveStat(Stat.Speed);
-        int opponentSpeed = Opponent.EffectiveStat(Stat.Speed);
+        int playerSpeed = SpeedOf(Player);
+        int opponentSpeed = SpeedOf(Opponent);
 
         if (playerSpeed != opponentSpeed)
             return playerSpeed > opponentSpeed ? [Side.Player, Side.Opponent] : [Side.Opponent, Side.Player];
@@ -737,7 +797,7 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             return;
         }
 
-        if (!sure && !DamageCalculator.RollAccuracy(_rng, move, attacker, defender))
+        if (!sure && !DamageCalculator.RollAccuracy(_rng, move, attacker, defender, Overhead))
         {
             events.Add(new BattleEvent.MoveMissed(side, move.Id));
 
@@ -747,7 +807,7 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             // group 0x2D and nothing else.
             if (kind.Kind == EffectKind.CrashOnMiss)
             {
-                DamageResult missed = DamageCalculator.Calculate(_rng, attacker, defender, move, critical: false);
+                DamageResult missed = DamageCalculator.Calculate(_rng, attacker, defender, move, critical: false, Overhead);
 
                 int hurt = attacker.TakeDamage(Math.Max(1, missed.Damage / 2));
 
@@ -836,7 +896,7 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         for (int hit = 0; hit < times; hit++)
         {
             bool critical = DamageCalculator.RollCritical(_rng, criticalStage);
-            DamageResult result = DamageCalculator.Calculate(_rng, attacker, defender, move, critical);
+            DamageResult result = DamageCalculator.Calculate(_rng, attacker, defender, move, critical, Overhead);
 
             if (result.NoEffect)
             {
@@ -1174,6 +1234,20 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             return;
         }
 
+        // The sky, from the four moves that change it. Which one each brings comes from
+        // Skies, so the effect table and the rule share one mapping rather than two.
+        if (effect.Kind == EffectKind.Weather && Skies.Of(move.Effect) is not Weather.None and var sky)
+        {
+            if (Sky == sky && SkyTurns > 0)
+            {
+                events.Add(new BattleEvent.NothingHappened(at));
+                return;
+            }
+
+            BeginWeather(sky, events);
+            return;
+        }
+
         if (effect.Kind == EffectKind.Confuse)
         {
             // Two to five turns, and it does not stack: somebody already confused is
@@ -1454,8 +1528,65 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
     }
 
     /// <summary>Poison and burn each take a sixteenth of maximum health, minimum one.</summary>
+    /// <summary>
+    /// What the sky does at the end of a turn, and how it runs out.
+    /// <para>
+    /// Before everything else in the turn's tail, because a sandstorm that finishes
+    /// somebody should finish them before their own poison is asked about — one cause of
+    /// death per turn, and the room's is the one that was there first.
+    /// </para>
+    /// <para>
+    /// The countdown runs on <see cref="Sky"/> rather than on what anybody can feel. An
+    /// AIR LOCK does not make the weather last longer; it makes nobody notice it, and when
+    /// it leaves the field whatever is left of the five turns is still there.
+    /// </para>
+    /// </summary>
+    private void ApplyWeather(List<BattleEvent> events)
+    {
+        if (Sky == Weather.None) return;
+
+        Weather felt = Overhead;
+
+        if (felt != Weather.None)
+        {
+            foreach (Side side in new[] { Side.Player, Side.Opponent })
+            {
+                Battler battler = Of(side);
+
+                if (battler.HasFainted) continue;
+
+                if (Abilities.DrinksFrom(battler.Ability, felt) && battler.CurrentHp < battler.MaxHp)
+                {
+                    int healed = battler.Heal(Math.Max(1, battler.MaxHp / Skies.Share));
+
+                    events.Add(new BattleEvent.WeatherHealed(side, felt, healed, battler.CurrentHp));
+
+                    continue;
+                }
+
+                if (!Skies.Bites(felt)) continue;
+                if (Skies.Shrugs(felt, battler.Type1, battler.Type2)) continue;
+                if (Abilities.ShrugsOffWeather(battler.Ability, felt)) continue;
+
+                int taken = battler.TakeDamage(Math.Max(1, battler.MaxHp / Skies.Share));
+
+                events.Add(new BattleEvent.WeatherHurt(side, felt, taken, battler.CurrentHp));
+
+                if (battler.HasFainted) events.Add(new BattleEvent.Fainted(side));
+            }
+        }
+
+        if (--SkyTurns > 0) return;
+
+        events.Add(new BattleEvent.WeatherEnded(Sky));
+
+        Sky = Weather.None;
+    }
+
     private void ApplyEndOfTurn(List<BattleEvent> events)
     {
+        ApplyWeather(events);
+
         foreach (Side side in new[] { Side.Player, Side.Opponent })
         {
             Battler battler = Of(side);

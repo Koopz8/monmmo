@@ -175,6 +175,30 @@ public static class BattleNarrator
 
         BattleEvent.TrapHurt e => $"{names.Of(e.Side)} is hurt by {names.MoveNamed(e.MoveId)}!",
 
+        // The sky, said the way the games say it — what it is doing rather than what it is
+        // called. "It started to rain!" is a thing that happened; "Weather: Rain" is a
+        // field on a struct.
+        BattleEvent.WeatherBegan e => e.Weather switch
+        {
+            Weather.Rain => "It started to rain!",
+            Weather.Sun => "The sunlight got bright!",
+            Weather.Sandstorm => "A sandstorm kicked up!",
+            _ => "It started to hail!",
+        },
+
+        BattleEvent.WeatherEnded e => e.Weather switch
+        {
+            Weather.Rain => "The rain stopped.",
+            Weather.Sun => "The sunlight faded.",
+            Weather.Sandstorm => "The sandstorm subsided.",
+            _ => "The hail stopped.",
+        },
+
+        BattleEvent.WeatherHurt e =>
+            $"{names.Of(e.Side)} is buffeted by the {(e.Weather == Weather.Hail ? "hail" : "sandstorm")}!",
+
+        BattleEvent.WeatherHealed e => $"{names.Of(e.Side)} drinks it in!",
+
         BattleEvent.BrokeFree e => $"{names.Of(e.Side)} got free of {names.MoveNamed(e.MoveId)}!",
 
         BattleEvent.OneHitKnockout e => $"It was a one-hit knockout on {names.Of(e.Side)}!",
