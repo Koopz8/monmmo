@@ -22,13 +22,15 @@ the ROM you already own, on your own machine, at runtime**. The client ships non
 of it. The server never sees any of it.
 
 This is a solo engineering project, built in public, one measured milestone at a
-time. Roughly **1,400 tests**, an authoritative server, a Gen III battle engine
-accurate down to truncation order, and three things two people can do to each
-other: **see each other, trade, and fight**.
+time. **1,568 tests**, none of which need a cartridge. An authoritative server, a
+Gen III battle engine accurate down to truncation order, and three things two
+people can do to each other: **see each other, trade, and fight**.
 
-A duel runs on the same one-on-one engine that fights every wild encounter in the
-game — not a line of it changed. What was new is that neither side is *you*, so
-each event gets turned round and told to both players in their own terms.
+It is also built to hold a crowd. A load generator that speaks the real protocol
+found the wall was the *door*, not the game; the server now admits people at a
+published rate it prints at startup, tells you only about what you could actually
+see, writes only the parts of a save that changed, and runs **more than one copy
+of a busy place** so forty people in a room never becomes four hundred.
 
 **Where to go**
 
@@ -192,9 +194,22 @@ an invitation that dies when either side walks away, and asking somebody who has
 already asked you is how it begins. Two verbs that behave the same way are two
 verbs a player only has to learn once.
 
+**The scaling run (111–124)** rebuilt most of this underneath the game: a door
+with a measured width, interest instead of broadcast, an index instead of a scan,
+an outbound queue per connection, a sight circle, saves moved off the input path
+and then reduced to only what changed, and **instancing** — past forty in a copy,
+the next arrival opens another.
+
+Instancing is a design decision, not an optimisation. Capping who gets drawn or
+shrinking the sight circle both leave a crowd standing there that the player
+cannot see and can walk into. **A copy has no crowd in it that anybody is being
+lied to about.**
+
 Open questions worth arguing about, any time:
-- A flag set in memory that the save does not have — the sharpest open lead.
-- The flag race — older and vaguer, and one reported sighting was withdrawn.
+- **A thousand players on hardware that could hold them.** Every number in the
+  scaling notes is two cores, with the load generator sharing them with the
+  server it measures. The only open question code cannot answer.
+- A flag set in memory that the save does not have.
 - Simulating maps nobody is standing on (walk away and back, and the street
   resets).`,
   ],
@@ -217,8 +232,13 @@ field. Held items — 112 species name what a wild one may be carrying, and the
 data was extracted long before anything read it. Duels, which needed no engine
 change at all.
 
-**Still silent:** 127 move-effect groups, the largest two moves apiece —
-PROTECT, ROLLOUT, FLAIL, FUTURE SIGHT, ERUPTION and a long tail of ones.`,
+**Still silent: ~119 move-effect groups** — and most of them should probably
+stay that way. What is left is largely numbers nobody can derive from the
+cartridge: FLAIL's power table, SONICBOOM's twenty. Inventing them would be
+inventing the game rather than reading it, so the honest remainder is small.
+
+That distinction matters more than the count. "Not modelled" and "cannot be
+derived" are different problems, and only one of them is work.`,
   ],
 
   'data-and-extraction': [
@@ -396,22 +416,37 @@ posting in #bug-reports.
   reach the server from the client. Still without evidence, and one previous
   sighting was withdrawn after turning out to be two events a second apart read
   as one.
-- **The battle engine's silent half.** 127 move-effect groups the engine steps
-  over. The largest are two moves apiece — PROTECT, ROLLOUT, FLAIL, FUTURE
-  SIGHT, ERUPTION and a long tail of ones.
-- **Unsimulated maps.** Only maps with a player on them tick. Walk away and back
-  and NPCs have reset to their starting positions.
+- **The battle engine's silent half.** ~119 move-effect groups the engine steps
+  over — though most are numbers nobody can derive (FLAIL's power table,
+  SONICBOOM's twenty) and should stay silent rather than be invented.
+- **A thousand players on real hardware.** Every scaling number so far is from
+  two cores with the load generator sharing them. Needs a second machine; the
+  only open question code cannot answer.
+- **No shop yet** for the cosmetics that exist. Money is what makes wearing
+  something a choice, and it's the last piece of a feature that has been
+  three-quarters built for fifteen milestones.
 - **Text rendering.** The cartridge's font has not been located. Four mechanical
   methods are ruled out; the mapping is not identity, and the geometry may not
   even be 8×8.
 - **Storage.** More than one box is not implemented — the count is stated
   nowhere in the data, so it would have to be remembered rather than read.
+- **Unsimulated maps.** Only maps with a player on them tick. Walk away and back
+  and the townsfolk have reset to their starting positions.
 - **Switching in a duel** is refused, and says so in the code rather than
   hiding it.
 
-**Closed, so please stop reporting them**
+**Closed items and non-bugs are in the message below.**`,
+
+`**Closed, so please stop reporting them**
 - ~~The bedroom PC's behaviour byte.~~ There is no byte. The bedroom machine is
   scripted, not a tile — proved, not assumed.
+- ~~Joining takes forever under load.~~ The door was one unbounded 997 ms hash
+  per arrival. It is now a measured 91 ms behind a permit per spare core, and
+  the rate is printed at startup.
+- ~~Everyone in a room sees every step of everyone else.~~ Interest replaced
+  broadcast, and past forty people a place opens another copy.
+- ~~A save rewrites everything about a character.~~ It now writes only the
+  sections that changed — about thirty statements down to one.
 
 **Not bugs**
 - The client refusing a ROM whose SHA-1 doesn't match. Working as intended.
