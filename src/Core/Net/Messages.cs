@@ -60,6 +60,10 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(FerryOpened), "ferry")]
 [JsonDerivedType(typeof(SailRequest), "sail")]
 [JsonDerivedType(typeof(ShopUpdated), "shopupdate")]
+[JsonDerivedType(typeof(BuyCosmeticRequest), "buyclothes")]
+[JsonDerivedType(typeof(DaycareUpdated), "daycare")]
+[JsonDerivedType(typeof(DaycareRequest), "daycareask")]
+[JsonDerivedType(typeof(CosmeticsOwned), "owned")]
 [JsonDerivedType(typeof(Welcome), "welcome")]
 [JsonDerivedType(typeof(AuthFailed), "authfailed")]
 [JsonDerivedType(typeof(MapChanged), "mapchanged")]
@@ -995,7 +999,52 @@ public sealed record ShopEntry(int ItemId, int Price);
 public sealed record ShopOpened(
     IReadOnlyList<ShopEntry> Stock,
     int Money,
-    IReadOnlyList<BagEntry> Bag) : NetMessage;
+    IReadOnlyList<BagEntry> Bag) : NetMessage
+{
+    /// <summary>
+    /// What this counter will sell you to wear, which is everything the wardrobe holds
+    /// that this account does not already own.
+    /// <para>
+    /// The same <see cref="ShopEntry"/> shape as the items, and that is a shortcut worth
+    /// naming rather than hiding: the id in one is an item and in the other a cosmetic,
+    /// and those are different numbering. Anything that looks one of them up in the
+    /// other's table gets a wrong name rather than an error, which is the kind of bug
+    /// that survives a review.
+    /// </para>
+    /// <para>
+    /// An init property, so every existing construction of this message stays correct and
+    /// a counter with nothing to wear simply sends none.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<ShopEntry> Clothes { get; init; } = [];
+}
+
+/// <summary>
+/// Buy something to wear from the counter that is open.
+/// <para>
+/// The id alone. What it costs, whether this counter sells it, and whether it is already
+/// owned are all the server's, checked against the wardrobe rather than against anything
+/// that arrived over a socket.
+/// </para>
+/// </summary>
+public sealed record BuyCosmeticRequest(int CosmeticId) : NetMessage;
+
+/// <summary>
+/// What this account owns, after it changed.
+/// <para>
+/// Its own message rather than another field on <see cref="ShopUpdated"/>, because what an
+/// account owns changes in more places than a shop: an operator's <c>/grant</c> does it
+/// too, and that has been silently broken for as long as it has existed. The owned list
+/// only ever reached a client in <see cref="Welcome"/>, so a granted hat appeared the next
+/// time somebody logged in and not before — and nobody noticed, because until there was a
+/// shop the wardrobe was only ever opened after a login.
+/// </para>
+/// <para>
+/// One message that says "this is what you own now" fixes both, and is the shape that stays
+/// right when the third thing that grants a cosmetic arrives.
+/// </para>
+/// </summary>
+public sealed record CosmeticsOwned(IReadOnlyList<int> Owned) : NetMessage;
 
 /// <summary>
 /// What the money and the bag are after something was bought or sold.

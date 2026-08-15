@@ -2283,6 +2283,13 @@ public static class Program
                     bag = updated.Bag;
                     break;
 
+                // What this account owns, after it changed. It used to arrive only in the
+                // Welcome, so anything granted or bought mid-session was invisible until
+                // the next login — including everything /grant has ever handed out.
+                case CosmeticsOwned owns:
+                    owned = owns.Owned;
+                    break;
+
                 case BattleUpdate update:
                     battle?.Apply(update);
 

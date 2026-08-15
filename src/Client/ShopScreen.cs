@@ -1,4 +1,5 @@
 using PokeMmo.RomExtract;
+using PokeMmo.Core.Cosmetics;
 using PokeMmo.Core.Net;
 using PokeMmo.Core.Save;
 using Raylib_cs;
@@ -24,7 +25,26 @@ public sealed class ShopScreen
     private IReadOnlyList<ShopEntry> _stock;
     private IReadOnlyList<BagEntry> _bag;
 
-    private bool _selling;
+    /// <summary>
+    /// Which of the three counters is showing.
+    /// <para>
+    /// Three rather than a pair of flags, because a shop is one counter at a time and two
+    /// booleans can say "selling and clothes at once", which is a state with no meaning
+    /// and one that would have to be prevented everywhere rather than made unsayable.
+    /// </para>
+    /// </summary>
+    private enum Counter
+    {
+        Buying,
+        Selling,
+        Clothes,
+    }
+
+    private Counter _at = Counter.Buying;
+
+    private bool _selling => _at == Counter.Selling;
+
+    private IReadOnlyList<ShopEntry> _clothes;
     private int _row;
     private int _quantity = 1;
     private string _message = "";
@@ -33,6 +53,7 @@ public sealed class ShopScreen
     {
         _names = names;
         _stock = opened.Stock;
+        _clothes = opened.Clothes;
         _bag = opened.Bag;
         Money = opened.Money;
     }
@@ -69,10 +90,28 @@ public sealed class ShopScreen
     /// the decision.
     /// </para>
     /// </summary>
-    private List<(int ItemId, int Price, int Held)> Lines() =>
-        _selling
-            ? _bag.Select(b => (b.ItemId, 0, b.Count)).ToList()
-            : _stock.Select(s => (s.ItemId, s.Price, Held(s.ItemId))).ToList();
+    private List<(int ItemId, int Price, int Held)> Lines() => _at switch
+    {
+        Counter.Selling => _bag.Select(b => (b.ItemId, 0, b.Count)).ToList(),
+
+        // The id here is a cosmetic and not an item, and the two are different numbering.
+        // Nothing on this screen may look one of them up in the other's table — it would
+        // come back with a wrong name rather than an error, which is the kind of bug that
+        // survives a review. Naming goes through NameOf, which knows which counter it is on.
+        Counter.Clothes => _clothes.Select(c => (c.ItemId, c.Price, 0)).ToList(),
+
+        _ => _stock.Select(s => (s.ItemId, s.Price, Held(s.ItemId))).ToList(),
+    };
+
+    /// <summary>
+    /// What to call the thing in a row, asked of whichever table this counter belongs to.
+    /// <para>
+    /// The whole reason this method exists rather than a call to <c>_names</c> everywhere:
+    /// a cosmetic id and an item id are two numberings that happen to be integers.
+    /// </para>
+    /// </summary>
+    private string NameOf(int id) =>
+        _at == Counter.Clothes ? Wardrobe.At(id)?.Name ?? $"cosmetic {id}" : _names.Of(id);
 
     private int Held(int itemId) => _bag.FirstOrDefault(b => b.ItemId == itemId)?.Count ?? 0;
 
@@ -96,7 +135,16 @@ public sealed class ShopScreen
 
         if (Raylib.IsKeyPressed(KeyboardKey.Tab))
         {
-            _selling = !_selling;
+            // Round the three, and past the clothes counter entirely when there is nothing
+            // left to buy from it — a counter that can only say "nothing here" is a stop on
+            // the way to somewhere and not a place.
+            _at = _at switch
+            {
+                Counter.Buying => Counter.Selling,
+                Counter.Selling when _clothes.Count > 0 => Counter.Clothes,
+                _ => Counter.Buying,
+            };
+
             _row = 0;
             _quantity = 1;
             _message = "";
@@ -126,9 +174,15 @@ public sealed class ShopScreen
         {
             (int itemId, _, _) = lines[_row];
 
-            Pending = _selling
-                ? new SellRequest(itemId, _quantity)
-                : new BuyRequest(itemId, _quantity);
+            // One at a time for clothes, because there is no such thing as two of one:
+            // the server refuses anything already owned, and a quantity would only ever be
+            // a way to ask for a refusal.
+            Pending = _at switch
+            {
+                Counter.Selling => new SellRequest(itemId, _quantity),
+                Counter.Clothes => new BuyCosmeticRequest(itemId),
+                _ => new BuyRequest(itemId, _quantity),
+            };
         }
     }
 
@@ -147,7 +201,9 @@ public sealed class ShopScreen
     {
         Raylib.ClearBackground(Skin.PanelDeep);
 
-        Font.Draw(_selling ? "SELLING" : "BUYING", 40, 30, 3, Skin.Ink);
+        Font.Draw(
+            _at switch { Counter.Selling => "SELLING", Counter.Clothes => "CLOTHES", _ => "BUYING" },
+            40, 30, 3, Skin.Ink);
 
         var purse = new Rectangle(Width - 300, 22, 268, 44);
 
@@ -163,7 +219,12 @@ public sealed class ShopScreen
         if (lines.Count == 0)
         {
             Font.Draw(
-                _selling ? "You have nothing to sell." : "There is nothing for sale here.",
+                _at switch
+                {
+                    Counter.Selling => "You have nothing to sell.",
+                    Counter.Clothes => "You own everything they have.",
+                    _ => "There is nothing for sale here.",
+                },
                 stock.X + 24, stock.Y + 26, 2, Skin.InkDim);
         }
 
@@ -178,7 +239,7 @@ public sealed class ShopScreen
 
             if (selected) Skin.DrawSelection(new Rectangle(stock.X + 12, y - 6, stock.Width - 24, 28));
 
-            Font.Draw(GameText.ToAscii(_names.Of(itemId)), stock.X + 28, y, 2, selected ? Skin.Ink : Skin.InkDim);
+            Font.Draw(GameText.ToAscii(NameOf(itemId)), stock.X + 28, y, 2, selected ? Skin.Ink : Skin.InkDim);
 
             // What it costs and what you already have, kept apart: they are different
             // questions and a player reading one should not have to find it inside the
@@ -210,7 +271,9 @@ public sealed class ShopScreen
         if (_message.Length > 0) Font.Draw(_message, 40, Height - 68, 2, Skin.HpGood);
 
         Font.Draw(
-            "up/down choose   left/right how many   Z confirm   Tab buy/sell   X leave",
+            _at == Counter.Clothes
+                ? "up/down choose   Z buy   Tab counter   X leave"
+                : "up/down choose   left/right how many   Z confirm   Tab counter   X leave",
             40, Height - 40, 2, Skin.InkFaint);
     }
 }

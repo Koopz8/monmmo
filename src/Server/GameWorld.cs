@@ -1936,12 +1936,105 @@ public sealed class GameWorld
             .Select(entry => new ShopEntry(entry.Id, entry.Item!.Price))
             .ToList();
 
-        if (stock.Count == 0) return [];
+        // The clothes counter: everything the wardrobe holds that this account has not
+        // already bought. Every Mart in the world has one, because every Mart already has
+        // a shopkeeper the world knows about — twenty of them, located at startup — so
+        // this needed no new map object and no script the cartridge does not have.
+        List<ShopEntry> clothes =
+        [
+            .. Wardrobe.All
+                .Where(c => !player.Owns.Contains(c.Id))
+                .Select(c => new ShopEntry(c.Id, c.Price)),
+        ];
+
+        if (stock.Count == 0 && clothes.Count == 0) return [];
 
         player.Shopping = [.. keeper.Stock];
 
-        return [new Outgoing(new ShopOpened(stock, player.Money, player.Bag.Entries), OnlyTo: player.Id)];
+        return
+        [
+            new Outgoing(
+                new ShopOpened(stock, player.Money, player.Bag.Entries) { Clothes = clothes },
+                OnlyTo: player.Id),
+        ];
     }
+
+    /// <summary>
+    /// What this account owns, told to the one player it is about.
+    /// <para>
+    /// Its own message because owning something changes in more places than a shop, and
+    /// every one of them used to change it silently. See <see cref="CosmeticsOwned"/>.
+    /// </para>
+    /// </summary>
+    private static List<Outgoing> Owning(ServerPlayer player) =>
+        [new(new CosmeticsOwned([.. player.Owns.Order()]), OnlyTo: player.Id)];
+
+    /// <summary>
+    /// Buys something to wear.
+    /// <para>
+    /// Everything is checked here and nothing is taken on trust: that a counter is open,
+    /// that the wardrobe has such a thing, that this account does not already own it, and
+    /// that the money is there. A client sends an id and has no say in any of the rest —
+    /// least of all the price, which is the wardrobe's.
+    /// </para>
+    /// <para>
+    /// Two answers go back rather than one. The money changed, which is what
+    /// <see cref="ShopUpdated"/> is for; and what this account owns changed, which nothing
+    /// on the wire could say until now.
+    /// </para>
+    /// </summary>
+    public List<Outgoing> BuyCosmetic(int playerId, int cosmeticId)
+    {
+        lock (_gate)
+        {
+            LastBought = null;
+
+            if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
+
+            // The same gate the items use: a player who walked away mid-shop would
+            // otherwise keep buying from wherever they now stand.
+            if (player.Shopping.Count == 0 && !AtAShop(player))
+            {
+                LastBought = "refused: no counter is open";
+                return [Sold(player, "There is no counter here.")];
+            }
+
+            if (Wardrobe.At(cosmeticId) is not { } wanted)
+            {
+                LastBought = $"refused: there is no cosmetic {cosmeticId}";
+                return [Sold(player, "They do not sell that.")];
+            }
+
+            if (player.Owns.Contains(cosmeticId))
+            {
+                LastBought = $"refused: already owns {wanted.Name}";
+                return [Sold(player, "You already have one.")];
+            }
+
+            if (player.Money < wanted.Price)
+            {
+                LastBought = $"refused: {wanted.Price} for {wanted.Name} and only {player.Money} to spend";
+                return [Sold(player, "You cannot afford it.")];
+            }
+
+            player.Money -= wanted.Price;
+            player.Owns.Add(cosmeticId);
+
+            LastBought = $"bought {wanted.Name} for {wanted.Price}";
+
+            return [Sold(player, $"{wanted.Name}, then."), .. Owning(player)];
+        }
+    }
+
+    /// <summary>What the last thing bought at a clothes counter came to.</summary>
+    public string? LastBought { get; private set; }
+
+    /// <summary>True when somebody who sells is within reach.</summary>
+    private bool AtAShop(ServerPlayer player) =>
+        _world.Find(player.MapId) is { } map && map.Objects.Any(o => o.IsShopkeeper);
+
+    private Outgoing Sold(ServerPlayer player, string said) =>
+        new(new ShopUpdated(player.Money, player.Bag.Entries, said), OnlyTo: player.Id);
 
     /// <summary>
     /// Buys some of one thing, and says what the money and the bag are afterwards.
@@ -5249,9 +5342,17 @@ public sealed class GameWorld
                 if (Wardrobe.At(giving) is not { } bought)
                     return [Said(player, $"there is no cosmetic {giving}")];
 
+                bool granted = player.Owns.Add(giving);
+
+                // And the client is told what it now owns, which /grant has never done.
+                // The owned list only ever arrived in the Welcome, so a granted hat turned
+                // up the next time somebody logged in and not before — invisible until
+                // there was a counter that sold them, because until then the wardrobe was
+                // only ever opened after a login.
                 return
                 [
-                    Said(player, player.Owns.Add(giving) ? $"granted {bought.Name}" : $"already owned {bought.Name}"),
+                    Said(player, granted ? $"granted {bought.Name}" : $"already owned {bought.Name}"),
+                    .. granted ? Owning(player) : [],
                 ];
             }
 

@@ -53,6 +53,14 @@ public class MessageChannelTests
     private static NetMessage[] SampleMessages() =>
         [
             new RegisterRequest("Mason", "a-good-password"),
+            new BuyCosmeticRequest(103),
+            new CosmeticsOwned([101, 103]),
+            new DaycareRequest(1, true),
+            new DaycareUpdated(
+                [new SavedMon(1, 5, null, 19, StatusCondition.None, Nature.Hardy, [33])],
+                [new SavedMon(16, 20, null, 40, StatusCondition.None, Nature.Bold, [33])],
+                3_940,
+                "We can raise them for you."),
             new LoginRequest("Mason", "a-good-password"),
             new ScriptGave(1, 358),
             new LearnMoveRequest(33, 2),
@@ -179,6 +187,41 @@ public class MessageChannelTests
         var covered = SampleMessages().Select(m => m.GetType()).Distinct().OrderBy(t => t.Name);
 
         Assert.Equal(declared, covered);
+    }
+
+    /// <summary>
+    /// And every kind that exists is declared, which is the half the test above does not
+    /// cover and the half that actually bites.
+    /// <para>
+    /// That one compares the declared list against the sample list, so a kind missing from
+    /// <em>both</em> passes it silently. Two were: the daycare's pair went in with a screen,
+    /// a handler and a sender, and no discriminator — so every one of them would have
+    /// serialised as its base type and arrived as nothing at all. It shipped in that state
+    /// and the whole suite was green.
+    /// </para>
+    /// <para>
+    /// The naming guardrail did not catch it either, because that one reads the sources for
+    /// the type's name and both sides used it. Named on both sides, and unable to cross.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AndEveryKindThatExistsIsDeclared()
+    {
+        var declared = typeof(NetMessage)
+            .GetCustomAttributes<System.Text.Json.Serialization.JsonDerivedTypeAttribute>()
+            .Select(a => a.DerivedType)
+            .ToHashSet();
+
+        string[] undeclared =
+        [
+            .. typeof(NetMessage).Assembly.GetTypes()
+                .Where(t => t.IsSubclassOf(typeof(NetMessage)) && !t.IsAbstract)
+                .Where(t => !declared.Contains(t))
+                .Select(t => t.Name)
+                .Order(),
+        ];
+
+        Assert.Empty(undeclared);
     }
 
     /// <summary>
