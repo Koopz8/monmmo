@@ -751,3 +751,123 @@ public class LeavingThemTogetherTests
         Assert.Equal(20 * Breeding.StepsPerCycle, Breeding.StepsToHatch(Species(1, EggGroup.Field)));
     }
 }
+
+/// <summary>
+/// Which sex a creature is, written down.
+/// <para>
+/// The ratio on a species record gives the chance, not the answer, so asking it twice
+/// gives two answers — and a creature whose sex changed between questions is a creature
+/// that could breed with itself on the second one. So it is rolled once, where the
+/// creature is made, and stored from then on.
+/// </para>
+/// <para>
+/// Nought means both "genderless" and "written down before anybody asked", which the
+/// column cannot tell apart and does not try to. A MAGNEMITE and a creature caught last
+/// week look the same, and breeding treats them the same way: it takes neither. The first
+/// is right and the second is the honest cost of adding a field to a save that exists.
+/// </para>
+/// </summary>
+public class WhichSexItIsTests
+{
+    /// <summary>A wild one is rolled, and both answers turn up.</summary>
+    [Fact]
+    public void AWildOneIsRolledOnceAndKept()
+    {
+        var factory = new BattleFactory(TestRules.All);
+
+        var seen = new HashSet<Gender>();
+
+        for (uint seed = 1; seed <= 60; seed++) seen.Add(factory.Wild(1, 10, new BattleRng(seed))!.Sex);
+
+        Assert.Contains(Gender.Male, seen);
+        Assert.Contains(Gender.Female, seen);
+    }
+
+    /// <summary>And one built with no dice has none recorded rather than a guess.</summary>
+    [Fact]
+    public void AndOneWithNoDiceHasNoneRecorded()
+    {
+        Assert.Equal(Gender.None, new BattleFactory(TestRules.All).Wild(1, 10)!.Sex);
+    }
+
+    /// <summary>It survives the save, and the process.</summary>
+    [Fact]
+    public async Task ItSurvivesTheProcess()
+    {
+        string path = TempDatabase.Path();
+
+        try
+        {
+            SavedMon hers = new(16, 3, null, 8, StatusCondition.None, Nature.Bold, [33])
+            {
+                Sex = Gender.Female,
+            };
+
+            using (var writing = new SqlitePlayerStore(path))
+            {
+                await writing.RegisterAsync(
+                    "Mason",
+                    "a-good-password",
+                    new SavedCharacter("1.0", 3, 4, Direction.Down, [hers]));
+            }
+
+            using (var reading = new SqlitePlayerStore(path))
+            {
+                var login = Assert.IsType<AuthOutcome.Success>(
+                    await reading.LoginAsync("Mason", "a-good-password"));
+
+                Assert.Equal(Gender.Female, Assert.Single(login.Character.Party).Sex);
+            }
+        }
+        finally
+        {
+            TempDatabase.Delete(path);
+        }
+    }
+
+    /// <summary>And a creature written before the column existed has none, not a wrong one.</summary>
+    [Fact]
+    public async Task AndOneFromBeforeHasNoneRatherThanAWrongOne()
+    {
+        string path = TempDatabase.Path();
+
+        try
+        {
+            using (var writing = new SqlitePlayerStore(path))
+            {
+                await writing.RegisterAsync(
+                    "Mason",
+                    "a-good-password",
+                    new SavedCharacter(
+                        "1.0", 3, 4, Direction.Down,
+                        [new SavedMon(16, 3, null, 8, StatusCondition.None, Nature.Bold, [33])]));
+            }
+
+            using (var reading = new SqlitePlayerStore(path))
+            {
+                var login = Assert.IsType<AuthOutcome.Success>(
+                    await reading.LoginAsync("Mason", "a-good-password"));
+
+                Assert.Equal(Gender.None, Assert.Single(login.Character.Party).Sex);
+            }
+        }
+        finally
+        {
+            TempDatabase.Delete(path);
+        }
+    }
+
+    /// <summary>And a battler carries it back out to whoever saves it.</summary>
+    [Fact]
+    public void AndItGoesBackOutAgain()
+    {
+        var factory = new BattleFactory(TestRules.All);
+
+        SavedMon his = new(1, 5, null, 20, StatusCondition.None, Nature.Hardy, [TestRules.FirstMove])
+        {
+            Sex = Gender.Male,
+        };
+
+        Assert.Equal(Gender.Male, BattleFactory.Save(factory.Restore(his)!).Sex);
+    }
+}

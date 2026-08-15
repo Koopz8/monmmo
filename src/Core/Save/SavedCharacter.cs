@@ -73,6 +73,24 @@ public sealed record SavedMon(
     public Genes Born => Genes.Of(Ivs);
 
     /// <summary>
+    /// Which sex this one is.
+    /// <para>
+    /// Stored rather than worked out, and that is the whole reason this property exists.
+    /// The ratio on a species record gives the chance, not the answer, so asking it twice
+    /// gives two answers — and a creature whose sex changed between questions would be a
+    /// creature that could breed with itself on the second one.
+    /// </para>
+    /// <para>
+    /// <see cref="Gender.None"/> is both "genderless" and "written down before anybody
+    /// asked", which are different things this cannot tell apart. A MAGNEMITE and a
+    /// creature caught last week look the same here, and the daycare treats them the same
+    /// way: it will not take either. The first is right and the second is the honest cost
+    /// of adding a field to a save that already exists.
+    /// </para>
+    /// </summary>
+    public Gender Sex { get; init; }
+
+    /// <summary>
     /// Compares move lists by their contents.
     /// <para>
     /// A record compares its members with <c>Equals</c>, and for a list that is
@@ -96,7 +114,8 @@ public sealed record SavedMon(
         Moves.SequenceEqual(other.Moves) &&
         Pp.SequenceEqual(other.Pp) &&
         Evs.SequenceEqual(other.Evs) &&
-        Ivs.SequenceEqual(other.Ivs);
+        Ivs.SequenceEqual(other.Ivs) &&
+        Sex == other.Sex;
 
     public override int GetHashCode()
     {
@@ -114,6 +133,8 @@ public sealed record SavedMon(
         foreach (int left in Pp) hash.Add(left);
         foreach (int earned in Evs) hash.Add(earned);
         foreach (int born in Ivs) hash.Add(born);
+
+        hash.Add(Sex);
 
         return hash.ToHashCode();
     }

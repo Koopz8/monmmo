@@ -63,6 +63,9 @@ public sealed class Battler
     /// </summary>
     public Genes Born { get; }
 
+    /// <summary>Which sex this one is, as its save recorded it.</summary>
+    public Gender Sex { get; init; }
+
     public SpeciesData Species { get; }
 
     /// <summary>

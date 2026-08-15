@@ -142,6 +142,13 @@ internal static class TestRules
                 // Named rather than left to the enum's first value, so the experience
                 // tests are asserting against a curve they actually chose.
                 GrowthRate = GrowthRate.MediumFast,
+
+                // Half and half, and a group to breed in. Left at nought these are a
+                // world where every creature is genderless and nothing can be bred,
+                // which is a fixture that quietly disagrees with every cartridge.
+                GenderRatio = 127,
+                EggGroup1 = EggGroup.Field,
+                EggCycles = 20,
             });
         }
 

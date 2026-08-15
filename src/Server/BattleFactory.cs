@@ -37,7 +37,10 @@ public sealed class BattleFactory(GameRules rules)
         // And what it has to show for its fights, which is an argument the stat
         // calculation has always taken and nothing ever supplied.
         var battler = new Battler(
-            species, saved.Level, saved.Nature, saved.Nickname, Effort.Of(saved.Evs), Genes.Of(saved.Ivs));
+            species, saved.Level, saved.Nature, saved.Nickname, Effort.Of(saved.Evs), Genes.Of(saved.Ivs))
+        {
+            Sex = saved.Sex,
+        };
 
         foreach (int moveId in saved.Moves)
             if (rules.MoveAt(moveId) is { } move) battler.Moves.Add(move);
@@ -104,7 +107,12 @@ public sealed class BattleFactory(GameRules rules)
         // and the whole reason anybody would want a particular one. Rolled only when
         // there are dice: a wild encounter has them, and a fixture asking for a creature
         // to test something with does not want six random numbers in its arithmetic.
-        var battler = new Battler(record, level, genes: rng is null ? null : Genes.Roll(rng));
+        var battler = new Battler(record, level, genes: rng is null ? null : Genes.Roll(rng))
+        {
+            // Rolled once, here, and written down from now on. A sex worked out from the
+            // ratio each time it is asked is a sex that changes between questions.
+            Sex = rng is null ? Gender.None : Breeding.SexOf(record, rng),
+        };
 
         battler.Moves.AddRange(rules.MovesKnownAt(species, level));
 
@@ -204,6 +212,7 @@ public sealed class BattleFactory(GameRules rules)
         // Empty means perfect, which is what everything written before genes existed
         // was — and what a creature this server has no dice for still is.
         Ivs = battler.Born.IsPerfect ? [] : [.. battler.Born.Values],
+        Sex = battler.Sex,
     };
 
     /// <summary>

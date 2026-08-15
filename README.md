@@ -14,7 +14,7 @@ src/Server          the authoritative server. Core only
 src/Client          the game: window, input, drawing, screens
 src/Tools/RomDump   the extractor's command line, and every instrument built for it
 src/Tools/Crowd     a crowd of real clients, for measuring what the server does at scale
-tests/              1634 tests, no cartridge required
+tests/              1639 tests, no cartridge required
 tools/rig/          the headless play rig — Xvfb, two clients, screenshots
 ```
 
@@ -70,7 +70,9 @@ which is the mother's species wound back down its own evolution chain, carrying 
 of its six numbers from its parents. Every part of that is read off the cartridge
 except two: how many of the six are inherited, and how long an egg cycle is. Checked
 against the real image: 336 species can be bred, 49 cannot, and exactly one breeds
-with anything.
+with anything. Which sex a creature is comes off its species' own ratio, rolled once
+when it is made and written down from then on — a sex worked out fresh each time it is
+asked is one that changes between questions.
 
 **Multiplayer, in three verbs.** Seeing each other, trading, and duelling. Players
 walk through each other on purpose — a game where standing still is a wall is a game
