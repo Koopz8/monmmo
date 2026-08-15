@@ -51,3 +51,9 @@ client.json
 *.db-wal
 *.db-shm
 .godot/
+
+# Delivery bundles. This project is handed over as git bundles rather than pushed, so
+# one of these lands in a working copy fairly often — including dropped straight into
+# the folder by tooling that cannot then remove it. Ignored rather than tidied up by
+# hand each time.
+*.bundle
