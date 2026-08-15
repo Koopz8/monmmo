@@ -242,6 +242,40 @@ public sealed class Battler
     public bool IsGuarded { get; set; }
 
     /// <summary>
+    /// Turns of mist left on this side. While it holds, nothing may lower this one's
+    /// stats.
+    /// <para>
+    /// A count rather than a flag, and the count is <b>modelled</b>: MIST's record says
+    /// what it costs and that it does no damage, and nothing anywhere says how long it
+    /// lasts. Only what somebody else does is refused — this one may still lower its own
+    /// stats, which every move that trades a stat for power does.
+    /// </para>
+    /// </summary>
+    public int MistTurns { get; set; }
+
+    /// <summary>True while nothing may lower this one's stats from outside.</summary>
+    public bool IsMisted => MistTurns > 0;
+
+    /// <summary>
+    /// Turns of safeguard left on this side. While it holds, nothing may afflict this
+    /// one. Modelled for the same reason and written the same way.
+    /// </summary>
+    public int SafeguardTurns { get; set; }
+
+    /// <summary>True while nothing may afflict this one.</summary>
+    public bool IsGuardedFromHarm => SafeguardTurns > 0;
+
+    /// <summary>
+    /// True when this one has taken aim, and the next move it uses cannot miss.
+    /// <para>
+    /// A flag with no count at all: what MIND READER's record does not say is how long
+    /// it lasts, and "the next one" is the only reading that needs no number. Cleared by
+    /// the move it is spent on, hit or miss.
+    /// </para>
+    /// </summary>
+    public bool HasAimed { get; set; }
+
+    /// <summary>
     /// True while something has made sure this one is not going anywhere.
     /// <para>
     /// MEAN LOOK, and it lasts as long as the creature is standing there rather than for

@@ -13,7 +13,7 @@ src/RomExtract      cartridge reading. Client-only, and enforced by a test
 src/Server          the authoritative server. Core only
 src/Client          the game: window, input, drawing, screens
 src/Tools/RomDump   the extractor's command line, and every instrument built for it
-tests/              1419 tests, no cartridge required
+tests/              1435 tests, no cartridge required
 tools/rig/          the headless play rig — Xvfb, two clients, screenshots
 ```
 
@@ -240,11 +240,10 @@ The lesson that keeps recurring, in the words it was learned in:
 ## Next
 
 Player-versus-player is in, switching included, and the battle engine now says when
-it does nothing: 215 of 354 moves have an effect it can carry out, a fight counts
+it does nothing: 220 of 354 moves have an effect it can carry out, a fight counts
 what it stepped over, and the server prints that count. What is left is the rest of
-that list — around 120 effect groups, ranked by how often they actually turn up in a
-trainer party or a learnset — and art: twelve cosmetic slots with nothing drawn in
-them, and a shop to buy from.
+that list — 119 effect groups, all of them two moves wide or fewer now — and art:
+twelve cosmetic slots with nothing drawn in them, and a shop to buy from.
 
 The ferry's ticket is derived and carried, and deliberately not enforced: three of
 this cartridge's 2681 map scripts mention a pass and all three are the sailor asking

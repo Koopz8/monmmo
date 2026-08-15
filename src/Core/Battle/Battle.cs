@@ -25,6 +25,11 @@ public enum Side
 [JsonDerivedType(typeof(MoveUsed), "used")]
 [JsonDerivedType(typeof(MoveMissed), "missed")]
 [JsonDerivedType(typeof(NoEffect), "noeffect")]
+[JsonDerivedType(typeof(StagesCleared), "hazed")]
+[JsonDerivedType(typeof(MistRose), "mist")]
+[JsonDerivedType(typeof(Safeguarded), "safeguard")]
+[JsonDerivedType(typeof(TookAim), "aimed")]
+[JsonDerivedType(typeof(Shielded), "shielded")]
 [JsonDerivedType(typeof(Immobilised), "immobilised")]
 [JsonDerivedType(typeof(WokeUp), "woke")]
 [JsonDerivedType(typeof(DamageDealt), "damage")]
@@ -73,6 +78,21 @@ public abstract record BattleEvent
     public sealed record MoveUsed(Side Side, int MoveId) : BattleEvent;
 
     public sealed record MoveMissed(Side Side, int MoveId) : BattleEvent;
+
+    /// <summary>Every stage on both sides is back to nothing. The side is who did it.</summary>
+    public sealed record StagesCleared(Side Side) : BattleEvent;
+
+    /// <summary>Mist is up on this side.</summary>
+    public sealed record MistRose(Side Side) : BattleEvent;
+
+    /// <summary>A safeguard is up on this side.</summary>
+    public sealed record Safeguarded(Side Side) : BattleEvent;
+
+    /// <summary>This one has taken aim, and what it does next cannot miss.</summary>
+    public sealed record TookAim(Side Side) : BattleEvent;
+
+    /// <summary>Something was refused because this side is shielded from it.</summary>
+    public sealed record Shielded(Side Side) : BattleEvent;
 
     public sealed record NoEffect(Side Side) : BattleEvent;
 
@@ -478,6 +498,13 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         Player.IsGuarded = false;
         Opponent.IsGuarded = false;
 
+        // And the two that hold for a count rather than for the turn. Ticked in the same
+        // place for the same reason: whatever a fight does to a turn, it ends here.
+        if (Player.MistTurns > 0) Player.MistTurns--;
+        if (Opponent.MistTurns > 0) Opponent.MistTurns--;
+        if (Player.SafeguardTurns > 0) Player.SafeguardTurns--;
+        if (Opponent.SafeguardTurns > 0) Opponent.SafeguardTurns--;
+
         if (IsOver) events.Add(new BattleEvent.Ended(Winner));
 
         return events;
@@ -693,7 +720,15 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         // Somewhere a move cannot reach. Checked before accuracy rather than folded into
         // it, because a move that would never have missed still cannot hit what is not
         // there — and SWIFT never misses.
-        if (defender.IsAway)
+        // Aim taken on an earlier turn, spent on this move whatever it does. Read before
+        // both of the ways a move fails to connect, because the whole of what it is for
+        // is that neither of them applies: an aimed move reaches somewhere a move cannot
+        // reach, and does not roll.
+        bool sure = attacker.HasAimed;
+
+        attacker.HasAimed = false;
+
+        if (defender.IsAway && !sure)
         {
             events.Add(new BattleEvent.MoveMissed(side, move.Id));
 
@@ -702,7 +737,7 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             return;
         }
 
-        if (!DamageCalculator.RollAccuracy(_rng, move, attacker, defender))
+        if (!sure && !DamageCalculator.RollAccuracy(_rng, move, attacker, defender))
         {
             events.Add(new BattleEvent.MoveMissed(side, move.Id));
 
@@ -1096,11 +1131,60 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         Side at = effect.OnUser ? side : Other(side);
         Battler target = effect.OnUser ? attacker : defender;
 
+        // The four that switch a rule off. Written together because they are one idea
+        // four times, and every rule they switch off was already here with one caller.
+        if (effect.Kind == EffectKind.Haze)
+        {
+            // Both sides, including the one that used it. That is what makes it a move
+            // somebody has to mean rather than a free reset, and it needs no count at
+            // all — the only one of the four with nothing modelled about it.
+            Player.ResetStages();
+            Opponent.ResetStages();
+
+            events.Add(new BattleEvent.StagesCleared(side));
+
+            return;
+        }
+
+        if (effect.Kind == EffectKind.Mist)
+        {
+            // Five turns. Modelled, not read.
+            target.MistTurns = 5;
+
+            events.Add(new BattleEvent.MistRose(at));
+
+            return;
+        }
+
+        if (effect.Kind == EffectKind.Safeguard)
+        {
+            target.SafeguardTurns = 5;
+
+            events.Add(new BattleEvent.Safeguarded(at));
+
+            return;
+        }
+
+        if (effect.Kind == EffectKind.TakeAim)
+        {
+            attacker.HasAimed = true;
+
+            events.Add(new BattleEvent.TookAim(side));
+
+            return;
+        }
+
         if (effect.Kind == EffectKind.Confuse)
         {
             // Two to five turns, and it does not stack: somebody already confused is
             // already confused. Modelled, not read — nothing in a move's record says how
             // long CONFUSE RAY muddles anybody for.
+            if (!effect.OnUser && target.IsGuardedFromHarm)
+            {
+                if (!rolled) events.Add(new BattleEvent.Shielded(at));
+                return;
+            }
+
             if (target.IsConfused || target.HasFainted)
             {
                 if (!rolled) events.Add(new BattleEvent.NothingHappened(at));
@@ -1141,6 +1225,8 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         // has already been rolled by the time this is reached.
         if (effect.Kind == EffectKind.Twice && effect.Status != StatusCondition.None)
         {
+            if (defender.IsGuardedFromHarm) return;
+
             if (defender.TryApplyStatus(effect.Status, sleepTurns: _rng.Next(3) + 1))
                 events.Add(new BattleEvent.StatusInflicted(Other(side), effect.Status));
 
@@ -1212,6 +1298,16 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
 
         if (effect.Kind == EffectKind.Status)
         {
+            // Refused while a safeguard holds — and only from outside. REST puts its own
+            // user to sleep through one, which is the games' rule and also the only
+            // reading where a move that shields a side does not shield it from itself.
+            if (!effect.OnUser && target.IsGuardedFromHarm)
+            {
+                if (!rolled) events.Add(new BattleEvent.Shielded(at));
+
+                return;
+            }
+
             // Sleep runs one to three turns. Chosen here rather than in the battler
             // because how long anything lasts is a rule of the battle, and the battler is
             // only the thing it happens to.
@@ -1219,6 +1315,15 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
                 events.Add(new BattleEvent.StatusInflicted(at, effect.Status));
             else if (!rolled)
                 events.Add(new BattleEvent.NothingHappened(at));
+
+            return;
+        }
+
+        // Refused while mist holds, and only from outside: a move that trades one of its
+        // user's own stats for something is not somebody else lowering it.
+        if (effect.Stages < 0 && !effect.OnUser && target.IsMisted)
+        {
+            if (!rolled) events.Add(new BattleEvent.Shielded(at));
 
             return;
         }

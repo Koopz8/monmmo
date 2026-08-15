@@ -181,6 +181,11 @@ public static class BattleNarrator
 
         BattleEvent.Unaffected e => $"It had no effect on {names.Of(e.Side)}.",
         BattleEvent.Protected e => $"{names.Of(e.Side)} protected itself!",
+        BattleEvent.StagesCleared e => $"{names.Of(e.Side)} eliminated all stat changes!",
+        BattleEvent.MistRose e => $"{names.Of(e.Side)} became shrouded in MIST!",
+        BattleEvent.Safeguarded e => $"{names.Of(e.Side)} is covered by a veil!",
+        BattleEvent.TookAim e => $"{names.Of(e.Side)} took aim!",
+        BattleEvent.Shielded e => $"{names.Of(e.Side)} is protected!",
         BattleEvent.CannotUse e => $"{names.Of(e.Side)}'s {names.MoveNamed(e.MoveId)} was disabled!",
         BattleEvent.CanUseAgain e => $"{names.Of(e.Side)} is no longer disabled!",
         BattleEvent.MustRepeat e => $"{names.Of(e.Side)} must do {names.MoveNamed(e.MoveId)} again!",

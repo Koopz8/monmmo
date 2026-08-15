@@ -31,6 +31,18 @@ public enum EffectKind
     /// <summary>Makes the target repeat the move it just used.</summary>
     Encore,
 
+    /// <summary>Every stage on both sides goes back to nothing.</summary>
+    Haze,
+
+    /// <summary>Nothing may lower this side's stats while it holds.</summary>
+    Mist,
+
+    /// <summary>Nothing may afflict this side while it holds.</summary>
+    Safeguard,
+
+    /// <summary>The next move this one uses cannot miss.</summary>
+    TakeAim,
+
     /// <summary>Inflicts a lasting condition.</summary>
     Status,
 
@@ -387,6 +399,28 @@ public static class MoveEffects
         // as such where it is written, and nothing else about them is.
         0x56 => new MoveEffect(EffectKind.Disable, OnUser: false),
         0x5A => new MoveEffect(EffectKind.Encore, OnUser: false),
+
+        // The four that switch off a rule this engine already follows.
+        //
+        //   0x19   1 move   HAZE        — the stages stop counting
+        //   0x2E   1 move   MIST        — nothing may lower ours
+        //   0x7C   1 move   SAFEGUARD   — nothing may afflict ours
+        //   0x5E   2 moves  MIND READER, LOCK-ON — the next one cannot miss
+        //
+        // They are together because they are one idea four times: none of them does
+        // anything to anybody, each of them stops something else from happening. That
+        // shape is why they were cheap to write — every rule they turn off was already
+        // there, in one place, with one caller.
+        //
+        // Their records agree with the reading as far as records can. All four have no
+        // power, all four are status moves, and the first three aim at the user's own
+        // side by the target byte — a move that shields cannot be aimed at somebody
+        // else. What is modelled is how long two of them hold, and that is written where
+        // it is chosen.
+        0x19 => new MoveEffect(EffectKind.Haze, OnUser: true),
+        0x2E => new MoveEffect(EffectKind.Mist, OnUser: true),
+        0x7C => new MoveEffect(EffectKind.Safeguard, OnUser: true),
+        0x5E => new MoveEffect(EffectKind.TakeAim, OnUser: true),
 
         _ => Stages(effect),
     };
