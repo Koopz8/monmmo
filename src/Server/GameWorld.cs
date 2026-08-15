@@ -1080,6 +1080,23 @@ public sealed class GameWorld
 
                 if (!person.Template.Talks)
                 {
+                    // And it goes off the map here, said by the server rather than
+                    // waited for. A ball on the ground is hidden by the same flag that
+                    // marks it taken, and until now only the client ever set it: the
+                    // client picks the ball up, sets the flag itself and reports it.
+                    //
+                    // That works right up until the report goes missing, and then the
+                    // two halves of one fact disagree for good — this server would have
+                    // the item in the bag and the ball still standing on the floor,
+                    // refusing to be picked up a second time because it remembers
+                    // handing it over. A ghost nobody can clear.
+                    //
+                    // It costs nothing to say it from here, and it is said whether or
+                    // not this was the pickup that did it, so a save that already lost
+                    // the flag is repaired the next time somebody walks up to the ball.
+                    if (person.Template.HiddenBy != 0 && player.Script.Set(person.Template.HiddenBy))
+                        given.AddRange(Reconcile(player));
+
                     LastTalkOutcome = gift;
                     return given;
                 }
@@ -3338,7 +3355,15 @@ public sealed class GameWorld
                 if (on) player.Script.Set(flag);
                 else player.Script.Clear(flag);
 
-                return [Said(player, $"flag 0x{flag:X4} is {(on ? "set" : "clear")}"), .. Resend(player)];
+                // And whoever that flag was hiding or holding back arrives or leaves,
+                // which is the only visible thing a flag does. Without this the operator
+                // sets a flag, is told it is set, and watches nothing happen.
+                return
+                [
+                    Said(player, $"flag 0x{flag:X4} is {(on ? "set" : "clear")}"),
+                    .. Resend(player),
+                    .. Reconcile(player),
+                ];
             }
 
             case "var":
