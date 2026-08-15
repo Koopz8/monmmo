@@ -1171,6 +1171,11 @@ public class ShiftingWhatIsInTheWayTests
         (ServerPlayer other, _) = world.Join(2, "Someone", SavedCharacter.Fresh(Town, 3, 4));
         other.Facing = Direction.Up;
 
+        // Arrivals are placed beside whoever is already standing there, so this one is
+        // put where the cutter is not — and then walked back to the square in front of
+        // the tree, which is what this test is actually about.
+        other.Square = new GridPosition(3, 4);
+
         world.StartTalking(cutter.Id, 1);
         world.Move(other.Id, Direction.Up, 10);
 

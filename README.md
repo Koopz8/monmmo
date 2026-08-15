@@ -267,7 +267,15 @@ about what it does not do: **a crowd standing in one place still costs what a cr
 standing in one place costs.** 141 of the 425 maps are bigger than the 23-square sight
 box on at least one side, and 74 on both — on those the circle bites, and on a
 starting room 12 squares wide it cannot. What helps there is not putting everybody in
-the same place, which is still to come.
+the same place — and that was tried, and measured, and it is not enough. Arrivals are
+now placed beside whoever is already standing there rather than on top of them, a ring
+at a time outward, which is right in itself: a hundred people arriving in one bedroom
+were one square deep in each other. But a hundred people spread over thirteen squares
+are still all inside an eleven-square circle, and the like-for-like measurement says
+so — 120 messages a second per player before, 129 after.
+
+**A heap spread thinly is still a heap.** The only thing that changes that number is a
+second copy of the place, which is a design decision this project has not made.
 
 The third measurement is the disk. A save happens on anything a player does that is
 not walking, at most once a second each, and it rewrites the whole character. At a

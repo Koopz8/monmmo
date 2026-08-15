@@ -148,6 +148,20 @@ public class WalkingThroughTests
             squares.Add(joined.Square);
         }
 
-        Assert.All(squares, square => Assert.Equal(new GridPosition(3, 4), square));
+        // Everybody gets in, which is the rule this test was written for: arriving onto
+        // somebody is never a refusal. What changed is where they are put — beside each
+        // other rather than in a heap, because a heap is the one shape no amount of
+        // interest management can make cheap, and a thousand people who all start in one
+        // bedroom start in one.
+        Assert.Equal(4, squares.Count);
+        Assert.Equal(4, squares.Distinct().Count());
+
+        Assert.All(squares, square =>
+            Assert.True(
+                Math.Max(Math.Abs(square.X - 3), Math.Abs(square.Y - 4)) <= 2,
+                $"{square} is not beside (3, 4)"));
+
+        // And the first one asked for that square and got it.
+        Assert.Equal(new GridPosition(3, 4), squares[0]);
     }
 }

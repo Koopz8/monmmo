@@ -543,6 +543,9 @@ public sealed class GameWorld
         {
             (string mapId, GridPosition square) = Resume(saved);
 
+            // And beside whoever is already standing there, rather than on top of them.
+            square = Beside(mapId, square);
+
             var player = new ServerPlayer(_nextPlayerId++, accountId, Sanitise(name))
             {
                 MapId = mapId,
@@ -3110,6 +3113,60 @@ public sealed class GameWorld
 
         return send;
     }
+
+    /// <summary>
+    /// The nearest square to this one that nobody is standing on.
+    /// <para>
+    /// Players walk through each other on purpose — a game where standing still is a wall
+    /// is a game where one person can shut a door for everybody — so sharing a square is
+    /// legal and stays legal. What is not sensible is <em>arriving</em> on top of somebody:
+    /// a thousand people who all start in the same bedroom start in a heap, and a heap is
+    /// the one shape no amount of interest management can make cheap. Everybody in it can
+    /// see everybody, whatever the radius, because they are all at the same place.
+    /// </para>
+    /// <para>
+    /// So arrivals are spread and nothing else is. A ring at a time, outward, taking the
+    /// first walkable square with nobody on it — which for the ordinary case of one person
+    /// arriving in an empty room is the square they asked for, tested once.
+    /// </para>
+    /// <para>
+    /// The search stops after a few rings and returns the original square. A place that
+    /// full is a place that needs a second copy of itself, and that is a decision this
+    /// server has not made yet — standing on somebody is a better answer than refusing to
+    /// let them in.
+    /// </para>
+    /// </summary>
+    private GridPosition Beside(string mapId, GridPosition wanted)
+    {
+        const int Rings = 6;
+
+        if (!IsTakenBySomebody(mapId, wanted)) return wanted;
+
+        CollisionGrid grid = GridFor(mapId);
+
+        for (int ring = 1; ring <= Rings; ring++)
+        {
+            for (int dx = -ring; dx <= ring; dx++)
+                for (int dy = -ring; dy <= ring; dy++)
+                {
+                    // The ring, not the square: everything inside it has been tried.
+                    if (Math.Abs(dx) != ring && Math.Abs(dy) != ring) continue;
+
+                    var square = new GridPosition(wanted.X + dx, wanted.Y + dy);
+
+                    if (!grid.Contains(square) || !grid.IsWalkable(square)) continue;
+                    if (IsOccupied(mapId, square) || IsTakenBySomebody(mapId, square)) continue;
+
+                    return square;
+                }
+        }
+
+        return wanted;
+    }
+
+    /// <summary>True when a player is standing on this square.</summary>
+    private bool IsTakenBySomebody(string mapId, GridPosition square) =>
+        _players.Values.Any(p => p.MapId == mapId && p.Square == square);
 
     /// <summary>Standing still, announced so everyone still sees the turn.</summary>
     private Outgoing Stay(ServerPlayer player) =>
