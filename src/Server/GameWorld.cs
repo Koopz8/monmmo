@@ -14,6 +14,28 @@ public sealed record ServerPlayer(int Id, long AccountId, string Name)
 {
     public string MapId { get; set; } = "";
 
+    /// <summary>
+    /// Which copy of that place this player is in.
+    /// <para>
+    /// A map is a place; a copy is one instance of it. People in different copies of the
+    /// same place never see each other and never hear each other's messages, which is
+    /// the only thing that changes the arithmetic of a crowd: the cost of standing in a
+    /// room is the number of people in <em>that copy</em> of the room, and that number
+    /// has a ceiling.
+    /// </para>
+    /// </summary>
+    public int Copy { get; set; }
+
+    /// <summary>
+    /// Where this player is, for anything deciding who hears something.
+    /// <para>
+    /// The map id decides what the ground looks like; this decides who is standing on it
+    /// with you. They are different questions and were the same string until there was
+    /// more than one copy of a place.
+    /// </para>
+    /// </summary>
+    public string Where => Instances.Key(MapId, Copy);
+
     public GridPosition Square { get; set; }
 
     public Direction Facing { get; set; } = Direction.Down;
@@ -453,15 +475,15 @@ public sealed class GameWorld
     public IReadOnlyCollection<string> MapsWithAnybodyOn => [.. _crowd.Keys];
 
     /// <summary>Records where somebody is standing, or that they are gone.</summary>
-    private void StandsAt(int playerId, string? mapId, GridPosition square = default)
+    private void StandsAt(int playerId, string? where, GridPosition square = default)
     {
         // A step within one map is the common case by a very long way, and it is only a
         // new position — the crowd this player belongs to has not changed.
-        if (mapId is not null
+        if (where is not null
             && _where.TryGetValue(playerId, out Spot already)
-            && already.MapId == mapId)
+            && already.MapId == where)
         {
-            _where[playerId] = new Spot(mapId, square);
+            _where[playerId] = new Spot(where, square);
             return;
         }
 
@@ -476,10 +498,10 @@ public sealed class GameWorld
                 _crowd.TryRemove(new KeyValuePair<string, ConcurrentDictionary<int, byte>>(was.MapId, left));
         }
 
-        if (mapId is null) return;
+        if (where is null) return;
 
-        _where[playerId] = new Spot(mapId, square);
-        _crowd.GetOrAdd(mapId, _ => new ConcurrentDictionary<int, byte>())[playerId] = 0;
+        _where[playerId] = new Spot(where, square);
+        _crowd.GetOrAdd(where, _ => new ConcurrentDictionary<int, byte>())[playerId] = 0;
     }
 
     /// <summary>True when this server has the numbers to decide a battle itself.</summary>
@@ -543,12 +565,18 @@ public sealed class GameWorld
         {
             (string mapId, GridPosition square) = Resume(saved);
 
+            // Which copy of that place has room. Everybody was in the first copy of
+            // everywhere until this line existed, which is what made a busy room cost
+            // what a busy room costs.
+            int copy = CopyWithRoom(mapId);
+
             // And beside whoever is already standing there, rather than on top of them.
-            square = Beside(mapId, square);
+            square = Beside(Instances.Key(mapId, copy), square);
 
             var player = new ServerPlayer(_nextPlayerId++, accountId, Sanitise(name))
             {
                 MapId = mapId,
+                Copy = copy,
                 Square = square,
                 Facing = saved.Facing,
                 Bag = new Bag(saved.Items),
@@ -578,18 +606,18 @@ public sealed class GameWorld
 
             // Tell the newcomer about everyone already on this map, before announcing them.
             foreach (ServerPlayer existing in _players.Values
-                         .Where(p => p.MapId == mapId && Sight.CanSee(p.Square, player.Square)))
+                         .Where(p => p.Where == player.Where && Sight.CanSee(p.Square, player.Square)))
             {
                 send.Add(new Outgoing(existing.ToAppeared(), OnlyTo: player.Id));
             }
 
-            if (Populate(mapId, 0) is { } people)
+            if (Populate(Instances.Key(mapId, copy), 0) is { } people)
                 send.Add(new Outgoing(new ObjectsPlaced([.. VisibleTo(player, people)]), OnlyTo: player.Id));
 
             _players[player.Id] = player;
-            StandsAt(player.Id, mapId, player.Square);
+            StandsAt(player.Id, player.Where, player.Square);
 
-            send.Add(new Outgoing(player.ToAppeared(), Except: player.Id, OnMap: mapId)
+            send.Add(new Outgoing(player.ToAppeared(), Except: player.Id, OnMap: player.Where)
             {
                 Near = player.Square,
             });
@@ -610,7 +638,7 @@ public sealed class GameWorld
 
             if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
 
-            string mapId = player.MapId;
+            string where = player.Where;
             _players.Remove(playerId);
             StandsAt(playerId, null);
 
@@ -619,7 +647,7 @@ public sealed class GameWorld
             return
             [
                 .. stopped,
-                new Outgoing(new PlayerLeft(playerId), OnMap: mapId) { Near = player.Square },
+                new Outgoing(new PlayerLeft(playerId), OnMap: where) { Near = player.Square },
             ];
         }
     }
@@ -668,7 +696,7 @@ public sealed class GameWorld
             // always refused by the time anything else has had a chance to look at it.
             if (MapFor(player) is { } here && here.HopOnto(wanted, direction) is { } landing)
             {
-                if (!IsOccupiedFor(player, player.MapId, landing))
+                if (!IsOccupiedFor(player, player.Where, landing))
                     return Hop(player, landing, nowSeconds);
 
                 // Somebody standing where you would land. Refused rather than shuffled
@@ -689,7 +717,7 @@ public sealed class GameWorld
             // stays. And two other places still count a player as occupying a square, both
             // of them answering a different question and both of them right: an NPC will
             // not wander onto somebody, and an arriving player is not put on top of one.
-            if (grid.Contains(wanted) && (!grid.IsWalkable(wanted) || IsOccupiedFor(player, player.MapId, wanted)))
+            if (grid.Contains(wanted) && (!grid.IsWalkable(wanted) || IsOccupiedFor(player, player.Where, wanted)))
             {
                 // Blocked is not an error, and everyone else still needs to see the turn.
                 //
@@ -719,7 +747,7 @@ public sealed class GameWorld
                         OnlyTo: playerId)]
                     : [new Outgoing(
                         new PlayerMoved(playerId, player.Square.X, player.Square.Y, player.Facing),
-                        OnMap: player.MapId)];
+                        OnMap: player.Where)];
             }
 
             if (nowSeconds - player.LastStepAt < MinimumStepInterval)
@@ -744,11 +772,11 @@ public sealed class GameWorld
 
             player.Square = wanted;
             player.LastStepAt = nowSeconds;
-            StandsAt(playerId, player.MapId, wanted);
+            StandsAt(playerId, player.Where, wanted);
 
             var send = new List<Outgoing>
             {
-                new(new PlayerMoved(playerId, wanted.X, wanted.Y, player.Facing), OnMap: player.MapId)
+                new(new PlayerMoved(playerId, wanted.X, wanted.Y, player.Facing), OnMap: player.Where)
                 {
                     Near = wanted,
                 },
@@ -809,7 +837,7 @@ public sealed class GameWorld
 
         var send = new List<Outgoing>
         {
-            new(new PlayerHopped(player.Id, landing.X, landing.Y, player.Facing), OnMap: player.MapId),
+            new(new PlayerHopped(player.Id, landing.X, landing.Y, player.Facing), OnMap: player.Where),
         };
 
         AfterArrival(player, send, nowSeconds);
@@ -841,7 +869,7 @@ public sealed class GameWorld
         GridPosition arrival = AcrossEdge(player.Square, side, map, target, connection.Offset);
         CollisionGrid targetGrid = GridFor(target.Id);
 
-        if (!targetGrid.IsWalkable(arrival) || IsOccupiedFor(player, target.Id, arrival))
+        if (!targetGrid.IsWalkable(arrival) || IsOccupiedFor(player, Instances.Key(target.Id, player.Copy), arrival))
         {
             // The neighbour exists but that particular square is solid. Treat it as the
             // wall it is rather than dropping the player into it.
@@ -900,10 +928,10 @@ public sealed class GameWorld
     /// kept for the callers who genuinely have no player in hand.
     /// </para>
     /// </summary>
-    private bool IsOccupiedFor(ServerPlayer player, string mapId, GridPosition square) =>
-        Standing(mapId, square) is { } who &&
-        !(mapId == player.MapId && player.Shifted.Contains(who)) &&
-        !(mapId == player.MapId && !player.Seeing.Contains(who) && HiddenOn(mapId, who));
+    private bool IsOccupiedFor(ServerPlayer player, string where, GridPosition square) =>
+        Standing(where, square) is { } who &&
+        !(where == player.Where && player.Shifted.Contains(who)) &&
+        !(where == player.Where && !player.Seeing.Contains(who) && HiddenOn(where, who));
 
     /// <summary>
     /// Puts something in a bag, holding key items to one.
@@ -923,16 +951,16 @@ public sealed class GameWorld
     }
 
     /// <summary>Whether an object on a map is one of the six hundred that can be hidden.</summary>
-    private bool HiddenOn(string mapId, int localId) =>
-        (_populated.TryGetValue(mapId, out MapPopulation? people)
+    private bool HiddenOn(string where, int localId) =>
+        (_populated.TryGetValue(where, out MapPopulation? people)
             ? people.ById(localId)?.Template
-            : _world.Find(mapId)?.Objects.FirstOrDefault(o => o.LocalId == localId))?.HiddenBy != 0;
+            : _world.Find(Instances.MapOf(where))?.Objects.FirstOrDefault(o => o.LocalId == localId))?.HiddenBy != 0;
 
     /// <summary>Who is on a square, by local id, or nothing.</summary>
-    private int? Standing(string mapId, GridPosition square) =>
-        _populated.TryGetValue(mapId, out MapPopulation? people)
+    private int? Standing(string where, GridPosition square) =>
+        _populated.TryGetValue(where, out MapPopulation? people)
             ? people.At(square)?.LocalId
-            : _world.Find(mapId)?.ObjectAt(square)?.LocalId;
+            : _world.Find(Instances.MapOf(where))?.ObjectAt(square)?.LocalId;
 
     /// <summary>
     /// The people on a map, brought to life if this is the first player to see it.
@@ -975,7 +1003,7 @@ public sealed class GameWorld
     /// </summary>
     private List<Outgoing> Reconcile(ServerPlayer player)
     {
-        if (!_populated.TryGetValue(player.MapId, out MapPopulation? people)) return [];
+        if (!_populated.TryGetValue(player.Where, out MapPopulation? people)) return [];
 
         var send = new List<Outgoing>();
 
@@ -1002,14 +1030,25 @@ public sealed class GameWorld
         return send;
     }
 
-    private MapPopulation? Populate(string mapId, double now)
+    /// <summary>
+    /// The people who live on one copy of a place, made if this is the first time
+    /// anybody has been in it.
+    /// <para>
+    /// Keyed by the copy and not by the map, which is what makes a copy a place rather
+    /// than a filter: each one walks its own townsfolk about, and the boy you talked to
+    /// in the first copy is not the boy standing in the second. That is also the cost of
+    /// this feature, stated — a place with twenty copies simulates twenty sets of the
+    /// same people.
+    /// </para>
+    /// </summary>
+    private MapPopulation? Populate(string where, double now)
     {
-        if (_populated.TryGetValue(mapId, out MapPopulation? existing)) return existing;
-        if (_world.Find(mapId) is not { } map) return null;
+        if (_populated.TryGetValue(where, out MapPopulation? existing)) return existing;
+        if (_world.Find(Instances.MapOf(where)) is not { } map) return null;
 
         var people = new MapPopulation(map, _objectRng, now);
 
-        _populated[mapId] = people;
+        _populated[where] = people;
         return people;
     }
 
@@ -1032,20 +1071,22 @@ public sealed class GameWorld
             // player in the world and sorting out the duplicates. At a hundred players
             // that scan happened five times a second inside this lock; at a thousand it
             // would have been the tick's whole budget.
-            foreach (string mapId in MapsWithAnybodyOn)
+            foreach (string where in MapsWithAnybodyOn)
             {
-                if (Populate(mapId, nowSeconds) is not { } people) continue;
+                if (Populate(where, nowSeconds) is not { } people) continue;
+
+                string mapId = Instances.MapOf(where);
 
                 // A conversation ends when the client says so, and also when it cannot:
                 // a player who disconnected or walked through a door is not talking to
                 // anybody, whatever the last thing they sent was.
                 people.Release(holder =>
-                    !_players.TryGetValue(holder, out ServerPlayer? talker) || talker.MapId != mapId);
+                    !_players.TryGetValue(holder, out ServerPlayer? talker) || talker.Where != where);
 
                 foreach (ObjectView moved in people.Step(_objectRng, nowSeconds, square => IsFree(mapId, square)))
-                    send.Add(new Outgoing(new ObjectMoved(moved.LocalId, moved.X, moved.Y, moved.Facing), OnMap: mapId));
+                    send.Add(new Outgoing(new ObjectMoved(moved.LocalId, moved.X, moved.Y, moved.Facing), OnMap: where));
 
-                send.AddRange(StepApproaches(mapId, people, nowSeconds));
+                send.AddRange(StepApproaches(where, people, nowSeconds));
             }
 
             // Maps nobody can see any more stop being simulated, and forget where their
@@ -1097,7 +1138,7 @@ public sealed class GameWorld
 
             if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
 
-            if (!_populated.TryGetValue(player.MapId, out MapPopulation? people))
+            if (!_populated.TryGetValue(player.Where, out MapPopulation? people))
             {
                 LastTalkOutcome = "that map is not populated";
                 return [];
@@ -1354,7 +1395,7 @@ public sealed class GameWorld
 
                         shop.Add(new Outgoing(
                             new ObjectMoved(person.LocalId, person.Square.X, person.Square.Y, person.Facing),
-                            OnMap: player.MapId));
+                            OnMap: player.Where));
                     }
 
                     return shop;
@@ -1367,7 +1408,7 @@ public sealed class GameWorld
 
                 return [new Outgoing(
                     new ObjectMoved(person.LocalId, person.Square.X, person.Square.Y, person.Facing),
-                    OnMap: player.MapId)];
+                    OnMap: player.Where)];
             }
         }
     }
@@ -1420,7 +1461,7 @@ public sealed class GameWorld
     /// </summary>
     private List<Outgoing> BeginApproach(ServerPlayer player, MapObject watcher, double nowSeconds)
     {
-        if (!_populated.TryGetValue(player.MapId, out MapPopulation? people)) return [];
+        if (!_populated.TryGetValue(player.Where, out MapPopulation? people)) return [];
         if (people.ById(watcher.LocalId) is not { } person) return [];
         if (person.Approaching is not null) return [];
 
@@ -1586,7 +1627,7 @@ public sealed class GameWorld
 
         if (_world.Find(player.MapId) is not { } map) return null;
 
-        _populated.TryGetValue(player.MapId, out MapPopulation? people);
+        _populated.TryGetValue(player.Where, out MapPopulation? people);
 
         foreach (MapObject template in map.Objects)
         {
@@ -1939,7 +1980,7 @@ public sealed class GameWorld
         LastGift = null;
 
         if (_rules is null || _battles is null) return [];
-        if (!_populated.TryGetValue(player.MapId, out MapPopulation? people)) return [];
+        if (!_populated.TryGetValue(player.Where, out MapPopulation? people)) return [];
 
         if (people.Objects.FirstOrDefault(o => o.HeldBy == player.Id && o.Template.GivesMon) is not { } person)
             return [];
@@ -2660,7 +2701,7 @@ public sealed class GameWorld
                 return [];
             }
 
-            if (!_populated.TryGetValue(player.MapId, out MapPopulation? people)) return [];
+            if (!_populated.TryGetValue(player.Where, out MapPopulation? people)) return [];
 
             int held = 0;
 
@@ -2705,7 +2746,7 @@ public sealed class GameWorld
             LastScenePlacement = null;
 
             if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
-            if (!_populated.TryGetValue(player.MapId, out MapPopulation? people)) return [];
+            if (!_populated.TryGetValue(player.Where, out MapPopulation? people)) return [];
 
             if (people.ById(localId) is not { } person)
             {
@@ -2796,7 +2837,7 @@ public sealed class GameWorld
 
             return [new Outgoing(
                 new ObjectMoved(localId, square.X, square.Y, facing),
-                OnMap: player.MapId)];
+                OnMap: player.Where)];
         }
     }
 
@@ -2852,7 +2893,7 @@ public sealed class GameWorld
                 return [];
             }
 
-            if (IsOccupiedFor(player, player.MapId, ahead))
+            if (IsOccupiedFor(player, player.Where, ahead))
             {
                 LastSurf = $"refused: somebody is standing on {ahead}";
                 return [];
@@ -2866,7 +2907,7 @@ public sealed class GameWorld
             var send = new List<Outgoing>
             {
                 new(new SurfingChanged(true, ahead.X, ahead.Y), OnlyTo: playerId),
-                new(new PlayerMoved(playerId, ahead.X, ahead.Y, player.Facing), OnMap: player.MapId),
+                new(new PlayerMoved(playerId, ahead.X, ahead.Y, player.Facing), OnMap: player.Where),
             };
 
             AfterArrival(player, send, LastTickAt);
@@ -2899,7 +2940,7 @@ public sealed class GameWorld
             player.FightingWhenDone = 0;
 
             if (localId == 0) return [];
-            if (!_populated.TryGetValue(player.MapId, out MapPopulation? here)) return [];
+            if (!_populated.TryGetValue(player.Where, out MapPopulation? here)) return [];
             if (here.ById(localId) is not { } person) return [];
 
             List<Outgoing> fight = StartTrainerBattle(player, person.Template);
@@ -3056,7 +3097,7 @@ public sealed class GameWorld
         lock (_gate)
         {
             if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return null;
-            if (!_populated.TryGetValue(player.MapId, out MapPopulation? people)) return null;
+            if (!_populated.TryGetValue(player.Where, out MapPopulation? people)) return null;
 
             return people.Objects.FirstOrDefault(o => o.HeldBy == playerId)?.LocalId;
         }
@@ -3089,7 +3130,7 @@ public sealed class GameWorld
 
         foreach (ServerPlayer other in _players.Values)
         {
-            if (other.Id == moved.Id || other.MapId != moved.MapId) continue;
+            if (other.Id == moved.Id || other.Where != moved.Where) continue;
 
             bool saw = Sight.CanSee(other.Square, from);
             bool sees = Sight.CanSee(other.Square, to);
@@ -3136,13 +3177,13 @@ public sealed class GameWorld
     /// let them in.
     /// </para>
     /// </summary>
-    private GridPosition Beside(string mapId, GridPosition wanted)
+    private GridPosition Beside(string where, GridPosition wanted)
     {
         const int Rings = 6;
 
-        if (!IsTakenBySomebody(mapId, wanted)) return wanted;
+        if (!IsTakenBySomebody(where, wanted)) return wanted;
 
-        CollisionGrid grid = GridFor(mapId);
+        CollisionGrid grid = GridFor(Instances.MapOf(where));
 
         for (int ring = 1; ring <= Rings; ring++)
         {
@@ -3155,7 +3196,7 @@ public sealed class GameWorld
                     var square = new GridPosition(wanted.X + dx, wanted.Y + dy);
 
                     if (!grid.Contains(square) || !grid.IsWalkable(square)) continue;
-                    if (IsOccupied(mapId, square) || IsTakenBySomebody(mapId, square)) continue;
+                    if (IsOccupied(where, square) || IsTakenBySomebody(where, square)) continue;
 
                     return square;
                 }
@@ -3165,12 +3206,25 @@ public sealed class GameWorld
     }
 
     /// <summary>True when a player is standing on this square.</summary>
-    private bool IsTakenBySomebody(string mapId, GridPosition square) =>
-        _players.Values.Any(p => p.MapId == mapId && p.Square == square);
+    private bool IsTakenBySomebody(string where, GridPosition square) =>
+        _players.Values.Any(p => p.Where == where && p.Square == square);
+
+    /// <summary>
+    /// The copy of a place with room in it, lowest first.
+    /// <para>
+    /// Asked when somebody arrives and never again while they stay, because a player
+    /// moved between copies while standing still would watch the room change around
+    /// them.
+    /// </para>
+    /// </summary>
+    private int CopyWithRoom(string mapId) => Instances.CopyWithRoom(copy =>
+        _crowd.TryGetValue(Instances.Key(mapId, copy), out ConcurrentDictionary<int, byte>? there)
+            ? there.Count
+            : 0);
 
     /// <summary>Standing still, announced so everyone still sees the turn.</summary>
     private Outgoing Stay(ServerPlayer player) =>
-        new(new PlayerMoved(player.Id, player.Square.X, player.Square.Y, player.Facing), OnMap: player.MapId)
+        new(new PlayerMoved(player.Id, player.Square.X, player.Square.Y, player.Facing), OnMap: player.Where)
         {
             Near = player.Square,
         };
@@ -3299,7 +3353,7 @@ public sealed class GameWorld
             GridPosition next = door.Step(way);
 
             if (!grid.IsWalkable(next) || map.WarpAt(next) is not null) continue;
-            if (IsOccupiedFor(player, map.Id, next)) continue;
+            if (IsOccupiedFor(player, Instances.Key(map.Id, player.Copy), next)) continue;
 
             return (next, way);
         }
@@ -3316,11 +3370,11 @@ public sealed class GameWorld
     private List<Outgoing> Transfer(
         ServerPlayer player, string mapId, GridPosition arrival, Direction facing, double nowSeconds)
     {
-        string previous = player.MapId;
+        string previousWhere = player.Where;
 
         var send = new List<Outgoing>
         {
-            new(new PlayerLeft(player.Id), Except: player.Id, OnMap: previous),
+            new(new PlayerLeft(player.Id), Except: player.Id, OnMap: previousWhere),
         };
 
         // And whatever they were negotiating, because a trade held across two rooms is one
@@ -3348,8 +3402,9 @@ public sealed class GameWorld
         player.Shifted.Clear();
 
         player.MapId = mapId;
+        player.Copy = CopyWithRoom(mapId);
         player.Square = arrival;
-        StandsAt(player.Id, mapId, arrival);
+        StandsAt(player.Id, player.Where, arrival);
         player.Facing = facing;
 
         send.Add(new Outgoing(
@@ -3362,7 +3417,7 @@ public sealed class GameWorld
         foreach (ServerPlayer existing in _players.Values.Where(p => p.MapId == mapId && p.Id != player.Id))
             send.Add(new Outgoing(existing.ToAppeared(), OnlyTo: player.Id));
 
-        send.Add(new Outgoing(player.ToAppeared(), Except: player.Id, OnMap: mapId));
+        send.Add(new Outgoing(player.ToAppeared(), Except: player.Id, OnMap: player.Where));
 
         OpenWindowForArrival(player, nowSeconds);
         send.AddRange(HandOverOnArrival(player));
@@ -3498,7 +3553,7 @@ public sealed class GameWorld
 
             if (_rules is null) return [];
             if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
-            if (!_populated.TryGetValue(player.MapId, out MapPopulation? people)) return [];
+            if (!_populated.TryGetValue(player.Where, out MapPopulation? people)) return [];
             if (people.ById(localId) is not { } person) return [];
 
             if (!person.Template.CanGive.Contains(itemId))
@@ -3553,7 +3608,7 @@ public sealed class GameWorld
             if (_rules is null || _battles is null) return [];
             if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
             if (player.InBattle) return [];
-            if (!_populated.TryGetValue(player.MapId, out MapPopulation? people)) return [];
+            if (!_populated.TryGetValue(player.Where, out MapPopulation? people)) return [];
             if (people.ById(localId) is not { } person) return [];
 
             if (!person.Template.CanFight.Contains(new WildFight(species, level)))
@@ -4363,7 +4418,7 @@ public sealed class GameWorld
     /// dress has taken a shirt and a pair of trousers off with it.
     /// </summary>
     private static List<Outgoing> Showing(ServerPlayer player) =>
-        [new(new AppearanceChanged(player.Id, player.Looks), OnMap: player.MapId)];
+        [new(new AppearanceChanged(player.Id, player.Looks), OnMap: player.Where)];
 
     public List<Outgoing> RunConsole(int playerId, string text, double nowSeconds = 0)
     {
@@ -4426,7 +4481,7 @@ public sealed class GameWorld
             if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
             if (_battles is null || player.Party.Count == 0) return [];
 
-            if (!_populated.TryGetValue(player.MapId, out MapPopulation? people)) return [];
+            if (!_populated.TryGetValue(player.Where, out MapPopulation? people)) return [];
 
             // In front of them, by the same rule a conversation uses — a counter two
             // rooms away is not a counter you are standing at.

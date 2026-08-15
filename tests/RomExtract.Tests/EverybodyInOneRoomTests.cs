@@ -436,3 +436,112 @@ public class HowFarSomebodyCanSeeTests
         return world.Move(player.Id, way, 100);
     }
 }
+
+/// <summary>
+/// More than one copy of a place.
+/// <para>
+/// The last wall the crowd tool found, and the only one that was a decision rather than
+/// a mistake. Standing in a room costs the square of the number of people in it, and
+/// milestone 116 measured the cheap fix — spreading arrivals over the squares around the
+/// spawn — doing nothing at all, because a hundred people spread over thirteen squares
+/// are still inside one screen of each other.
+/// </para>
+/// <para>
+/// So past a number, the next arrivals go into a second copy, and the two never see each
+/// other. The alternatives were capping who is drawn or shrinking the circle, and both of
+/// those leave a crowd standing there that the player cannot see and can walk into. A
+/// copy has no crowd in it that anybody is being lied to about.
+/// </para>
+/// </summary>
+public class MoreThanOneCopyTests
+{
+    private const string Room = "1.0";
+
+    private static GameWorld Somewhere() =>
+        new(new WorldData([new MapData(Room, "ROOM", 32, 32, new byte[32 * 32])]), Room, TestRules.All);
+
+    private static List<ServerPlayer> Crowd(GameWorld world, int howMany) =>
+        [.. Enumerable.Range(1, howMany).Select(i => world.Join(i, $"P{i}", world.FreshCharacter()).Player)];
+
+    /// <summary>A room that is not full is one room.</summary>
+    [Fact]
+    public void ASmallCrowdIsAllInOnePlace()
+    {
+        List<ServerPlayer> people = Crowd(Somewhere(), 5);
+
+        Assert.All(people, p => Assert.Equal(0, p.Copy));
+        Assert.Single(people.Select(p => p.Where).Distinct());
+    }
+
+    /// <summary>And one that is full opens another.</summary>
+    [Fact]
+    public void AndAFullOneOpensAnother()
+    {
+        List<ServerPlayer> people = Crowd(Somewhere(), Instances.RoomFor + 5);
+
+        Assert.Equal(Instances.RoomFor, people.Count(p => p.Copy == 0));
+        Assert.Equal(5, people.Count(p => p.Copy == 1));
+    }
+
+    /// <summary>
+    /// And nobody in one copy hears anything from the other, which is the whole point:
+    /// the cost of a room is the number of people in that copy of it.
+    /// </summary>
+    [Fact]
+    public void AndTheTwoCopiesNeverHearEachOther()
+    {
+        GameWorld world = Somewhere();
+
+        List<ServerPlayer> people = Crowd(world, Instances.RoomFor + 2);
+
+        ServerPlayer first = people[0];
+        ServerPlayer second = people[^1];
+
+        Assert.NotEqual(first.Copy, second.Copy);
+
+        Assert.DoesNotContain(second.Id, world.WhoIsOn(first.Where));
+        Assert.DoesNotContain(first.Id, world.WhoIsOn(second.Where));
+
+        // And a step in the second copy is addressed to the second copy.
+        Outgoing step = Assert.Single(
+            world.Move(second.Id, Direction.Right, 100).Where(o => o.Message is PlayerMoved));
+
+        Assert.Equal(second.Where, step.OnMap);
+        Assert.NotEqual(first.Where, step.OnMap);
+    }
+
+    /// <summary>And each copy is a place, with its own people walking about in it.</summary>
+    [Fact]
+    public void AndEachCopyKeepsItsOwnPeople()
+    {
+        GameWorld world = Somewhere();
+
+        List<ServerPlayer> people = Crowd(world, Instances.RoomFor + 1);
+
+        Assert.Equal(2, people.Select(p => p.Where).Distinct().Count());
+        Assert.Equal(2, world.MapsWithAnybodyOn.Count);
+    }
+
+    /// <summary>A key is a place and a copy, and the first copy is spelled as it always was.</summary>
+    [Fact]
+    public void TheFirstCopyIsSpelledLikeEverythingEverWritten()
+    {
+        Assert.Equal("1.0", Instances.Key("1.0", 0));
+        Assert.Equal("1.0#3", Instances.Key("1.0", 3));
+
+        Assert.Equal("1.0", Instances.MapOf("1.0#3"));
+        Assert.Equal(3, Instances.CopyOf("1.0#3"));
+
+        Assert.Equal("1.0", Instances.MapOf("1.0"));
+        Assert.Equal(0, Instances.CopyOf("1.0"));
+    }
+
+    /// <summary>And a place fills up from the lowest copy, so a quiet night ends in one.</summary>
+    [Fact]
+    public void AndAPlaceFillsFromTheLowestCopy()
+    {
+        Assert.Equal(0, Instances.CopyWithRoom(copy => copy == 0 ? Instances.RoomFor - 1 : 0));
+        Assert.Equal(1, Instances.CopyWithRoom(copy => copy == 0 ? Instances.RoomFor : 0));
+        Assert.Equal(2, Instances.CopyWithRoom(copy => copy < 2 ? Instances.RoomFor : 0));
+    }
+}

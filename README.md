@@ -14,7 +14,7 @@ src/Server          the authoritative server. Core only
 src/Client          the game: window, input, drawing, screens
 src/Tools/RomDump   the extractor's command line, and every instrument built for it
 src/Tools/Crowd     a crowd of real clients, for measuring what the server does at scale
-tests/              1553 tests, no cartridge required
+tests/              1559 tests, no cartridge required
 tools/rig/          the headless play rig — Xvfb, two clients, screenshots
 ```
 
@@ -275,7 +275,23 @@ are still all inside an eleven-square circle, and the like-for-like measurement 
 so — 120 messages a second per player before, 129 after.
 
 **A heap spread thinly is still a heap.** The only thing that changes that number is a
-second copy of the place, which is a design decision this project has not made.
+second copy of the place — so there is one. Past forty people, the next arrivals go
+into another copy, and the copies never see each other: different crowds, different
+townsfolk, the same ground. A key is a place and a copy, and the first copy is spelled
+exactly as every map id in every world file and every save already is.
+
+Same measurement, same map, same hundred players:
+
+```
+one copy:     12,887 messages a second, 129 per player
+three copies:  4,880 messages a second,  49 per player
+```
+
+The alternatives were capping how many people are drawn or shrinking the circle, and
+both leave a crowd standing there that the player cannot see and can walk into. A copy
+has no crowd in it that anybody is being lied to about. What it costs is honest too:
+every copy walks its own townsfolk, and two people who want to be together have to be
+put in the same one — which is the next rule to write.
 
 The third measurement is the disk. A save happens on anything a player does that is
 not walking, at most once a second each, and it rewrites the whole character. At a
