@@ -43,6 +43,9 @@ public sealed record ServerPlayer(int Id, long AccountId, string Name)
     /// <summary>When this player last completed a step, in server seconds.</summary>
     public double LastStepAt { get; set; } = double.NegativeInfinity;
 
+    /// <summary>When this player last said something, in server seconds.</summary>
+    public double LastSaidAt { get; set; } = double.NegativeInfinity;
+
     /// <summary>
     /// The battle this player is in, held by the server.
     /// <para>
@@ -3676,6 +3679,117 @@ public sealed class GameWorld
     /// for arrivals rather than a wall — arrivals are the thing there are thousands of.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// The longest thing anybody may say at once.
+    /// <para>
+    /// Not a style rule. Everything said is broadcast to a whole copy of a place, so the
+    /// cost of one message is its length times the number of people in the room — and the
+    /// only number in that product a player controls is this one.
+    /// </para>
+    /// </summary>
+    public const int LongestLine = 120;
+
+    /// <summary>
+    /// The shortest gap between two things one player may say.
+    /// <para>
+    /// The same argument as the step limit, which this is deliberately modelled on: a rule
+    /// enforced here rather than asked for politely, because a client that decided how
+    /// often it could speak would decide "always". Half a second is far below what anybody
+    /// types and far above what a script would want.
+    /// </para>
+    /// </summary>
+    public const double LeastChatSeconds = 0.5;
+
+    /// <summary>What the last thing anybody tried to say came to.</summary>
+    public string? LastChat { get; private set; }
+
+    /// <summary>
+    /// Says something, to a room or to one person.
+    /// <para>
+    /// A room is a <em>copy</em> of a place and not a map. That distinction is the whole
+    /// reason chat had to wait for the instancing work: two people standing in the same
+    /// town can be in copies that cannot see each other, and a chat scoped to the map would
+    /// have put words in the mouths of people who were not there.
+    /// </para>
+    /// <para>
+    /// Nothing is scoped by sight. Everybody in the room hears it, including whoever is
+    /// round the corner, because a room you can be silently excluded from by standing three
+    /// squares too far away is worse than no chat at all.
+    /// </para>
+    /// </summary>
+    public List<Outgoing> Say(int playerId, string text, string? to, double nowSeconds)
+    {
+        lock (_gate)
+        {
+            LastChat = null;
+
+            if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
+
+            string said = Trimmed(text);
+
+            if (said.Length == 0)
+            {
+                LastChat = "refused: nothing to say";
+                return [];
+            }
+
+            if (nowSeconds - player.LastSaidAt < LeastChatSeconds)
+            {
+                LastChat = $"refused: {nowSeconds - player.LastSaidAt:F2}s since the last, limit {LeastChatSeconds:F2}s";
+
+                return [new Outgoing(new Rejected("Too fast."), OnlyTo: playerId)];
+            }
+
+            player.LastSaidAt = nowSeconds;
+
+            if (to is null or "")
+            {
+                LastChat = $"{player.Name} to {player.Where}: {said}";
+
+                return [new Outgoing(new ChatSaid(player.Id, player.Name, said), OnMap: player.Where)];
+            }
+
+            ServerPlayer? heard = _players.Values.FirstOrDefault(p =>
+                string.Equals(p.Name, to, StringComparison.OrdinalIgnoreCase));
+
+            if (heard is null)
+            {
+                LastChat = $"refused: nobody is called {to}";
+
+                return [new Outgoing(new Rejected($"Nobody here is called {to}."), OnlyTo: playerId)];
+            }
+
+            LastChat = $"{player.Name} to {heard.Name}: {said}";
+
+            // Two copies, and the sender's is flagged. One of them needs to read as "to
+            // Koop" and the other as "from Mason", and that is a difference in wording
+            // rather than in what happened.
+            return
+            [
+                new Outgoing(
+                    new ChatSaid(player.Id, heard.Name, said) { Private = true, Mine = true },
+                    OnlyTo: playerId),
+
+                .. heard.Id == playerId
+                    ? new List<Outgoing>()
+                    : [new Outgoing(
+                        new ChatSaid(player.Id, player.Name, said) { Private = true },
+                        OnlyTo: heard.Id)],
+            ];
+        }
+    }
+
+    /// <summary>
+    /// What is left of a line once the things that are not words are taken out.
+    /// <para>
+    /// Control characters go because a newline in a chat line is a way to draw over
+    /// somebody else's, and the length is cut rather than refused: a player who typed one
+    /// character too many meant the first hundred and twenty of them.
+    /// </para>
+    /// </summary>
+    private static string Trimmed(string text) =>
+        new string([.. text.Where(c => !char.IsControl(c)).Take(LongestLine)]).Trim();
+
     public List<Outgoing> GoTo(int playerId, string name)
     {
         lock (_gate)

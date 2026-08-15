@@ -43,6 +43,16 @@ public sealed class ConsoleBox
 
     public bool IsOpen { get; private set; }
 
+    /// <summary>
+    /// True when what is being typed is a thing to say rather than a command.
+    /// <para>
+    /// The same line at the bottom of the screen does both, because that is what it is: a
+    /// place to type. Two boxes would be two sets of the same key handling, and the second
+    /// one is where the paste bug lives.
+    /// </para>
+    /// </summary>
+    public bool IsChat { get; private set; }
+
     /// <summary>The command to send, once there is one. Taken rather than read.</summary>
     public string? Pending { get; private set; }
 
@@ -70,9 +80,10 @@ public sealed class ConsoleBox
     /// somebody meant for something else is worse than no console.
     /// </para>
     /// </summary>
-    public void Open()
+    public void Open(bool chat = false)
     {
         IsOpen = true;
+        IsChat = chat;
         _showFor = FadeAfterSeconds;
         _line = "";
     }

@@ -836,12 +836,21 @@ public static class Program
             // letters.
             console.Update(delta);
 
-            if (console.TakePending() is { } typed) network.SendConsole(typed);
+            // Whether it was a command or a thing to say is decided by which key opened
+            // the line, and the line remembers. Reading the first character instead would
+            // make "/" the one thing nobody could ever say.
+            bool chatting = console.IsChat;
 
-            if (!console.IsOpen && naming is null && talking is null && battle is null &&
-                Raylib.IsKeyPressed(KeyboardKey.Slash))
+            if (console.TakePending() is { } typed)
             {
-                console.Open();
+                if (chatting) SendTyped(network, typed);
+                else network.SendConsole(typed);
+            }
+
+            if (!console.IsOpen && naming is null && talking is null && battle is null)
+            {
+                if (Raylib.IsKeyPressed(KeyboardKey.Slash)) console.Open();
+                else if (Raylib.IsKeyPressed(KeyboardKey.T)) console.Open(chat: true);
             }
 
             // Ahead of everything else, because a name is being typed and W, A, S and D
@@ -1862,6 +1871,34 @@ public static class Program
     /// <summary>
     /// Folds server messages into local state, returning an encounter if one arrived.
     /// </summary>
+    /// <summary>
+    /// Sends what was typed on the chat line, splitting a whisper off the front.
+    /// <para>
+    /// <c>@name something</c> goes to one person and anything else goes to the room. The
+    /// splitting is done here rather than on the server because it is a convenience of this
+    /// keyboard, and the wire already has a field for who it is for — a server that parsed
+    /// text would be a server with a second, worse protocol inside its first one.
+    /// </para>
+    /// </summary>
+    private static void SendTyped(NetworkClient network, string typed)
+    {
+        if (!typed.StartsWith('@'))
+        {
+            network.SendChat(typed);
+            return;
+        }
+
+        string[] parts = typed[1..].Split(' ', 2, StringSplitOptions.TrimEntries);
+
+        if (parts.Length < 2 || parts[0].Length == 0 || parts[1].Length == 0)
+        {
+            network.SendChat(typed);
+            return;
+        }
+
+        network.SendChat(parts[1], parts[0]);
+    }
+
     private static void ApplyServerMessages(
         NetworkClient network,
         Dictionary<int, RemoteCharacter> others,
@@ -1908,6 +1945,16 @@ public static class Program
             {
                 case ConsoleReply reply:
                     console.Said(reply.Text);
+                    break;
+
+                // Said out loud, or said to you. A whisper reads differently at each end, and
+                // which end this is arrives on the message rather than being worked out.
+                case ChatSaid spoken:
+                    console.Said(
+                        spoken.Private
+                            ? spoken.Mine ? $"to {spoken.Name}: {spoken.Text}" : $"{spoken.Name} whispers: {spoken.Text}"
+                            : $"{spoken.Name}: {spoken.Text}");
+
                     break;
 
                 case Welcome welcome:

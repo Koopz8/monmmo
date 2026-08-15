@@ -216,6 +216,12 @@ public sealed class NetworkClient : IDisposable
     /// </summary>
     public void SendDaycare(int slot, bool leaving) => Send(new DaycareRequest(slot, leaving));
 
+    /// <summary>
+    /// Say something to the room, or to one person by name. Who hears it is the server's,
+    /// and so is how often anybody may ask.
+    /// </summary>
+    public void SendChat(string text, string? to = null) => Send(new ChatRequest(text, to));
+
     private void Send(NetMessage message)
     {
         if (_channel is null) return;

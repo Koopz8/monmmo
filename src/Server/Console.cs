@@ -76,6 +76,7 @@ public static class ConsoleHelp
         "/ail <condition>           everybody poisoned, burned, asleep — or none",
         "/money <amount>            set it",
         "/forget                    every flag and variable, gone",
+        "T then a line             say it to the room; @name in front whispers",
         "/help                      this",
     ];
 }

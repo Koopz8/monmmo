@@ -61,6 +61,8 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(SailRequest), "sail")]
 [JsonDerivedType(typeof(ShopUpdated), "shopupdate")]
 [JsonDerivedType(typeof(BuyCosmeticRequest), "buyclothes")]
+[JsonDerivedType(typeof(ChatRequest), "chatask")]
+[JsonDerivedType(typeof(ChatSaid), "chatsaid")]
 [JsonDerivedType(typeof(DaycareUpdated), "daycare")]
 [JsonDerivedType(typeof(DaycareRequest), "daycareask")]
 [JsonDerivedType(typeof(CosmeticsOwned), "owned")]
@@ -1017,6 +1019,45 @@ public sealed record ShopOpened(
     /// </para>
     /// </summary>
     public IReadOnlyList<ShopEntry> Clothes { get; init; } = [];
+}
+
+/// <summary>
+/// Something a player is saying.
+/// <para>
+/// <paramref name="To"/> is nobody for the ordinary case, which is everybody in the copy of
+/// the place you are standing in — and the copy, rather than the map, is the point. Two
+/// people in different copies of one town cannot see each other, so a chat scoped to the
+/// map would put words in the mouths of people who are not there.
+/// </para>
+/// <para>
+/// A name rather than an id for a whisper, because a name is what a player can read off
+/// somebody's head. The server refuses anything it cannot find.
+/// </para>
+/// </summary>
+public sealed record ChatRequest(string Text, string? To = null) : NetMessage;
+
+/// <summary>
+/// Something that was said, and who said it.
+/// <para>
+/// The name travels with it rather than being looked up from the id. A client that had to
+/// resolve a name would have nothing to show for somebody who has just walked out of
+/// sight, which is exactly when the last thing they said still matters.
+/// </para>
+/// </summary>
+public sealed record ChatSaid(int PlayerId, string Name, string Text) : NetMessage
+{
+    /// <summary>True when this was said to one person rather than to a room.</summary>
+    public bool Private { get; init; }
+
+    /// <summary>
+    /// True when this is the copy sent back to whoever said it.
+    /// <para>
+    /// A whisper reaches two people and reads differently to each: one of them needs to see
+    /// who it went to, and the other who it came from. Rather than two message shapes, the
+    /// sender's copy is flagged and the client picks the wording.
+    /// </para>
+    /// </summary>
+    public bool Mine { get; init; }
 }
 
 /// <summary>

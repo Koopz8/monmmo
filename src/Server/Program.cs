@@ -1228,6 +1228,14 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                         // Leaving one at the daycare, or taking one back. The slot is an
                         // index into whichever list the direction names, and every rule
                         // about whether it may happen is on the far side of this call.
+                        case ChatRequest talk when playerId != 0:
+                            await DispatchAsync(
+                                    world.Say(playerId, talk.Text, talk.To, Now), playerId, cancellationToken)
+                                .ConfigureAwait(false);
+
+                            if (world.LastChat is { } heard) Console.WriteLine($"\" {heard}");
+                            break;
+
                         case BuyCosmeticRequest clothes when playerId != 0:
                             await DispatchAsync(
                                     world.BuyCosmetic(playerId, clothes.CosmeticId), playerId, cancellationToken)

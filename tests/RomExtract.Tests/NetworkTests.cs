@@ -54,6 +54,10 @@ public class MessageChannelTests
         [
             new RegisterRequest("Mason", "a-good-password"),
             new BuyCosmeticRequest(103),
+            new ChatRequest("hello"),
+            new ChatRequest("psst", "Koop"),
+            new ChatSaid(1, "Mason", "hello"),
+            new ChatSaid(1, "Koop", "psst") { Private = true, Mine = true },
             new CosmeticsOwned([101, 103]),
             new DaycareRequest(1, true),
             new DaycareUpdated(
