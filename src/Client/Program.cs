@@ -275,6 +275,15 @@ public static class Program
         // fight simply does not pick up again, which is what happened until now.
         BattleOutcomes? outcomes = BattleOutcomeLocator.Locate(data.Rom, Note);
 
+        // Who heals, which is now also where the box is. Located here rather than asked
+        // of the server, because a rule kept on both sides of the split is kept twice or
+        // it is not kept at all — and this side has the same cartridge to read it from.
+        uint? healer = HealerLocator.Locate(
+            library.All().Select(m => ($"{m.Bank}.{m.Number}", (IReadOnlyList<MapObject>)m.Objects)),
+            data.Rom);
+
+        if (healer is null) Note("no healer script, so the box has nowhere to be offered");
+
         // The cartridge's own walking figures, if they can be read. A rectangle is the
         // fallback rather than a failure: a client that will not start because it could
         // not find a sprite table is worse than one that draws a box.
@@ -551,6 +560,20 @@ public static class Program
             if (carrying is null && talking is null && !console.IsOpen && Raylib.IsKeyPressed(KeyboardKey.B))
                 carrying = new BagScreen(bag, party, items, data);
 
+            // The box, on its own key now rather than on a square. It used to open by
+            // facing behaviour 0x6A, which is the stairs — and there is no byte and no
+            // script anywhere in this cartridge for a storage machine, so there is no
+            // square to face. What is left is the room: somewhere that heals is somewhere
+            // the box is offered, which the server decides from the same field.
+            //
+            // Not on the action key, because the action key belongs to whoever is in
+            // front of you and a healing centre is full of people.
+            if (carrying is null && storing is null && looking is null && talking is null && !console.IsOpen
+                && Raylib.IsKeyPressed(KeyboardKey.C) && InARoomThatHeals(data, view, healer))
+            {
+                storing = new BoxScreen(party, box, boxSize, data, items);
+            }
+
             // The party, on the key the box used to take. Nothing else is going on, the
             // console is shut, and this is the one screen that needs no machine.
             if (carrying is null && storing is null && looking is null && talking is null && !console.IsOpen
@@ -747,12 +770,7 @@ public static class Program
             }
             else if (DialogueBox.Pressed() && !player.IsStepping)
             {
-                // The machine in the corner comes first, because it is not a
-                // conversation and there is nobody on that square to talk to. The
-                // server enforces the same rule from its own copy of the world; this is
-                // only the interface refusing to open a box in the middle of a route.
-                if (FacingAComputer(view, player)) storing = new BoxScreen(party, box, boxSize, data, items);
-                else talking = Talk(data, view, player, network, script, party, rival, waiting);
+                talking = Talk(data, view, player, network, script, party, rival, waiting);
             }
 
             exclaimFor = Math.Max(0f, exclaimFor - delta);
@@ -1542,25 +1560,21 @@ public static class Program
         };
 
     /// <summary>
-    /// True when the square in front holds a storage machine.
+    /// True when this room heals, which is where the box is offered.
     /// <para>
-    /// The client's half of a rule the server also keeps, read off the same behaviour
-    /// byte on the same square. Neither side is told by the other, and the server is
-    /// the one that decides — this only stops the interface offering something that
-    /// would be refused.
+    /// The client's half of a rule the server also keeps, off the same field of the same
+    /// world file. It used to be a square — behaviour 0x6A, in the corner of every healing
+    /// centre — and 0x6A is the stairs. There is no byte for a storage machine on this
+    /// cartridge and no script for one either, so there is no square to face, and the room
+    /// is what is left.
+    /// </para>
+    /// <para>
+    /// Neither side is told by the other, and the server is the one that decides — this
+    /// only stops the interface offering something that would be refused.
     /// </para>
     /// </summary>
-    private static bool FacingAComputer(MapView view, WalkingCharacter player)
-    {
-        GridPosition front = player.Square.Step(player.Facing);
-
-        if (view.Map.Behaviours.Length == 0) return false;
-
-        int at = front.Y * view.Collision.Width + front.X;
-
-        return at >= 0 && at < view.Map.Behaviours.Length
-            && MetatileBehaviour.IsComputer(view.Map.Behaviours[at]);
-    }
+    private static bool InARoomThatHeals(GameData data, MapView view, uint? healer) =>
+        healer is { } script && view.Map.Objects.Any(o => HealerLocator.Heals(data.Rom, o, script));
 
     /// <summary>
     /// Reads whatever is written on the square in front, if anything is.

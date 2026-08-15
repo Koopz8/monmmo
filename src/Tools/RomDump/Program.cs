@@ -4977,13 +4977,14 @@ public static class Program
             Console.WriteLine(
                 $"    0x{behaviour:X2}   {onHealing[behaviour].Count,3} of {heals.Count} healing maps, " +
                 $"{other,4} of {maps.Count - heals.Count} others" +
-                (behaviour == MetatileBehaviour.Computer ? "   <- taken as the machine" : ""));
+                (behaviour == MetatileBehaviour.StairsUp ? "   <- the stairs, taken for a machine until milestone 82" : ""));
         }
 
-        // And where it sits. The counter would be beside the healer; this is across the
-        // room from it, in the same corner every time.
+        // And where it sits, and — the question the first version of this never asked —
+        // whether it is a warp. It is, on every one of them, and every one lands on a
+        // square carrying 0x6B. Nineteen staircases, not nineteen machines.
         Console.WriteLine();
-        Console.WriteLine("  map                    size     machine   healer   apart");
+        Console.WriteLine("  map                    size     square    healer   apart   warp");
 
         foreach (LoadedMap map in maps)
         {
@@ -4991,18 +4992,21 @@ public static class Program
 
             for (int at = 0; at < map.Behaviours.Length; at++)
             {
-                if (!MetatileBehaviour.IsComputer(map.Behaviours[at])) continue;
+                if (map.Behaviours[at] != MetatileBehaviour.StairsUp) continue;
 
                 var square = new GridPosition(at % width, at / width);
 
                 MapObject? nurse = map.Objects.FirstOrDefault(o => HealerLocator.Heals(rom, o, healer));
 
+                bool warps = map.Warps.Any(w => w.X == square.X && w.Y == square.Y);
+
                 Console.WriteLine(
                     $"    {map.Name,-22} {width}x{map.Collision.Height,-4} ({square.X},{square.Y})" +
                     (nurse is null
-                        ? "     -        -"
+                        ? "     -        -    "
                         : $"     ({nurse.X},{nurse.Y})    " +
-                          $"{Math.Abs(nurse.X - square.X) + Math.Abs(nurse.Y - square.Y)}"));
+                          $"{Math.Abs(nurse.X - square.X) + Math.Abs(nurse.Y - square.Y),-6}") +
+                    (warps ? "  yes" : "  no"));
             }
         }
 

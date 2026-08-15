@@ -147,37 +147,36 @@ public static class MetatileBehaviour
     public static bool IsEncounterGrass(byte behaviour) => behaviour is TallGrass or LongGrass;
 
     /// <summary>
-    /// The storage machine in the corner of every Pokémon Center.
+    /// The stairs, up and down.
     /// <para>
-    /// Found the way the water was: by laying the behaviour bytes against a structure
-    /// that has nothing to do with them. Twenty of this cartridge's maps have somebody
-    /// on them who heals a party, which is a fact held in a script the healer locator
-    /// already found. 0x6A is on nineteen of those twenty and on <b>nought of the other
-    /// four hundred and five</b>, one square each and never more.
+    /// 0x6A was taken for a storage machine for thirteen milestones. It was found the way
+    /// the water was — by laying the behaviour bytes against a structure that has nothing
+    /// to do with them — and it passed: twenty of this cartridge's maps have somebody on
+    /// them who heals a party, 0x6A is on nineteen of those twenty and on nought of the
+    /// other four hundred and five, one square each and never more, in the same corner
+    /// every time. Every word of that is still true.
     /// </para>
     /// <para>
-    /// And it is in the same place every time. Eighteen of the nineteen rooms are
-    /// fifteen by ten with the square at (1, 6) and the healer at (7, 2) — the far
-    /// corner from the counter, ten steps away. That rules out the two things it might
-    /// otherwise have been: the counter itself would be next to the healer, and the
-    /// stairs to the club are in the opposite corner.
+    /// It is also true of the staircase, because a healing centre is the only kind of room
+    /// in this game with an upstairs. The test could not tell the two apart, and the note
+    /// that thought it had — <em>the stairs to the club are in the opposite corner</em> —
+    /// was an assumption, checked against nothing.
     /// </para>
     /// <para>
-    /// The twentieth healing map is TRAINER TOWER, which has somebody who heals and no
-    /// machine. That is a fact about the tower rather than a hole in the reading.
-    /// </para>
-    /// <para>
-    /// The one in the player's bedroom is <em>not</em> this byte, and this project has
-    /// not worked out which one it is — the rare bytes on that floor turn up in the
-    /// ROCKET HIDEOUT and the POWER PLANT, which is what scenery does and not what a
-    /// storage machine does. So the box lives in the Pokémon Centers and nowhere else,
-    /// which is stated rather than quietly worked around.
+    /// What settles it is a question the first test never asked. <b>All nineteen squares
+    /// carrying 0x6A are warps, and all nineteen land on a square carrying 0x6B.</b> That
+    /// is not a machine. That is a staircase and the staircase at the other end of it, and
+    /// the only reason nobody noticed is that walking onto one worked perfectly while
+    /// facing one opened a box.
     /// </para>
     /// </summary>
-    public const byte Computer = 0x6A;
+    public const byte StairsUp = 0x6A;
 
-    /// <summary>True when there is a storage machine on this square.</summary>
-    public static bool IsComputer(byte behaviour) => behaviour == Computer;
+    /// <summary>The other end of one, and never on the same map as its partner.</summary>
+    public const byte StairsDown = 0x6B;
+
+    /// <summary>True when this square is one end of a staircase.</summary>
+    public static bool IsStairs(byte behaviour) => behaviour is StairsUp or StairsDown;
 
     /// <summary>True when this square is a ledge of any direction.</summary>
     public static bool IsLedge(byte behaviour) => behaviour is >= HopWest and <= HopSouth;

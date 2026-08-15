@@ -1975,22 +1975,30 @@ public sealed class GameWorld
     public string? LastBoxed { get; private set; }
 
     /// <summary>
-    /// True when the player is standing in front of a storage machine.
+    /// True when the player is somewhere a box is offered — which is a room that heals.
     /// <para>
-    /// By the same rule the counter uses, because it is the same question: something two
-    /// rooms away is not something you are standing at. The client will not offer the
-    /// box anywhere else either — a rule enforced on one side of the split needs its
+    /// This used to be a square: stand in front of behaviour 0x6A and the box opened.
+    /// 0x6A is the stairs, and there is no byte for a storage machine anywhere in this
+    /// cartridge. Nor is there a script for one: the healing centres carry four people
+    /// each and none of them is a machine, and the one in the player's bedroom is a sign
+    /// that says a line and hands the rest of itself to code nothing else calls. Every
+    /// PC in this game is code, and code is the one thing this project does not read.
+    /// </para>
+    /// <para>
+    /// So the square is given up and the room is kept. A map heals when somebody on it
+    /// heals, which is a fact the world file already carries because the healer script
+    /// was located long ago — so the rule is still anchored on something derived, and
+    /// what is chosen is only <em>where a machine that cannot be found should be said to
+    /// be</em>. Beside the counter, which is where a player would look for it.
+    /// </para>
+    /// <para>
+    /// Marked as chosen rather than dressed up as read. The client tests the same thing
+    /// off the same field — a rule enforced on one side of the split needs its
     /// counterpart on the other — and this is the side that decides.
     /// </para>
     /// </summary>
-    public bool AtAComputer(ServerPlayer player)
-    {
-        if (_world.Find(player.MapId) is not { } map) return false;
-
-        return Interaction
-            .Reachable(player.Square, player.Facing, square => !GridFor(player.MapId).IsWalkable(square))
-            .Any(square => MetatileBehaviour.IsComputer(map.BehaviourAt(square)));
-    }
+    public bool AtAComputer(ServerPlayer player) =>
+        _world.Find(player.MapId) is { } map && map.Objects.Any(o => o.Heals);
 
     private Outgoing Boxed(ServerPlayer player, string said) =>
         new(new BoxUpdated([.. player.Party], [.. player.Box], BoxSize, said), OnlyTo: player.Id);

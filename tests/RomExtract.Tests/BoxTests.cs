@@ -29,21 +29,26 @@ public class BoxTests
     private const string Town = "1.0";
 
     /// <summary>
-    /// A room with a machine on one square, and the player standing in front of it.
+    /// A room that heals, which is where a box is offered.
     /// <para>
-    /// The machine matters: every one of these operations is refused anywhere else, so a
+    /// The room matters: every one of these operations is refused anywhere else, so a
     /// fixture on bare ground would test the refusal and nothing else.
+    /// </para>
+    /// <para>
+    /// This used to be a square carrying behaviour 0x6A. That byte is the stairs, and
+    /// there is no byte for a storage machine anywhere on the cartridge — so the room is
+    /// what is left, and a room heals when somebody on it heals.
     /// </para>
     /// </summary>
     private static (GameWorld World, ServerPlayer Player) Standing(
         int party = 1, int stored = 0, bool atAMachine = true)
     {
-        var behaviours = new byte[64];
+        MapObject nurse = new(1, 5, 7, 2, Direction.Down, 0, false) { Heals = true, Talks = true };
 
-        // (3,3), which is the square the player at (3,4) faces when looking up.
-        if (atAMachine) behaviours[3 * 8 + 3] = MetatileBehaviour.Computer;
-
-        MapData map = new(Town, "PALLET TOWN", 8, 8, new byte[64]) { Behaviours = behaviours };
+        MapData map = new(Town, "PALLET TOWN", 8, 8, new byte[64])
+        {
+            Objects = atAMachine ? [nurse] : [],
+        };
 
         var world = new GameWorld(new WorldData([map]), Town, TestRules.All);
 
@@ -343,5 +348,89 @@ public class BoxTests
 
         Assert.NotNull(saved);
         Assert.Equal(2, saved.Box.Count);
+    }
+}
+
+/// <summary>
+/// The machine in the corner was the stairs.
+/// <para>
+/// 0x6A was taken for a storage machine for thirteen milestones, on a behaviour test it
+/// passed honestly: nineteen of the twenty maps with a healer carry it, nought of the other
+/// four hundred and five do, one square each, the same corner every time. All of that is
+/// still true — and all of it is true of a staircase, because a healing centre is the only
+/// kind of room in this game with an upstairs.
+/// </para>
+/// <para>
+/// The question the first test never asked is whether the square is a warp. It is, on every
+/// one of them, and every one lands on a square carrying 0x6B. Walking onto one worked
+/// perfectly the whole time; only facing one opened a box, which is why nobody noticed.
+/// </para>
+/// </summary>
+public class TheStairsTests
+{
+    private const string Centre = "5.4";
+
+    private static MapData Room(string id, byte at16, params Warp[] warps)
+    {
+        var behaviours = new byte[64];
+        behaviours[16] = at16;
+
+        return new MapData(id, "VIRIDIAN CITY", 8, 8, new byte[64])
+        {
+            Behaviours = behaviours,
+            Warps = warps,
+            Objects = [new MapObject(1, 5, 7, 2, Direction.Down, 0, false) { Heals = true, Talks = true }],
+        };
+    }
+
+    /// <summary>Both ends of one, told apart and told together.</summary>
+    [Fact]
+    public void BothEndsOfAStaircaseAreStairs()
+    {
+        Assert.True(MetatileBehaviour.IsStairs(MetatileBehaviour.StairsUp));
+        Assert.True(MetatileBehaviour.IsStairs(MetatileBehaviour.StairsDown));
+        Assert.NotEqual(MetatileBehaviour.StairsUp, MetatileBehaviour.StairsDown);
+        Assert.False(MetatileBehaviour.IsStairs(0x00));
+    }
+
+    /// <summary>
+    /// And a box is offered by the room rather than by the square, so standing beside the
+    /// stairs is neither necessary nor sufficient.
+    /// </summary>
+    [Fact]
+    public void TheBoxComesFromTheRoomAndNotFromTheStairs()
+    {
+        // A room that heals and has no stairs at all.
+        var world = new GameWorld(
+            new WorldData([Room(Centre, at16: 0x00)]), Centre, TestRules.All);
+
+        (ServerPlayer inside, _) = world.Join(1, "Mason", SavedCharacter.Fresh(Centre, 3, 4));
+
+        Assert.True(world.AtAComputer(inside));
+    }
+
+    /// <summary>And a room with the stairs in it but nobody who heals offers nothing.</summary>
+    [Fact]
+    public void StairsWithoutAHealerOfferNothing()
+    {
+        MapData nowhere = new("9.9", "ROCKET HIDEOUT", 8, 8, new byte[64])
+        {
+            Behaviours = Stairs(),
+            Warps = [new Warp(0, 2, 0, "9.9")],
+        };
+
+        var world = new GameWorld(new WorldData([nowhere]), "9.9", TestRules.All);
+
+        (ServerPlayer standing, _) = world.Join(1, "Mason", SavedCharacter.Fresh("9.9", 3, 4));
+
+        Assert.False(world.AtAComputer(standing));
+    }
+
+    private static byte[] Stairs()
+    {
+        var behaviours = new byte[64];
+        behaviours[16] = MetatileBehaviour.StairsUp;
+
+        return behaviours;
     }
 }
