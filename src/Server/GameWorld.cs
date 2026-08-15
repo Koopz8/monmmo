@@ -223,7 +223,22 @@ public sealed record ServerPlayer(int Id, long AccountId, string Name)
 /// Without it every step anyone took anywhere would be sent to everyone.
 /// </para>
 /// </summary>
-public sealed record Outgoing(NetMessage Message, int? OnlyTo = null, int? Except = null, string? OnMap = null);
+/// <summary>Where somebody is, as the index outside the gate holds it.</summary>
+public readonly record struct Spot(string MapId, GridPosition Square);
+
+public sealed record Outgoing(NetMessage Message, int? OnlyTo = null, int? Except = null, string? OnMap = null)
+{
+    /// <summary>
+    /// The square this is about, when it is only for people who can see that square.
+    /// <para>
+    /// Set on the messages that happen thousands of times a second — somebody moving —
+    /// and left off the rare ones, which go to the whole map as they always did. A rule
+    /// costs something to apply, and applying it to a message sent once an hour buys
+    /// nothing.
+    /// </para>
+    /// </summary>
+    public GridPosition? Near { get; init; }
+}
 
 /// <summary>
 /// The authoritative world.
@@ -274,7 +289,7 @@ public sealed class GameWorld
     /// times for each time it changes.
     /// </para>
     /// </summary>
-    private readonly ConcurrentDictionary<int, string> _where = new();
+    private readonly ConcurrentDictionary<int, Spot> _where = new();
 
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<int, byte>> _crowd = new();
     private readonly object _gate = new();
@@ -416,7 +431,12 @@ public sealed class GameWorld
     /// in between.
     /// </para>
     /// </summary>
-    public string? MapIdOf(int playerId) => _where.GetValueOrDefault(playerId);
+    public string? MapIdOf(int playerId) =>
+        _where.TryGetValue(playerId, out Spot standing) ? standing.MapId : null;
+
+    /// <summary>Where somebody is standing, without taking the gate.</summary>
+    public GridPosition? SquareOf(int playerId) =>
+        _where.TryGetValue(playerId, out Spot standing) ? standing.Square : null;
 
     /// <summary>
     /// Everybody on one map, without taking the gate.
@@ -433,21 +453,32 @@ public sealed class GameWorld
     public IReadOnlyCollection<string> MapsWithAnybodyOn => [.. _crowd.Keys];
 
     /// <summary>Records where somebody is standing, or that they are gone.</summary>
-    private void Standing(int playerId, string? mapId)
+    private void StandsAt(int playerId, string? mapId, GridPosition square = default)
     {
-        if (_where.TryRemove(playerId, out string? was)
-            && _crowd.TryGetValue(was, out ConcurrentDictionary<int, byte>? left))
+        // A step within one map is the common case by a very long way, and it is only a
+        // new position — the crowd this player belongs to has not changed.
+        if (mapId is not null
+            && _where.TryGetValue(playerId, out Spot already)
+            && already.MapId == mapId)
+        {
+            _where[playerId] = new Spot(mapId, square);
+            return;
+        }
+
+        if (_where.TryRemove(playerId, out Spot was)
+            && _crowd.TryGetValue(was.MapId, out ConcurrentDictionary<int, byte>? left))
         {
             left.TryRemove(playerId, out _);
 
             // An empty map is removed so that "every map with anybody on it" stays the
             // size of the crowd rather than the size of everywhere it has ever been.
-            if (left.IsEmpty) _crowd.TryRemove(new KeyValuePair<string, ConcurrentDictionary<int, byte>>(was, left));
+            if (left.IsEmpty)
+                _crowd.TryRemove(new KeyValuePair<string, ConcurrentDictionary<int, byte>>(was.MapId, left));
         }
 
         if (mapId is null) return;
 
-        _where[playerId] = mapId;
+        _where[playerId] = new Spot(mapId, square);
         _crowd.GetOrAdd(mapId, _ => new ConcurrentDictionary<int, byte>())[playerId] = 0;
     }
 
@@ -543,16 +574,22 @@ public sealed class GameWorld
             var send = new List<Outgoing> { new(WelcomeFor(player), OnlyTo: player.Id) };
 
             // Tell the newcomer about everyone already on this map, before announcing them.
-            foreach (ServerPlayer existing in _players.Values.Where(p => p.MapId == mapId))
+            foreach (ServerPlayer existing in _players.Values
+                         .Where(p => p.MapId == mapId && Sight.CanSee(p.Square, player.Square)))
+            {
                 send.Add(new Outgoing(existing.ToAppeared(), OnlyTo: player.Id));
+            }
 
             if (Populate(mapId, 0) is { } people)
                 send.Add(new Outgoing(new ObjectsPlaced([.. VisibleTo(player, people)]), OnlyTo: player.Id));
 
             _players[player.Id] = player;
-            Standing(player.Id, mapId);
+            StandsAt(player.Id, mapId, player.Square);
 
-            send.Add(new Outgoing(player.ToAppeared(), Except: player.Id, OnMap: mapId));
+            send.Add(new Outgoing(player.ToAppeared(), Except: player.Id, OnMap: mapId)
+            {
+                Near = player.Square,
+            });
 
             return (player, send);
         }
@@ -572,11 +609,15 @@ public sealed class GameWorld
 
             string mapId = player.MapId;
             _players.Remove(playerId);
-            Standing(playerId, null);
+            StandsAt(playerId, null);
 
             AbandonApproaches(playerId);
 
-            return [.. stopped, new Outgoing(new PlayerLeft(playerId), OnMap: mapId)];
+            return
+            [
+                .. stopped,
+                new Outgoing(new PlayerLeft(playerId), OnMap: mapId) { Near = player.Square },
+            ];
         }
     }
 
@@ -696,13 +737,24 @@ public sealed class GameWorld
             if (!grid.Contains(wanted))
                 return StepAcrossEdge(player, direction, nowSeconds);
 
+            GridPosition cameFrom = player.Square;
+
             player.Square = wanted;
             player.LastStepAt = nowSeconds;
+            StandsAt(playerId, player.MapId, wanted);
 
             var send = new List<Outgoing>
             {
-                new(new PlayerMoved(playerId, wanted.X, wanted.Y, player.Facing), OnMap: player.MapId),
+                new(new PlayerMoved(playerId, wanted.X, wanted.Y, player.Facing), OnMap: player.MapId)
+                {
+                    Near = wanted,
+                },
             };
+
+            // And the two people who have just come into or gone out of each other's
+            // sight, which is a different message from a step and has to be worked out
+            // here — it depends on where they both were, and only this side knows that.
+            send.AddRange(Crossings(player, cameFrom, wanted));
 
             // Stepping ashore is how surfing ends. Not announced as a choice, because it
             // is not one — the step was onto land, and there is nowhere to be but on it.
@@ -3013,9 +3065,58 @@ public sealed class GameWorld
         !IsOccupied(mapId, square) &&
         !_players.Values.Any(p => p.MapId == mapId && p.Square == square);
 
+    /// <summary>
+    /// Who has just come into sight of whom, and who has just gone out of it.
+    /// <para>
+    /// A step changes what two people can see of each other, and both of them have to be
+    /// told: the one who moved gains and loses people, and the people around them gain
+    /// and lose the one who moved. It is the same comparison twice, which is why it is
+    /// one method and not two — and why the pair of messages is always sent together.
+    /// </para>
+    /// <para>
+    /// The scan is over the people on this map, and it is arithmetic with no lock in it.
+    /// What it saves is not the scan: it is the messages. A hundred people in one room
+    /// used to mean a hundred sockets written for every step; now it means as many as can
+    /// actually see it happen.
+    /// </para>
+    /// </summary>
+    private List<Outgoing> Crossings(ServerPlayer moved, GridPosition from, GridPosition to)
+    {
+        var send = new List<Outgoing>();
+
+        foreach (ServerPlayer other in _players.Values)
+        {
+            if (other.Id == moved.Id || other.MapId != moved.MapId) continue;
+
+            bool saw = Sight.CanSee(other.Square, from);
+            bool sees = Sight.CanSee(other.Square, to);
+
+            if (saw == sees) continue;
+
+            if (sees)
+            {
+                send.Add(new Outgoing(moved.ToAppeared(), OnlyTo: other.Id));
+                send.Add(new Outgoing(other.ToAppeared(), OnlyTo: moved.Id));
+            }
+            else
+            {
+                // Gone, as far as this pair is concerned. The same message a disconnect
+                // sends, on purpose: a client that already knows how to forget somebody
+                // needs no new case for somebody who has simply walked far enough away.
+                send.Add(new Outgoing(new PlayerLeft(moved.Id), OnlyTo: other.Id));
+                send.Add(new Outgoing(new PlayerLeft(other.Id), OnlyTo: moved.Id));
+            }
+        }
+
+        return send;
+    }
+
     /// <summary>Standing still, announced so everyone still sees the turn.</summary>
     private Outgoing Stay(ServerPlayer player) =>
-        new(new PlayerMoved(player.Id, player.Square.X, player.Square.Y, player.Facing), OnMap: player.MapId);
+        new(new PlayerMoved(player.Id, player.Square.X, player.Square.Y, player.Facing), OnMap: player.MapId)
+        {
+            Near = player.Square,
+        };
 
     /// <summary>
     /// Why the last attempt to walk off an edge did not move anyone.
@@ -3190,9 +3291,8 @@ public sealed class GameWorld
         player.Shifted.Clear();
 
         player.MapId = mapId;
-        Standing(player.Id, mapId);
-
         player.Square = arrival;
+        StandsAt(player.Id, mapId, arrival);
         player.Facing = facing;
 
         send.Add(new Outgoing(

@@ -290,3 +290,149 @@ public sealed class BlockingPipe
         }
     }
 }
+
+/// <summary>
+/// How far somebody can see, and who therefore has to be told when anybody moves.
+/// <para>
+/// The map was the unit of sight, which is right about what a player sees and wrong
+/// about what it costs: four hundred people who can all see each other, stepping twice a
+/// second, is a hundred and sixty thousand sightings a second, and no index makes that
+/// number smaller. It is quadratic inside one map, and the only thing that changes it is
+/// a circle.
+/// </para>
+/// <para>
+/// The radius comes off the client's own viewport rather than being picked: 960 pixels at
+/// three times life size is twenty squares across, half of that is ten, and one square of
+/// margin means nobody arrives on screen out of nothing.
+/// </para>
+/// </summary>
+public class HowFarSomebodyCanSeeTests
+{
+    private const string Field = "1.0";
+
+    private static GameWorld OneBigField()
+    {
+        MapData field = new(Field, "FIELD", 64, 64, new byte[64 * 64]);
+
+        return new GameWorld(new WorldData([field]), Field, TestRules.All);
+    }
+
+    private static ServerPlayer At(GameWorld world, int account, string name, int x, int y)
+    {
+        (ServerPlayer player, _) = world.Join(account, name, world.FreshCharacter() with { X = x, Y = y });
+
+        return player;
+    }
+
+    /// <summary>The radius is the screen's, and it is bigger than half a screen.</summary>
+    [Fact]
+    public void TheRadiusComesOffTheScreen()
+    {
+        Assert.Equal(20, Sight.SquaresAcross);
+        Assert.Equal(13, Sight.SquaresDown);
+        Assert.Equal(11, Sight.Squares);
+    }
+
+    /// <summary>Somebody standing on you is somebody you can see; the far corner is not.</summary>
+    [Fact]
+    public void AndItIsTheShapeOfAScreen()
+    {
+        Assert.True(Sight.CanSee(new GridPosition(10, 10), new GridPosition(10, 10)));
+
+        // The corner of the box, which a straight-line rule would have excluded.
+        Assert.True(Sight.CanSee(new GridPosition(0, 0), new GridPosition(Sight.Squares, Sight.Squares)));
+
+        Assert.False(Sight.CanSee(new GridPosition(0, 0), new GridPosition(Sight.Squares + 1, 0)));
+    }
+
+    /// <summary>Joining tells you about the people near you, and nobody else.</summary>
+    [Fact]
+    public void JoiningTellsYouAboutThePeopleNearYou()
+    {
+        GameWorld world = OneBigField();
+
+        ServerPlayer near = At(world, 1, "Near", 4, 4);
+        ServerPlayer far = At(world, 2, "Far", 60, 60);
+
+        (ServerPlayer joining, List<Outgoing> send) =
+            world.Join(3, "Joining", world.FreshCharacter() with { X = 5, Y = 5 });
+
+        List<int> told =
+        [
+            .. send
+                .Where(o => o.OnlyTo == joining.Id && o.Message is PlayerAppeared)
+                .Select(o => ((PlayerAppeared)o.Message).PlayerId)
+        ];
+
+        Assert.Contains(near.Id, told);
+        Assert.DoesNotContain(far.Id, told);
+    }
+
+    /// <summary>
+    /// And walking out of somebody's sight tells them so, in the same words a disconnect
+    /// uses — a client that knows how to forget somebody needs no new case for somebody
+    /// who has simply walked far enough away.
+    /// </summary>
+    [Fact]
+    public void AndWalkingOutOfSightSaysSo()
+    {
+        GameWorld world = OneBigField();
+
+        ServerPlayer watcher = At(world, 1, "Watcher", 4, 20);
+        ServerPlayer walker = At(world, 2, "Walker", 4 + Sight.Squares, 20);
+
+        // One step further away crosses the edge of what the watcher can see.
+        List<Outgoing> send = Walk(world, walker, Direction.Right);
+
+        Assert.Contains(send, o =>
+            o.OnlyTo == watcher.Id && o.Message is PlayerLeft left && left.PlayerId == walker.Id);
+
+        Assert.Contains(send, o =>
+            o.OnlyTo == walker.Id && o.Message is PlayerLeft gone && gone.PlayerId == watcher.Id);
+    }
+
+    /// <summary>And walking back into it says that too.</summary>
+    [Fact]
+    public void AndWalkingBackIntoItSaysThatToo()
+    {
+        GameWorld world = OneBigField();
+
+        ServerPlayer watcher = At(world, 1, "Watcher", 4, 20);
+        ServerPlayer walker = At(world, 2, "Walker", 5 + Sight.Squares, 20);
+
+        List<Outgoing> send = Walk(world, walker, Direction.Left);
+
+        Assert.Contains(send, o =>
+            o.OnlyTo == watcher.Id && o.Message is PlayerAppeared seen && seen.PlayerId == walker.Id);
+
+        Assert.Contains(send, o =>
+            o.OnlyTo == walker.Id && o.Message is PlayerAppeared back && back.PlayerId == watcher.Id);
+    }
+
+    /// <summary>
+    /// And an ordinary step is about the square it ends on, so the people who cannot see
+    /// that square are not written to at all. This is the whole saving.
+    /// </summary>
+    [Fact]
+    public void AndAnOrdinaryStepIsAboutTheSquareItEndsOn()
+    {
+        GameWorld world = OneBigField();
+
+        At(world, 1, "Watcher", 4, 20);
+
+        ServerPlayer walker = At(world, 2, "Walker", 10, 20);
+
+        Outgoing step = Assert.Single(
+            Walk(world, walker, Direction.Right).Where(o => o.Message is PlayerMoved));
+
+        Assert.Equal(new GridPosition(11, 20), step.Near);
+    }
+
+    private static List<Outgoing> Walk(GameWorld world, ServerPlayer player, Direction way)
+    {
+        // One step. Facing and moving are the same message here, so a step in a new
+        // direction is still a step — which two calls made two squares, and cost the
+        // first draft of these tests an hour.
+        return world.Move(player.Id, way, 100);
+    }
+}

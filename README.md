@@ -14,7 +14,7 @@ src/Server          the authoritative server. Core only
 src/Client          the game: window, input, drawing, screens
 src/Tools/RomDump   the extractor's command line, and every instrument built for it
 src/Tools/Crowd     a crowd of real clients, for measuring what the server does at scale
-tests/              1538 tests, no cartridge required
+tests/              1544 tests, no cartridge required
 tools/rig/          the headless play rig — Xvfb, two clients, screenshots
 ```
 
@@ -253,10 +253,21 @@ queue and pump, so one socket that has stopped reading delays nobody but itself:
 ```
 
 At 400 players on the same two cores: everybody in, 18,000 messages a second
-delivered, a step answered in 3.8 ms at the median. What breaks at that size is the
-crowd sharing one room — 400 people who can all see each other is 160,000 sightings a
-second, and the connections that cannot keep up are disconnected on purpose rather
-than quietly missing messages. Interest finer than a whole map is what comes next.
+delivered, a step answered in 3.8 ms at the median. The connections that cannot keep
+up are disconnected on purpose rather than quietly missing messages.
+
+Sight is now a circle rather than a map: the radius comes off the client's own
+viewport — 960 pixels at three times life size is 20 squares across, so 11 with a
+square of margin — and a step is told only to the people who can see the square it
+ends on. Walking out of somebody's circle sends the same message a disconnect does,
+so a client needs no new case for it.
+
+That bounds the cost by distance instead of by map, and the measurement is honest
+about what it does not do: **a crowd standing in one place still costs what a crowd
+standing in one place costs.** 141 of the 425 maps are bigger than the 23-square sight
+box on at least one side, and 74 on both — on those the circle bites, and on a
+starting room 12 squares wide it cannot. What helps there is not putting everybody in
+the same place, which is the next thing.
 
 ## Playing it headlessly
 

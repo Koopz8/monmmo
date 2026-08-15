@@ -1417,8 +1417,21 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
             if (item.OnMap is { } scope)
             {
                 foreach (int id in world.WhoIsOn(scope))
-                    if (item.Except != id)
-                        Post(id, item);
+                {
+                    if (item.Except == id) continue;
+
+                    // And of the people on that map, the ones who can see the square it
+                    // is about. Messages with no square on them go to the whole map, as
+                    // everything did before there was a circle at all.
+                    if (item.Near is { } square
+                        && world.SquareOf(id) is { } standing
+                        && !Sight.CanSee(standing, square))
+                    {
+                        continue;
+                    }
+
+                    Post(id, item);
+                }
 
                 continue;
             }
