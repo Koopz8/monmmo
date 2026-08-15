@@ -2020,7 +2020,10 @@ public sealed class GameWorld
             return [];
         }
 
-        if (_battles.Wild(species, Math.Max(1, template.GivesLevel)) is not { } handed)
+        // With dice, for the same reason the console's gift has them: a creature handed
+        // over by a script is somebody's creature, and a perfect one is a hole in the
+        // only economy this game has.
+        if (_battles.Wild(species, Math.Max(1, template.GivesLevel), _rng) is not { } handed)
         {
             LastGift = $"species {species}, which is not one this server can field";
             return [];
@@ -4667,7 +4670,10 @@ public sealed class GameWorld
                 int level = line.Number(1) ?? 5;
 
                 if (player.Party.Count >= MaxPartySize) return [Said(player, "the party is full")];
-                if (_battles.Wild(species, level) is not { } made)
+                // With dice, so an operator's gift is a creature and not a perfect one.
+                // A game whose whole economy is in what a creature was born with cannot
+                // have a command that hands out the best of everything.
+                if (_battles.Wild(species, level, _rng) is not { } made)
                     return [Said(player, $"species {species} is not one this server can field")];
 
                 player.Party.Add(BattleFactory.Save(made));

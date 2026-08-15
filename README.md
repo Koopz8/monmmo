@@ -14,7 +14,7 @@ src/Server          the authoritative server. Core only
 src/Client          the game: window, input, drawing, screens
 src/Tools/RomDump   the extractor's command line, and every instrument built for it
 src/Tools/Crowd     a crowd of real clients, for measuring what the server does at scale
-tests/              1614 tests, no cartridge required
+tests/              1622 tests, no cartridge required
 tools/rig/          the headless play rig — Xvfb, two clients, screenshots
 ```
 
@@ -60,7 +60,9 @@ fights and across restarts; a creature with nothing left struggles, using the
 cartridge's own STRUGGLE record, and a counter puts every use back. Wild creatures
 come out carrying what their own species record says they might, and beating one leaves
 behind the effort its own record says it is worth — kept across fights, centres and
-restarts. Trainer fights are a run of one-on-one battles with the dice carried over.
+restarts. Every creature is also born with six numbers of its own, nought to thirty-one
+a stat, fixed for life: what makes one PIDGEY worth having and another not, and the
+thing every market in a game like this one is really a market in. Trainer fights are a run of one-on-one battles with the dice carried over.
 Experience, levels, learnsets, evolution and catching all work.
 
 **Multiplayer, in three verbs.** Seeing each other, trading, and duelling. Players

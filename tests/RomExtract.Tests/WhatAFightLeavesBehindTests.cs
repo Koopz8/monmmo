@@ -393,3 +393,186 @@ public class WhatAFightLeavesBehindTests
         Assert.Equal(3, read.EvTotal);
     }
 }
+
+/// <summary>
+/// What a creature was born with.
+/// <para>
+/// The other half of the pair that makes two of a species different: effort is what a
+/// creature has done, and this is what it was. <c>Stats.Hp</c> and <c>Stats.Other</c>
+/// have taken this argument since they were written, and every caller in this project
+/// left it at its default of thirty-one — so every creature in the game was perfect.
+/// </para>
+/// <para>
+/// That is not a missing feature. It is the feature the rest of an MMO is about: with
+/// nothing to breed for, nothing to hunt for and nothing that makes one PIDGEY worth more
+/// than another, there is nothing worth trading either. Every market in every game like
+/// this one is a market in these six numbers.
+/// </para>
+/// </summary>
+public class WhatItWasBornWithTests
+{
+    private static SpeciesData Plain() => new()
+    {
+        Index = 1,
+        Name = string.Empty,
+        BaseHp = 60, BaseAttack = 60, BaseDefense = 60,
+        BaseSpeed = 60, BaseSpAttack = 60, BaseSpDefense = 60,
+        Type1 = PokemonType.Normal, Type2 = PokemonType.Normal,
+        CatchRate = 255, ExpYield = 64, GrowthRate = GrowthRate.MediumFast,
+    };
+
+    /// <summary>Nought to thirty-one, and never outside it however it is asked for.</summary>
+    [Fact]
+    public void TheyAreNeverOutsideTheirRange()
+    {
+        for (uint seed = 1; seed <= 200; seed++)
+        {
+            Genes rolled = Genes.Roll(new BattleRng(seed));
+
+            foreach (Stat stat in Genes.Order) Assert.InRange(rolled.In(stat), 0, Genes.Best);
+        }
+
+        Assert.Equal([0, 31, 31, 31, 31, 31], Genes.Of([-4, 99, 31, 31, 31, 31]).Values);
+    }
+
+    /// <summary>And they are not all the same number, which a bad roll would look like.</summary>
+    [Fact]
+    public void AndTheyAreSixNumbersRatherThanOne()
+    {
+        var seen = new HashSet<string>();
+
+        for (uint seed = 1; seed <= 50; seed++) seen.Add(Genes.Roll(new BattleRng(seed)).ToString());
+
+        Assert.True(seen.Count > 40, $"{seen.Count} different creatures out of fifty rolls");
+    }
+
+    /// <summary>A better creature is a better creature, which is the whole of what they do.</summary>
+    [Fact]
+    public void ABetterOneIsBetter()
+    {
+        var poor = new Battler(Plain(), 50, genes: Genes.Of([0, 0, 0, 0, 0, 0]));
+        var perfect = new Battler(Plain(), 50, genes: Genes.Perfect);
+
+        Assert.True(perfect.MaxHp > poor.MaxHp);
+        Assert.True(perfect.Attack > poor.Attack);
+        Assert.True(perfect.Speed > poor.Speed);
+    }
+
+    /// <summary>
+    /// And a creature nobody said anything about is perfect, which is what every creature
+    /// in this project was before this existed. A save from yesterday holds one.
+    /// </summary>
+    [Fact]
+    public void AndSayingNothingIsWhatEverythingUsedToBe()
+    {
+        Assert.Equal(new Battler(Plain(), 50).MaxHp, new Battler(Plain(), 50, genes: Genes.Perfect).MaxHp);
+        Assert.True(Genes.Of([]).IsPerfect);
+    }
+
+    /// <summary>What is born survives the save, and perfect is stored as nothing at all.</summary>
+    [Fact]
+    public void WhatIsBornSurvivesTheSave()
+    {
+        var factory = new BattleFactory(TestRules.All);
+
+        SavedMon saved = new(1, 20, null, 20, StatusCondition.None, Nature.Hardy, [TestRules.FirstMove])
+        {
+            Ivs = [3, 14, 15, 9, 26, 5],
+        };
+
+        Battler battler = factory.Restore(saved)!;
+
+        Assert.Equal(14, battler.Born.In(Stat.Attack));
+        Assert.Equal([3, 14, 15, 9, 26, 5], BattleFactory.Save(battler).Ivs);
+
+        SavedMon plain = new(1, 20, null, 20, StatusCondition.None, Nature.Hardy, [TestRules.FirstMove]);
+
+        Assert.Empty(BattleFactory.Save(factory.Restore(plain)!).Ivs);
+    }
+
+    /// <summary>And a wild one is rolled, while one built without dice is not.</summary>
+    [Fact]
+    public void AndAWildOneIsRolled()
+    {
+        var factory = new BattleFactory(TestRules.All);
+
+        Assert.True(factory.Wild(1, 10)!.Born.IsPerfect);
+
+        var seen = new HashSet<string>();
+
+        for (uint seed = 1; seed <= 40; seed++)
+            seen.Add(factory.Wild(1, 10, new BattleRng(seed))!.Born.ToString());
+
+        Assert.True(seen.Count > 30, $"{seen.Count} different wild creatures out of forty");
+    }
+
+    /// <summary>And it survives the process.</summary>
+    [Fact]
+    public async Task AndItSurvivesTheProcess()
+    {
+        string path = TempDatabase.Path();
+
+        try
+        {
+            SavedMon born = new(16, 3, null, 8, StatusCondition.None, Nature.Bold, [33])
+            {
+                Ivs = [0, 31, 7, 22, 13, 30],
+            };
+
+            using (var writing = new SqlitePlayerStore(path))
+            {
+                await writing.RegisterAsync(
+                    "Mason",
+                    "a-good-password",
+                    new SavedCharacter("1.0", 3, 4, Direction.Down, [born]));
+            }
+
+            using (var reading = new SqlitePlayerStore(path))
+            {
+                var login = Assert.IsType<AuthOutcome.Success>(
+                    await reading.LoginAsync("Mason", "a-good-password"));
+
+                Assert.Equal([0, 31, 7, 22, 13, 30], Assert.Single(login.Character.Party).Ivs);
+            }
+        }
+        finally
+        {
+            TempDatabase.Delete(path);
+        }
+    }
+
+    /// <summary>
+    /// And a party saved before this column existed comes back perfect rather than
+    /// empty-handed, because perfect is what it actually was.
+    /// </summary>
+    [Fact]
+    public async Task AndAPartyFromBeforeThisComesBackPerfect()
+    {
+        string path = TempDatabase.Path();
+
+        try
+        {
+            using (var writing = new SqlitePlayerStore(path))
+            {
+                await writing.RegisterAsync(
+                    "Mason",
+                    "a-good-password",
+                    new SavedCharacter(
+                        "1.0", 3, 4, Direction.Down,
+                        [new SavedMon(16, 3, null, 8, StatusCondition.None, Nature.Bold, [33])]));
+            }
+
+            using (var reading = new SqlitePlayerStore(path))
+            {
+                var login = Assert.IsType<AuthOutcome.Success>(
+                    await reading.LoginAsync("Mason", "a-good-password"));
+
+                Assert.True(Assert.Single(login.Character.Party).Born.IsPerfect);
+            }
+        }
+        finally
+        {
+            TempDatabase.Delete(path);
+        }
+    }
+}

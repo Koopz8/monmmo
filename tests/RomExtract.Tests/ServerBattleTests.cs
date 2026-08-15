@@ -185,9 +185,10 @@ public class ServerBattleTests
 
         int before = player.Party.Count;
 
-        List<Outgoing> send = world.TakeBattleTurn(player.Id, new BattleAction.ThrowBall(TestRules.BallItem));
-
-        BattleFinished finished = send.Select(o => o.Message).OfType<BattleFinished>().Single();
+        // Thrown until it sticks. A ball is dice, and it stopped being a single throw
+        // the day wild creatures started being born with different numbers — the roll
+        // that decides what one is made of comes out of the same stream the throw does.
+        BattleFinished finished = Caught(world, player);
 
         Assert.True(finished.Caught);
         Assert.Equal(before + 1, finished.Party.Count);
@@ -195,12 +196,26 @@ public class ServerBattleTests
         Assert.Equal(before + 1, player.Party.Count);
     }
 
+    /// <summary>Throws balls until one sticks, and hands back what the catch said.</summary>
+    private static BattleFinished Caught(GameWorld world, ServerPlayer player)
+    {
+        for (int thrown = 0; thrown < 40; thrown++)
+        {
+            List<Outgoing> send = world.TakeBattleTurn(player.Id, new BattleAction.ThrowBall(TestRules.BallItem));
+
+            if (send.Select(o => o.Message).OfType<BattleFinished>().FirstOrDefault() is { } finished)
+                return finished;
+        }
+
+        throw new InvalidOperationException("forty balls and it never stuck");
+    }
+
     [Fact]
     public void TheBattleIsClosedWhenItEnds()
     {
         (GameWorld world, ServerPlayer player, _) = InBattle();
 
-        world.TakeBattleTurn(player.Id, new BattleAction.ThrowBall(TestRules.BallItem));
+        Caught(world, player);
 
         Assert.Null(player.Battle);
         Assert.False(player.InBattle);

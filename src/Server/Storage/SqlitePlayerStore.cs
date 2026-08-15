@@ -201,6 +201,12 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
         foreach (string stat in EffortColumns)
             AddColumnIfMissing(connection, "party_members", stat, "INTEGER NOT NULL DEFAULT 0");
 
+        // And what each was born with. Defaulting to the best of everything, because
+        // that is what every creature saved before this column existed actually was:
+        // every stat in the project was computed with the argument at its default.
+        foreach (string stat in GeneColumns)
+            AddColumnIfMissing(connection, "party_members", stat, $"INTEGER NOT NULL DEFAULT {Genes.Best}");
+
         // The balls column is what the bag used to be, back when a player could carry
         // exactly one kind of thing. It is left in place and written as zero rather than
         // dropped, because dropping a column in SQLite means rebuilding the table and
@@ -245,6 +251,10 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
     /// <summary>The six effort columns, in the six-stat order.</summary>
     private static readonly string[] EffortColumns =
         ["ev_hp", "ev_attack", "ev_defense", "ev_speed", "ev_spattack", "ev_spdefense"];
+
+    /// <summary>The six gene columns, in the same order.</summary>
+    private static readonly string[] GeneColumns =
+        ["iv_hp", "iv_attack", "iv_defense", "iv_speed", "iv_spattack", "iv_spdefense"];
 
     private static void AddColumnIfMissing(SqliteConnection connection, string table, string column, string definition)
     {
@@ -729,9 +739,11 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
                     """
                     INSERT INTO party_members
                         (account_id, slot, species, level, nickname, current_hp, status, nature, experience, held_item, in_box,
-                         ev_hp, ev_attack, ev_defense, ev_speed, ev_spattack, ev_spdefense)
+                         ev_hp, ev_attack, ev_defense, ev_speed, ev_spattack, ev_spdefense,
+                         iv_hp, iv_attack, iv_defense, iv_speed, iv_spattack, iv_spdefense)
                     VALUES ($account, $slot, $species, $level, $nickname, $hp, $status, $nature, $experience, $held, $box,
-                            $ev0, $ev1, $ev2, $ev3, $ev4, $ev5)
+                            $ev0, $ev1, $ev2, $ev3, $ev4, $ev5,
+                            $iv0, $iv1, $iv2, $iv3, $iv4, $iv5)
                     RETURNING id;
                     """;
 
@@ -749,6 +761,9 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
 
                 for (int stat = 0; stat < EffortColumns.Length; stat++)
                     insert.Parameters.AddWithValue($"$ev{stat}", stat < mon.Evs.Count ? mon.Evs[stat] : 0);
+
+                for (int stat = 0; stat < GeneColumns.Length; stat++)
+                    insert.Parameters.AddWithValue($"$iv{stat}", stat < mon.Ivs.Count ? mon.Ivs[stat] : Genes.Best);
 
                 memberId = (long)(await insert.ExecuteScalarAsync(cancellationToken))!;
             }
@@ -834,7 +849,8 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
             command.CommandText =
                 """
                 SELECT id, species, level, nickname, current_hp, status, nature, experience, held_item, in_box,
-                       ev_hp, ev_attack, ev_defense, ev_speed, ev_spattack, ev_spdefense
+                       ev_hp, ev_attack, ev_defense, ev_speed, ev_spattack, ev_spdefense,
+                       iv_hp, iv_attack, iv_defense, iv_speed, iv_spattack, iv_spdefense
                 FROM party_members
                 WHERE account_id = $id
                 ORDER BY slot;
@@ -871,6 +887,13 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
                     // in, which is the question SavedMon exists to answer.
                     Evs = Effort.Of([.. Enumerable.Range(10, 6).Select(reader.GetInt32)]) is { IsNone: false } earned
                         ? [.. earned.Values]
+                        : [],
+
+                    // And perfect is stored as nothing, for the same reason six noughts
+                    // of effort are: empty already says it, and two ways of saying one
+                    // thing is one too many.
+                    Ivs = Genes.Of([.. Enumerable.Range(16, 6).Select(reader.GetInt32)]) is { IsPerfect: false } born
+                        ? [.. born.Values]
                         : [],
                 };
 

@@ -26,7 +26,8 @@ public sealed class Battler
         int level,
         Nature nature = Nature.Hardy,
         string? nickname = null,
-        Effort? effort = null)
+        Effort? effort = null,
+        Genes? genes = null)
     {
         Species = species;
         Level = level;
@@ -35,14 +36,18 @@ public sealed class Battler
         Name = nickname ?? species.Name;
         Effort = effort ?? Effort.None;
 
-        MaxHp = Stats.Hp(species.BaseHp, level, ev: Effort.In(Stat.Hp));
+        // Perfect when nobody said otherwise, which is what every creature in this
+        // project was before there was anything to say.
+        Born = genes ?? Genes.Perfect;
+
+        MaxHp = Stats.Hp(species.BaseHp, level, Born.In(Stat.Hp), Effort.In(Stat.Hp));
         CurrentHp = MaxHp;
 
-        Attack = Stats.Other(Stat.Attack, species.BaseAttack, level, nature, ev: Effort.In(Stat.Attack));
-        Defense = Stats.Other(Stat.Defense, species.BaseDefense, level, nature, ev: Effort.In(Stat.Defense));
-        Speed = Stats.Other(Stat.Speed, species.BaseSpeed, level, nature, ev: Effort.In(Stat.Speed));
-        SpAttack = Stats.Other(Stat.SpAttack, species.BaseSpAttack, level, nature, ev: Effort.In(Stat.SpAttack));
-        SpDefense = Stats.Other(Stat.SpDefense, species.BaseSpDefense, level, nature, ev: Effort.In(Stat.SpDefense));
+        Attack = Stats.Other(Stat.Attack, species.BaseAttack, level, nature, Born.In(Stat.Attack), Effort.In(Stat.Attack));
+        Defense = Stats.Other(Stat.Defense, species.BaseDefense, level, nature, Born.In(Stat.Defense), Effort.In(Stat.Defense));
+        Speed = Stats.Other(Stat.Speed, species.BaseSpeed, level, nature, Born.In(Stat.Speed), Effort.In(Stat.Speed));
+        SpAttack = Stats.Other(Stat.SpAttack, species.BaseSpAttack, level, nature, Born.In(Stat.SpAttack), Effort.In(Stat.SpAttack));
+        SpDefense = Stats.Other(Stat.SpDefense, species.BaseSpDefense, level, nature, Born.In(Stat.SpDefense), Effort.In(Stat.SpDefense));
     }
 
     /// <summary>
@@ -51,6 +56,12 @@ public sealed class Battler
     /// ever supplied.
     /// </summary>
     public Effort Effort { get; }
+
+    /// <summary>
+    /// What this one was born with: the other half of what makes two of a species
+    /// different, and the half that never changes.
+    /// </summary>
+    public Genes Born { get; }
 
     public SpeciesData Species { get; }
 

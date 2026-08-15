@@ -36,7 +36,8 @@ public sealed class BattleFactory(GameRules rules)
 
         // And what it has to show for its fights, which is an argument the stat
         // calculation has always taken and nothing ever supplied.
-        var battler = new Battler(species, saved.Level, saved.Nature, saved.Nickname, Effort.Of(saved.Evs));
+        var battler = new Battler(
+            species, saved.Level, saved.Nature, saved.Nickname, Effort.Of(saved.Evs), Genes.Of(saved.Ivs));
 
         foreach (int moveId in saved.Moves)
             if (rules.MoveAt(moveId) is { } move) battler.Moves.Add(move);
@@ -99,7 +100,12 @@ public sealed class BattleFactory(GameRules rules)
     {
         if (rules.SpeciesAt(species) is not { } record) return null;
 
-        var battler = new Battler(record, level);
+        // What it was born with, which is the difference between one PIDGEY and another
+        // and the whole reason anybody would want a particular one. Rolled only when
+        // there are dice: a wild encounter has them, and a fixture asking for a creature
+        // to test something with does not want six random numbers in its arithmetic.
+        var battler = new Battler(record, level, genes: rng is null ? null : Genes.Roll(rng));
+
         battler.Moves.AddRange(rules.MovesKnownAt(species, level));
 
         // And whatever it happens to be carrying, which THIEF has been able to take off
@@ -194,6 +200,10 @@ public sealed class BattleFactory(GameRules rules)
         HeldItem = battler.Holding,
         Pp = [.. Enumerable.Range(0, battler.Moves.Count).Select(battler.PpLeft)],
         Evs = battler.Effort.IsNone ? [] : [.. battler.Effort.Values],
+
+        // Empty means perfect, which is what everything written before genes existed
+        // was — and what a creature this server has no dice for still is.
+        Ivs = battler.Born.IsPerfect ? [] : [.. battler.Born.Values],
     };
 
     /// <summary>

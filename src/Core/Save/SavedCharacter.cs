@@ -59,6 +59,20 @@ public sealed record SavedMon(
     public Effort Earned => Effort.Of(Evs);
 
     /// <summary>
+    /// What this one was born with, nought to thirty-one a stat, fixed for life.
+    /// <para>
+    /// Empty means the best of everything, which is what every creature written before
+    /// this existed was — every stat in this project was computed with the argument at
+    /// its default, so a save from yesterday holds a perfect creature and is read as one
+    /// rather than being quietly ruined.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<int> Ivs { get; init; } = [];
+
+    /// <summary>The same six numbers as something that knows what they mean.</summary>
+    public Genes Born => Genes.Of(Ivs);
+
+    /// <summary>
     /// Compares move lists by their contents.
     /// <para>
     /// A record compares its members with <c>Equals</c>, and for a list that is
@@ -81,7 +95,8 @@ public sealed record SavedMon(
         HeldItem == other.HeldItem &&
         Moves.SequenceEqual(other.Moves) &&
         Pp.SequenceEqual(other.Pp) &&
-        Evs.SequenceEqual(other.Evs);
+        Evs.SequenceEqual(other.Evs) &&
+        Ivs.SequenceEqual(other.Ivs);
 
     public override int GetHashCode()
     {
@@ -98,6 +113,7 @@ public sealed record SavedMon(
         foreach (int move in Moves) hash.Add(move);
         foreach (int left in Pp) hash.Add(left);
         foreach (int earned in Evs) hash.Add(earned);
+        foreach (int born in Ivs) hash.Add(born);
 
         return hash.ToHashCode();
     }
