@@ -49,6 +49,49 @@ public interface IMarketStore
     Task<IReadOnlyList<Listing>> MineAsync(long sellerId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Buys one, in the single transaction that moves the creature and the money.
+    /// <para>
+    /// <paramref name="buyer"/> is the buyer as they are now — their money is read from it
+    /// rather than from the row, because for somebody who is online the row is the stale
+    /// copy. What is written back is that same character with the creature in their box
+    /// and the price gone, which is why this cannot be split into "take the money" and
+    /// "hand it over": either half alone is somebody robbed.
+    /// </para>
+    /// <para>
+    /// Returns what was bought and what it cost, or nothing when the listing has already
+    /// gone, is the buyer's own, or costs more than they have. Two people pressing buy in
+    /// the same instant is the ordinary case in a market rather than the exotic one, and
+    /// the loser is told rather than left holding a creature that was already sold.
+    /// </para>
+    /// </summary>
+    Task<(SavedMon Bought, int Price)?> BuyAsync(
+        long buyerId,
+        long listingId,
+        SavedCharacter buyer,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Takes the money for everything of this seller's that has sold, and forgets those
+    /// listings.
+    /// <para>
+    /// Everything at once rather than one at a time, because a seller has no reason to want
+    /// only some of their money and an interface that offers the choice is an interface
+    /// with a wrong answer in it.
+    /// </para>
+    /// <para>
+    /// This is where a sold listing's price has been sitting since it sold, and why it sat
+    /// there rather than being paid into the seller's row: crediting somebody who is online
+    /// means their next save writes the old figure back over it, and they sold something
+    /// and got nothing. Money waiting to be collected is money nothing else is touching.
+    /// </para>
+    /// </summary>
+    Task<int> CollectAsync(
+        long sellerId,
+        SavedCharacter current,
+        int ceiling,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Takes one back off the market, returning it to the seller's box.
     /// <para>
     /// The box rather than the party, for the reason an egg goes to the box: a party that

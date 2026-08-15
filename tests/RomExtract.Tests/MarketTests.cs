@@ -300,4 +300,375 @@ public class MarketTests
             TempDatabase.Delete(path);
         }
     }
+
+    // ---- and the half with money in it -------------------------------------------------
+
+    /// <summary>
+    /// Buying moves both things at once: the creature into the buyer's box, the price out
+    /// of their pocket. Either half on its own is somebody robbed.
+    /// </summary>
+    [Fact]
+    public async Task BuyingMovesTheCreatureAndTheMoney()
+    {
+        string path = TempDatabase.Path();
+
+        try
+        {
+            SavedMon offered = Mon(150, level: 44);
+            SavedCharacter mason = Character(offered);
+
+            (SqlitePlayerStore store, long sellerId) = await AccountAsync(path, "Mason", mason);
+
+            using (store)
+            {
+                var koop = Assert.IsType<AuthOutcome.Success>(
+                    await store.RegisterAsync("Koop", "a-good-password", Character()));
+
+                long listingId = await store.ListAsync(sellerId, mason with { Box = [] }, offered, 2_500);
+
+                var bought = await store.BuyAsync(koop.Account.Id, listingId, koop.Character);
+
+                Assert.NotNull(bought);
+                Assert.Equal(150, bought!.Value.Bought.Species);
+                Assert.Equal(44, bought.Value.Bought.Level);
+                Assert.Equal(2_500, bought.Value.Price);
+
+                var theirs = Assert.IsType<AuthOutcome.Success>(
+                    await store.LoginAsync("Koop", "a-good-password"));
+
+                Assert.Equal([150], theirs.Character.Box.Select(m => m.Species));
+                Assert.Equal(5_000 - 2_500, theirs.Character.Money);
+
+                // Off the board, and the creature exists exactly once.
+                Assert.Empty(await store.BrowseAsync());
+
+                var sellers = Assert.IsType<AuthOutcome.Success>(
+                    await store.LoginAsync("Mason", "a-good-password"));
+
+                Assert.DoesNotContain(150, sellers.Character.Box.Select(m => m.Species));
+            }
+        }
+        finally
+        {
+            TempDatabase.Delete(path);
+        }
+    }
+
+    /// <summary>
+    /// The second buyer loses, and is told so. This is the guard on the update doing its
+    /// work: a check beforehand reads the past, and by the time it has answered somebody
+    /// else has committed.
+    /// <para>
+    /// Asked one after the other rather than at the same instant, on purpose. What is being
+    /// proved is that the rule holds once a listing has been sold — which is the state a
+    /// racing buyer arrives into — and a test that raced two threads would be proving the
+    /// scheduler instead, differently on every machine.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task TheSecondBuyerIsToldRatherThanCharged()
+    {
+        string path = TempDatabase.Path();
+
+        try
+        {
+            SavedMon offered = Mon(150);
+            SavedCharacter mason = Character(offered);
+
+            (SqlitePlayerStore store, long sellerId) = await AccountAsync(path, "Mason", mason);
+
+            using (store)
+            {
+                var first = Assert.IsType<AuthOutcome.Success>(
+                    await store.RegisterAsync("Koop", "a-good-password", Character()));
+
+                var second = Assert.IsType<AuthOutcome.Success>(
+                    await store.RegisterAsync("Ash", "a-good-password", Character()));
+
+                long listingId = await store.ListAsync(sellerId, mason with { Box = [] }, offered, 2_500);
+
+                Assert.NotNull(await store.BuyAsync(first.Account.Id, listingId, first.Character));
+                Assert.Null(await store.BuyAsync(second.Account.Id, listingId, second.Character));
+
+                // The loser paid nothing and got nothing.
+                var theirs = Assert.IsType<AuthOutcome.Success>(
+                    await store.LoginAsync("Ash", "a-good-password"));
+
+                Assert.Empty(theirs.Character.Box);
+                Assert.Equal(5_000, theirs.Character.Money);
+            }
+        }
+        finally
+        {
+            TempDatabase.Delete(path);
+        }
+    }
+
+    /// <summary>Nobody buys what they cannot pay for, and nothing moves when they try.</summary>
+    [Fact]
+    public async Task NobodyBuysWhatTheyCannotAfford()
+    {
+        string path = TempDatabase.Path();
+
+        try
+        {
+            SavedMon offered = Mon(150);
+            SavedCharacter mason = Character(offered);
+
+            (SqlitePlayerStore store, long sellerId) = await AccountAsync(path, "Mason", mason);
+
+            using (store)
+            {
+                var koop = Assert.IsType<AuthOutcome.Success>(
+                    await store.RegisterAsync("Koop", "a-good-password", Character() with { Money = 100 }));
+
+                long listingId = await store.ListAsync(sellerId, mason with { Box = [] }, offered, 2_500);
+
+                Assert.Null(await store.BuyAsync(koop.Account.Id, listingId, koop.Character with { Money = 100 }));
+                Assert.Single(await store.BrowseAsync());
+            }
+        }
+        finally
+        {
+            TempDatabase.Delete(path);
+        }
+    }
+
+    /// <summary>And nobody buys their own, which would be a way to move a price about.</summary>
+    [Fact]
+    public async Task NobodyBuysTheirOwn()
+    {
+        string path = TempDatabase.Path();
+
+        try
+        {
+            SavedMon offered = Mon(150);
+            SavedCharacter mason = Character(offered);
+
+            (SqlitePlayerStore store, long sellerId) = await AccountAsync(path, "Mason", mason);
+
+            using (store)
+            {
+                SavedCharacter without = mason with { Box = [] };
+
+                long listingId = await store.ListAsync(sellerId, without, offered, 2_500);
+
+                Assert.Null(await store.BuyAsync(sellerId, listingId, without));
+                Assert.Single(await store.BrowseAsync());
+            }
+        }
+        finally
+        {
+            TempDatabase.Delete(path);
+        }
+    }
+
+    /// <summary>
+    /// The seller's money waits for them rather than being paid into a row their next save
+    /// would write over. Until it is collected the listing is the ledger, and it says sold.
+    /// </summary>
+    [Fact]
+    public async Task TheSellersMoneyWaitsUntilTheyCollectIt()
+    {
+        string path = TempDatabase.Path();
+
+        try
+        {
+            SavedMon offered = Mon(150);
+            SavedCharacter mason = Character(offered);
+
+            (SqlitePlayerStore store, long sellerId) = await AccountAsync(path, "Mason", mason);
+
+            using (store)
+            {
+                var koop = Assert.IsType<AuthOutcome.Success>(
+                    await store.RegisterAsync("Koop", "a-good-password", Character()));
+
+                SavedCharacter without = mason with { Box = [] };
+
+                long listingId = await store.ListAsync(sellerId, without, offered, 2_500);
+
+                await store.BuyAsync(koop.Account.Id, listingId, koop.Character);
+
+                // Sold, and still theirs to see.
+                Listing sold = Assert.Single(await store.MineAsync(sellerId));
+
+                Assert.True(sold.Sold);
+                Assert.Equal(2_500, sold.Price);
+
+                // Nothing has been paid into the row while they were not looking.
+                var before = Assert.IsType<AuthOutcome.Success>(
+                    await store.LoginAsync("Mason", "a-good-password"));
+
+                Assert.Equal(5_000, before.Character.Money);
+
+                Assert.Equal(2_500, await store.CollectAsync(sellerId, without, ceiling: 999_999));
+
+                var after = Assert.IsType<AuthOutcome.Success>(
+                    await store.LoginAsync("Mason", "a-good-password"));
+
+                Assert.Equal(7_500, after.Character.Money);
+
+                // And collecting twice pays nothing, because the ledger is gone.
+                Assert.Equal(0, await store.CollectAsync(sellerId, after.Character, ceiling: 999_999));
+                Assert.Empty(await store.MineAsync(sellerId));
+            }
+        }
+        finally
+        {
+            TempDatabase.Delete(path);
+        }
+    }
+
+    /// <summary>
+    /// And what will not fit under the ceiling is not paid. The ceiling belongs to the
+    /// caller because how much money a character may hold is a rule about the game rather
+    /// than about the disk.
+    /// </summary>
+    [Fact]
+    public async Task AndOnlyWhatFitsIsPaid()
+    {
+        string path = TempDatabase.Path();
+
+        try
+        {
+            SavedMon offered = Mon(150);
+            SavedCharacter mason = Character(offered);
+
+            (SqlitePlayerStore store, long sellerId) = await AccountAsync(path, "Mason", mason);
+
+            using (store)
+            {
+                var koop = Assert.IsType<AuthOutcome.Success>(
+                    await store.RegisterAsync("Koop", "a-good-password", Character()));
+
+                SavedCharacter without = mason with { Box = [] };
+
+                long listingId = await store.ListAsync(sellerId, without, offered, 2_500);
+
+                await store.BuyAsync(koop.Account.Id, listingId, koop.Character);
+
+                // Room for four hundred of the two and a half thousand owed.
+                Assert.Equal(400, await store.CollectAsync(sellerId, without, ceiling: 5_400));
+            }
+        }
+        finally
+        {
+            TempDatabase.Delete(path);
+        }
+    }
+
+    /// <summary>And a sold listing can no longer be taken back off the board.</summary>
+    [Fact]
+    public async Task AndSomethingSoldCannotBeTakenBack()
+    {
+        string path = TempDatabase.Path();
+
+        try
+        {
+            SavedMon offered = Mon(150);
+            SavedCharacter mason = Character(offered);
+
+            (SqlitePlayerStore store, long sellerId) = await AccountAsync(path, "Mason", mason);
+
+            using (store)
+            {
+                var koop = Assert.IsType<AuthOutcome.Success>(
+                    await store.RegisterAsync("Koop", "a-good-password", Character()));
+
+                SavedCharacter without = mason with { Box = [] };
+
+                long listingId = await store.ListAsync(sellerId, without, offered, 2_500);
+
+                await store.BuyAsync(koop.Account.Id, listingId, koop.Character);
+
+                Assert.Null(await store.CancelAsync(sellerId, listingId, without));
+            }
+        }
+        finally
+        {
+            TempDatabase.Delete(path);
+        }
+    }
+
+    /// <summary>
+    /// And two buyers genuinely at once. Whoever wins, exactly one of them wins, and the
+    /// creature exists in exactly one box afterwards.
+    /// <para>
+    /// Written after the sequential test above turned out not to prove what it claimed:
+    /// removing the guard on the update left every test passing, because the read at the
+    /// top of the purchase already refuses a listing that has been sold. That read is what
+    /// catches a buyer who arrives late; it is not what catches two who arrive together.
+    /// </para>
+    /// <para>
+    /// This one does not assert which buyer wins or how the loser fails — a refusal and a
+    /// database that says "busy" are both losing, and insisting on one of them would be
+    /// asserting the scheduler. What it asserts is the thing that must never happen: two
+    /// people paying for one creature.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task TwoBuyersAtOnceMeansOneCreature()
+    {
+        string path = TempDatabase.Path();
+
+        try
+        {
+            SavedMon offered = Mon(150);
+            SavedCharacter mason = Character(offered);
+
+            (SqlitePlayerStore store, long sellerId) = await AccountAsync(path, "Mason", mason);
+
+            using (store)
+            {
+                var first = Assert.IsType<AuthOutcome.Success>(
+                    await store.RegisterAsync("Koop", "a-good-password", Character()));
+
+                var second = Assert.IsType<AuthOutcome.Success>(
+                    await store.RegisterAsync("Ash", "a-good-password", Character()));
+
+                long listingId = await store.ListAsync(sellerId, mason with { Box = [] }, offered, 2_500);
+
+                async Task<bool> TryBuy(long who, SavedCharacter theirs)
+                {
+                    try
+                    {
+                        return await store.BuyAsync(who, listingId, theirs) is not null;
+                    }
+                    catch (Exception)
+                    {
+                        // Losing by being told the database is busy is still losing.
+                        return false;
+                    }
+                }
+
+                bool[] won = await Task.WhenAll(
+                    TryBuy(first.Account.Id, first.Character),
+                    TryBuy(second.Account.Id, second.Character));
+
+                Assert.Equal(1, won.Count(w => w));
+
+                var koop = Assert.IsType<AuthOutcome.Success>(
+                    await store.LoginAsync("Koop", "a-good-password"));
+
+                var ash = Assert.IsType<AuthOutcome.Success>(
+                    await store.LoginAsync("Ash", "a-good-password"));
+
+                // One box has it, the other does not, and the board is empty.
+                Assert.Equal(
+                    1,
+                    koop.Character.Box.Count(m => m.Species == 150) +
+                    ash.Character.Box.Count(m => m.Species == 150));
+
+                // And exactly one of them paid.
+                Assert.Equal(7_500, koop.Character.Money + ash.Character.Money);
+
+                Assert.Empty(await store.BrowseAsync());
+            }
+        }
+        finally
+        {
+            TempDatabase.Delete(path);
+        }
+    }
 }

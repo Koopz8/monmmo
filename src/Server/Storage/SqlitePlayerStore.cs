@@ -1325,6 +1325,151 @@ public sealed class SqlitePlayerStore : IPlayerStore, IMarketStore, IDisposable
         return coming;
     }
 
+    public async Task<(SavedMon Bought, int Price)?> BuyAsync(
+        long buyerId,
+        long listingId,
+        SavedCharacter buyer,
+        CancellationToken cancellationToken = default)
+    {
+        await using SqliteConnection connection = Open();
+
+        await using SqliteTransaction transaction =
+            (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+
+        long memberId;
+        long sellerId;
+        int price;
+
+        await using (SqliteCommand find = connection.CreateCommand())
+        {
+            find.Transaction = transaction;
+            find.CommandText =
+                $"SELECT member_id, seller_id, price FROM market_listings " +
+                $"WHERE id = $id AND state = {ForSale} AND member_id IS NOT NULL;";
+
+            find.Parameters.AddWithValue("$id", listingId);
+
+            await using SqliteDataReader reading = await find.ExecuteReaderAsync(cancellationToken);
+
+            if (!await reading.ReadAsync(cancellationToken)) return null;
+
+            memberId = reading.GetInt64(0);
+            sellerId = reading.GetInt64(1);
+            price = reading.GetInt32(2);
+        }
+
+        // Nobody buys their own. It would work — the money would go round in a circle and
+        // the creature would come home — but it is a way to launder a listing past anybody
+        // watching prices, and it costs one line to refuse.
+        if (sellerId == buyerId) return null;
+
+        if (buyer.Money < price) return null;
+
+        SavedMon? bought = await ReadMemberAsync(connection, transaction, memberId, cancellationToken);
+
+        if (bought is null) return null;
+
+        // The guard, and the whole of what settles two people pressing buy at once. Not a
+        // lock and not a check beforehand: a check reads the past, and by the time it has
+        // answered somebody else has committed. This asks the database to change the row
+        // only if it is still the row that was read, and a buyer who changed nothing lost.
+        await using (SqliteCommand sell = connection.CreateCommand())
+        {
+            sell.Transaction = transaction;
+            sell.CommandText =
+                $"""
+                UPDATE market_listings
+                SET state = {Sold}, buyer_id = $buyer, sold_at = $now, member_id = NULL
+                WHERE id = $id AND state = {ForSale};
+                """;
+
+            sell.Parameters.AddWithValue("$id", listingId);
+            sell.Parameters.AddWithValue("$buyer", buyerId);
+            sell.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
+
+            if (await sell.ExecuteNonQueryAsync(cancellationToken) == 0) return null;
+        }
+
+        // The escrowed row goes rather than being re-parented: the buyer's copy is written
+        // below as part of their own character, where every save after this expects to
+        // find it. A row left behind in the fourth state would be a creature nobody owns.
+        await using (SqliteCommand clear = connection.CreateCommand())
+        {
+            clear.Transaction = transaction;
+            clear.CommandText = "DELETE FROM party_members WHERE id = $member;";
+            clear.Parameters.AddWithValue("$member", memberId);
+
+            await clear.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await WriteCharacterAsync(
+            connection,
+            transaction,
+            buyerId,
+            buyer with { Box = [.. buyer.Box, bought], Money = buyer.Money - price },
+            cancellationToken);
+
+        await transaction.CommitAsync(cancellationToken);
+
+        return (bought, price);
+    }
+
+    public async Task<int> CollectAsync(
+        long sellerId,
+        SavedCharacter current,
+        int ceiling,
+        CancellationToken cancellationToken = default)
+    {
+        await using SqliteConnection connection = Open();
+
+        await using SqliteTransaction transaction =
+            (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+
+        int owed;
+
+        await using (SqliteCommand total = connection.CreateCommand())
+        {
+            total.Transaction = transaction;
+            total.CommandText =
+                $"SELECT COALESCE(SUM(price), 0) FROM market_listings WHERE seller_id = $seller AND state = {Sold};";
+
+            total.Parameters.AddWithValue("$seller", sellerId);
+
+            owed = Convert.ToInt32(await total.ExecuteScalarAsync(cancellationToken));
+        }
+
+        if (owed == 0) return 0;
+
+        // Deleted in the same breath as being paid. A listing whose money has been
+        // collected is kept for nothing, and one kept by accident is one that pays twice.
+        await using (SqliteCommand clear = connection.CreateCommand())
+        {
+            clear.Transaction = transaction;
+            clear.CommandText =
+                $"DELETE FROM market_listings WHERE seller_id = $seller AND state = {Sold};";
+
+            clear.Parameters.AddWithValue("$seller", sellerId);
+
+            await clear.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        // The ceiling is the caller's, because how much money a character may hold is a
+        // rule about the game rather than about the disk. What is paid is what fits, and
+        // the difference is said out loud by whoever asked rather than lost quietly here.
+        int paid = Math.Min(owed, Math.Max(0, ceiling - current.Money));
+
+        await WriteCharacterAsync(
+            connection,
+            transaction,
+            sellerId,
+            current with { Money = current.Money + paid },
+            cancellationToken);
+
+        await transaction.CommitAsync(cancellationToken);
+
+        return paid;
+    }
+
     /// <summary>Reads one creature back out of its row, moves and all.</summary>
     private static async Task<SavedMon?> ReadMemberAsync(
         SqliteConnection connection,
