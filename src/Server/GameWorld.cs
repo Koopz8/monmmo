@@ -563,6 +563,15 @@ public sealed class GameWorld
                     OnlyTo: playerId)];
             }
 
+            // Note what is not in this test: other players. They do not block each other,
+            // on purpose and by decision — a game where standing still is a wall is a game
+            // where one person can shut a door for everybody, and a doorway is exactly
+            // where somebody would choose to stand.
+            //
+            // The people who do block are the map's own, which is the cartridge's rule and
+            // stays. And two other places still count a player as occupying a square, both
+            // of them answering a different question and both of them right: an NPC will
+            // not wander onto somebody, and an arriving player is not put on top of one.
             if (grid.Contains(wanted) && (!grid.IsWalkable(wanted) || IsOccupiedFor(player, player.MapId, wanted)))
             {
                 // Blocked is not an error, and everyone else still needs to see the turn.

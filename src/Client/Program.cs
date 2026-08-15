@@ -937,7 +937,11 @@ public static class Program
                 else DrawPlayer(x, y - other.Arc, other.Facing, new Color(120, 200, 255, 255));
 
                 DrawWorn(other.Looks, x, y - other.Arc);
-                DrawNameTag(other.Name, x, y - other.Arc);
+
+                // Stacked when somebody is standing on somebody. Players walk through each
+                // other by design, so sharing a square is ordinary rather than a glitch —
+                // and two name tags drawn in the same place are one unreadable smudge.
+                DrawNameTag(other.Name, x, y - other.Arc - Stacked(others, other) * 10);
             }
 
             // Off the ground while hopping, and the shadow stays where the feet would
@@ -2200,6 +2204,14 @@ public static class Program
 
         Raylib.DrawCircle((int)x + size / 2 + dx, (int)y + size / 2 + dy, 2f, new Color(216, 72, 72, 255));
     }
+
+    /// <summary>
+    /// How many other people are already drawn on this square, so a name tag can be lifted
+    /// clear of theirs. Counted by id order rather than by draw order, so the pile does not
+    /// reshuffle itself every frame.
+    /// </summary>
+    private static int Stacked(Dictionary<int, RemoteCharacter> others, RemoteCharacter who) =>
+        others.Values.Count(o => o.Id < who.Id && o.Square == who.Square);
 
     private static void DrawNameTag(string name, float x, float y)
     {
