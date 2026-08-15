@@ -22,13 +22,34 @@ public sealed class CharacterSprite : IDisposable
 
     private readonly List<Texture2D> _frames = [];
 
-    private CharacterSprite(List<Texture2D> frames, int width, int height, bool walks)
+    private CharacterSprite(
+        List<Texture2D> frames, int width, int height, bool walks, Rectangle outline)
     {
         _frames = frames;
         Width = width;
         Height = height;
         Walks = walks;
+        Outline = outline;
     }
+
+    /// <summary>
+    /// Where the figure actually is inside its frame, in sprite pixels.
+    /// <para>
+    /// Measured rather than assumed, and it had to be. A walking frame is a rectangle
+    /// with a person somewhere in it, and on this cartridge the person is neither
+    /// centred nor as tall as the frame — there is empty space above the head and to
+    /// each side, because the same frame size has to hold a figure with its arms out.
+    /// Art placed against the frame instead of against the figure put a cap in the air
+    /// above somebody's head, which is exactly what the first attempt at this looked
+    /// like.
+    /// </para>
+    /// <para>
+    /// This is the one measurement in the cosmetic work that is <b>read</b>: it comes off
+    /// the player's own sprite, by finding the pixels that are not the transparent index.
+    /// Everything drawn into it is invented.
+    /// </para>
+    /// </summary>
+    public Rectangle Outline { get; }
 
     /// <summary>
     /// True when this one has enough frames to be animated as somebody walking.
@@ -79,7 +100,36 @@ public sealed class CharacterSprite : IDisposable
             frames.Add(texture);
         }
 
-        return new CharacterSprite(frames, info.Width, info.Height, walks);
+        return new CharacterSprite(frames, info.Width, info.Height, walks, Measure(images[0]));
+    }
+
+    /// <summary>
+    /// The smallest rectangle holding everything in a frame that is not transparent.
+    /// <para>
+    /// Index nought is the transparent colour in every one of these — that is what the
+    /// palette's first entry is for — so the outline is the pixels that are anything
+    /// else. A frame that is entirely transparent gets the whole frame back rather than
+    /// nothing, because nothing would mean dividing by it.
+    /// </para>
+    /// </summary>
+    private static Rectangle Measure(IndexedImage image)
+    {
+        int left = image.Width, top = image.Height, right = -1, bottom = -1;
+
+        for (int y = 0; y < image.Height; y++)
+            for (int x = 0; x < image.Width; x++)
+            {
+                if (image[x, y] == 0) continue;
+
+                if (x < left) left = x;
+                if (x > right) right = x;
+                if (y < top) top = y;
+                if (y > bottom) bottom = y;
+            }
+
+        return right < 0
+            ? new Rectangle(0, 0, image.Width, image.Height)
+            : new Rectangle(left, top, right - left + 1, bottom - top + 1);
     }
 
     /// <summary>

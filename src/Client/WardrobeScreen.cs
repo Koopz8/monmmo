@@ -151,7 +151,45 @@ public sealed class WardrobeScreen
         DrawSlots(slots);
         DrawChoices(choices);
 
+        // What all of that adds up to, drawn at eight times life size in the corner. A
+        // wardrobe that lists what you are wearing and does not show it is a wardrobe with
+        // no mirror in it, and every one of these choices was made blind until now.
+        DrawMirror(Width - 156, 96, 8);
+
         DrawKeys(_inChoices ? "Z wear    T take off    < slots    X close" : "Z open    T take off    slots >    X close");
+    }
+
+    /// <summary>
+    /// The figure as it now is, from the front, drawn from the same art the map uses.
+    /// <para>
+    /// Not the cartridge's own walking sprite: this screen has no cartridge and does not
+    /// want one. It is the outline of a person and everything worn over it, which is
+    /// enough to tell a red cap from a straw one.
+    /// </para>
+    /// </summary>
+    private void DrawMirror(float x, float y, float scale)
+    {
+        Raylib.DrawRectangleRec(
+            new Rectangle(x - 8, y - 8, Patch.BoxWidth * scale + 16, Patch.BoxHeight * scale + 16),
+            Skin.Panel);
+
+        // The person under the clothes. Invented like the clothes, and the one drawing in
+        // this project that is allowed to be a rectangle on purpose.
+        Raylib.DrawRectangleRec(new Rectangle(x + 4 * scale, y + 4 * scale, 8 * scale, 8 * scale), Skin.Person);
+        Raylib.DrawRectangleRec(new Rectangle(x + 4 * scale, y + 13 * scale, 8 * scale, 9 * scale), Skin.Person);
+        Raylib.DrawRectangleRec(new Rectangle(x + 5 * scale, y + 22 * scale, 2 * scale, 9 * scale), Skin.Person);
+        Raylib.DrawRectangleRec(new Rectangle(x + 9 * scale, y + 22 * scale, 2 * scale, 9 * scale), Skin.Person);
+
+        foreach (bool behind in new[] { true, false })
+            foreach ((CosmeticSlot _, int id) in _looks.InDrawingOrder())
+            {
+                if (CosmeticArt.GoesBehind(id, Aspect.Front) != behind) continue;
+
+                foreach (Patch patch in CosmeticArt.For(id, Aspect.Front))
+                    Raylib.DrawRectangleRec(
+                        new Rectangle(x + patch.X * scale, y + patch.Y * scale, patch.Width * scale, patch.Height * scale),
+                        new Color(patch.R, patch.G, patch.B, (byte)255));
+            }
     }
 
     private void DrawSlots(Rectangle panel)

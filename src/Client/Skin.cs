@@ -46,6 +46,9 @@ public static class Skin
     public static readonly Color InkOnLight = new(30, 34, 48, 255);
 
     /// <summary>The one colour that says "this is the thing you have chosen".</summary>
+    /// <summary>The figure in the wardrobe's mirror, under everything worn.</summary>
+    public static readonly Color Person = new(226, 186, 150, 255);
+
     public static readonly Color Accent = new(96, 176, 255, 255);
 
     public static readonly Color AccentDeep = new(38, 96, 168, 255);

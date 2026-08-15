@@ -997,10 +997,12 @@ public static class Program
 
                 if (other.Arc > 0f) DrawShadow(x, y);
 
+                DrawWorn(other.Looks, x, y - other.Arc, other.Facing, sprite, behind: true);
+
                 if (sprite is not null) sprite.Draw(x, y - other.Arc, other.Facing, other.IsMoving, other.Id);
                 else DrawPlayer(x, y - other.Arc, other.Facing, new Color(120, 200, 255, 255));
 
-                DrawWorn(other.Looks, x, y - other.Arc);
+                DrawWorn(other.Looks, x, y - other.Arc, other.Facing, sprite, behind: false);
 
                 // Stacked when somebody is standing on somebody. Players walk through each
                 // other by design, so sharing a square is ordinary rather than a glitch —
@@ -1013,12 +1015,16 @@ public static class Program
             // one in the air.
             if (player.Arc > 0f) DrawShadow(playerX, playerY);
 
-            DrawWorn(looks, playerX, playerY - player.Arc);
+            // A cape hangs behind whoever is wearing it, so it is drawn before them. The
+            // rest goes over the top, which is why this is two calls and not one.
+            DrawWorn(looks, playerX, playerY - player.Arc, player.Facing, sprite, behind: true);
 
             if (sprite is not null)
                 sprite.Draw(playerX, playerY - player.Arc, player.Facing, player.IsStepping, player.StepsTaken);
             else
                 DrawPlayer(playerX, playerY - player.Arc, player.Facing);
+
+            DrawWorn(looks, playerX, playerY - player.Arc, player.Facing, sprite, behind: false);
             Raylib.EndMode2D();
 
             if (fadingIn > 0f)
@@ -1707,35 +1713,53 @@ public static class Program
     /// fallback rather than a failure</em>.
     /// </para>
     /// </summary>
-    private static void DrawWorn(Appearance looks, float x, float y)
+    private static void DrawWorn(
+        Appearance looks, float x, float y, Direction facing, CharacterSprite? sprite, bool behind)
     {
         if (looks.Worn.Count == 0) return;
 
-        int at = 0;
-
-        foreach ((CosmeticSlot slot, int id) in looks.InDrawingOrder())
+        Aspect aspect = facing switch
         {
-            Raylib.DrawRectangle((int)x + 2 + at * 5, (int)y - 20, 4, 4, MarkFor(slot));
-            at++;
+            Direction.Up => Aspect.Back,
+            Direction.Down => Aspect.Front,
+            _ => Aspect.Side,
+        };
+
+        // Drawn as though facing left, and mirrored for right — the same way the
+        // cartridge's own frames are, and for the same reason.
+        bool mirror = facing == Direction.Right;
+
+        // Placed against the figure rather than against the frame it is drawn in. The
+        // frame is bigger than the person on this cartridge — empty above the head and
+        // at each side — and art aligned to the frame put a cap in the air.
+        float frameWidth = sprite?.Width ?? WalkingCharacter.SquarePixels;
+        float frameHeight = sprite?.Height ?? WalkingCharacter.SquarePixels;
+
+        Rectangle outline = sprite?.Outline ?? new Rectangle(0, 0, frameWidth, frameHeight);
+
+        float frameLeft = x + (WalkingCharacter.SquarePixels - frameWidth) / 2f;
+        float frameTop = y + WalkingCharacter.SquarePixels - frameHeight;
+
+        float left = frameLeft + outline.X;
+        float top = frameTop + outline.Y;
+
+        float across = outline.Width / (float)Patch.BoxWidth;
+        float down = outline.Height / (float)Patch.BoxHeight;
+
+        foreach ((CosmeticSlot _, int id) in looks.InDrawingOrder())
+        {
+            if (CosmeticArt.GoesBehind(id, aspect) != behind) continue;
+
+            foreach (Patch patch in CosmeticArt.For(id, aspect))
+            {
+                float px = mirror ? Patch.BoxWidth - patch.X - patch.Width : patch.X;
+
+                Raylib.DrawRectangleRec(
+                    new Rectangle(left + px * across, top + patch.Y * down, patch.Width * across, patch.Height * down),
+                    new Color(patch.R, patch.G, patch.B, (byte)255));
+            }
         }
     }
-
-    /// <summary>A colour per slot, so a row of marks can be read at a glance.</summary>
-    private static Color MarkFor(CosmeticSlot slot) => slot switch
-    {
-        CosmeticSlot.Hair => new Color(120, 72, 40, 255),
-        CosmeticSlot.Eyes => new Color(90, 170, 220, 255),
-        CosmeticSlot.Hat => new Color(220, 60, 60, 255),
-        CosmeticSlot.Glasses => new Color(230, 230, 230, 255),
-        CosmeticSlot.Scarf => new Color(230, 140, 60, 255),
-        CosmeticSlot.Shirt => new Color(90, 200, 120, 255),
-        CosmeticSlot.Pants => new Color(70, 90, 200, 255),
-        CosmeticSlot.Skirt => new Color(200, 90, 190, 255),
-        CosmeticSlot.Dress => new Color(230, 120, 200, 255),
-        CosmeticSlot.Shoes => new Color(110, 90, 70, 255),
-        CosmeticSlot.Cape => new Color(150, 60, 200, 255),
-        _ => new Color(200, 200, 120, 255),
-    };
 
     private static bool InARoomThatHeals(GameData data, MapView view, uint? healer) =>
         healer is { } script && view.Map.Objects.Any(o => HealerLocator.Heals(data.Rom, o, script));
