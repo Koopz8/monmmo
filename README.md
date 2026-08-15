@@ -14,7 +14,7 @@ src/Server          the authoritative server. Core only
 src/Client          the game: window, input, drawing, screens
 src/Tools/RomDump   the extractor's command line, and every instrument built for it
 src/Tools/Crowd     a crowd of real clients, for measuring what the server does at scale
-tests/              1530 tests, no cartridge required
+tests/              1538 tests, no cartridge required
 tools/rig/          the headless play rig — Xvfb, two clients, screenshots
 ```
 
@@ -238,9 +238,25 @@ hashes still verify under the parameters stored inside them — gave:
   a step took      2.0 /  14.7 / 589.4 ms
 ```
 
-The next wall is already visible in the same report: **52 messages a second, per
-player**, because a hundred bots all start in one room and every step is told to
-everybody on that map. That is the shape of an O(n²) and it is what comes next.
+The next wall was in the same report — every step told to everybody, by a dispatch
+loop that walked all connections and asked the world where each one was, taking the
+server's one global lock each time. A hundred people stepping once a second on one map
+was ten thousand lock acquisitions a second, contending with the world's own clock.
+
+Fixed by an index of who is standing where, kept outside the lock and written only
+where somebody joins, leaves or changes map; and by giving every connection its own
+queue and pump, so one socket that has stopped reading delays nobody but itself:
+
+```
+  joining       5815 /  9889 / 10362 ms   (median, 95th, worst)
+  a step took      1.5 /   5.8 /  370.4 ms
+```
+
+At 400 players on the same two cores: everybody in, 18,000 messages a second
+delivered, a step answered in 3.8 ms at the median. What breaks at that size is the
+crowd sharing one room — 400 people who can all see each other is 160,000 sightings a
+second, and the connections that cannot keep up are disconnected on purpose rather
+than quietly missing messages. Interest finer than a whole map is what comes next.
 
 ## Playing it headlessly
 

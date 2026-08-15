@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using PokeMmo.Core.Battle;
 using PokeMmo.Core.Cosmetics;
 using PokeMmo.Core.Data;
@@ -255,6 +256,27 @@ public sealed class GameWorld
     private readonly WorldData _world;
     private readonly Dictionary<string, CollisionGrid> _grids = [];
     private readonly Dictionary<int, ServerPlayer> _players = [];
+
+    /// <summary>
+    /// Who is on which map, and where each player is, kept outside the gate.
+    /// <para>
+    /// Two copies of something the players already know, and they exist for one caller:
+    /// the thing that decides who a message goes to. That question is asked once per
+    /// recipient per message — a hundred people stepping once a second on one map is ten
+    /// thousand of them a second — and it used to be answered by taking this server's one
+    /// global lock and looking a player up inside it. Every step anybody took therefore
+    /// serialised against every other step, and against the world's own clock.
+    /// </para>
+    /// <para>
+    /// These are written only where a player joins, leaves or changes map, which is three
+    /// places, all of them already inside the gate. So the writes are still serialised and
+    /// the reads are free — which is the right way round for something read thousands of
+    /// times for each time it changes.
+    /// </para>
+    /// </summary>
+    private readonly ConcurrentDictionary<int, string> _where = new();
+
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<int, byte>> _crowd = new();
     private readonly object _gate = new();
 
     private int _nextPlayerId = 1;
@@ -385,9 +407,48 @@ public sealed class GameWorld
     }
 
     /// <summary>Which map a player is on, for scoping a broadcast.</summary>
-    public string? MapIdOf(int playerId)
+    /// <summary>
+    /// Where somebody is, without taking the gate.
+    /// <para>
+    /// The hot question of the whole server: asked once for every recipient of every
+    /// message. Answered from the index rather than from the players, because the answer
+    /// changes when somebody walks through a door and is read ten thousand times a second
+    /// in between.
+    /// </para>
+    /// </summary>
+    public string? MapIdOf(int playerId) => _where.GetValueOrDefault(playerId);
+
+    /// <summary>
+    /// Everybody on one map, without taking the gate.
+    /// <para>
+    /// This is what turns a broadcast into a delivery. Sending to a map used to mean
+    /// walking every connection on the server and asking each one where it was; now it
+    /// means walking the people who are actually there.
+    /// </para>
+    /// </summary>
+    public IReadOnlyCollection<int> WhoIsOn(string mapId) =>
+        _crowd.TryGetValue(mapId, out ConcurrentDictionary<int, byte>? there) ? [.. there.Keys] : [];
+
+    /// <summary>Every map with anybody on it, which is the only kind worth simulating.</summary>
+    public IReadOnlyCollection<string> MapsWithAnybodyOn => [.. _crowd.Keys];
+
+    /// <summary>Records where somebody is standing, or that they are gone.</summary>
+    private void Standing(int playerId, string? mapId)
     {
-        lock (_gate) return _players.GetValueOrDefault(playerId)?.MapId;
+        if (_where.TryRemove(playerId, out string? was)
+            && _crowd.TryGetValue(was, out ConcurrentDictionary<int, byte>? left))
+        {
+            left.TryRemove(playerId, out _);
+
+            // An empty map is removed so that "every map with anybody on it" stays the
+            // size of the crowd rather than the size of everywhere it has ever been.
+            if (left.IsEmpty) _crowd.TryRemove(new KeyValuePair<string, ConcurrentDictionary<int, byte>>(was, left));
+        }
+
+        if (mapId is null) return;
+
+        _where[playerId] = mapId;
+        _crowd.GetOrAdd(mapId, _ => new ConcurrentDictionary<int, byte>())[playerId] = 0;
     }
 
     /// <summary>True when this server has the numbers to decide a battle itself.</summary>
@@ -489,6 +550,8 @@ public sealed class GameWorld
                 send.Add(new Outgoing(new ObjectsPlaced([.. VisibleTo(player, people)]), OnlyTo: player.Id));
 
             _players[player.Id] = player;
+            Standing(player.Id, mapId);
+
             send.Add(new Outgoing(player.ToAppeared(), Except: player.Id, OnMap: mapId));
 
             return (player, send);
@@ -509,6 +572,7 @@ public sealed class GameWorld
 
             string mapId = player.MapId;
             _players.Remove(playerId);
+            Standing(playerId, null);
 
             AbandonApproaches(playerId);
 
@@ -909,7 +973,11 @@ public sealed class GameWorld
 
             LastTickAt = nowSeconds;
 
-            foreach (string mapId in _players.Values.Select(p => p.MapId).Distinct().ToList())
+            // The maps with anybody on them, from the index rather than by walking every
+            // player in the world and sorting out the duplicates. At a hundred players
+            // that scan happened five times a second inside this lock; at a thousand it
+            // would have been the tick's whole budget.
+            foreach (string mapId in MapsWithAnybodyOn)
             {
                 if (Populate(mapId, nowSeconds) is not { } people) continue;
 
@@ -930,7 +998,7 @@ public sealed class GameWorld
             // knowing: walk away and back, and the street is as the cartridge left it.
             foreach (string mapId in _populated.Keys.ToList())
             {
-                if (_players.Values.Any(p => p.MapId == mapId)) continue;
+                if (_crowd.ContainsKey(mapId)) continue;
 
                 // A map about to stop being simulated may still hold somebody walking
                 // towards a player who left it by some route that did not go through a
@@ -3122,6 +3190,8 @@ public sealed class GameWorld
         player.Shifted.Clear();
 
         player.MapId = mapId;
+        Standing(player.Id, mapId);
+
         player.Square = arrival;
         player.Facing = facing;
 

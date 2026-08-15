@@ -765,7 +765,7 @@ public static class Program
 /// <summary>Accepts connections and fans messages out to them.</summary>
 public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose = false)
 {
-    private readonly ConcurrentDictionary<int, MessageChannel> _channels = new();
+    private readonly ConcurrentDictionary<int, Outbox> _channels = new();
 
     /// <summary>How many people may be having their password checked at once.</summary>
     private readonly Doorway _door = new();
@@ -931,7 +931,10 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                             foreach (Outgoing mine in welcome.Where(o => o.OnlyTo == playerId))
                                 await channel.SendAsync(mine.Message, cancellationToken).ConfigureAwait(false);
 
-                            _channels[playerId] = channel;
+                            // A queue and a pump, rather than the socket itself. What
+                            // this buys is that no player's connection can ever make
+                            // another player wait — see Outbox.
+                            _channels[playerId] = new Outbox(channel, cancellationToken);
 
                             await DispatchAsync(
                                     welcome.Where(o => o.OnlyTo != playerId).ToList(),
@@ -1371,7 +1374,7 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                         }
                     }
 
-                    _channels.TryRemove(playerId, out _);
+                    if (_channels.TryRemove(playerId, out Outbox? closing)) closing.Dispose();
                     await DispatchAsync(world.Leave(playerId), playerId, CancellationToken.None).ConfigureAwait(false);
                     Console.WriteLine($"- #{playerId} left, {world.PlayerCount} online");
                 }
@@ -1379,29 +1382,72 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
         }
     }
 
-    private async Task DispatchAsync(List<Outgoing> outgoing, int sender, CancellationToken cancellationToken)
+    /// <summary>
+    /// Puts every message in the post of everybody it is for.
+    /// <para>
+    /// It used to walk every connection on the server for every message and ask the world
+    /// where each one was — and that question took the world's single lock. A hundred
+    /// people stepping once a second on one map was ten thousand lock acquisitions a
+    /// second, each of them contending with the world's own clock; at a thousand it would
+    /// have been a million. The cost of one person moving grew with the number of people
+    /// who existed, which is the definition of not scaling.
+    /// </para>
+    /// <para>
+    /// Now a message aimed at a map asks the world who is on that map — an index, no lock
+    /// — and posts to those people. The cost of one step is the number of people who can
+    /// actually see it.
+    /// </para>
+    /// <para>
+    /// And posting no longer waits. Each connection has its own queue and its own pump, so
+    /// one slow socket delays nobody but itself.
+    /// </para>
+    /// </summary>
+    private Task DispatchAsync(List<Outgoing> outgoing, int sender, CancellationToken cancellationToken)
     {
         foreach (Outgoing item in outgoing)
         {
-            foreach ((int id, MessageChannel channel) in _channels)
+            if (item.OnlyTo is { } only)
             {
-                if (item.OnlyTo is { } only && only != id) continue;
-                if (item.Except is { } except && except == id) continue;
-
-                // A world of 425 maps would behave like one enormous room without
-                // this — every step anyone took anywhere, sent to everyone.
-                if (item.OnMap is { } scope && world.MapIdOf(id) != scope) continue;
-
-                try
-                {
-                    await channel.SendAsync(item.Message, cancellationToken).ConfigureAwait(false);
-                }
-                catch (Exception ex) when (ex is IOException or ObjectDisposedException or OperationCanceledException)
-                {
-                    // A send failing means that connection is gone; its own loop will
-                    // clean it up. One dead client must not stop the broadcast.
-                }
+                Post(only, item);
+                continue;
             }
+
+            // Everybody who can see it, which for anything with a map on it is the people
+            // standing there and nobody else.
+            if (item.OnMap is { } scope)
+            {
+                foreach (int id in world.WhoIsOn(scope))
+                    if (item.Except != id)
+                        Post(id, item);
+
+                continue;
+            }
+
+            foreach ((int id, Outbox _) in _channels)
+                if (item.Except != id)
+                    Post(id, item);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Posts one message to one player, and forgets the ones who have stopped reading.
+    /// <para>
+    /// A connection whose queue has filled is not sent to again. Its own loop closes it —
+    /// this only stops the world pretending somebody is still listening.
+    /// </para>
+    /// </summary>
+    private void Post(int playerId, Outgoing item)
+    {
+        if (!_channels.TryGetValue(playerId, out Outbox? outbox)) return;
+
+        if (outbox.Post(item.Message)) return;
+
+        if (_channels.TryRemove(playerId, out Outbox? behind))
+        {
+            Console.WriteLine($"! #{playerId} fell {Outbox.Room} messages behind and was let go");
+            behind.Dispose();
         }
     }
 }
