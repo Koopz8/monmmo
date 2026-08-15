@@ -3483,6 +3483,9 @@ public sealed class GameWorld
             case "hidden":
                 return [.. WhoIsBeingHeldBack(player).Select(said => Said(player, said))];
 
+            case "reach":
+                return [.. WhereThisSaveCanGet(player).Select(said => Said(player, said))];
+
             case "forget":
                 player.Script.Forget();
                 return [Said(player, "every flag and variable, gone"), .. Resend(player)];
@@ -3490,6 +3493,61 @@ public sealed class GameWorld
             default:
                 return [Said(player, $"no command \"{line.Verb}\" — try /help")];
         }
+    }
+
+    /// <summary>
+    /// How much of the world this save can actually get to, from where it is standing.
+    /// <para>
+    /// The same walk the server prints at startup, asked of one player instead of a fresh
+    /// character: their flags, their map, and the moves their own party knows. The startup
+    /// figure answers "how much of this game is built"; this one answers "how much of it
+    /// has this player opened", and the two are only the same on the first morning.
+    /// </para>
+    /// <para>
+    /// Three walks and a difference. Where the party's moves are worth something the
+    /// second number says so; where water is the wall the third does. A number on its own
+    /// says nothing — the whole value is in which of the three it jumps at.
+    /// </para>
+    /// <para>
+    /// It walks four hundred maps three times, so it is an operator's question and not a
+    /// thing to put on a key.
+    /// </para>
+    /// </summary>
+    public List<string> WhereThisSaveCanGet(ServerPlayer player)
+    {
+        if (_world.Find(player.MapId) is not { } here) return ["no such map"];
+
+        int[] flags = [.. player.Script.Flags];
+
+        // What this party can actually do to the world, rather than what somebody with
+        // every move could. Field moves are moves like any other and the walker only
+        // looks at the ones an obstacle names, so handing it the lot costs nothing.
+        int[] moves = [.. player.Party.SelectMany(m => m.Moves).Where(m => m > 0).Distinct().Order()];
+
+        Reach plain = WorldWalker.Walk(_world, player.MapId, flagsSet: flags, startSquare: player.Square);
+
+        Reach withMoves = WorldWalker.Walk(
+            _world, player.MapId, moves, flagsSet: flags, startSquare: player.Square);
+
+        Reach afloat = WorldWalker.Walk(
+            _world, player.MapId, moves, surfing: true, flagsSet: flags, startSquare: player.Square);
+
+        var said = new List<string>
+        {
+            $"{here.Name}: {plain.Maps.Count} of {_world.Count} maps from here, on this save's flags",
+            $"  {withMoves.Maps.Count} with what this party knows " +
+            $"({(moves.Length == 0 ? "nothing" : string.Join(",", moves))})",
+            $"  {afloat.Maps.Count} if it could also cross water",
+        };
+
+        // And the nearest thing that is not geometry. Named rather than counted, because
+        // "something is in the way" is not an answer anybody can act on.
+        foreach (Frontier stuck in withMoves.Blocked.Take(3))
+            said.Add($"  in the way: {stuck}");
+
+        if (withMoves.Blocked.Count > 3) said.Add($"  and {withMoves.Blocked.Count - 3} more like that");
+
+        return said;
     }
 
     /// <summary>

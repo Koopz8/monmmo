@@ -56,6 +56,7 @@ public static class ConsoleHelp
         "/item <id> [count]         something for the bag",
         "/flag <id> [on|off]        set or clear a story flag, e.g. /flag 0x082C",
         "/hidden                    who this map is holding back, and on which flag",
+        "/reach                     how much of the world this save can get to",
         "/var <id> <value>          write a story variable, e.g. /var 0x4055 3",
         "/read <id>                 what a variable holds",
         "/heal                      everybody back on their feet",

@@ -88,7 +88,8 @@ public static class WorldWalker
         bool surfing = false,
         IReadOnlyDictionary<byte, Direction>? hops = null,
         IReadOnlyCollection<(string MapId, int LocalId)>? asIfGone = null,
-        IReadOnlyCollection<int>? flagsSet = null)
+        IReadOnlyCollection<int>? flagsSet = null,
+        GridPosition? startSquare = null)
     {
         IReadOnlyCollection<int> known = moves ?? [];
 
@@ -144,7 +145,14 @@ public static class WorldWalker
         // Where a fresh character stands is not in the world file, so the walk starts from
         // anywhere on the starting map that a person could be. Which square hardly matters
         // — a town is one connected piece — and it avoids inventing a spawn point.
-        queue.Enqueue((start, GridOf(start).FirstWalkable()));
+        //
+        // A caller with a real player in hand says where instead, and the difference is not
+        // cosmetic: somebody standing on the wrong side of a boulder is on the wrong side
+        // of everything behind it, and a walk that began at the first walkable square of
+        // the map would report the whole world open to them.
+        queue.Enqueue((start, startSquare is { } begin && GridOf(start).IsWalkable(begin)
+            ? begin
+            : GridOf(start).FirstWalkable()));
 
         var seen = new HashSet<(string, GridPosition)>();
 
