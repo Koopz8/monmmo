@@ -536,13 +536,22 @@ public class MoreThanOneCopyTests
         Assert.Equal(0, Instances.CopyOf("1.0"));
     }
 
-    /// <summary>And a place fills up from the lowest copy, so a quiet night ends in one.</summary>
+    /// <summary>
+    /// A place fills its fullest copy that still has room, which is what empties it
+    /// again: filling the lowest first leaves a tail of copies holding two people each as
+    /// a busy evening drains away, and every one of those walks its own townsfolk about
+    /// for nobody.
+    /// </summary>
     [Fact]
-    public void AndAPlaceFillsFromTheLowestCopy()
+    public void AndAPlaceFillsTheFullestCopyThatHasRoom()
     {
-        Assert.Equal(0, Instances.CopyWithRoom(copy => copy == 0 ? Instances.RoomFor - 1 : 0));
-        Assert.Equal(1, Instances.CopyWithRoom(copy => copy == 0 ? Instances.RoomFor : 0));
+        // One nearly full and one nearly empty: the newcomer goes to the busy one.
+        Assert.Equal(0, Instances.CopyWithRoom(copy => copy switch { 0 => Instances.RoomFor - 1, 1 => 3, _ => 0 }));
+        Assert.Equal(1, Instances.CopyWithRoom(copy => copy switch { 0 => 3, 1 => Instances.RoomFor - 1, _ => 0 }));
+
+        // Full ones are skipped, and a place with nobody on it is its first copy.
         Assert.Equal(2, Instances.CopyWithRoom(copy => copy < 2 ? Instances.RoomFor : 0));
+        Assert.Equal(0, Instances.CopyWithRoom(_ => 0));
     }
 }
 

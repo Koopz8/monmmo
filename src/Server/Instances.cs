@@ -62,16 +62,42 @@ public sealed class Instances
     /// <summary>
     /// Which copy of a place somebody should be put in, given how full each one is.
     /// <para>
-    /// The lowest-numbered copy with room, so that copies fill up and empty out rather
-    /// than everybody drifting into higher and higher numbers — a place that is busy at
-    /// noon and quiet at midnight should end the night back in one copy.
+    /// The <b>fullest</b> copy that still has room, and ties go to the lower number. That
+    /// is the opposite of the obvious answer and it is the one that empties a place out
+    /// again: filling the lowest copy first leaves a long tail of copies holding two or
+    /// three people each as a busy evening drains away, and every one of those is a
+    /// separate set of townsfolk being walked about for nobody. Filling the fullest one
+    /// packs the crowd down as it shrinks, and the empty copies close by themselves.
+    /// </para>
+    /// <para>
+    /// It also puts arrivals where the people are, which is what somebody arriving in a
+    /// town actually wants — a copy with thirty-nine people in it looks like a game with
+    /// other players in it, and a fresh copy with one looks like a server nobody is on.
     /// </para>
     /// </summary>
     public static int CopyWithRoom(Func<int, int> howManyIn, int mostCopies = 64)
     {
+        int best = -1;
+        int fullest = -1;
+
         for (int copy = 0; copy < mostCopies; copy++)
-            if (howManyIn(copy) < RoomFor)
-                return copy;
+        {
+            int howMany = howManyIn(copy);
+
+            if (howMany >= RoomFor) continue;
+
+            if (howMany > fullest)
+            {
+                fullest = howMany;
+                best = copy;
+            }
+
+            // An empty copy is as empty as it gets, and every copy past the first empty
+            // one is empty too — there is nothing further along worth asking about.
+            if (howMany == 0) break;
+        }
+
+        if (best >= 0) return best;
 
         // Every copy full is a place more popular than this server can divide. Putting
         // them in the first one is worse than refusing to let them in, which is the same
