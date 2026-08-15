@@ -275,13 +275,142 @@ public class CheapGroupTests
     /// A group this engine does nothing for is not the same as a group there is nothing
     /// to do for. Both of these are already carried by fields the engine reads for every
     /// move on the cartridge, whatever group it is in.
+    /// <para>
+    /// They used to answer <see cref="EffectKind.None"/>, which is the same answer the
+    /// engine gives for an effect nobody has written — so a count of what it understands
+    /// was wrong by three groups and there was no way to tell the two apart. They answer
+    /// <see cref="EffectKind.Nothing"/> now, and that difference is what makes it possible
+    /// for a fight to say how much of itself went unmodelled.
+    /// </para>
     /// </summary>
     [Theory]
+    [InlineData((byte)0x00)]  // POUND, SCRATCH, CUT — they hit, and that is all
     [InlineData((byte)0x11)]  // SWIFT, AERIAL ACE — accuracy of nought, which never misses
     [InlineData((byte)0x67)]  // QUICK ATTACK, EXTREMESPEED — a priority above nought
     public void SomeSilenceIsTheRecordHavingAlreadySaidIt(byte effect)
     {
-        Assert.Equal(EffectKind.None, MoveEffects.Of(effect).Kind);
+        Assert.Equal(EffectKind.Nothing, MoveEffects.Of(effect).Kind);
+        Assert.False(MoveEffects.IsSilent(effect));
+    }
+
+    // ---- the guard ------------------------------------------------------------------
+
+    private const byte GuardEffect = 0x6F;   // PROTECT, DETECT
+
+    /// <summary>
+    /// PROTECT and DETECT carry a priority of three in their own records — read, not
+    /// modelled, and the reason the guard is up before anything arrives. Only ENDURE,
+    /// MAGIC COAT, SNATCH, FOLLOW ME and HELPING HAND carry as much or more.
+    /// </summary>
+    private static MoveData Guard(int id) =>
+        new(id, "", GuardEffect, 0, PokemonType.Normal, 0, 10, 0, 0, Priority: 3);
+
+    /// <summary>
+    /// A guard stops the move rather than dodging it, so it is checked before accuracy —
+    /// PROTECT works against something that never misses, and evasion does not.
+    /// </summary>
+    [Fact]
+    public void AGuardStopsWhatWouldOtherwiseLand()
+    {
+        // Slower, and it still goes up first, because the record says so.
+        Battler you = Make(1, Guard(9));
+        Battler them = Make(250, Move(Plain, 0x00, 60));
+
+        var battle = new Battle(you, them, 7);
+
+        List<BattleEvent> events =
+            battle.ResolveTurn(new BattleAction.UseMove(0), new BattleAction.UseMove(0));
+
+        Assert.Contains(events, e => e is BattleEvent.Protected { Side: Side.Player });
+        Assert.Equal(you.MaxHp, you.CurrentHp);
+    }
+
+    /// <summary>And the one who put it up is announced as having done so.</summary>
+    [Fact]
+    public void AndSaysItPutOneUp()
+    {
+        Battler you = Make(250, Guard(9));
+        Battler them = Make(1, Move(Plain, 0x00, 60));
+
+        List<BattleEvent> events =
+            new Battle(you, them, 7).ResolveTurn(new BattleAction.UseMove(0), new BattleAction.UseMove(0));
+
+        Assert.Contains(events, e => e is BattleEvent.Protected);
+        Assert.Contains(events, e => e is BattleEvent.Unaffected);
+    }
+
+    /// <summary>
+    /// And it lasts one turn. A guard that outlived the turn it was put up in would be a
+    /// move that ends fights rather than one that buys a moment.
+    /// </summary>
+    [Fact]
+    public void AndOnlyForThatTurn()
+    {
+        Battler you = Make(250, Guard(9), Move(Plain, 0x00, 10));
+        Battler them = Make(1, Move(Plain, 0x00, 60));
+
+        var battle = new Battle(you, them, 7);
+
+        battle.ResolveTurn(new BattleAction.UseMove(0), new BattleAction.UseMove(0));
+
+        int after = you.CurrentHp;
+
+        battle.ResolveTurn(new BattleAction.UseMove(1), new BattleAction.UseMove(0));
+
+        Assert.True(you.CurrentHp < after);
+    }
+
+    /// <summary>A guard is not silence — it is one of the groups this engine now does.</summary>
+    [Fact]
+    public void AndIsNotCountedAsSomethingSteppedOver()
+    {
+        Battler you = Make(250, Guard(9));
+        Battler them = Make(1, Move(Plain, 0x00, 60));
+
+        var battle = new Battle(you, them, 7);
+
+        battle.ResolveTurn(new BattleAction.UseMove(0), new BattleAction.UseMove(0));
+
+        Assert.Empty(battle.SteppedOver);
+    }
+
+    /// <summary>And an effect nobody has written still says so.</summary>
+    [Fact]
+    public void AndTheOtherKindOfSilenceSaysSo()
+    {
+        // METRONOME, and the hundred-odd like it.
+        Assert.Equal(EffectKind.None, MoveEffects.Of(0x54).Kind);
+        Assert.True(MoveEffects.IsSilent(0x54));
+    }
+
+    /// <summary>
+    /// A fight keeps count of what it could not do. One entry per use rather than per
+    /// move, because the question afterwards is how much of this fight went unmodelled.
+    /// </summary>
+    [Fact]
+    public void AFightCountsWhatItSteppedOver()
+    {
+        Battler you = Make(250, Move(9, 0x54, 40));
+        Battler them = Make(250, Move(Plain, 0x00, 10));
+
+        var battle = new Battle(you, them, 7);
+
+        battle.ResolveTurn(new BattleAction.UseMove(0), new BattleAction.UseMove(0));
+
+        Assert.Single(battle.SteppedOver);
+    }
+
+    [Fact]
+    public void AndCountsNothingWhenItDidTheWholeThing()
+    {
+        Battler you = Make(250, Move(9, 0x00, 40));
+        Battler them = Make(250, Move(Plain, 0x00, 10));
+
+        var battle = new Battle(you, them, 7);
+
+        battle.ResolveTurn(new BattleAction.UseMove(0), new BattleAction.UseMove(0));
+
+        Assert.Empty(battle.SteppedOver);
     }
 
     [Fact]

@@ -6,6 +6,22 @@ public enum EffectKind
     /// <summary>Nothing this engine knows how to do.</summary>
     None,
 
+    /// <summary>
+    /// There is nothing more to do, and that is the answer rather than a gap.
+    /// <para>
+    /// Told apart from <see cref="None"/> on purpose, because the two used to be the same
+    /// value and a count of "moves this engine understands" cannot be right while "hits
+    /// and does nothing else" and "has a part nobody has written" share an answer. Effect
+    /// 0 is 23 moves that only hit. 0x11 never misses and 0x67 moves out of turn, and both
+    /// of those are in the record already — the accuracy field and the priority field —
+    /// so by the time the engine looks at the effect byte there is genuinely nothing left.
+    /// </para>
+    /// </summary>
+    Nothing,
+
+    /// <summary>Cannot be hit this turn.</summary>
+    Guard,
+
     /// <summary>Inflicts a lasting condition.</summary>
     Status,
 
@@ -321,6 +337,24 @@ public static class MoveEffects
         //   0x69   2 moves  THIEF, COVET
         0x69 => new MoveEffect(EffectKind.Steal, OnUser: false),
 
+        // The three that have nothing left to say by the time anybody reads the effect
+        // byte, which is a different answer from not knowing.
+        //
+        //   0x00  23 moves  POUND, SCRATCH, CUT, WING ATTACK — they hit, and that is all
+        //   0x11   6 moves  SWIFT, AERIAL ACE — never miss, and their records carry no accuracy
+        //   0x67   3 moves  QUICK ATTACK, EXTREMESPEED — move first, off the priority field
+        0x00 or 0x11 or 0x67 => new MoveEffect(EffectKind.Nothing, OnUser: false),
+
+        // Cannot be hit this turn.
+        //
+        //   0x6F   2 moves  PROTECT, DETECT
+        //
+        // Two moves, one idea, and no number to invent: what it does is not a magnitude,
+        // it is a yes or a no. The games make it fail more often the more it is used in a
+        // row, and that share is in their code — so it is modelled as always working and
+        // this sentence is the note saying which half is which.
+        0x6F => new MoveEffect(EffectKind.Guard, OnUser: true),
+
         _ => Stages(effect),
     };
 
@@ -354,4 +388,14 @@ public static class MoveEffects
     /// </summary>
     public static int Known(IEnumerable<MoveData> moves) =>
         moves.Count(m => Of(m.Effect).Kind != EffectKind.None);
+
+    /// <summary>
+    /// True when this effect has a part nobody has written yet.
+    /// <para>
+    /// The question the engine asks at run time, so that a move which quietly did half of
+    /// what it should can say so instead. Reading it off the kind rather than off a list
+    /// means the answer changes by itself the moment an effect is modelled.
+    /// </para>
+    /// </summary>
+    public static bool IsSilent(byte effect) => Of(effect).Kind == EffectKind.None;
 }

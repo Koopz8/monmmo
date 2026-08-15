@@ -781,7 +781,11 @@ public class MoveEffectTests
         // The runs would each be one longer if the slot after them were claimed, and the
         // move sitting in that slot is the check: SWIFT is not "raise evasion by one" and
         // TRANSFORM is not "raise accuracy by two".
-        Assert.Equal(EffectKind.None, MoveEffects.Of(effect).Kind);
+        //
+        // Not a stage, whichever kind of not-a-stage it is: 0x11's whole job is in the
+        // accuracy field and the other three are simply unwritten.
+        Assert.NotEqual(EffectKind.Stage, MoveEffects.Of(effect).Kind);
+        Assert.Equal(0, MoveEffects.Of(effect).Stages);
     }
 }
 

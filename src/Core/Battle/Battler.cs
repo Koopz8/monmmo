@@ -143,6 +143,16 @@ public sealed class Battler
     public bool IsAway { get; set; }
 
     /// <summary>
+    /// True for the rest of this turn, after PROTECT or DETECT.
+    /// <para>
+    /// Cleared at the end of every turn rather than at the start of the next, so that a
+    /// guard put up by whoever moved first is still up when the other one swings — which
+    /// is the whole of what the move is for.
+    /// </para>
+    /// </summary>
+    public bool IsGuarded { get; set; }
+
+    /// <summary>
     /// True while something has made sure this one is not going anywhere.
     /// <para>
     /// MEAN LOOK, and it lasts as long as the creature is standing there rather than for

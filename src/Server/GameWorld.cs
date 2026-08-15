@@ -1628,6 +1628,20 @@ public sealed class GameWorld
     /// <summary>What the last thing anybody did about the boat came to.</summary>
     public string? LastFerry { get; private set; }
 
+    /// <summary>What the last fight could not do, if it could not do something.</summary>
+    public string? LastSilence { get; private set; }
+
+    /// <summary>Taken rather than read, so nothing prints twice.</summary>
+    public string? TakeSilence()
+    {
+        lock (_gate)
+        {
+            string? said = LastSilence;
+            LastSilence = null;
+            return said;
+        }
+    }
+
     /// <summary>
     /// Sails, if the boat is open and the place asked for is one it calls at.
     /// <para>
@@ -4908,6 +4922,17 @@ public sealed class GameWorld
             // Whoever is out has to be written back before anything replaces them, or
             // a fight of six creatures records only what happened to the last one.
             WriteBackActive(player, encounter);
+
+            // What this fight could not do, kept where an operator can read it. A move
+            // that quietly does half of what it should is the hardest kind of wrong to
+            // notice, and 138 of this cartridge's moves are in that state.
+            if (battle.SteppedOver.Count > 0)
+            {
+                LastSilence =
+                    $"#{playerId}: {battle.SteppedOver.Count} moves this fight have a part " +
+                    $"this engine does not do — " +
+                    string.Join(", ", battle.SteppedOver.Distinct().Order().Select(m => $"move {m}"));
+            }
 
             bool finished = Conclude(encounter, player, out Side? winner);
 

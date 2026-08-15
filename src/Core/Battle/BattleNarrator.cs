@@ -180,6 +180,7 @@ public static class BattleNarrator
         BattleEvent.OneHitKnockout e => $"It was a one-hit knockout on {names.Of(e.Side)}!",
 
         BattleEvent.Unaffected e => $"It had no effect on {names.Of(e.Side)}.",
+        BattleEvent.Protected e => $"{names.Of(e.Side)} protected itself!",
 
         BattleEvent.GotAway => "Got away safely!",
 

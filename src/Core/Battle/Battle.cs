@@ -58,6 +58,7 @@ public enum Side
 [JsonDerivedType(typeof(BrokeFree), "brokefree")]
 [JsonDerivedType(typeof(OneHitKnockout), "onehit")]
 [JsonDerivedType(typeof(Unaffected), "unaffected")]
+[JsonDerivedType(typeof(Protected), "protected")]
 [JsonDerivedType(typeof(GotAway), "gotaway")]
 [JsonDerivedType(typeof(CouldNotGetAway), "couldnotgetaway")]
 [JsonDerivedType(typeof(HeldFast), "heldfast")]
@@ -204,6 +205,9 @@ public abstract record BattleEvent
     /// </summary>
     public sealed record Unaffected(Side Side) : BattleEvent;
 
+    /// <summary>Put a guard up, and nothing got through it.</summary>
+    public sealed record Protected(Side Side) : BattleEvent;
+
     /// <summary>Left.</summary>
     public sealed record GotAway(Side Side) : BattleEvent;
 
@@ -344,6 +348,18 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
 
     public int TurnNumber { get; private set; }
 
+    private readonly List<int> _steppedOver = [];
+
+    /// <summary>
+    /// Every move used in this fight whose effect this engine has no answer for.
+    /// <para>
+    /// One entry per use, not per move, because the question worth answering afterwards is
+    /// how much of a fight went unmodelled rather than which moves exist. A fight with no
+    /// entries is a fight this engine did the whole of.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<int> SteppedOver => _steppedOver;
+
     /// <summary>True once the opponent has been caught, which ends the battle.</summary>
     public bool OpponentCaught { get; private set; }
 
@@ -433,6 +449,12 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         }
 
         if (!IsOver) ApplyEndOfTurn(events);
+
+        // A guard lasts the turn it was put up and no longer. Cleared here rather than at
+        // the start of the next turn so that the two are the same thing even when the
+        // fight ends in between.
+        Player.IsGuarded = false;
+        Opponent.IsGuarded = false;
 
         if (IsOver) events.Add(new BattleEvent.Ended(Winner));
 
@@ -561,6 +583,34 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         }
 
         events.Add(new BattleEvent.MoveUsed(side, move.Id));
+
+        // What this engine cannot do, said out loud rather than skipped. Recorded rather
+        // than announced: a line in the middle of a fight reading "this move has a part
+        // nobody has written" is a worse experience than the move quietly under-doing —
+        // but a fight that never mentions it anywhere is how 138 moves came to be half
+        // implemented without anybody counting.
+        if (MoveEffects.IsSilent(move.Effect)) _steppedOver.Add(move.Id);
+
+        // Behind a guard, and nothing else happens. Before accuracy, because PROTECT is
+        // not evasion — the move is not missing, it is being stopped.
+        if (defender.IsGuarded)
+        {
+            events.Add(new BattleEvent.Unaffected(Other(side)));
+
+            EndLockedIn(side, attacker, events);
+
+            return;
+        }
+
+        // And putting one up, which is the whole of the move.
+        if (kind.Kind == EffectKind.Guard)
+        {
+            attacker.IsGuarded = true;
+
+            events.Add(new BattleEvent.Protected(side));
+
+            return;
+        }
 
         // The lock starts when the move is used, not when it lands. A THRASH that misses
         // is still a THRASH: the games do not let go because the swing went wide, and

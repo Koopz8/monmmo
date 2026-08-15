@@ -909,6 +909,8 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                         case BattleTurn turn when playerId != 0:
                             List<Outgoing> battleResult = world.TakeBattleTurn(playerId, turn.Action);
 
+                            if (world.TakeSilence() is { } quiet) Console.WriteLine($"? {quiet}");
+
                             foreach (Outgoing outgoing in battleResult)
                             {
                                 if (outgoing.Message is BattleUpdate battleUpdate)
