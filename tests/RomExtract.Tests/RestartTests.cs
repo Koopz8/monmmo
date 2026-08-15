@@ -86,7 +86,17 @@ public class RestartTests : IDisposable
 
     private static async Task<T> ExpectAsync<T>(MessageChannel channel, int maxMessages = 12) where T : NetMessage
     {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        // Generous on purpose. Five seconds was the original figure and it is plenty of
+        // time for a message on an idle machine — but these tests start a whole server,
+        // world file and all, and when the suite runs alongside anything else the start
+        // alone has taken ten. Two false failures came from that, both of them a slow
+        // machine rather than a broken one.
+        //
+        // Nothing is hidden by the larger number: a server that never sends the message
+        // still fails, just later. A test that fails when the machine is busy is worse
+        // than a slow one, because it teaches everybody to re-run the suite instead of
+        // reading it.
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
 
         for (int i = 0; i < maxMessages; i++)
         {
