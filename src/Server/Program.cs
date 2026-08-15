@@ -766,6 +766,9 @@ public static class Program
 public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose = false)
 {
     private readonly ConcurrentDictionary<int, MessageChannel> _channels = new();
+
+    /// <summary>How many people may be having their password checked at once.</summary>
+    private readonly Doorway _door = new();
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private readonly TaskCompletionSource<int> _listening =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -779,6 +782,17 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
     /// </summary>
     public Task<int> Listening => _listening.Task;
 
+    /// <summary>
+    /// What one password check cost when it was last measured, in milliseconds.
+    /// <para>
+    /// <b>Modelled, and it is a measurement rather than a rule</b> — it is only used to
+    /// turn the door's width into a rate for the startup line. The machine this runs on
+    /// decides the real number, and a server on better hardware than the one this was
+    /// measured on will quietly beat its own report.
+    /// </para>
+    /// </summary>
+    private const double MeasuredCheckMilliseconds = 91;
+
     public async Task RunAsync(int port, CancellationToken cancellationToken = default)
     {
         var listener = new TcpListener(IPAddress.Loopback, port);
@@ -788,6 +802,10 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
         _listening.TrySetResult(boundPort);
 
         Console.WriteLine($"Listening on port {boundPort}. Ctrl+C to stop.");
+
+        // What the door can do, before anybody is at it. This is the number that decides
+        // whether a launch works, and it is invisible from inside a running server.
+        Console.WriteLine($"  {_door.Rate(MeasuredCheckMilliseconds)}");
 
         _ = TickAsync(cancellationToken);
 
@@ -864,7 +882,11 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                     switch (message)
                     {
                         case RegisterRequest or LoginRequest when playerId == 0:
-                            AuthOutcome outcome = message switch
+                            // Through the door, which is the only bounded thing in this
+                            // server and the only one that has to be: checking a password
+                            // costs a hundred times what anything else here costs, and
+                            // nineteen megabytes for as long as it takes.
+                            AuthOutcome outcome = await _door.AdmitAsync(async () => message switch
                             {
                                 RegisterRequest register => await store
                                     .RegisterAsync(register.Username, register.Password, world.FreshCharacter(), cancellationToken)
@@ -875,7 +897,7 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                                     .ConfigureAwait(false),
 
                                 _ => new AuthOutcome.Failed("Unknown request."),
-                            };
+                            }, cancellationToken).ConfigureAwait(false);
 
                             if (outcome is AuthOutcome.Failed failed)
                             {

@@ -13,7 +13,8 @@ src/RomExtract      cartridge reading. Client-only, and enforced by a test
 src/Server          the authoritative server. Core only
 src/Client          the game: window, input, drawing, screens
 src/Tools/RomDump   the extractor's command line, and every instrument built for it
-tests/              1522 tests, no cartridge required
+src/Tools/Crowd     a crowd of real clients, for measuring what the server does at scale
+tests/              1530 tests, no cartridge required
 tools/rig/          the headless play rig — Xvfb, two clients, screenshots
 ```
 
@@ -206,6 +207,40 @@ because something got past a review:
 - the server assembly does not reference the extractor
 
 ---
+
+## Measuring it under a crowd
+
+`src/Tools/Crowd` opens hundreds of real sockets, registers or logs in, and walks —
+the same frames the raylib client sends, minus the drawing. It reports how long
+joining took, how long a step took to be answered, and what one player costs everybody
+else in messages a second.
+
+```bash
+dotnet run --project src/Tools/Crowd -c Release -- --players 100 --seconds 45
+```
+
+The first run of it moved the whole roadmap. The guess was that the database or the
+JSON would be the wall. Measured on two cores, at a hundred players:
+
+```
+  joining      24560 / 42188 / 44404 ms   (median, 95th, worst)   7 never got in
+  a step took      2.7 / 380.2 / 883.0 ms
+```
+
+The wall was **the door**: one password check cost 997 ms and 64 MiB, unbounded, so a
+hundred people arriving were a hundred simultaneous Argon2 hashes fighting for two
+cores. Bounding the door to one hash per spare core and moving the cost parameters to
+OWASP's published Argon2id baseline — 19 MiB, two passes, still memory-hard, and old
+hashes still verify under the parameters stored inside them — gave:
+
+```
+  joining       7782 / 13853 / 14753 ms   (median, 95th, worst)   100 of 100 got in
+  a step took      2.0 /  14.7 / 589.4 ms
+```
+
+The next wall is already visible in the same report: **52 messages a second, per
+player**, because a hundred bots all start in one room and every step is told to
+everybody on that map. That is the shape of an O(n²) and it is what comes next.
 
 ## Playing it headlessly
 

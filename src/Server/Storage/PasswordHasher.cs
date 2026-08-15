@@ -16,10 +16,27 @@ namespace PokeMmo.Server.Storage;
 /// </summary>
 public static class PasswordHasher
 {
-    /// <summary>64 MiB. Enough to hurt an attacker; unnoticeable once per login.</summary>
-    public const int MemoryKib = 64 * 1024;
+    /// <summary>
+    /// 19 MiB and two passes, which is OWASP's published Argon2id baseline for p=1.
+    /// <para>
+    /// It was 64 MiB and three passes, chosen for being comfortably above any baseline
+    /// — and "unnoticeable once per login" was written next to it without anybody having
+    /// measured it. Measured, on the machine this was developed on, that cost <b>997 ms
+    /// and 64 MiB per login</b>. A thousand people arriving is then 64 GiB of demand and
+    /// a quarter of an hour of one core, which is not a slow door, it is a closed one.
+    /// </para>
+    /// <para>
+    /// At the baseline the same measurement is 91 ms and 19 MiB: eleven times the
+    /// throughput and a third of the memory, still memory-hard, and a number somebody
+    /// else has argued for in public rather than one this project picked. The cost
+    /// parameters travel inside each hash, so every account made under the old ones goes
+    /// on verifying under the old ones — nobody is locked out by this, and nobody is
+    /// silently downgraded either.
+    /// </para>
+    /// </summary>
+    public const int MemoryKib = 19 * 1024;
 
-    public const int Iterations = 3;
+    public const int Iterations = 2;
 
     public const int Parallelism = 1;
 
