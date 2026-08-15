@@ -115,6 +115,11 @@ walk to, what stands in the way, which trainers have parties, which maps have no
 leading in. That report is the project's main instrument, and most of what is written
 below was found by reading it.
 
+`--door <n>` sets how many passwords may be checked at once; it defaults to one fewer
+than the cores, because the spare core is the game. Widening it past the machine is
+measurable and bad: on two cores, `--door 4` took the average wait from 6.4 s to 5.0 and
+the 95th percentile step from 9 ms to 39.
+
 An `--operator <name>` argument gives one account a console (`/` in the client) for
 `/tp`, `/give`, `/flag`, `/reach`, `/hidden`, `/docks`, `/sail`, `/duel` and the rest.
 

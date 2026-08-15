@@ -140,7 +140,15 @@ public static class Program
                     : $"  {forgetting} has forgotten {forgotten} flags and variables; the story starts over");
         }
 
-        await new GameServer(game, store, verbose).RunAsync(port);
+        // How many passwords may be checked at once. Named here because it is the one
+        // number in this server that depends on the machine it is running on: the door's
+        // width is what decides how fast a launch can let people in, and a box with
+        // sixteen cores can afford a door fifteen wide where this one cannot.
+        int door = int.TryParse(ArgumentValue(args, "--door"), out int wide) && wide > 0
+            ? wide
+            : Doorway.DefaultWidth;
+
+        await new GameServer(game, store, verbose, door).RunAsync(port);
         return 0;
     }
 
@@ -763,12 +771,12 @@ public static class Program
 }
 
 /// <summary>Accepts connections and fans messages out to them.</summary>
-public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose = false)
+public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose = false, int? doorWidth = null)
 {
     private readonly ConcurrentDictionary<int, Outbox> _channels = new();
 
     /// <summary>How many people may be having their password checked at once.</summary>
-    private readonly Doorway _door = new();
+    private readonly Doorway _door = new(doorWidth);
 
     /// <summary>When the periodic report last said anything.</summary>
     private double _lastReport;
@@ -872,7 +880,8 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
 
                     Console.WriteLine(
                         $"= {world.PlayerCount} online on {world.MapsWithAnybodyOn.Count} maps, " +
-                        $"door {_door.Admitted} in ({_door.AverageWait:F0} ms average wait)" +
+                        $"door {_door.Admitted} in ({_door.AverageWait:F0} ms average wait" +
+                        (_door.Waiting > 0 ? $", {_door.Waiting} in the queue now" : string.Empty) + ")" +
                         (store is Storage.SqlitePlayerStore disk
                             ? $", {disk.Saves} saves ({disk.AverageSave:F0} ms average, {disk.SlowestSave:F0} worst)"
                             : string.Empty) +

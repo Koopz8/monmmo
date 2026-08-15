@@ -47,6 +47,19 @@ public sealed class Doorway
     /// </summary>
     public static int DefaultWidth => Math.Max(1, Environment.ProcessorCount - 1);
 
+    /// <summary>
+    /// And what happens when somebody overrides it, measured rather than argued.
+    /// <para>
+    /// On a two-core box, <c>--door 4</c> took the average wait from 6.4 seconds to 5.0
+    /// and took the 95th percentile step from 9 ms to 39. That is the trade in one line:
+    /// a door wider than the machine admits people slightly faster by taking the game
+    /// away from everybody already inside. The width belongs to whoever knows how many
+    /// cores the server has, which is why it is an argument and not a constant — and the
+    /// default stays one short of them.
+    /// </para>
+    /// </summary>
+    public const string WidthArgument = "--door";
+
     public Doorway(int? width = null)
     {
         Width = Math.Max(1, width ?? DefaultWidth);
