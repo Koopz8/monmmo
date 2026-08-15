@@ -381,16 +381,26 @@ public class TurningTests
     }
 
     [Fact]
-    public void FacingTheSameWayTwiceSaysNothingToAnybody()
+    public void FacingTheSameWayTwiceSaysNothingToANYBODYELSE()
     {
         // A client only reports changes, but a server that rebroadcast every repeat
-        // would hand anyone who does not one megaphone per frame.
+        // would hand anyone who does not one megaphone per frame. So nothing goes to
+        // the map — and that half is unchanged.
+        //
+        // What changed is the other half. This used to return nothing at all, to
+        // nobody, and that silence was a hole: the mover had predicted the step from
+        // its own collision grid, and where the two sides disagreed about who was
+        // standing on the square it was left one square wrong for ever. The answer is
+        // now sent, to the mover alone.
         GameWorld world = World(Walls());
 
         (ServerPlayer player, _) = world.Join(
             1, "Koop", new SavedCharacter(Town, 2, 1, Direction.Down, []));
 
-        Assert.Empty(world.Move(player.Id, Direction.Down, 10));
+        List<Outgoing> send = world.Move(player.Id, Direction.Down, 10);
+
+        Assert.All(send, o => Assert.Equal(player.Id, o.OnlyTo));
+        Assert.NotEmpty(send);
     }
 }
 

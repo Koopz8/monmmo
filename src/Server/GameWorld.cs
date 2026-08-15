@@ -547,16 +547,32 @@ public sealed class GameWorld
 
             if (grid.Contains(wanted) && (!grid.IsWalkable(wanted) || IsOccupiedFor(player, player.MapId, wanted)))
             {
-                // Blocked is not an error: the client predicted the same thing and is
-                // already standing still, facing the wall. Everyone else still needs
-                // to see the turn.
+                // Blocked is not an error, and everyone else still needs to see the turn.
                 //
                 // Checked before the interval, because nobody has moved. Rate limiting a
                 // turn would refuse the last thing a player does before pressing the
                 // button — walk up to somebody, turn to face them, speak — and refuse it
                 // precisely when they did it briskly.
+                //
+                // What this used to do when the facing had not changed either was return
+                // nothing at all, on the grounds that "the client predicted the same
+                // thing and is already standing still, facing the wall". That sentence is
+                // true exactly as often as the two sides agree about what is on the
+                // square — and the test above is half walkability, which they always
+                // agree on, and half who is standing there, which they do not.
+                //
+                // A client that predicted a step the server refused in silence is a
+                // client that is one square wrong for ever. It costs nothing to say so,
+                // and not saying so cost two milestones: a captain three squares out of
+                // reach on the S.S. ANNE, and before that a GIOVANNI who looked like a
+                // missing person and was not.
+                LastStepRefusal = $"blocked at {wanted}";
+
                 return before == direction
-                    ? []
+                    ? [new Outgoing(
+                        new MoveRejected(
+                            player.Square.X, player.Square.Y, player.Facing, "Something is in the way."),
+                        OnlyTo: playerId)]
                     : [new Outgoing(
                         new PlayerMoved(playerId, player.Square.X, player.Square.Y, player.Facing),
                         OnMap: player.MapId)];
