@@ -473,6 +473,49 @@ public sealed record BoxUpdated(
     string Message) : NetMessage;
 
 /// <summary>
+/// What is on the daycare's shelf, and how far off an egg is.
+/// <para>
+/// One message for opening the place and for every change to it, the way
+/// <see cref="BoxUpdated"/> is. Two would be two ways of saying the same thing, and the
+/// second one is always the one that drifts.
+/// </para>
+/// <para>
+/// The party comes with it for the reason it comes with the box: leaving somebody there
+/// changes both lists at once, and a client holding one of them stale shows a creature in
+/// two places or in neither.
+/// </para>
+/// </summary>
+public sealed record DaycareUpdated(
+    IReadOnlyList<SavedMon> Party,
+    IReadOnlyList<SavedMon> Minded,
+    int StepsToEgg,
+    string Message) : NetMessage
+{
+    /// <summary>
+    /// How many one of these holds. The client draws that many places on the shelf, and
+    /// two empty ones say what one empty one and a guess cannot.
+    /// </summary>
+    public int Holds { get; init; } = 2;
+}
+
+/// <summary>
+/// Leaving one, or taking one back.
+/// <para>
+/// One message for both, with a flag, rather than two nearly identical ones. Which
+/// direction it goes decides which list the slot is an index into, and nothing else — so
+/// two messages would differ only in their names and would each need their own handler
+/// saying the same things.
+/// </para>
+/// <para>
+/// A slot and a direction is the whole of what a client gets to say. Whether there is
+/// anywhere to leave anybody, whether that one is the last that can fight, and whether the
+/// pair will produce anything are all the server's, checked against the world file it
+/// loaded rather than against anything that arrived over a socket.
+/// </para>
+/// </summary>
+public sealed record DaycareRequest(int Slot, bool Leaving) : NetMessage;
+
+/// <summary>
 /// The bag and the party after something was used out of a fight.
 /// <para>
 /// Both, because using a potion changes both and a client holding one of them stale
@@ -617,7 +660,18 @@ public sealed record AuthFailed(string Reason) : NetMessage;
 /// put.
 /// </para>
 /// </summary>
-public sealed record ObjectView(int LocalId, int GraphicsId, int X, int Y, Direction Facing, bool Heals = false);
+public sealed record ObjectView(int LocalId, int GraphicsId, int X, int Y, Direction Facing, bool Heals = false)
+{
+    /// <summary>
+    /// True when two can be left with this one.
+    /// <para>
+    /// The client is told for the same reason it is told who heals: a rule enforced on one
+    /// side of the split needs its counterpart on the other, or the only way to find out
+    /// that somebody minds creatures is to walk up and be refused.
+    /// </para>
+    /// </summary>
+    public bool MindsCreatures { get; init; }
+}
 
 /// <summary>Everyone standing on the map a player has just arrived on.</summary>
 public sealed record ObjectsPlaced(IReadOnlyList<ObjectView> Objects) : NetMessage;

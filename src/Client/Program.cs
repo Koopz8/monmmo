@@ -352,6 +352,7 @@ public static class Program
         var console = new ConsoleBox();
 
         ShopScreen? shop = null;
+        DaycareScreen? minding = null;
         FerryScreen? boat = null;
         IReadOnlyList<BagEntry> bag = [];
         int money = 0;
@@ -468,7 +469,7 @@ public static class Program
 
             ApplyServerMessages(
                 network, others, player, view, data, trainers, items, script, carrying, storing, looking,
-                ref talking, ref battle, ref shop, ref boat, ref bag, ref party, ref box, ref boxSize, ref money,
+                ref talking, ref battle, ref shop, ref minding, ref boat, ref bag, ref party, ref box, ref boxSize, ref money,
                 ref correction, ref looks, ref owned, ref trading, ref askedBy, ref challengedBy, ref watching, ref exclaimFor, ref scene, ref arrived, ref fadingIn, ref holdInput,
                 ref afterTheFight, ref cameOut, outcomes, rival, console);
 
@@ -770,6 +771,30 @@ public static class Program
                 if (boat.IsClosed)
                 {
                     boat = null;
+                    network.SendTalkFinished();
+                }
+
+                continue;
+            }
+
+            // The daycare takes the whole screen the way a shop does, and for the same
+            // reason: talking to the attendant is what the button press was for.
+            if (minding is not null)
+            {
+                talking = null;
+
+                minding.Update();
+
+                if (minding.TakePending() is DaycareRequest asked)
+                    network.SendDaycare(asked.Slot, asked.Leaving);
+
+                Raylib.BeginDrawing();
+                minding.Draw();
+                Raylib.EndDrawing();
+
+                if (minding.IsClosed)
+                {
+                    minding = null;
                     network.SendTalkFinished();
                 }
 
@@ -1852,6 +1877,7 @@ public static class Program
         ref DialogueBox? said,
         ref BattleScreen? battle,
         ref ShopScreen? shop,
+        ref DaycareScreen? mindingScreen,
         ref FerryScreen? boat,
         ref IReadOnlyList<BagEntry> bag,
         ref IReadOnlyList<SavedMon> party,
@@ -2234,6 +2260,17 @@ public static class Program
 
                 case ShopOpened opened:
                     shop = new ShopScreen(opened, items);
+                    break;
+
+                // One message opens the screen and updates it, the way the box's does.
+                // Which of the two this is depends only on whether a screen is already
+                // there, and that is a question this side can answer without being told.
+                case DaycareUpdated minded:
+                    party = minded.Party;
+                    if (battle is not null) battle.Party = party;
+                    if (mindingScreen is null) mindingScreen = new DaycareScreen(minded, data);
+                    else mindingScreen.Apply(minded);
+
                     break;
 
                 case FerryOpened asked:

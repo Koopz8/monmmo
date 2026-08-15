@@ -1409,10 +1409,17 @@ public sealed class GameWorld
 
                 if (!boat) shop = OpenShop(player, person.Template);
 
+                // And the daycare, which is a counter like the other two: nobody is a
+                // shopkeeper and a minder both, so the order between them decides nothing
+                // — but it is asked last because it is the newest and the cheapest to be
+                // wrong about.
+                if (shop.Count == 0) shop = OpenDaycare(player, person.Template);
+
                 person.HeldBy = playerId;
 
                 LastTalkOutcome =
-                    boat ? $"a boat, from dock {player.AtTheDock}"
+                    person.Template.MindsCreatures ? "a daycare, and what is on its shelf"
+                    : boat ? $"a boat, from dock {player.AtTheDock}"
                     : person.Template.IsShopkeeper && shop.Count == 0
                         ? $"object {localId} sells {person.Template.Stock.Count} things, none of which this server has an item for"
                         : shop.Count > 0
@@ -2379,10 +2386,16 @@ public sealed class GameWorld
                 return [];
             }
 
+            if (!AtADaycare(player))
+            {
+                LastDaycare = "refused: nobody here minds creatures";
+                return [Minded(player, "There is nobody here to mind them.")];
+            }
+
             if (player.Daycare.Count >= DaycareSize)
             {
                 LastDaycare = "refused: the daycare is full";
-                return [Boxed(player, "There is no room there.")];
+                return [Minded(player, "There is no room there.")];
             }
 
             if (_battles is { } battles
@@ -2390,7 +2403,7 @@ public sealed class GameWorld
                 && player.Party.Count(battles.CanFight) <= 1)
             {
                 LastDaycare = "refused: that is the last one that can fight";
-                return [Boxed(player, "That's the last one that can fight.")];
+                return [Minded(player, "That's the last one that can fight.")];
             }
 
             SavedMon going = player.Party[slot];
@@ -2403,7 +2416,7 @@ public sealed class GameWorld
             LastDaycare = $"left party slot {slot} at the daycare, {player.Daycare.Count} there" +
                 (player.EggAt > 0 ? $", an egg due on step {player.EggAt}" : "");
 
-            return [Boxed(player, "Left at the daycare.")];
+            return [Minded(player, "Left at the daycare.")];
         }
     }
 
@@ -2433,10 +2446,16 @@ public sealed class GameWorld
                 return [];
             }
 
+            if (!AtADaycare(player))
+            {
+                LastDaycare = "refused: nobody here is minding them";
+                return [Minded(player, "They are not here.")];
+            }
+
             if (player.Party.Count >= Party.MaxSize)
             {
                 LastDaycare = "refused: the party is full";
-                return [Boxed(player, "The party is full.")];
+                return [Minded(player, "The party is full.")];
             }
 
             SavedMon coming = player.Daycare[slot];
@@ -2448,12 +2467,43 @@ public sealed class GameWorld
 
             LastDaycare = $"took daycare slot {slot} back, {player.Daycare.Count} left there";
 
-            return [Boxed(player, "Back from the daycare.")];
+            return [Minded(player, "Back from the daycare.")];
         }
     }
 
     /// <summary>What the last thing done at a daycare came to.</summary>
     public string? LastDaycare { get; private set; }
+
+    /// <summary>
+    /// The shelf as the client should hold it, and how far off an egg is.
+    /// <para>
+    /// A distance rather than the step it lands on. "In 3,940 steps" is something a player
+    /// can act on; "on step 41,207" is arithmetic homework, and the client would have to be
+    /// told the counter as well to do it.
+    /// </para>
+    /// </summary>
+    private Outgoing Minded(ServerPlayer player, string said) =>
+        new(
+            new DaycareUpdated(
+                [.. player.Party],
+                [.. player.Daycare],
+                player.EggAt > 0 ? Math.Max(0, player.EggAt - player.Steps) : 0,
+                said)
+            {
+                Holds = DaycareSize,
+            },
+            OnlyTo: player.Id);
+
+    /// <summary>
+    /// Opens the daycare, which is what talking to somebody who minds creatures does.
+    /// <para>
+    /// Nothing is asked and nothing is taken. This is the shelf being shown — the same
+    /// shape as a shopkeeper opening a shop, and for the same reason: a player has to see
+    /// what is there before they can decide anything about it.
+    /// </para>
+    /// </summary>
+    private List<Outgoing> OpenDaycare(ServerPlayer player, MapObject keeper) =>
+        keeper.MindsCreatures ? [Minded(player, "We can raise them for you.")] : [];
 
     /// <summary>
     /// Works out when the pair on the shelf are due, and writes it on the player.
@@ -2605,6 +2655,23 @@ public sealed class GameWorld
     /// </summary>
     public bool AtAComputer(ServerPlayer player) =>
         _world.Find(player.MapId) is { } map && map.Objects.Any(o => o.Heals);
+
+    /// <summary>
+    /// True when the player is somewhere two can be left together.
+    /// <para>
+    /// A room rather than a square, exactly as the box is, and for a plainer reason than
+    /// the box had: the room is one attendant's room. The world file says which person
+    /// minds creatures — located at export by who they call into the game's own code —
+    /// and being on their map is being at their counter.
+    /// </para>
+    /// <para>
+    /// The client tests the same field off the same world file, because a rule enforced
+    /// on one side of the split needs its counterpart on the other. This is the side that
+    /// decides.
+    /// </para>
+    /// </summary>
+    public bool AtADaycare(ServerPlayer player) =>
+        _world.Find(player.MapId) is { } map && map.Objects.Any(o => o.MindsCreatures);
 
     private Outgoing Boxed(ServerPlayer player, string said) =>
         new(new BoxUpdated([.. player.Party], [.. player.Box], BoxSize, said), OnlyTo: player.Id);

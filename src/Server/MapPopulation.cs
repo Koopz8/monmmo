@@ -57,7 +57,10 @@ public sealed class ServerObject(MapObject template)
     public bool Arrived { get; set; }
 
     public ObjectView ToView() =>
-        new(LocalId, Template.GraphicsId, Square.X, Square.Y, Facing, Template.Heals);
+        new(LocalId, Template.GraphicsId, Square.X, Square.Y, Facing, Template.Heals)
+        {
+            MindsCreatures = Template.MindsCreatures,
+        };
 }
 
 /// <summary>

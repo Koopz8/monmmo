@@ -354,6 +354,25 @@ public sealed record MapObject(
     public bool Heals { get; init; }
 
     /// <summary>
+    /// True when this one will mind two creatures while you walk.
+    /// <para>
+    /// A fact about a person for the same reason healing is, and found the same way: what
+    /// a daycare <em>does</em> is a routine in the game's own code, and what can be read is
+    /// who calls it. Several routines naming exactly the same one-person-per-map set are a
+    /// subsystem, and that set is the attendants.
+    /// </para>
+    /// <para>
+    /// <em>Two</em>, specifically, and that word is doing work. This cartridge has two of
+    /// these places and they are different services: one holds a single creature and hands
+    /// it back stronger, and one holds a pair. Only the second is a daycare in the sense
+    /// this project means, and the two are told apart by whether the place's own routines
+    /// ever have their answer compared against two — which is in the bytes rather than in
+    /// anybody's memory of another game.
+    /// </para>
+    /// </summary>
+    public bool MindsCreatures { get; init; }
+
+    /// <summary>
     /// What talking to this one hands over, if it hands over anything.
     /// <para>
     /// A ball lying on the ground is a person like any other, with a script that writes

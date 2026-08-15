@@ -576,6 +576,12 @@ public sealed class WorldData
             writer.Write(entry.GivesLevel);
             writer.Write(entry.HiddenBy);
 
+            // Whether two can be left with this one. Written beside the healing flag
+            // because it is the same kind of fact and was found the same way — a routine
+            // in the game's own code, identified by who calls it rather than by what it
+            // does.
+            writer.Write(entry.MindsCreatures);
+
 
             // Item ids, which are numbers. The list itself lived at a cartridge address
             // and that address stays where it was.
@@ -837,6 +843,7 @@ public sealed class WorldData
                 GivesSpecies = reader.ReadInt32(),
                 GivesLevel = reader.ReadInt32(),
                 HiddenBy = reader.ReadInt32(),
+                MindsCreatures = reader.ReadBoolean(),
                 Stock = ReadStock(reader, mapId),
             });
         }

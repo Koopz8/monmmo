@@ -210,6 +210,12 @@ public sealed class NetworkClient : IDisposable
 
     public void SendSwapParty(int a, int b) => Send(new SwapPartyRequest(a, b));
 
+    /// <summary>
+    /// Leave one at the daycare, or take one back. A slot and a direction is all a client
+    /// gets to say about it; everything else is checked on the far side.
+    /// </summary>
+    public void SendDaycare(int slot, bool leaving) => Send(new DaycareRequest(slot, leaving));
+
     private void Send(NetMessage message)
     {
         if (_channel is null) return;

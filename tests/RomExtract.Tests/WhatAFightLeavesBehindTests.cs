@@ -1000,14 +1000,27 @@ public class TheDaycareTests
 
     /// <summary>
     /// Somewhere flat to walk, with a wall at (4, 4) so a refused step can be told from a
-    /// taken one.
+    /// taken one, and somebody standing on it who minds creatures.
+    /// <para>
+    /// The minder matters as much as the nurse does in the box tests: every one of these
+    /// operations is refused anywhere else, so a fixture on bare ground would be testing
+    /// the refusal and nothing else.
+    /// </para>
     /// </summary>
-    private static (GameWorld World, ServerPlayer Player) Walking(params SavedMon[] party)
+    private static (GameWorld World, ServerPlayer Player) Walking(params SavedMon[] party) =>
+        Standing(true, party);
+
+    private static (GameWorld World, ServerPlayer Player) Standing(bool minder, params SavedMon[] party)
     {
         var collision = new byte[64];
         collision[(4 * 8) + 4] = 1;
 
-        MapData map = new(Town, "PALLET TOWN", 8, 8, collision);
+        MapObject attendant = new(1, 61, 3, 3, Direction.Down, 0, false) { MindsCreatures = true, Talks = true };
+
+        MapData map = new(Town, "PALLET TOWN", 8, 8, collision)
+        {
+            Objects = minder ? [attendant] : [],
+        };
 
         var world = new GameWorld(new WorldData([map]), Town, TestRules.All);
 
@@ -1314,8 +1327,145 @@ public class TheDaycareTests
         Assert.Contains("it takes two", Said(world.RunConsole(player.Id, "/daycare")));
     }
 
+    /// <summary>
+    /// And nowhere else. The gate is the same shape as the box's — a room with the right
+    /// person in it — and without it the console would be a way to leave creatures in the
+    /// middle of a route with nobody to mind them.
+    /// </summary>
+    [Fact]
+    public void NobodyMindsThemInTheMiddleOfNowhere()
+    {
+        (GameWorld world, ServerPlayer player) = Standing(
+            false, Mon(1, Gender.Male), Mon(2, Gender.Female));
+
+        world.LeaveAtDaycare(player.Id, 1);
+
+        Assert.Empty(player.Daycare);
+        Assert.Equal(2, player.Party.Count);
+        Assert.Contains("nobody here minds creatures", world.LastDaycare ?? "");
+    }
+
+    /// <summary>
+    /// And taking one back needs the place too, which is the half of this that is easy to
+    /// forget: a shelf you can empty from anywhere is a shelf with no reason to be visited.
+    /// </summary>
+    [Fact]
+    public void AndTheyCannotBeCollectedFromAnywhereEither()
+    {
+        (GameWorld world, ServerPlayer player) = Walking(
+            Mon(1, Gender.Male), Mon(2, Gender.Female), Mon(3, Gender.Male));
+
+        world.LeaveAtDaycare(player.Id, 2);
+
+        (GameWorld elsewhere, ServerPlayer walker) = Standing(false, Mon(1, Gender.Male));
+
+        walker.Daycare = [.. player.Daycare];
+
+        elsewhere.TakeFromDaycare(walker.Id, 0);
+
+        Assert.Single(walker.Daycare);
+        Assert.Contains("nobody here is minding them", elsewhere.LastDaycare ?? "");
+    }
+
+    /// <summary>
+    /// Talking to the attendant shows the shelf, the way talking to a shopkeeper shows the
+    /// stock. Nothing is asked for and nothing is taken — a player has to see what is there
+    /// before they can decide anything about it.
+    /// </summary>
+    [Fact]
+    public void TalkingToTheAttendantShowsTheShelf()
+    {
+        (GameWorld world, ServerPlayer player) = Walking(
+            Mon(1, Gender.Male), Mon(2, Gender.Female), Mon(3, Gender.Male));
+
+        world.LeaveAtDaycare(player.Id, 2);
+        world.LeaveAtDaycare(player.Id, 1);
+
+        player.Facing = Direction.Up;
+
+        DaycareUpdated shown = Assert.Single(
+            world.StartTalking(player.Id, 1).Select(o => o.Message).OfType<DaycareUpdated>());
+
+        Assert.Equal(2, shown.Minded.Count);
+        Assert.Equal(GameWorld.DaycareSize, shown.Holds);
+
+        // A distance rather than the step it lands on, because that is the number a player
+        // can act on without being told the counter as well.
+        Assert.Equal(Breeding.StepsToHatch(TestRules.All.SpeciesAt(1)!), shown.StepsToEgg);
+    }
+
+    /// <summary>And a pair that will never produce anything says nothing is coming.</summary>
+    [Fact]
+    public void AndSaysNothingIsComingWhenNothingIs()
+    {
+        (GameWorld world, ServerPlayer player) = Walking(
+            Mon(1, Gender.Male), Mon(2, Gender.Male), Mon(3, Gender.Male));
+
+        world.LeaveAtDaycare(player.Id, 2);
+        world.LeaveAtDaycare(player.Id, 1);
+
+        player.Facing = Direction.Up;
+
+        DaycareUpdated shown = Assert.Single(
+            world.StartTalking(player.Id, 1).Select(o => o.Message).OfType<DaycareUpdated>());
+
+        Assert.Equal(0, shown.StepsToEgg);
+    }
+
+    /// <summary>
+    /// And the flag survives the world file, which is the only way it ever reaches a
+    /// server: the locator runs at export, on a machine with a cartridge, and everything
+    /// after that is reading a number out of a file.
+    /// <para>
+    /// Worth its own test because the failure mode is silent. A field written and not read
+    /// — or read in the wrong order — does not throw; it shifts every field after it, and
+    /// the first symptom is a shopkeeper who heals.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TheFlagSurvivesTheWorldFile()
+    {
+        MapObject attendant = new(1, 61, 3, 3, Direction.Down, 0, false) { MindsCreatures = true, Talks = true };
+        MapObject bystander = new(2, 61, 5, 3, Direction.Down, 0, false) { Talks = true };
+
+        var written = new WorldData([
+            new MapData(Town, "PALLET TOWN", 8, 8, new byte[64]) { Objects = [attendant, bystander] },
+        ]);
+
+        using var file = new MemoryStream();
+
+        written.Save(file);
+        file.Position = 0;
+
+        MapData read = Assert.Single(WorldData.Load(file).Maps);
+
+        Assert.True(read.Objects.Single(o => o.LocalId == 1).MindsCreatures);
+        Assert.False(read.Objects.Single(o => o.LocalId == 2).MindsCreatures);
+    }
+
+    /// <summary>
+    /// And the client is told, because a rule enforced on one side of the split needs its
+    /// counterpart on the other. Without this the only way to discover that somebody minds
+    /// creatures is to walk up to them and be refused by everybody who does not.
+    /// </summary>
+    [Fact]
+    public void AndThePeopleTheServerPlacesSayWhoMinds()
+    {
+        (GameWorld world, ServerPlayer player) = Walking(Mon(1, Gender.Male));
+
+        (_, List<Outgoing> send) = world.Join(2, "Koop", SavedCharacter.Fresh(Town, 3, 5));
+
+        ObjectView placed = Assert.Single(
+            send.Select(o => o.Message).OfType<ObjectsPlaced>().SelectMany(p => p.Objects));
+
+        Assert.True(placed.MindsCreatures);
+        Assert.Equal(1, player.Id);
+    }
+
     private static string Said(IEnumerable<Outgoing> from) =>
         string.Join("\n", from.Select(o => o.Message).OfType<ConsoleReply>().Select(r => r.Text)) +
+        "\n" +
+        string.Join("\n", from.Select(o => o.Message).OfType<DaycareUpdated>().Select(b => b.Message)) +
         "\n" +
         string.Join("\n", from.Select(o => o.Message).OfType<BoxUpdated>().Select(b => b.Message));
 }

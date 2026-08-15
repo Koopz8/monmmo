@@ -1217,6 +1217,21 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                             if (world.LastHandedOver is { } tookBack) Console.WriteLine($"* #{playerId} {tookBack}");
                             break;
 
+                        // Leaving one at the daycare, or taking one back. The slot is an
+                        // index into whichever list the direction names, and every rule
+                        // about whether it may happen is on the far side of this call.
+                        case DaycareRequest shelf when playerId != 0:
+                            await DispatchAsync(
+                                shelf.Leaving
+                                    ? world.LeaveAtDaycare(playerId, shelf.Slot)
+                                    : world.TakeFromDaycare(playerId, shelf.Slot),
+                                playerId,
+                                cancellationToken)
+                                .ConfigureAwait(false);
+
+                            if (world.LastDaycare is { } minded) Console.WriteLine($"* #{playerId} {minded}");
+                            break;
+
                         case DepositRequest put when playerId != 0:
                             await DispatchAsync(
                                 world.Deposit(playerId, put.Slot), playerId, cancellationToken)

@@ -229,6 +229,31 @@ public static class WorldExporter
             }
         }
 
+        // And the daycare, which is the same kind of question and cannot be asked of one
+        // map either: the attendants share no script, only the routines they call, so the
+        // set that names them is only visible once every map's people have been read.
+        Scripts.DaycareFound? daycare = Scripts.DaycareLocator.Locate(
+            maps.Select(m => (m.Id, m.Objects)), rom, log);
+
+        if (daycare is not null)
+        {
+            for (int i = 0; i < maps.Count; i++)
+            {
+                string mapId = maps[i].Id;
+
+                maps[i] = maps[i] with
+                {
+                    Objects =
+                    [
+                        .. maps[i].Objects.Select(o => o with
+                        {
+                            MindsCreatures = Scripts.DaycareLocator.Minds(mapId, o, daycare),
+                        }),
+                    ],
+                };
+            }
+        }
+
         int withEncounters = maps.Count(m => m.Encounters is not null);
         int warps = maps.Sum(m => m.Warps.Count);
         int connections = maps.Sum(m => m.Connections.Count);
@@ -344,6 +369,14 @@ public static class WorldExporter
             healers == 0
                 ? "  nobody heals — losing is still the only way to put a party back on its feet"
                 : $"  {healers} of them heal a party across {maps.Count(m => m.Objects.Any(o => o.Heals))} maps");
+
+        int minders = maps.Sum(m => m.Objects.Count(o => o.MindsCreatures));
+
+        log?.Invoke(
+            minders == 0
+                ? "  nobody minds creatures — there is nowhere to leave two together"
+                : $"  {minders} of them will mind two across " +
+                  $"{maps.Count(m => m.Objects.Any(o => o.MindsCreatures))} maps");
 
         ReportDanglingLinks(maps, log);
 
