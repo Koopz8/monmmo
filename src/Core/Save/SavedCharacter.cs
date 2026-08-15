@@ -1,6 +1,8 @@
 using PokeMmo.Core.Battle;
 using PokeMmo.Core.World;
 
+using PokeMmo.Core.Cosmetics;
+
 namespace PokeMmo.Core.Save;
 
 /// <summary>
@@ -91,6 +93,18 @@ public sealed record SavedCharacter(
 
     /// <summary>What a new account starts with, in the games' own currency.</summary>
     public const int StartingMoney = 3000;
+
+    /// <summary>
+    /// What this account owns and what it has on.
+    /// <para>
+    /// Both are the server's, because both are what a shop sells — see the note on
+    /// <see cref="Cosmetics.Appearance"/> for why nothing in that namespace is derived from
+    /// a cartridge and why it is kept apart from everything that is.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<int> Cosmetics { get; init; } = [];
+
+    public Appearance Looks { get; init; } = Appearance.Bare;
 
     /// <summary>
     /// Trainers this account has already beaten.

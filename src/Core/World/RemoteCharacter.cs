@@ -11,6 +11,16 @@ namespace PokeMmo.Core.World;
 /// </summary>
 public sealed class RemoteCharacter
 {
+    /// <summary>
+    /// What they are wearing, as the server last said.
+    /// <para>
+    /// Held rather than asked for: an appearance arrives with the person and changes only
+    /// when they change it, so a client that re-derived it every frame would be doing work
+    /// to reach the same answer.
+    /// </para>
+    /// </summary>
+    public Cosmetics.Appearance Looks { get; set; } = Cosmetics.Appearance.Bare;
+
     private float _fromX;
     private float _fromY;
     private float _progress = 1f;

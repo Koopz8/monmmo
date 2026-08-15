@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using PokeMmo.Core.Battle;
+using PokeMmo.Core.Cosmetics;
 using PokeMmo.Core.Save;
 using PokeMmo.Core.World;
 
@@ -135,6 +136,19 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
                 account_id INTEGER NOT NULL REFERENCES characters(account_id) ON DELETE CASCADE,
                 flag       INTEGER NOT NULL,
                 PRIMARY KEY (account_id, flag)
+            );
+
+            CREATE TABLE IF NOT EXISTS cosmetics_owned (
+                account_id INTEGER NOT NULL REFERENCES characters(account_id) ON DELETE CASCADE,
+                cosmetic   INTEGER NOT NULL,
+                PRIMARY KEY (account_id, cosmetic)
+            );
+
+            CREATE TABLE IF NOT EXISTS cosmetics_worn (
+                account_id INTEGER NOT NULL REFERENCES characters(account_id) ON DELETE CASCADE,
+                slot       INTEGER NOT NULL,
+                cosmetic   INTEGER NOT NULL,
+                PRIMARY KEY (account_id, slot)
             );
 
             CREATE TABLE IF NOT EXISTS script_variables (
@@ -528,9 +542,35 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
             clear.Transaction = transaction;
             clear.CommandText =
                 "DELETE FROM script_flags WHERE account_id = $id; " +
-                "DELETE FROM script_variables WHERE account_id = $id;";
+                "DELETE FROM script_variables WHERE account_id = $id; " +
+                "DELETE FROM cosmetics_owned WHERE account_id = $id; " +
+                "DELETE FROM cosmetics_worn WHERE account_id = $id;";
             clear.Parameters.AddWithValue("$id", accountId);
             await clear.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        // Wholesale for the same reason as the flags: a hat can come off.
+        foreach (int owned in character.Cosmetics)
+        {
+            await using SqliteCommand row = connection.CreateCommand();
+            row.Transaction = transaction;
+            row.CommandText =
+                "INSERT OR IGNORE INTO cosmetics_owned (account_id, cosmetic) VALUES ($id, $what);";
+            row.Parameters.AddWithValue("$id", accountId);
+            row.Parameters.AddWithValue("$what", owned);
+            await row.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        foreach ((CosmeticSlot slot, int what) in character.Looks.Worn)
+        {
+            await using SqliteCommand row = connection.CreateCommand();
+            row.Transaction = transaction;
+            row.CommandText =
+                "INSERT OR REPLACE INTO cosmetics_worn (account_id, slot, cosmetic) VALUES ($id, $slot, $what);";
+            row.Parameters.AddWithValue("$id", accountId);
+            row.Parameters.AddWithValue("$slot", (int)slot);
+            row.Parameters.AddWithValue("$what", what);
+            await row.ExecuteNonQueryAsync(cancellationToken);
         }
 
         foreach (int flag in character.Flags)
@@ -741,6 +781,29 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
             while (await reader.ReadAsync(cancellationToken)) flags.Add(reader.GetInt32(0));
         }
 
+        var owned = new List<int>();
+
+        await using (SqliteCommand command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT cosmetic FROM cosmetics_owned WHERE account_id = $id ORDER BY cosmetic;";
+            command.Parameters.AddWithValue("$id", accountId);
+
+            await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken)) owned.Add(reader.GetInt32(0));
+        }
+
+        var worn = new Dictionary<CosmeticSlot, int>();
+
+        await using (SqliteCommand command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT slot, cosmetic FROM cosmetics_worn WHERE account_id = $id;";
+            command.Parameters.AddWithValue("$id", accountId);
+
+            await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+                worn[(CosmeticSlot)reader.GetInt32(0)] = reader.GetInt32(1);
+        }
+
         var variables = new List<SavedVariable>();
 
         await using (SqliteCommand command = connection.CreateCommand())
@@ -795,6 +858,8 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
             Items = carried,
             Money = money,
             Flags = flags,
+            Cosmetics = owned,
+            Looks = new Appearance(worn),
             Variables = variables,
         };
     }

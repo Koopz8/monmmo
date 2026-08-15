@@ -1,4 +1,5 @@
 using PokeMmo.Core.Battle;
+using PokeMmo.Core.Cosmetics;
 using PokeMmo.Core.Data;
 using PokeMmo.Core.Net;
 using PokeMmo.Core.Scripts;
@@ -166,6 +167,18 @@ public sealed record ServerPlayer(int Id, long AccountId, string Name)
     /// </summary>
     public Bag Bag { get; set; } = new();
 
+    /// <summary>
+    /// What this account owns, and what it has on.
+    /// <para>
+    /// Both live on the server because both are what a shop sells. A client that kept
+    /// either would be a client that wears whatever it has been edited to wear, and the
+    /// whole point of a thing being sold is that not everybody has it.
+    /// </para>
+    /// </summary>
+    public HashSet<int> Owns { get; } = [.. Wardrobe.FreeToEverybody];
+
+    public Appearance Looks { get; set; } = Appearance.Bare;
+
     public int Money { get; set; } = SavedCharacter.StartingMoney;
 
     /// <summary>
@@ -195,7 +208,8 @@ public sealed record ServerPlayer(int Id, long AccountId, string Name)
     /// </summary>
     public List<SavedMon> Box { get; set; } = [];
 
-    public PlayerAppeared ToAppeared() => new(Id, Name, Square.X, Square.Y, Facing);
+    public PlayerAppeared ToAppeared() =>
+        new(Id, Name, Square.X, Square.Y, Facing) { Looks = Looks };
 }
 
 /// <summary>
@@ -449,6 +463,10 @@ public sealed class GameWorld
                 RestingAt = saved.RestingAt,
                 RestingSquare = new GridPosition(saved.RestingX, saved.RestingY),
             };
+
+            foreach (int owned in saved.Cosmetics) player.Owns.Add(owned);
+
+            player.Looks = saved.Looks;
 
             foreach (int beaten in saved.DefeatedTrainers) player.DefeatedTrainers.Add(beaten);
             foreach (string taken in saved.ItemsTaken) player.ItemsTaken.Add(taken);
@@ -3239,6 +3257,64 @@ public sealed class GameWorld
     /// <summary>What the last answer about a move came to.</summary>
     public string? LastLearned { get; private set; }
 
+    /// <summary>What the last attempt to wear something came to.</summary>
+    public string? LastWorn { get; private set; }
+
+    /// <summary>
+    /// Puts something on, or takes a slot off, if this account owns the thing.
+    /// <para>
+    /// The ownership test is the whole of it and it belongs here rather than in a wardrobe
+    /// screen: an interface that greys out what you have not bought is a courtesy, and a
+    /// server that refuses it is the product.
+    /// </para>
+    /// <para>
+    /// Taking something off is asking for id zero, and it needs no permission — there is no
+    /// version of this game where a player cannot remove their own hat.
+    /// </para>
+    /// </summary>
+    public List<Outgoing> Wear(int playerId, int cosmeticId, CosmeticSlot slot)
+    {
+        lock (_gate)
+        {
+            LastWorn = null;
+
+            if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
+
+            if (cosmeticId == 0)
+            {
+                player.Looks = player.Looks.Without(slot);
+                LastWorn = $"took off whatever was in the {slot} slot";
+
+                return Showing(player);
+            }
+
+            if (Wardrobe.At(cosmeticId) is not { } cosmetic)
+            {
+                LastWorn = $"refused: there is no cosmetic {cosmeticId}";
+                return [];
+            }
+
+            if (!player.Owns.Contains(cosmeticId))
+            {
+                LastWorn = $"refused: {player.Name} does not own {cosmetic.Name}";
+                return [];
+            }
+
+            player.Looks = player.Looks.Wearing(cosmetic);
+            LastWorn = $"put on {cosmetic.Name}";
+
+            return Showing(player);
+        }
+    }
+
+    /// <summary>
+    /// Told to everyone on the map, including the wearer — who needs it as much as anybody,
+    /// because what they asked for and what they got are not always the same thing once a
+    /// dress has taken a shirt and a pair of trousers off with it.
+    /// </summary>
+    private static List<Outgoing> Showing(ServerPlayer player) =>
+        [new(new AppearanceChanged(player.Id, player.Looks), OnMap: player.MapId)];
+
     public List<Outgoing> RunConsole(int playerId, string text, double nowSeconds = 0)
     {
         lock (_gate)
@@ -3498,6 +3574,49 @@ public sealed class GameWorld
 
             case "hidden":
                 return [.. WhoIsBeingHeldBack(player).Select(said => Said(player, said))];
+
+            case "wear":
+            {
+                if (line.Number(0) is not { } what) return [Said(player, "/wear <cosmetic id>, or 0 <slot>")];
+
+                CosmeticSlot slot = what == 0
+                    ? Enum.TryParse(line.Word(1), true, out CosmeticSlot asked) ? asked : CosmeticSlot.Hat
+                    : Wardrobe.At(what)?.Slot ?? CosmeticSlot.Hat;
+
+                // Re-entrant on this thread, which is the only reason a command handler that
+                // already holds the gate may call something that takes it.
+                List<Outgoing> shown = Wear(player.Id, what, slot);
+
+                return [Said(player, LastWorn ?? "nothing happened"), .. shown];
+            }
+
+            case "wardrobe":
+            {
+                var said = new List<Outgoing>
+                {
+                    Said(player, $"{player.Owns.Count} owned, wearing {player.Looks.Worn.Count}"),
+                };
+
+                foreach (Cosmetic what in Wardrobe.All.Where(c => player.Owns.Contains(c.Id)))
+                {
+                    bool on = player.Looks.In(what.Slot) == what.Id;
+                    said.Add(Said(player, $"  {what.Id,4} {what.Slot,-9} {what.Name}{(on ? "   worn" : "")}"));
+                }
+
+                return said;
+            }
+
+            case "grant":
+            {
+                if (line.Number(0) is not { } giving) return [Said(player, "/grant <cosmetic id>")];
+                if (Wardrobe.At(giving) is not { } bought)
+                    return [Said(player, $"there is no cosmetic {giving}")];
+
+                return
+                [
+                    Said(player, player.Owns.Add(giving) ? $"granted {bought.Name}" : $"already owned {bought.Name}"),
+                ];
+            }
 
             case "reach":
                 return [.. WhereThisSaveCanGet(player).Select(said => Said(player, said))];
@@ -4204,6 +4323,8 @@ public sealed class GameWorld
                 Items = player.Bag.Entries,
                 Money = player.Money,
                 Flags = [.. player.Script.Flags],
+                Cosmetics = [.. player.Owns.Order()],
+                Looks = player.Looks,
                 Variables = [.. player.Script.Variables.Select(v => new SavedVariable(v.Key, v.Value))],
                 ItemsTaken = [.. player.ItemsTaken],
                 RestingAt = player.RestingAt,

@@ -1,4 +1,5 @@
 using PokeMmo.Core.Battle;
+using PokeMmo.Core.Cosmetics;
 using PokeMmo.Core.Net;
 using PokeMmo.Core.Save;
 using PokeMmo.Core.Scripts;
@@ -306,6 +307,9 @@ public static class Program
         };
 
         var others = new Dictionary<int, RemoteCharacter>();
+
+        // What this player is wearing, as the server last said it.
+        Appearance looks = Appearance.Bare;
         BattleScreen? battle = null;
         DialogueBox? talking = null;
 
@@ -455,7 +459,7 @@ public static class Program
             ApplyServerMessages(
                 network, others, player, view, data, trainers, items, script, carrying, storing, looking,
                 ref talking, ref battle, ref shop, ref bag, ref party, ref box, ref boxSize, ref money,
-                ref correction, ref watching, ref exclaimFor, ref scene, ref arrived, ref fadingIn, ref holdInput,
+                ref correction, ref looks, ref watching, ref exclaimFor, ref scene, ref arrived, ref fadingIn, ref holdInput,
                 ref afterTheFight, ref cameOut, outcomes, rival, console);
 
             // A battle suspends the overworld entirely: the server is running it, and
@@ -903,6 +907,7 @@ public static class Program
                 if (sprite is not null) sprite.Draw(x, y - other.Arc, other.Facing, other.IsMoving, other.Id);
                 else DrawPlayer(x, y - other.Arc, other.Facing, new Color(120, 200, 255, 255));
 
+                DrawWorn(other.Looks, x, y - other.Arc);
                 DrawNameTag(other.Name, x, y - other.Arc);
             }
 
@@ -910,6 +915,8 @@ public static class Program
             // be — without it a raised sprite reads as a taller sprite rather than as
             // one in the air.
             if (player.Arc > 0f) DrawShadow(playerX, playerY);
+
+            DrawWorn(looks, playerX, playerY - player.Arc);
 
             if (sprite is not null)
                 sprite.Draw(playerX, playerY - player.Arc, player.Facing, player.IsStepping, player.StepsTaken);
@@ -1589,6 +1596,50 @@ public static class Program
     /// only stops the interface offering something that would be refused.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// What somebody is wearing, drawn as coloured marks over their head.
+    /// <para>
+    /// Placeholder, and deliberately so. There is no art for a hat yet and there will not be
+    /// until somebody draws one; what there is is the whole of the machinery that gets a hat
+    /// from an account, through a server that decides whether it is owned, onto a wire, and
+    /// into every other client on the map. Drawing that as a row of squares proves the part
+    /// that is hard and admits the part that is not done.
+    /// </para>
+    /// <para>
+    /// The same choice the walking figures make one screen away: <em>a rectangle is the
+    /// fallback rather than a failure</em>.
+    /// </para>
+    /// </summary>
+    private static void DrawWorn(Appearance looks, float x, float y)
+    {
+        if (looks.Worn.Count == 0) return;
+
+        int at = 0;
+
+        foreach ((CosmeticSlot slot, int id) in looks.InDrawingOrder())
+        {
+            Raylib.DrawRectangle((int)x + 2 + at * 5, (int)y - 20, 4, 4, MarkFor(slot));
+            at++;
+        }
+    }
+
+    /// <summary>A colour per slot, so a row of marks can be read at a glance.</summary>
+    private static Color MarkFor(CosmeticSlot slot) => slot switch
+    {
+        CosmeticSlot.Hair => new Color(120, 72, 40, 255),
+        CosmeticSlot.Eyes => new Color(90, 170, 220, 255),
+        CosmeticSlot.Hat => new Color(220, 60, 60, 255),
+        CosmeticSlot.Glasses => new Color(230, 230, 230, 255),
+        CosmeticSlot.Scarf => new Color(230, 140, 60, 255),
+        CosmeticSlot.Shirt => new Color(90, 200, 120, 255),
+        CosmeticSlot.Pants => new Color(70, 90, 200, 255),
+        CosmeticSlot.Skirt => new Color(200, 90, 190, 255),
+        CosmeticSlot.Dress => new Color(230, 120, 200, 255),
+        CosmeticSlot.Shoes => new Color(110, 90, 70, 255),
+        CosmeticSlot.Cape => new Color(150, 60, 200, 255),
+        _ => new Color(200, 200, 120, 255),
+    };
+
     private static bool InARoomThatHeals(GameData data, MapView view, uint? healer) =>
         healer is { } script && view.Map.Objects.Any(o => HealerLocator.Heals(data.Rom, o, script));
 
@@ -1660,6 +1711,7 @@ public static class Program
         ref int boxSize,
         ref int money,
         ref (string MapId, GridPosition Square)? correction,
+        ref Appearance looks,
         ref int? watching,
         ref float exclaimFor,
         ref Cutscene? scene,
@@ -1874,7 +1926,22 @@ public static class Program
                 case PlayerAppeared appeared when appeared.PlayerId != network.PlayerId:
                     others[appeared.PlayerId] = new RemoteCharacter(
                         appeared.PlayerId, appeared.Name,
-                        new GridPosition(appeared.X, appeared.Y), appeared.Facing);
+                        new GridPosition(appeared.X, appeared.Y), appeared.Facing)
+                    {
+                        Looks = appeared.Looks,
+                    };
+                    break;
+
+                case AppearanceChanged dressed when dressed.PlayerId != network.PlayerId:
+                    if (others.TryGetValue(dressed.PlayerId, out RemoteCharacter? wearer))
+                        wearer.Looks = dressed.Looks;
+                    break;
+
+                case AppearanceChanged mine when mine.PlayerId == network.PlayerId:
+                    // Ours arrives the same way as anybody else's, and it has to: what was
+                    // asked for and what was granted are not the same thing once a dress
+                    // has taken a shirt and a pair of trousers off with it.
+                    looks = mine.Looks;
                     break;
 
                 case PlayerMoved moved when moved.PlayerId != network.PlayerId:

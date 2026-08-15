@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Net.Sockets;
 using PokeMmo.Core.Battle;
+using PokeMmo.Core.Cosmetics;
 using PokeMmo.Core.Net;
 using PokeMmo.Core.Save;
 using PokeMmo.Core.World;
@@ -167,6 +168,9 @@ public sealed class NetworkClient : IDisposable
     /// any more, which a script asks for by object number rather than by flag.
     /// </summary>
     public void SendFlagsSet(IReadOnlyList<int> flags) => Send(new ScriptRan(flags, [], []));
+
+    /// <summary>Asks to wear something. Asking, because owning it is the server's to know.</summary>
+    public void SendWear(int cosmeticId, CosmeticSlot slot) => Send(new WearRequest(cosmeticId, slot));
 
     public void SendNameMon(int slot, string name) => Send(new NameMonRequest(slot, name));
 

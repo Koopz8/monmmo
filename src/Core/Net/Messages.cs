@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using PokeMmo.Core.Battle;
+using PokeMmo.Core.Cosmetics;
 using PokeMmo.Core.Save;
 using PokeMmo.Core.World;
 
@@ -62,6 +63,8 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(ObjectsPlaced), "objects")]
 [JsonDerivedType(typeof(ObjectMoved), "objectmoved")]
 [JsonDerivedType(typeof(PlayerAppeared), "appeared")]
+[JsonDerivedType(typeof(AppearanceChanged), "looks")]
+[JsonDerivedType(typeof(WearRequest), "wear")]
 [JsonDerivedType(typeof(PlayerMoved), "moved")]
 [JsonDerivedType(typeof(PlayerHopped), "hopped")]
 [JsonDerivedType(typeof(PlayerLeft), "left")]
@@ -565,7 +568,32 @@ public sealed record ObjectsPlaced(IReadOnlyList<ObjectView> Objects) : NetMessa
 public sealed record ObjectMoved(int LocalId, int X, int Y, Direction Facing) : NetMessage;
 
 /// <summary>Another player is now visible — sent on join, and for everyone already present.</summary>
-public sealed record PlayerAppeared(int PlayerId, string Name, int X, int Y, Direction Facing) : NetMessage;
+public sealed record PlayerAppeared(int PlayerId, string Name, int X, int Y, Direction Facing) : NetMessage
+{
+    /// <summary>
+    /// What they are wearing, which is the whole of what one player is told about another
+    /// beyond their name and their square.
+    /// <para>
+    /// An init property rather than a positional one, for the reason every other addition
+    /// to this file gives: every existing construction is correct without it. It defaults
+    /// to bare, so a client that has never heard of cosmetics draws what it always drew.
+    /// </para>
+    /// </summary>
+    public Appearance Looks { get; init; } = Appearance.Bare;
+}
+
+/// <summary>Somebody put something on or took it off.</summary>
+public sealed record AppearanceChanged(int PlayerId, Appearance Looks) : NetMessage;
+
+/// <summary>
+/// A player asking to wear something, or to take a slot off with id zero.
+/// <para>
+/// Asking, not telling. What an account owns is the server's to know — a client that
+/// decided what it was wearing would be a client that wears whatever it has been edited to
+/// wear, and the whole point of a thing being sold is that not everybody has it.
+/// </para>
+/// </summary>
+public sealed record WearRequest(int CosmeticId, CosmeticSlot Slot) : NetMessage;
 
 /// <summary>A player stepped. Sent to everyone, including the player who moved.</summary>
 public sealed record PlayerMoved(int PlayerId, int X, int Y, Direction Facing) : NetMessage;

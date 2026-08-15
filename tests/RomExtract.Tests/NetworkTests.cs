@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Buffers.Binary;
 using PokeMmo.Core.Battle;
+using PokeMmo.Core.Cosmetics;
 using PokeMmo.Core.Net;
 using PokeMmo.Core.Save;
 using PokeMmo.Core.World;
@@ -115,7 +116,12 @@ public class MessageChannelTests
             new Welcome(
                 7, "3.0", 12, 5, Direction.Up, 5000, [new BagEntry(4, 20)],
                 [new SavedMon(1, 5, null, 19, StatusCondition.None, Nature.Hardy, [33])]),
-            new PlayerAppeared(9, "Someone", 1, 2, Direction.Right),
+            new PlayerAppeared(9, "Someone", 1, 2, Direction.Right)
+            {
+                Looks = Appearance.Bare.Wearing(Wardrobe.At(301)!),
+            },
+            new AppearanceChanged(9, Appearance.Bare.Wearing(Wardrobe.At(901)!)),
+            new WearRequest(301, CosmeticSlot.Hat),
             new PlayerMoved(9, 3, 4, Direction.Down),
             new PlayerLeft(9),
             new MoveRejected(1, 1, Direction.Up, "Too fast."),

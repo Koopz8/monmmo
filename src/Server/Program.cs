@@ -931,6 +931,14 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                             await DispatchAsync(taught, playerId, cancellationToken).ConfigureAwait(false);
                             break;
 
+                        case WearRequest wearing when playerId != 0:
+                            List<Outgoing> shown = world.Wear(playerId, wearing.CosmeticId, wearing.Slot);
+
+                            if (world.LastWorn is { } dressed) Console.WriteLine($"~ #{playerId} {dressed}");
+
+                            await DispatchAsync(shown, playerId, cancellationToken).ConfigureAwait(false);
+                            break;
+
                         case ScriptRan ran when playerId != 0:
                             List<Outgoing> handed = world.RunScript(playerId, ran);
 
