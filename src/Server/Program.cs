@@ -1169,6 +1169,14 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                                 .ConfigureAwait(false);
                             break;
 
+                        case DuelRequest duelling when playerId != 0:
+                            List<Outgoing> challenged = world.AskToDuel(playerId, duelling.WithPlayerId);
+
+                            if (world.LastDuel is { } challenge) Console.WriteLine($"% #{playerId} duel: {challenge}");
+
+                            await DispatchAsync(challenged, playerId, cancellationToken).ConfigureAwait(false);
+                            break;
+
                         case SailRequest sail when playerId != 0:
                             List<Outgoing> sailed = world.Sail(playerId, sail.Number, Now);
 

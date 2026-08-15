@@ -1,0 +1,203 @@
+using PokeMmo.Core.Battle;
+
+namespace PokeMmo.Server;
+
+/// <summary>
+/// A fight between two people, and the two decisions a turn of one is waiting for.
+/// <para>
+/// The engine underneath is the same engine, unchanged. What is different is who the two
+/// sides belong to: <see cref="Side.Player"/> is whoever was asked first and
+/// <see cref="Side.Opponent"/> is whoever asked, and neither of those is "you" — each
+/// client is told about the same turn in its own terms, by turning the events round.
+/// </para>
+/// <para>
+/// A duel costs nothing and changes nothing. Both parties are copies made when it starts
+/// and thrown away when it ends: no experience, no fainting that outlasts the fight, no
+/// money, no black-out, no catching somebody else's creature. That is a decision rather
+/// than a reading — the cartridge has no rule for this because the cartridge has no
+/// second player — and it is the one that makes a duel something anybody would agree to
+/// twice.
+/// </para>
+/// </summary>
+public sealed class Duel
+{
+    private readonly List<Battler> _ones;
+    private readonly List<Battler> _twos;
+
+    private int _oneSlot;
+    private int _twoSlot;
+
+    private BattleAction? _oneChose;
+    private BattleAction? _twoChose;
+
+    public Duel(int one, int two, IReadOnlyList<Battler> ones, IReadOnlyList<Battler> twos, uint seed)
+    {
+        if (ones.Count == 0 || twos.Count == 0)
+            throw new ArgumentException("A duel needs somebody on both sides.");
+
+        One = one;
+        Two = two;
+        _ones = [.. ones];
+        _twos = [.. twos];
+
+        Current = new Battle(_ones[0], _twos[0], seed) { IsWild = false };
+    }
+
+    /// <summary>Whoever is <see cref="Side.Player"/> in the engine.</summary>
+    public int One { get; }
+
+    public int Two { get; }
+
+    public Battle Current { get; private set; }
+
+    public bool Has(int playerId) => playerId == One || playerId == Two;
+
+    public int Other(int playerId) => playerId == One ? Two : One;
+
+    /// <summary>Which side of the engine a player is on.</summary>
+    public Side SideOf(int playerId) => playerId == One ? Side.Player : Side.Opponent;
+
+    public int SlotOf(int playerId) => playerId == One ? _oneSlot : _twoSlot;
+
+    public Battler ActiveFor(int playerId) => playerId == One ? Current.Player : Current.Opponent;
+
+    public IReadOnlyList<Battler> TeamOf(int playerId) => playerId == One ? _ones : _twos;
+
+    /// <summary>What this player has decided this turn, if they have decided.</summary>
+    public BattleAction? ChoiceOf(int playerId) => playerId == One ? _oneChose : _twoChose;
+
+    /// <summary>
+    /// Writes down what somebody wants to do.
+    /// <para>
+    /// Kept rather than acted on. A turn where the faster player's move landed while the
+    /// slower one was still reading the menu would not be a turn — it would be a race,
+    /// and the reward for winning it would be going first every time.
+    /// </para>
+    /// </summary>
+    public void Choose(int playerId, BattleAction action)
+    {
+        if (playerId == One) _oneChose = action;
+        else _twoChose = action;
+    }
+
+    public bool BothHaveChosen => _oneChose is not null && _twoChose is not null;
+
+    /// <summary>Runs the turn both sides have now decided, and forgets both decisions.</summary>
+    public List<BattleEvent> Resolve()
+    {
+        BattleAction one = _oneChose ?? new BattleAction.UseMove(0);
+        BattleAction two = _twoChose ?? new BattleAction.UseMove(0);
+
+        _oneChose = null;
+        _twoChose = null;
+
+        return Current.ResolveTurn(one, two);
+    }
+
+    /// <summary>Everybody on a side who can still fight.</summary>
+    public bool HasAnotherOne(int playerId) =>
+        Team(playerId).Where((_, slot) => slot != SlotOf(playerId)).Any(b => !b.HasFainted);
+
+    public bool IsBeaten(int playerId) => Team(playerId).All(b => b.HasFainted);
+
+    /// <summary>
+    /// Sends out the next one who can fight, because somebody fainted.
+    /// <para>
+    /// Chosen here rather than asked for. A duel that stopped to ask would need a third
+    /// message and a screen that can wait on the other player twice in one turn, and the
+    /// first version of a thing should be the version that can be played.
+    /// </para>
+    /// </summary>
+    public Battler? SendNext(int playerId)
+    {
+        List<Battler> team = Team(playerId);
+
+        for (int slot = 0; slot < team.Count; slot++)
+        {
+            if (team[slot].HasFainted) continue;
+
+            if (playerId == One)
+            {
+                _oneSlot = slot;
+                Current = new Battle(team[slot], Current.Opponent, Current.State) { IsWild = false };
+            }
+            else
+            {
+                _twoSlot = slot;
+                Current = new Battle(Current.Player, team[slot], Current.State) { IsWild = false };
+            }
+
+            return team[slot];
+        }
+
+        return null;
+    }
+
+    private List<Battler> Team(int playerId) => playerId == One ? _ones : _twos;
+}
+
+/// <summary>
+/// Who is fighting whom, and who has been asked.
+/// <para>
+/// The same shape as <see cref="Trades"/>, deliberately: one at a time each, an invitation
+/// that dies when either side walks away, and asking somebody who has already asked you is
+/// how a fight begins. Two verbs that behave the same way are two verbs a player only has
+/// to learn once.
+/// </para>
+/// </summary>
+public sealed class Duels
+{
+    private readonly List<Duel> _live = [];
+    private readonly Dictionary<int, int> _asked = [];
+
+    public Duel? For(int playerId) => _live.FirstOrDefault(d => d.Has(playerId));
+
+    public int? AskedBy(int playerId) => _asked.TryGetValue(playerId, out int who) ? who : null;
+
+    /// <summary>
+    /// One player asks another. Asking back is agreeing.
+    /// <para>
+    /// Whoever was asked first is <see cref="Duel.One"/>, which is the engine's
+    /// <see cref="Side.Player"/>. It decides nothing about the fight — the engine has no
+    /// preference between its two sides — but it has to be settled somewhere, and "the
+    /// one who was asked" is a rule anybody can check.
+    /// </para>
+    /// </summary>
+    public (int One, int Two)? Ask(int from, int to)
+    {
+        if (For(from) is not null || For(to) is not null) return null;
+
+        if (_asked.TryGetValue(to, out int theirs) && theirs == from)
+        {
+            _asked.Remove(to);
+            _asked.Remove(from);
+
+            return (from, to);
+        }
+
+        _asked[from] = to;
+
+        return null;
+    }
+
+    public void Begin(Duel duel) => _live.Add(duel);
+
+    /// <summary>Everything this player was in the middle of, gone.</summary>
+    public Duel? Drop(int playerId)
+    {
+        _asked.Remove(playerId);
+
+        foreach (int asker in _asked.Where(a => a.Value == playerId).Select(a => a.Key).ToList())
+            _asked.Remove(asker);
+
+        if (For(playerId) is not { } duel) return null;
+
+        _live.Remove(duel);
+
+        return duel;
+    }
+
+    public void Finish(Duel duel) => _live.Remove(duel);
+
+    public int Count => _live.Count;
+}

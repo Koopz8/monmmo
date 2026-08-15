@@ -503,6 +503,8 @@ public sealed class GameWorld
             // player is removed, because the other side still has to be told.
             List<Outgoing> stopped = CancelTrade(playerId, "They left.");
 
+            stopped.AddRange(CancelDuel(playerId, "somebody left"));
+
             if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
 
             string mapId = player.MapId;
@@ -3050,6 +3052,10 @@ public sealed class GameWorld
         // neither side can see and the reach test would refuse to start.
         send.AddRange(CancelTrade(player.Id, "They walked off."));
 
+        // And whatever they were fighting, for the same reason. A duel is two people
+        // standing in front of each other; one of them somewhere else is not that.
+        send.AddRange(CancelDuel(player.Id, "somebody walked off"));
+
         // Whoever was walking over is walking over to an empty square now. Saying so
         // matters: the player is standing still because somebody was coming, and
         // nothing else is going to tell them that stopped being true.
@@ -3389,6 +3395,324 @@ public sealed class GameWorld
 
     /// <summary>What the last attempt to wear something came to.</summary>
     public string? LastWorn { get; private set; }
+
+    private readonly Duels _duels = new();
+
+    /// <summary>What the last thing anybody did about a duel came to.</summary>
+    public string? LastDuel { get; private set; }
+
+    /// <summary>How many duels are being fought, for reporting and for tests.</summary>
+    public int OpenDuels => _duels.Count;
+
+    /// <summary>
+    /// Asks somebody for a fight, or agrees to one with somebody who asked.
+    /// <para>
+    /// The same handshake as a trade, and within the same reach, because both are things
+    /// two people do while standing in front of each other. Two verbs that behave the same
+    /// way are two verbs a player only has to learn once.
+    /// </para>
+    /// </summary>
+    public List<Outgoing> AskToDuel(int playerId, int withPlayerId)
+    {
+        lock (_gate)
+        {
+            LastDuel = null;
+
+            if (_battles is null) return [];
+            if (!_players.TryGetValue(playerId, out ServerPlayer? asking)) return [];
+
+            if (playerId == withPlayerId)
+            {
+                LastDuel = "refused: nobody fights themselves";
+                return [];
+            }
+
+            if (!_players.TryGetValue(withPlayerId, out ServerPlayer? asked)
+                || asked.MapId != asking.MapId)
+            {
+                LastDuel = "refused: they are not here";
+                return [];
+            }
+
+            if (!WithinReach(asking, asked.Square))
+            {
+                LastDuel = "refused: they are not within reach";
+                return [];
+            }
+
+            if (asking.InBattle || asked.InBattle
+                || _duels.For(playerId) is not null || _duels.For(withPlayerId) is not null)
+            {
+                LastDuel = "refused: one fight at a time";
+                return [];
+            }
+
+            // A duel is fought with copies, so what matters is that both sides have
+            // somebody at all — not that they are healthy. Somebody carrying a fainted
+            // party can still duel, and their copies come out on their feet.
+            if (asking.Party.Count == 0 || asked.Party.Count == 0)
+            {
+                LastDuel = "refused: somebody has nobody to send out";
+                return [];
+            }
+
+            if (_duels.Ask(playerId, withPlayerId) is not { } pair)
+            {
+                LastDuel = $"{asking.Name} challenged {asked.Name}";
+
+                return [new Outgoing(new DuelAsked(playerId, asking.Name), OnlyTo: withPlayerId)];
+            }
+
+            return Begin(pair.One, pair.Two);
+        }
+    }
+
+    /// <summary>
+    /// Both parties copied, both leads sent out, and both clients told.
+    /// <para>
+    /// Copies, and this is where the decision lives: a duel is fought by
+    /// <see cref="BattleFactory"/> restorations of what each side is carrying, and nothing
+    /// is ever written back. Losing one costs the walk to the nearest bed in the cartridge;
+    /// losing one to a friend costs nothing, because a fight nobody would agree to twice
+    /// is not a feature.
+    /// </para>
+    /// </summary>
+    private List<Outgoing> Begin(int oneId, int twoId)
+    {
+        if (_battles is null) return [];
+        if (!_players.TryGetValue(oneId, out ServerPlayer? one)) return [];
+        if (!_players.TryGetValue(twoId, out ServerPlayer? two)) return [];
+
+        List<Battler> ones = Copies(one);
+        List<Battler> twos = Copies(two);
+
+        if (ones.Count == 0 || twos.Count == 0)
+        {
+            LastDuel = "refused: somebody has nobody to send out";
+            return [];
+        }
+
+        var duel = new Duel(oneId, twoId, ones, twos, _rng.State);
+
+        _duels.Begin(duel);
+
+        LastDuel = $"{one.Name} and {two.Name} are fighting";
+        DuelLog = $"#{oneId} and #{twoId}: opened";
+
+        return
+        [
+            Opening(duel, one, two),
+            Opening(duel, two, one),
+        ];
+    }
+
+    /// <summary>What one side is told when the fight starts.</summary>
+    private Outgoing Opening(Duel duel, ServerPlayer who, ServerPlayer other) =>
+        new(
+            new BattleStarted(
+                BattleFactory.View(duel.ActiveFor(who.Id)),
+                BattleFactory.View(duel.ActiveFor(other.Id)),
+
+                // No balls and no medicine. A duel is a fight, not a shopping trip, and
+                // the other side's creature is not anybody's to catch.
+                [],
+                [],
+                TrainerId: null,
+                Slot: duel.SlotOf(who.Id))
+            {
+                // Who it is against, which the trainer id has always answered before and
+                // cannot answer here — there is no trainer. Without it the first line of
+                // the first duel this game ever fought read "A wild SQUIRTLE appeared!",
+                // which is the client being exactly as wrong as it was told to be.
+                Against = other.Name,
+            },
+            OnlyTo: who.Id);
+
+    /// <summary>
+    /// Restorations of a party, for a fight that will not write any of it back.
+    /// <para>
+    /// On their feet, every one of them, whatever state the real party is in. It follows
+    /// from the fight being fought with copies at all — nothing here can be lost, so
+    /// there is nothing for damage carried in to protect — and what it buys is that the
+    /// answer to "shall we?" is never "let me walk to a bed first".
+    /// </para>
+    /// </summary>
+    private List<Battler> Copies(ServerPlayer player)
+    {
+        if (_battles is null) return [];
+
+        var team = new List<Battler>();
+
+        foreach (SavedMon saved in player.Party)
+        {
+            if (_battles.Restore(saved with { CurrentHp = int.MaxValue, Status = StatusCondition.None })
+                is { } battler)
+            {
+                team.Add(battler);
+            }
+        }
+
+        return team;
+    }
+
+    /// <summary>
+    /// One player's decision for this turn, and the turn itself once both have decided.
+    /// <para>
+    /// Nothing happens until both are in. A turn resolved on the first decision would make
+    /// reading the menu slowly a disadvantage, and the reward for pressing fastest would be
+    /// going first every time.
+    /// </para>
+    /// </summary>
+    public List<Outgoing> TakeDuelTurn(int playerId, BattleAction action)
+    {
+        lock (_gate)
+        {
+            LastDuel = null;
+
+            if (_duels.For(playerId) is not { } duel) return [];
+
+            duel.Choose(playerId, Allowed(duel, playerId, action));
+
+            if (!duel.BothHaveChosen)
+            {
+                LastDuel = "waiting for the other one";
+                return [];
+            }
+
+            List<BattleEvent> events = duel.Resolve();
+
+            // Somebody who fainted is replaced before the turn is reported, so both
+            // clients are told about the next one in the same breath as the last one
+            // going down.
+            var next = new List<(int Who, Battler Sent)>();
+
+            foreach (int side in new[] { duel.One, duel.Two })
+            {
+                if (!duel.ActiveFor(side).HasFainted) continue;
+                if (duel.IsBeaten(side)) continue;
+                if (duel.SendNext(side) is { } sent) next.Add((side, sent));
+            }
+
+            bool over = duel.IsBeaten(duel.One) || duel.IsBeaten(duel.Two);
+
+            int? beaten = duel.IsBeaten(duel.One) ? duel.One : duel.IsBeaten(duel.Two) ? duel.Two : null;
+
+            // The engine says a battle ended whenever somebody fainted. In a duel that is
+            // the end of a creature, not of the fight — the same correction the trainer
+            // path makes, for the same reason.
+            if (!over) events.RemoveAll(e => e is BattleEvent.Ended);
+
+            var send = new List<Outgoing>();
+
+            foreach (int side in new[] { duel.One, duel.Two })
+            {
+                if (!_players.TryGetValue(side, out ServerPlayer? who)) continue;
+
+                bool mine = side == duel.One;
+
+                List<BattleEvent> theirs = mine ? events : BattleSides.Swap(events);
+
+                send.Add(new Outgoing(
+                    new BattleUpdate(
+                        theirs,
+                        duel.ActiveFor(side).CurrentHp,
+                        duel.ActiveFor(duel.Other(side)).CurrentHp,
+                        [],
+                        [],
+                        [.. who.Party]),
+                    OnlyTo: side));
+
+                foreach ((int sent, Battler battler) in next)
+                {
+                    send.Add(new Outgoing(
+                        new BattlerSentOut(
+                            sent == side ? Side.Player : Side.Opponent,
+                            BattleFactory.View(battler),
+                            sent == side ? duel.SlotOf(side) : 0),
+                        OnlyTo: side));
+                }
+            }
+
+            if (!over)
+            {
+                LastDuel = "a turn";
+                return send;
+            }
+
+            _duels.Finish(duel);
+
+            DuelLog = beaten is { } lost
+                ? $"#{duel.Other(lost)} beat #{lost}"
+                : $"#{duel.One} and #{duel.Two}: over";
+
+            LastDuel = DuelLog;
+
+            foreach (int side in new[] { duel.One, duel.Two })
+            {
+                if (!_players.TryGetValue(side, out ServerPlayer? who)) continue;
+
+                // Nothing changes hands. The party sent back is the one they walked in
+                // with, untouched — which is the whole of what a duel costs.
+                send.Add(new Outgoing(
+                    new BattleFinished(
+                        beaten == side ? Side.Opponent : beaten is null ? null : Side.Player,
+                        Caught: false,
+                        who.Money,
+                        Prize: 0,
+                        BallsOf(who),
+                        [.. who.Party]),
+                    OnlyTo: side));
+            }
+
+            return send;
+        }
+    }
+
+    /// <summary>
+    /// What a player is actually allowed to do in a duel.
+    /// <para>
+    /// Balls and items are not offered and are refused here as well, because a hidden
+    /// option is a courtesy and not a rule. A switch is refused too, for now: the engine
+    /// takes one action per side per turn and a duel has no place to put "and then wait
+    /// for the other one to finish deciding about the creature that is no longer there".
+    /// </para>
+    /// </summary>
+    private static BattleAction Allowed(Duel duel, int playerId, BattleAction action) =>
+        action is BattleAction.UseMove ? action : new BattleAction.UseMove(0);
+
+    /// <summary>Called off, by either side or by walking away.</summary>
+    public List<Outgoing> CancelDuel(int playerId, string reason)
+    {
+        if (_duels.Drop(playerId) is not { } duel) return [];
+
+        DuelLog = $"#{duel.One} and #{duel.Two}: {reason}";
+
+        var said = new List<Outgoing>();
+
+        foreach (int side in new[] { duel.One, duel.Two })
+        {
+            if (!_players.TryGetValue(side, out ServerPlayer? who)) continue;
+
+            said.Add(new Outgoing(
+                new BattleFinished(null, false, who.Money, 0, BallsOf(who), [.. who.Party]),
+                OnlyTo: side));
+        }
+
+        return said;
+    }
+
+    /// <summary>Every change of state a duel goes through, for the server to print.</summary>
+    public string? DuelLog { get; private set; }
+
+    public string? TakeDuelLog()
+    {
+        lock (_gate)
+        {
+            string? said = DuelLog;
+            DuelLog = null;
+            return said;
+        }
+    }
 
     private readonly Trades _trades = new();
 
@@ -4066,6 +4390,15 @@ public sealed class GameWorld
                 ];
             }
 
+            case "duel":
+            {
+                if (line.Number(0) is not { } who) return [Said(player, "/duel <player id>")];
+
+                List<Outgoing> challenged = AskToDuel(player.Id, who);
+
+                return [.. challenged, Said(player, LastDuel ?? "nothing happened")];
+            }
+
             case "sail":
             {
                 if (line.Number(0) is not { } number) return [Said(player, "/sail <dock number>")];
@@ -4467,6 +4800,10 @@ public sealed class GameWorld
     {
         lock (_gate)
         {
+            // A duel first, because a player in one has no Encounter at all — the two
+            // kinds of fight share every message and none of the state.
+            if (_duels.For(playerId) is not null) return TakeDuelTurn(playerId, action);
+
             if (!_players.TryGetValue(playerId, out ServerPlayer? player) || player.Battle is not { } encounter)
                 return [new Outgoing(new Rejected("You are not in a battle."), OnlyTo: playerId)];
 

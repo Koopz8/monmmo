@@ -317,6 +317,7 @@ public static class Program
         // Somebody has asked, and has not been answered. Kept so the offer can be
         // accepted with a key rather than by typing a player id.
         int askedBy = 0;
+        int challengedBy = 0;
         BattleScreen? battle = null;
         DialogueBox? talking = null;
 
@@ -467,7 +468,7 @@ public static class Program
             ApplyServerMessages(
                 network, others, player, view, data, trainers, items, script, carrying, storing, looking,
                 ref talking, ref battle, ref shop, ref boat, ref bag, ref party, ref box, ref boxSize, ref money,
-                ref correction, ref looks, ref owned, ref trading, ref askedBy, ref watching, ref exclaimFor, ref scene, ref arrived, ref fadingIn, ref holdInput,
+                ref correction, ref looks, ref owned, ref trading, ref askedBy, ref challengedBy, ref watching, ref exclaimFor, ref scene, ref arrived, ref fadingIn, ref holdInput,
                 ref afterTheFight, ref cameOut, outcomes, rival, console);
 
             // A battle suspends the overworld entirely: the server is running it, and
@@ -628,10 +629,22 @@ public static class Program
             }
 
             // Saying yes to somebody who asked, which is the same message they sent.
-            if (askedBy != 0 && talking is null && !console.IsOpen && Raylib.IsKeyPressed(KeyboardKey.Y))
+            // One key for both invitations, because a player agreeing to something should
+            // not have to remember which kind of something it was.
+            //
+            // Answered from inside the box that asked, which is the whole of what was
+            // wrong the first time this was played: the invitation opened a text box, a
+            // text box swallows every key, and the one key it was telling the player to
+            // press was the one it had just taken away.
+            if ((askedBy != 0 || challengedBy != 0) && !console.IsOpen
+                && Raylib.IsKeyPressed(KeyboardKey.Y))
             {
-                network.SendMessage(new TradeRequest(askedBy));
+                if (challengedBy != 0) network.SendMessage(new DuelRequest(challengedBy));
+                else network.SendMessage(new TradeRequest(askedBy));
+
                 askedBy = 0;
+                challengedBy = 0;
+                talking = null;
             }
 
             if (dressing is not null)
@@ -1800,6 +1813,7 @@ public static class Program
         ref IReadOnlyList<int> owned,
         ref TradeScreen? trading,
         ref int askedBy,
+        ref int challengedBy,
         ref int? watching,
         ref float exclaimFor,
         ref Cutscene? scene,
@@ -2026,6 +2040,11 @@ public static class Program
                 case AppearanceChanged dressed when dressed.PlayerId != network.PlayerId:
                     if (others.TryGetValue(dressed.PlayerId, out RemoteCharacter? wearer))
                         wearer.Looks = dressed.Looks;
+                    break;
+
+                case DuelAsked challenge:
+                    challengedBy = challenge.FromPlayerId;
+                    said = new DialogueBox([$"{challenge.FromName} wants a fight! Press Y."]);
                     break;
 
                 case TradeAsked asked:

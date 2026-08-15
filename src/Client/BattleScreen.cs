@@ -132,9 +132,11 @@ public sealed class BattleScreen
         // those has to be a placeholder — it is the table's, and nothing else in the game
         // wears that name. Whoever opened this screen says so, because the fight and the
         // sentence that names him are the same script.
-        _trainerName = start.TrainerId is { } id
-            ? calledInstead ?? trainers?.Of(id) ?? "TRAINER"
-            : null;
+        // Another player first, because a duel has no trainer id to look up and is in
+        // every other respect a fight with a person: they send somebody out, nothing in
+        // it is wild, and nothing in it can be caught.
+        _trainerName = start.Against
+            ?? (start.TrainerId is { } id ? calledInstead ?? trainers?.Of(id) ?? "TRAINER" : null);
 
         _names = BattleNames.Unknown;
         Rename();

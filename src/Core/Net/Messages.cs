@@ -68,6 +68,8 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(AppearanceChanged), "looks")]
 [JsonDerivedType(typeof(WearRequest), "wear")]
 [JsonDerivedType(typeof(TradeRequest), "tradeask")]
+[JsonDerivedType(typeof(DuelRequest), "duelask")]
+[JsonDerivedType(typeof(DuelAsked), "duelasked")]
 [JsonDerivedType(typeof(TradeOffer), "tradeoffer")]
 [JsonDerivedType(typeof(TradeConfirm), "tradeyes")]
 [JsonDerivedType(typeof(TradeCancel), "tradestop")]
@@ -630,6 +632,20 @@ public sealed record PlayerAppeared(int PlayerId, string Name, int X, int Y, Dir
 /// </summary>
 public sealed record TradeRequest(int WithPlayerId) : NetMessage;
 
+/// <summary>
+/// Asking somebody for a fight, or agreeing to one.
+/// <para>
+/// The same shape as <see cref="TradeRequest"/> and the same handshake: two requests
+/// pointing at each other and nothing else. What comes back is a battle, in the same
+/// messages a battle has always used, which is why this is the only new thing a client
+/// needs to know to fight another player.
+/// </para>
+/// </summary>
+public sealed record DuelRequest(int WithPlayerId) : NetMessage;
+
+/// <summary>Somebody has challenged you, and asking back is how you accept.</summary>
+public sealed record DuelAsked(int FromPlayerId, string FromName) : NetMessage;
+
 /// <summary>Putting a party slot up, or −1 to take it back down.</summary>
 public sealed record TradeOffer(int Slot) : NetMessage;
 
@@ -733,7 +749,20 @@ public sealed record BattleStarted(
     int? TrainerId = null,
 
     /// <summary>Which party slot is out, so a client can offer the other five.</summary>
-    int Slot = 0) : NetMessage;
+    int Slot = 0) : NetMessage
+{
+    /// <summary>
+    /// The player on the other side, when the other side is a player.
+    /// <para>
+    /// A fight in this game has always been either something in the grass or a trainer
+    /// with a number, and the client tells them apart by whether there is a number. A
+    /// duel is neither: there is nobody to look up, and without a name for the other
+    /// chair the first line of the first duel this game ever fought was "A wild SQUIRTLE
+    /// appeared!"
+    /// </para>
+    /// </summary>
+    public string? Against { get; init; }
+}
 
 /// <summary>
 /// A move somebody has been offered and cannot fit, outside a battle.

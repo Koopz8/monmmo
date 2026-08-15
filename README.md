@@ -1,131 +1,169 @@
-# Cartridge extractor
+# MonMMO
 
-Reads a player-supplied Generation III cartridge and turns it into engine-native
-data: base stats, species names, decoded 64x64 sprites, and rendered maps.
+A multiplayer game, written from scratch in C# on .NET 8, whose client reads every
+asset it draws from a cartridge the player already owns.
 
-This is the first milestone of the client. It exists to retire the riskiest unknown
-in the whole project — *can we actually read the player's file?* — before any effort
-goes into netcode, battle logic, or persistence.
+There is an authoritative server, a raylib client, a battle engine, a world of 425
+maps, and a cartridge extractor that locates every table it needs by shape rather
+than by remembered address. The server has never seen a cartridge and never will.
+
+```
+src/Core            the shared model: world, battle, save, protocol, cosmetics
+src/RomExtract      cartridge reading. Client-only, and enforced by a test
+src/Server          the authoritative server. Core only
+src/Client          the game: window, input, drawing, screens
+src/Tools/RomDump   the extractor's command line, and every instrument built for it
+tests/              1351 tests, no cartridge required
+tools/rig/          the headless play rig — Xvfb, two clients, screenshots
+```
 
 ---
 
 ## The rule this repository is built around
 
-**No cartridge data ever lives here.** Not in the repo, not in the installer, not on
-the server. The player supplies their own file, extraction runs locally on their
+**No cartridge data ever lives here.** Not in the repository, not in a build, not on
+the server. Every player supplies their own file, extraction runs locally on their
 machine, and the results stay on their disk. `.gitignore` blocks every ROM extension
-and every extractor output directory as a first line of defence.
+and every extractor output at any depth — `world.dat`, `rules.dat`, `players.db` and
+`client.json` included.
 
-The project layout enforces the rest:
+The layout enforces the rest. `src/Server` references `Core` and nothing else, and a
+test asserts `RomExtract` does not appear in the server assembly's referenced
+assemblies. A comment would not have caught a stray `using`; that does.
 
-| Project | Role | Notes |
-|---|---|---|
-| `src/Core` | Shared game model | Referenced by **both** the client and, later, the server |
-| `src/RomExtract` | Cartridge reading | **Client-only.** The server must never reference this |
-| `src/Tools/RomDump` | CLI harness | Development tool for inspecting a cartridge |
-| `src/Client` | The game client | Window, input, drawing. No engine, no editor |
-| `src/Server` | Authoritative server | **Core only.** Never references `RomExtract` |
-| `tests/RomExtract.Tests` | Test suite | 270 tests, no cartridge required |
+What the server learns about the world, it learns from a file an operator exports
+from their own image: map dimensions, one byte of walkability and one of behaviour
+per square, the people and doors on each map, and the numbers a rule needs. No
+graphics, no text, no audio, and no cartridge addresses — those stay on the
+cartridge, because an address is only meaningful next to the image it came from.
 
-The server does not read cartridges. It learns the world from a **collision-only**
-file an operator exports from their own image — map ids, names, dimensions and one
-byte of walkability per square. No graphics, no text, no audio.
+---
 
-That rule is enforced rather than remembered: a test asserts `RomExtract` does not
-appear in the server assembly's referenced assemblies. A comment would not have
-caught a stray `using`; this does.
+## What works
+
+**The world.** 425 maps. From a fresh character, 246 are reachable on foot, by water
+and through every obstacle a party can shift; the boat opens 152 more, for 398. The
+rest is 30 separate pieces that nothing in the cartridge sails to, and the startup
+log says so in those words rather than leaving it to be discovered.
+
+**The story, as far as it goes.** Warps, map edges, ledges, doors, triggers, arrival
+scripts, people who hand things over, people who take things, obstacles that need a
+move, shops, healing, the box, hidden items, and the flags that decide which line
+somebody is on. The client runs the cartridge's own scripts and reports what they
+did; the server checks every claim against what that person is allowed to do.
+
+**Battles.** A one-on-one engine with the damage, accuracy, status, priority, trap,
+recharge, multi-hit, drain, recoil and one-hit-knockout rules read out of the
+cartridge's own tables. Trainer fights are a run of one-on-one battles with the dice
+carried over. Experience, levels, learnsets, evolution and catching all work.
+
+**Multiplayer, in three verbs.** Seeing each other, trading, and duelling. Players
+walk through each other on purpose — a game where standing still is a wall is a game
+where one person can shut a door for everybody.
+
+**Cosmetics.** Twelve slots, a wardrobe screen, and a catalogue that is the one place
+in this project where invented numbers are allowed.
 
 ---
 
 ## Running it
 
-```bash
-dotnet build
-dotnet run --project src/Tools/RomDump -- /path/to/your.gba --out ./out --species 1,4,7
-```
-
-Output:
-
-```
-out/
-  tables.json      where every data table was found, and how
-  species.json     the full base-stat table with decoded names
-  sprites/001.png  decoded 64x64 sprites, transparent background
-  maps.json        every map, with its bank.map address, name and dimensions
-  maps/03-00_PALLET_TOWN.png   rendered maps
-```
-
-Options: `--shiny`, `--back`, `--no-sprites`, `--diagnose`, `--tile-order row|column`,
-`--list-maps`, `--map <list>`, `--map-name <text>`, `--tileset-split firered|emerald`.
-
-To see what maps the cartridge holds, and render one:
+Build once, then export a world and a rules file from your own image:
 
 ```bash
-dotnet run --project src/Tools/RomDump -- your.gba --out ./out --no-sprites --list-maps
-dotnet run --project src/Tools/RomDump -- your.gba --out ./out --no-sprites --map-name pallet
+dotnet build -c Release
+
+dotnet run --project src/Tools/RomDump -- your.gba --export-world world.dat
+dotnet run --project src/Tools/RomDump -- your.gba --export-rules rules.dat
 ```
 
-Maps are addressed the way the game addresses them, as `bank.map`, and named from the
-region map table — so `--map 3.0` and `--map-name pallet` both work, and rendered
-files come out as `03-00_PALLET_TOWN.png`. `--map all` renders everything.
+Then a server and a client:
+
+```bash
+dotnet run --project src/Server -- --world world.dat --rules rules.dat
+dotnet run --project src/Client
+```
+
+The server prints what it knows before it listens — how many maps a new character can
+walk to, what stands in the way, which trainers have parties, which maps have no door
+leading in. That report is the project's main instrument, and most of what is written
+below was found by reading it.
+
+An `--operator <name>` argument gives one account a console (`/` in the client) for
+`/tp`, `/give`, `/flag`, `/reach`, `/hidden`, `/docks`, `/sail`, `/duel` and the rest.
 
 ---
 
-## How it finds things
+## How the extractor finds things
 
-The obvious implementation hardcodes addresses like `0x08254784` for the base-stat
-table. That approach breaks badly: feed it a different revision or region and every
-offset shifts, so it reads plausible-looking garbage and reports success.
+The obvious implementation hardcodes `0x08254784` for the base-stat table. That
+breaks badly: feed it a different revision and every offset shifts, so it reads
+plausible garbage and reports success.
 
-This extractor searches for **structure** instead:
+This one searches for **structure**, and a candidate must produce a long run of
+well-formed entries before it is accepted:
 
-- **Species names** — anchors on the encoded name of species 1, then confirms by
-  decoding 150 following records. Real names decode cleanly; misaligned data
-  produces `?` almost immediately.
-- **Base stats** — anchors on the ten-byte stat signature of species 1, then
-  range-checks 200 following records (type ids ≤ 17, growth rate ≤ 5, egg groups ≤ 15).
-- **Sprite tables** — every mon pic entry is `{pointer, 0x800, tag}`, so a real table
-  is a long run of entries whose tags increase by one and whose pointers land inside
-  the cartridge.
-- **Palette tables** — same idea with `{pointer, tag, 0}`. The tag base is read from
-  each run's own first entry rather than assumed to be zero, because the shiny table
-  offsets every tag by a constant.
-- **Map layouts** — a layout record is two small positive dimensions followed by
-  pointers that must land in the cartridge, with block data that must fit inside it.
-- **Map banks** — two levels of indirection: a table of pointers, each to an array of
-  pointers, each to a map header whose own layout pointer must resolve to a valid
-  layout. That shape is specific enough that nothing else in the image matches it at
-  length, and it yields the game's own `(bank, map)` numbering rather than an index
-  into a table whose boundaries had to be guessed.
-- **Region names** — both `{x, y, width, height, name}` records and bare arrays of
-  text pointers are scanned, then ranked by how many entries read like places. An
-  image holds several long runs of text pointers; the location table is the one whose
-  *contents* are place names, not the longest or the first.
+- **Species names** anchor on the encoded name of species 1, then confirm by decoding
+  150 following records. Real names decode cleanly; misaligned data produces `?`
+  almost immediately.
+- **Base stats** anchor on the ten-byte stat signature of species 1, then range-check
+  200 following records.
+- **Sprite and palette tables** are runs of `{pointer, size, tag}` whose tags increase
+  by one and whose pointers land inside the cartridge. Each run reads its tag base
+  from its own first entry, because the shiny table offsets every tag by 500.
+- **Map banks** are two levels of indirection ending in a header whose layout pointer
+  must itself resolve to a valid layout. That shape is specific enough that nothing
+  else in the image matches it at length, and it yields the game's own `(bank, map)`
+  numbering.
+- **Region names** are ranked by how many entries read like places, because an image
+  holds several long runs of text pointers and the location table is the one whose
+  *contents* are place names.
 
-A candidate must produce at least 100 consecutive well-formed entries to be accepted.
-The result: the extractor either finds tables that genuinely satisfy the format's
-invariants, or it fails loudly. New revisions tend to work without a code change, and
-the located addresses are written to `tables.json` so they can be recorded.
+Cartridge identification comes from the header rather than a hash allowlist, because
+the header is self-describing. SHA-1 is still computed and compared against the
+hashes the pret decompilation projects publish.
 
-Cartridge identification is driven by the header (game code at `0xAC`, revision at
-`0xBC`) rather than a hash allowlist, because the header is self-describing. SHA-1 is
-still computed and checked against the hashes published by the pret decompilation
-projects; a match means you are looking at exactly the image those projects document.
+---
+
+## The method
+
+Everything in this project follows one rule: **derive, don't remember.** No constant
+is written from recollection of another game. Something is located by its shape in
+the image, and the evidence is printed beside it.
+
+Worked examples, all of them in the code as comments:
+
+- A script command's width is settled by what the read resumes on. `warp` is seven
+  bytes because at seven it names a real map at a square inside that map at 19 of 19
+  sites, where the next best byte manages five per cent.
+- Behaviour byte `0x6A` is a staircase, not a storage machine, because every square
+  carrying it is at the top or bottom of a flight and none of them is in a corner of
+  a healing centre.
+- The ferry's destination table was read without reading the routine that uses it:
+  sixteen scripts write a number into an argument slot and then hand the screen to
+  the same routine as the last thing they ever do, and no two of them write the same
+  number. The numbers check themselves — 0 is VERMILION CITY and 1 through 7 are ONE
+  ISLAND through SEVEN ISLAND, in order, from ten scripts that have never met.
+
+Three categories, and they are marked in the source:
+
+- **Read** — it came out of the cartridge.
+- **Modelled** — a number that lives in the game's own code, stated in the open.
+- **Invented** — allowed in `PokeMmo.Core.Cosmetics` and nowhere else.
+
+And a fourth thing, written down rather than guessed at: **what cannot be derived
+stays silent on purpose.** The cartridge's font has defeated four separate methods.
+That is in the notes, not in a magic number.
 
 ---
 
 ## Testing without a cartridge
 
-No copyrighted file is needed to test any of this. `SyntheticRom` builds a fake 2 MiB
-cartridge that satisfies the same structural invariants as a real one — header, name
-table, stat table, both pic tables, both palette tables, and LZ77-compressed graphics
-at known offsets. The tests then assert the extractor recovers the exact bytes that
-were written.
-
-That covers the full pipeline: LZ77 round trips (including overlapping back-references
-and every malformed-input rejection path), 4bpp nibble order, both tile orderings,
-BGR555 expansion, PNG chunk structure and CRCs, table location, and the CLI itself
-end to end.
+No copyrighted file is needed to run the suite. `SyntheticRom` builds a fake
+cartridge that satisfies the same structural invariants as a real one, and the tests
+assert the extractor recovers the exact bytes that were written. Everything else —
+the world, the battle engine, the protocol, the server's rules — is tested against
+synthetic maps and rules with no image involved at all.
 
 ```bash
 dotnet test
@@ -133,75 +171,60 @@ dotnet test
 
 Two negative tests matter more than the positive ones: a cartridge-sized buffer of
 random noise must yield **no** tables, and a planted anchor with nothing valid after
-it must be **rejected**. Those are what stop the scanner from being confidently wrong.
+it must be **rejected**. Those are what stop the scanner from being confidently
+wrong.
+
+A handful of tests are guardrails rather than tests of behaviour, and each exists
+because something got past a review:
+
+- every message on the wire round-trips, and every message kind is in the sample list
+- every message kind is named by **both** sides of the client/server split — a
+  message with a handler and no sender reads, to anybody looking at that side, as if
+  the feature were there
+- every battle event names at most one side, and names it first, so a duel can be
+  told to both players in their own terms
+- the server assembly does not reference the extractor
+
+---
+
+## Playing it headlessly
+
+`tools/rig/` runs the real client against the real server with no screen: Xvfb,
+software GL, `xdotool` for keys and ImageMagick for screenshots. `twoclients.sh`
+brings up two signed-in players, which is how trading and duelling were checked.
+
+Every milestone in this project ends by playing the thing that was just built and
+looking at the screenshot. Three times, something that looked like a bug turned out
+to be the program being right and quiet about it; twice, something that looked fine
+was wrong and only the screenshot said so.
 
 ---
 
 ## Field notes
 
-Run against a real FireRed (US) rev 0 image whose SHA-1 matched pret's published
-hash. Three bugs surfaced that the synthetic fixture had not caught, because the
-fixture encoded assumptions rather than the cartridge's actual layout:
+The lesson that keeps recurring, in the words it was learned in:
 
-- **Name records are zero-filled past the terminator**, not padded with more
-  terminator bytes. The full-width search key therefore matched nothing and every
-  species came out unnamed. The anchor is now the characters plus the terminator and
-  stops there.
-- **Tables sit back-to-back.** After completing a run the scanner resumed four bytes
-  too far, stepping over the next table's first entry — so the shiny palette table
-  was missed and the scanner latched onto unrelated data further along.
-- **Shiny palette entries are tagged `species + 500`**, not by bare species index.
-  Requiring tags to count from zero made the scanner walk past the table while it sat
-  directly after the normal one, and latch onto the trainer palette table instead.
-  Runs now read their tag base from their own first entry, and the normal and shiny
-  tables are told apart by that base rather than by which one comes second.
-
-The fixture now models all three properties — including a decoy zero-tagged palette
-table standing in for the trainer one — and every failure is pinned by a regression
-test. The lesson worth keeping: a fixture built from the same assumptions as the code
-under test only ever proves the code agrees with itself.
-
-**Sprite tile ordering is confirmed row-major** against the same image. The
-`--tile-order` flag stays for other cartridges, but the default is correct.
-
-## Diagnosing an unfamiliar cartridge
-
-If the scan reports a table with an unexpected entry count, or misses one entirely:
-
-```bash
-dotnet run --project src/Tools/RomDump -- your.gba --out ./out --no-sprites --diagnose
-```
-
-That drops the run threshold to 16, lists every candidate run of both table shapes
-with its address range, length and tag base, and dumps the raw 8-byte records
-following each located table as `{pointer, halfword, halfword}`. All three bugs above
-were identified from that output rather than guessed at.
-
----
-
-## Maps
-
-A map square is a **metatile**: a 2x2 grid of 8x8 tiles, drawn twice — once for the
-bottom layer, then again for the top layer with colour 0 left transparent so terrain
-shows through. Each tile reference carries its own palette index and horizontal and
-vertical flip flags.
-
-Two tilesets are in play at once, primary and secondary, and tile, metatile and
-palette slots form a single shared index space split between them. Those split points
-are per-game constants, so they live in `TilesetSplit` and can be swapped with
-`--tileset-split` rather than edited — a wrong split produces a recognisably wrong
-picture rather than an error, and being able to flip it makes that a one-word
-experiment instead of a code change.
-
-The synthetic cartridge carries a complete map: a tileset whose tiles are flat
-colour, one metatile per colour, a block grid, a layout record and a pointer table.
-Flat colour is deliberate — every square renders as one solid 16x16 block, so the
-tests assert exact pixel colours and catch tile ordering, palette selection, layer
-compositing and block indexing all at once.
+- **A fixture built from the same assumptions as the code under test only ever proves
+  the code agrees with itself.** Three extractor bugs survived a green suite because
+  the synthetic cartridge encoded the same guesses the scanner did.
+- **The behaviour test beats the shape test.** Seventeen tests once rested on a
+  behaviour byte that meant something else entirely, and all of them passed.
+- **A refusal that does not name its cause costs more than the line it saves.** A
+  blocked step that answered with silence desynchronised the client for two
+  milestones and read, the whole time, as a missing person.
+- **A rule enforced on one side of the split needs its counterpart on the other.**
+  Learned three times before it became a heading.
+- **A thing being absent from the data you have looked at is not the same as the thing
+  being absent.** "179 maps have nothing leading in" was counted correctly and
+  described wrongly for a dozen milestones, because the count came from map records
+  and the sentence said "world".
 
 ---
 
 ## Next
 
-A Godot 4 client that renders an extracted map and lets you walk around it, then the
-authoritative server underneath it.
+Player-versus-player is in. What is left, in order: the passes that gate the ferry
+(two flags and two items, all of them plainly in the VERMILION script and none of
+them derived yet), the battle engine's silent half (127 move-effect groups the
+engine steps over without saying so), and art — twelve cosmetic slots with nothing
+drawn in them, and a shop to buy from.
