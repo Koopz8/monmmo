@@ -316,8 +316,9 @@ put in the same one.
 
 That last rule is written. Walking through a door keeps your copy number when the
 copy on the other side has room, so two people going through together arrive together;
-and `/with <name>` moves you into the copy somebody else is in, on the map you are
-already standing on. It never carries anybody across the world — that is a different
+and `L` opens "who is here" — the people in this copy of this place, and a key to go
+to one of them. It was a console command first, which is to say a rule only an
+operator could use; the console version is still there as `/with <name>`. It never carries anybody across the world — that is a different
 feature, and one that would make every locked door optional — and a full copy does not
 refuse, because somebody who asked to be with a friend would rather stand in a copy of
 forty-one than be told no.

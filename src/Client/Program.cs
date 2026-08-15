@@ -312,6 +312,7 @@ public static class Program
         Appearance looks = Appearance.Bare;
         IReadOnlyList<int> owned = [];
         WardrobeScreen? dressing = null;
+        PeopleScreen? people = null;
         TradeScreen? trading = null;
 
         // Somebody has asked, and has not been answered. Kept so the offer can be
@@ -613,6 +614,17 @@ public static class Program
                 dressing = new WardrobeScreen(owned, looks);
             }
 
+            // Who else is here, and a way to go to them. The one thing more than one copy
+            // of a place owes a player: two people in the same town can be in copies that
+            // cannot see each other, and from inside that looks like the other person not
+            // being there.
+            if (carrying is null && storing is null && looking is null && dressing is null
+                && people is null && talking is null && !console.IsOpen
+                && Raylib.IsKeyPressed(KeyboardKey.L))
+            {
+                people = new PeopleScreen(others.Values.Select(o => o.Name));
+            }
+
             if (trading is not null)
             {
                 trading.Apply(party);
@@ -645,6 +657,20 @@ public static class Program
                 askedBy = 0;
                 challengedBy = 0;
                 talking = null;
+            }
+
+            if (people is not null)
+            {
+                people.Update();
+
+                if (people.TakePending() is GoToRequest asking) network.SendGoTo(asking.Name);
+
+                people.Draw();
+
+                if (people.IsClosed) people = null;
+
+                Raylib.EndDrawing();
+                continue;
             }
 
             if (dressing is not null)

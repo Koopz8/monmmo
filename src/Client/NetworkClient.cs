@@ -130,6 +130,9 @@ public sealed class NetworkClient : IDisposable
 
     public void SendTalkFinished() => Send(new TalkFinished());
 
+    /// <summary>Asks to be put in the copy of this place that somebody else is in.</summary>
+    public void SendGoTo(string name) => Send(new GoToRequest(name));
+
     /// <summary>Asks to get onto the water ahead. Whether that is allowed is not this side's call.</summary>
     public void SendSurf() => Send(new SurfRequest());
 

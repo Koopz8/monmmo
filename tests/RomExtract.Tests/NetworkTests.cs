@@ -57,6 +57,7 @@ public class MessageChannelTests
             new ScriptGave(1, 358),
             new LearnMoveRequest(33, 2),
             new SurfRequest(),
+            new GoToRequest("Mason"),
             new MoveOffered(1, 57),
             new SurfingChanged(true, 9, 12),
             new PlayerHopped(1, 9, 12, Direction.Down),

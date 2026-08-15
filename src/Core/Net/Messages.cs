@@ -21,6 +21,7 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(MoveRequest), "move")]
 [JsonDerivedType(typeof(TalkRequest), "talk")]
 [JsonDerivedType(typeof(TalkFinished), "talkdone")]
+[JsonDerivedType(typeof(GoToRequest), "goto")]
 [JsonDerivedType(typeof(ScriptRan), "scriptran")]
 [JsonDerivedType(typeof(FlagsChanged), "flags")]
 [JsonDerivedType(typeof(TrainerBeaten), "beaten")]
@@ -119,6 +120,23 @@ public sealed record TalkRequest(int LocalId) : NetMessage;
 
 /// <summary>The text box is closed; whoever was held may carry on. Also shuts a shop.</summary>
 public sealed record TalkFinished : NetMessage;
+
+/// <summary>
+/// "Put me where they are."
+/// <para>
+/// A place can have more than one copy of itself, and two people who want to be together
+/// can be in copies that cannot see each other — which, from inside, looks exactly like
+/// the other person not being there. This is how an ordinary player asks to be moved
+/// into somebody's copy. It was a console command first, and the console belongs to
+/// operators, so the rule instancing owed was one only an operator could use.
+/// </para>
+/// <para>
+/// By name rather than by id, because a name is what a player can see on another
+/// player's head. The server refuses anything else — it never moves anybody off the map
+/// they are standing on, whatever this asks for.
+/// </para>
+/// </summary>
+public sealed record GoToRequest(string Name) : NetMessage;
 
 /// <summary>
 /// A square was stepped onto that runs a script.

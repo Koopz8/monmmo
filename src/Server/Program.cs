@@ -1047,6 +1047,19 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                             await DispatchAsync(talked, playerId, cancellationToken).ConfigureAwait(false);
                             break;
 
+                        case GoToRequest going when playerId != 0:
+                        {
+                            // Anybody may ask this. It is the rule instancing owed, and
+                            // it was a console command — which is to say a rule only an
+                            // operator could use — until this case existed.
+                            List<Outgoing> wentTo = world.GoTo(playerId, going.Name);
+
+                            if (world.LastGoTo is { } said && verbose) Console.WriteLine($"~ {said}");
+
+                            await DispatchAsync(wentTo, playerId, cancellationToken).ConfigureAwait(false);
+                            break;
+                        }
+
                         case TalkFinished when playerId != 0:
                         {
                             List<Outgoing> done = world.StopTalking(playerId);
