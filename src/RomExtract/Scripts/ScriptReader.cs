@@ -785,6 +785,23 @@ public static class ScriptCommands
         // Two. Both sites read `94 00 00 | 6C 02` — an argument of zero, then release
         // and end.
         [0x94] = 2,
+
+        // One byte, and the column says so. Fifteen places in this game a read stops on
+        // 0x97; at every one of them the byte after it is 1, 2 or 3 and nothing else,
+        // which is an argument rather than an opcode — opcodes vary between sites and
+        // arguments have columns, the same test that settled 0xA1 in milestone 55.
+        //
+        // The scorer could not split five bytes from six and preferred both to one, on
+        // the continuation test. The continuation test is not to be trusted alone and
+        // this project has now been shown that twice: read one wide, 0x97 resumes on
+        // real work at every site — a waitbutton, a repeated 0x53, a loadpointer — and
+        // read five or six wide it resumes on a column of nothing.
+        //
+        // And the anchor is from outside the script entirely. ROCKET HIDEOUT object 1's
+        // script, read one wide, runs on through a waitbutton and two more commands and
+        // lands exactly on `clearflag 0x0037` — the flag that hides the SILPH SCOPE,
+        // whose address was found by a scan that knew nothing about widths.
+        [0x97] = 1,
     };
 
     /// <summary>

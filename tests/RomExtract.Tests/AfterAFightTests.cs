@@ -51,10 +51,15 @@ public class AfterAFightTests
         Pointer(image, 0x10E, 0x08000600);   // the script afterwards
         Put(image, 0x112, Release, End);
 
-        // Two pages of something that is not script. 0x97 has no known length, which is
+        // Two pages of something that is not script. 0xFE has no known length, which is
         // what a page of text looks like to a reader of commands.
-        Put(image, 0x400, 0x97, 0x97, 0x97, 0x97);
-        Put(image, 0x500, 0x97, 0x97, 0x97, 0x97);
+        //
+        // This said 0x97 for exactly one milestone, until 0x97 turned out to be a
+        // command one byte wide and the fixture started claiming text was script. A
+        // fixture built on "this byte means nothing" has to be re-read every time the
+        // table learns something, and the two tests below are what caught it.
+        Put(image, 0x400, 0xFE, 0xFE, 0xFE, 0xFE);
+        Put(image, 0x500, 0xFE, 0xFE, 0xFE, 0xFE);
 
         // And the script the fight leads to.
         Put(image, 0x600, SetFlag, 0x36, 0x00, End);
