@@ -238,3 +238,156 @@ public class WritingEverybodyDownTests
         Assert.NotEqual(Somebody(), hurt);
     }
 }
+
+/// <summary>
+/// Writing behind the players rather than in front of them.
+/// <para>
+/// A save used to happen inside the loop that reads a player's messages, so the disk was
+/// in the path of that player's input — sixteen milliseconds usually and four hundred and
+/// fifty occasionally, with nothing on screen to say why the game had stopped.
+/// </para>
+/// <para>
+/// The queue holds the latest state per account rather than a list of states, and that is
+/// the whole idea: a character noted twice before either is written is written once, with
+/// the newer. The older one was never anything anybody could observe — it is a photograph,
+/// not an event, and only the last photograph matters.
+/// </para>
+/// </summary>
+public class WritingBehindTests
+{
+    private static SavedCharacter Somewhere(int x) =>
+        new("1.0", x, 5, Direction.Down, []);
+
+    /// <summary>What is noted is written.</summary>
+    [Fact]
+    public async Task WhatIsNotedIsWritten()
+    {
+        var store = new CountingStore();
+
+        await using (var scribe = new Scribe(store, CancellationToken.None))
+        {
+            scribe.Note(1, Somewhere(4));
+        }
+
+        Assert.Equal([(1L, 4)], store.Written);
+    }
+
+    /// <summary>
+    /// And two notes for one account before either is written are one write, with the
+    /// newer of the two. This is the saving, and it is also the correctness argument.
+    /// </summary>
+    [Fact]
+    public async Task AndTwoNotesBeforeAWriteAreOneWrite()
+    {
+        var store = new CountingStore { Slow = TimeSpan.FromMilliseconds(60) };
+
+        await using (var scribe = new Scribe(store, CancellationToken.None))
+        {
+            scribe.Note(1, Somewhere(1));
+            scribe.Note(1, Somewhere(2));
+            scribe.Note(1, Somewhere(3));
+
+            await Task.Delay(200);
+        }
+
+        Assert.Equal(3, store.Written[^1].X);
+        Assert.True(store.Written.Count < 3, $"{store.Written.Count} writes for three notes");
+    }
+
+    /// <summary>And two different accounts are two writes, however close together.</summary>
+    [Fact]
+    public async Task AndTwoAccountsAreTwoWrites()
+    {
+        var store = new CountingStore();
+
+        await using (var scribe = new Scribe(store, CancellationToken.None))
+        {
+            scribe.Note(1, Somewhere(1));
+            scribe.Note(2, Somewhere(2));
+        }
+
+        Assert.Equal(2, store.Written.Count);
+    }
+
+    /// <summary>
+    /// And what is forgotten is not written. A disconnect writes the newest state by
+    /// hand, so anything still queued for that account must not land on top of it
+    /// afterwards.
+    /// </summary>
+    [Fact]
+    public async Task AndWhatIsForgottenIsNotWritten()
+    {
+        var store = new CountingStore { Slow = TimeSpan.FromMilliseconds(40) };
+
+        await using (var scribe = new Scribe(store, CancellationToken.None))
+        {
+            scribe.Note(1, Somewhere(1));
+            scribe.Note(2, Somewhere(2));
+            scribe.Forget(2);
+
+            await Task.Delay(200);
+        }
+
+        Assert.DoesNotContain(store.Written, w => w.Account == 2);
+    }
+
+    /// <summary>
+    /// And a server on its way out writes what it is still holding. Stopping must not
+    /// throw away the last few seconds of everybody's play.
+    /// </summary>
+    [Fact]
+    public async Task AndStoppingWritesWhatIsLeft()
+    {
+        var store = new CountingStore { Slow = TimeSpan.FromMilliseconds(50) };
+
+        var scribe = new Scribe(store, CancellationToken.None);
+
+        for (int account = 1; account <= 5; account++) scribe.Note(account, Somewhere(account));
+
+        await scribe.DisposeAsync();
+
+        Assert.Equal(5, store.Written.Select(w => w.Account).Distinct().Count());
+    }
+
+    /// <summary>A store that remembers what it was asked to write, and can be made slow.</summary>
+    private sealed class CountingStore : IPlayerStore
+    {
+        private readonly List<(long Account, int X)> _written = [];
+
+        public TimeSpan Slow { get; init; }
+
+        public IReadOnlyList<(long Account, int X)> Written
+        {
+            get { lock (_written) return [.. _written]; }
+        }
+
+        public async Task SaveAsync(
+            long accountId, SavedCharacter character, CancellationToken cancellationToken = default)
+        {
+            if (Slow > TimeSpan.Zero) await Task.Delay(Slow, cancellationToken);
+
+            lock (_written) _written.Add((accountId, character.X));
+        }
+
+        public Task<AuthOutcome> RegisterAsync(
+            string username, string password, SavedCharacter fresh, CancellationToken cancellationToken = default) =>
+            Task.FromResult<AuthOutcome>(new AuthOutcome.Failed("not here"));
+
+        public Task<AuthOutcome> LoginAsync(
+            string username, string password, CancellationToken cancellationToken = default) =>
+            Task.FromResult<AuthOutcome>(new AuthOutcome.Failed("not here"));
+
+        // The rest of the interface, which this test has no opinion about.
+        public Task<int> ForgetStoryAsync(
+            string username, SavedCharacter fresh, CancellationToken cancellationToken = default) =>
+            Task.FromResult(0);
+
+        public Task<bool> GiveAsync(
+            string username, int species, int level, CancellationToken cancellationToken = default) =>
+            Task.FromResult(false);
+
+        public Task<bool> WipeAsync(
+            string username, SavedCharacter fresh, CancellationToken cancellationToken = default) =>
+            Task.FromResult(false);
+    }
+}

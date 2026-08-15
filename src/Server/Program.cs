@@ -772,6 +772,9 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
 
     /// <summary>When the periodic report last said anything.</summary>
     private double _lastReport;
+
+    /// <summary>Writes characters down behind the players rather than in front of them.</summary>
+    private Scribe? _scribe;
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private readonly TaskCompletionSource<int> _listening =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -810,6 +813,8 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
         // whether a launch works, and it is invisible from inside a running server.
         Console.WriteLine($"  {_door.Rate(MeasuredCheckMilliseconds)}");
 
+        _scribe = new Scribe(store, cancellationToken);
+
         _ = TickAsync(cancellationToken);
 
         try
@@ -829,6 +834,10 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
         finally
         {
             listener.Stop();
+
+            // Everything still queued goes to disk before this returns. A server asked
+            // to stop must not throw away the last few seconds of everybody's play.
+            if (_scribe is { } scribe) await scribe.DisposeAsync().ConfigureAwait(false);
         }
     }
 
@@ -866,6 +875,9 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                         $"door {_door.Admitted} in ({_door.AverageWait:F0} ms average wait)" +
                         (store is Storage.SqlitePlayerStore disk
                             ? $", {disk.Saves} saves ({disk.AverageSave:F0} ms average, {disk.SlowestSave:F0} worst)"
+                            : string.Empty) +
+                        (_scribe is { } writer
+                            ? $", {writer.Coalesced} saved by waiting"
                             : string.Empty));
                 }
             }
@@ -1364,7 +1376,9 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                         {
                             if (sinceThen != written)
                             {
-                                await store.SaveAsync(accountId, sinceThen, cancellationToken).ConfigureAwait(false);
+                                // Handed over rather than written here. The disk is no
+                                // longer in the path of this player's next message.
+                                _scribe?.Note(accountId, sinceThen);
 
                                 written = sinceThen;
                             }
@@ -1392,6 +1406,11 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                     // immediately rather than waiting for a clean disconnect.
                     if (world.Snapshot(playerId) is { } state)
                     {
+                        // By hand, and newer than anything queued — so whatever the
+                        // scribe was still holding for this account is dropped rather
+                        // than written after it.
+                        _scribe?.Forget(accountId);
+
                         try
                         {
                             await store.SaveAsync(accountId, state, CancellationToken.None).ConfigureAwait(false);

@@ -14,7 +14,7 @@ src/Server          the authoritative server. Core only
 src/Client          the game: window, input, drawing, screens
 src/Tools/RomDump   the extractor's command line, and every instrument built for it
 src/Tools/Crowd     a crowd of real clients, for measuring what the server does at scale
-tests/              1548 tests, no cartridge required
+tests/              1553 tests, no cartridge required
 tools/rig/          the headless play rig — Xvfb, two clients, screenshots
 ```
 
@@ -286,8 +286,22 @@ prints what it is costing every half minute:
 = 100 online on 2 maps, door 100 in (5554 ms average wait), 1385 saves (16 ms average, 454 worst)
 ```
 
-What is left is structural: a save writes everything about a character every time,
-and it should write what changed.
+And then the save moved out of the player's way entirely. It used to happen inside
+the loop that reads that player's messages, so the disk was in the path of their
+input; now a character is handed to a writer that runs behind everybody, holding the
+*latest state per account* rather than a list of states — two changes to one character
+before either is written are one write, with the newer. A disconnect still writes by
+hand and tells the writer to forget whatever it was holding, because that copy is
+older.
+
+```
+before:  1254 saves (21 ms average, 458 worst),  a step 3.3 / 19.5 / 102.1 ms
+after:   1258 saves ( 1 ms average, 156 worst),  a step 2.5 /  8.3 /  36.4 ms
+```
+
+A save costs a sixteenth of what it did, because it no longer fights the connection
+loops for the same lock and the same core. What is left is structural: a save writes
+everything about a character every time, and it should write what changed.
 
 ## Playing it headlessly
 
