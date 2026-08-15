@@ -181,6 +181,9 @@ public static class BattleNarrator
 
         BattleEvent.Unaffected e => $"It had no effect on {names.Of(e.Side)}.",
         BattleEvent.Protected e => $"{names.Of(e.Side)} protected itself!",
+        BattleEvent.CannotUse e => $"{names.Of(e.Side)}'s {names.MoveNamed(e.MoveId)} was disabled!",
+        BattleEvent.CanUseAgain e => $"{names.Of(e.Side)} is no longer disabled!",
+        BattleEvent.MustRepeat e => $"{names.Of(e.Side)} must do {names.MoveNamed(e.MoveId)} again!",
 
         BattleEvent.GotAway => "Got away safely!",
 

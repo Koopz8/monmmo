@@ -64,6 +64,9 @@ public sealed class BattleScreen
     private int _selectedMove;
 
     private BattlerView _you;
+
+    /// <summary>The slot the server says cannot be pressed, if there is one.</summary>
+    private int? _disabled;
     private BattlerView _opponent;
 
     /// <summary>
@@ -327,6 +330,7 @@ public sealed class BattleScreen
             _offered.Enqueue(offered.MoveId);
 
         _noChoiceBut = update.NoChoiceBut;
+        _disabled = update.Disabled;
 
         _you = _you with { CurrentHp = update.YourHp };
 
@@ -923,7 +927,10 @@ public sealed class BattleScreen
 
             if (selected) Skin.DrawSelection(cell);
 
-            _font.Draw(_moveNames[i], cell.X + 14, cell.Y + 8, 3, selected ? Skin.Ink : Skin.InkDim);
+            // A blocked slot is drawn as one, rather than offered and refused.
+            Color ink = _disabled == i ? Skin.HpPoor : selected ? Skin.Ink : Skin.InkDim;
+
+            _font.Draw(_moveNames[i], cell.X + 14, cell.Y + 8, 3, ink);
         }
 
         // And what the highlighted one is, on the right: the modern half of this screen.

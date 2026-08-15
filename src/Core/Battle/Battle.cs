@@ -59,6 +59,9 @@ public enum Side
 [JsonDerivedType(typeof(OneHitKnockout), "onehit")]
 [JsonDerivedType(typeof(Unaffected), "unaffected")]
 [JsonDerivedType(typeof(Protected), "protected")]
+[JsonDerivedType(typeof(CannotUse), "cannotuse")]
+[JsonDerivedType(typeof(CanUseAgain), "canuseagain")]
+[JsonDerivedType(typeof(MustRepeat), "mustrepeat")]
 [JsonDerivedType(typeof(GotAway), "gotaway")]
 [JsonDerivedType(typeof(CouldNotGetAway), "couldnotgetaway")]
 [JsonDerivedType(typeof(HeldFast), "heldfast")]
@@ -207,6 +210,15 @@ public abstract record BattleEvent
 
     /// <summary>Put a guard up, and nothing got through it.</summary>
     public sealed record Protected(Side Side) : BattleEvent;
+
+    /// <summary>A move is blocked, either just now or when it was tried.</summary>
+    public sealed record CannotUse(Side Side, int MoveId) : BattleEvent;
+
+    /// <summary>The block ran out.</summary>
+    public sealed record CanUseAgain(Side Side) : BattleEvent;
+
+    /// <summary>Made to do the same thing again.</summary>
+    public sealed record MustRepeat(Side Side, int MoveId) : BattleEvent;
 
     /// <summary>Left.</summary>
     public sealed record GotAway(Side Side) : BattleEvent;
@@ -617,6 +629,20 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             attacker.ForcedSlot = null;
             attacker.ForcedTurns = 0;
         }
+
+        // A blocked slot cannot be swung. Checked after the substitution above, so a
+        // creature whose only move is blocked and whose others are spent still struggles
+        // rather than standing there.
+        if (action is BattleAction.UseMove blocked && attacker.IsDisabled(blocked.Slot))
+        {
+            events.Add(new BattleEvent.CannotUse(side, move.Id));
+
+            return;
+        }
+
+        // What this one just did, for the two moves that care. Written when the move is
+        // made rather than when it lands, because a miss is still what you did.
+        if (action is BattleAction.UseMove made) attacker.LastSlot = made.Slot;
 
         events.Add(new BattleEvent.MoveUsed(side, move.Id));
 
@@ -1141,6 +1167,49 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             return;
         }
 
+        // Blocks whatever they just did. Nothing to block if they have not moved yet, and
+        // nothing to do if something is already blocked — one at a time, which is the
+        // games' rule and the only one that needs no second counter.
+        if (effect.Kind == EffectKind.Disable)
+        {
+            if (target.LastSlot is not { } theirs || target.DisabledTurns > 0)
+            {
+                events.Add(new BattleEvent.NothingHappened(at));
+
+                return;
+            }
+
+            target.DisabledSlot = theirs;
+
+            // Modelled, not read: nothing in DISABLE's record says how long it holds.
+            target.DisabledTurns = _rng.Next(4) + 2;
+
+            events.Add(new BattleEvent.CannotUse(at, target.MoveAt(theirs)?.Id ?? 0));
+
+            return;
+        }
+
+        // And the other way round: makes them do it again. The holding is the same
+        // holding THRASH uses, which is why this needed no machinery of its own.
+        if (effect.Kind == EffectKind.Encore)
+        {
+            if (target.LastSlot is not { } again || target.ForcedSlot is not null)
+            {
+                events.Add(new BattleEvent.NothingHappened(at));
+
+                return;
+            }
+
+            target.ForcedSlot = again;
+
+            // Modelled for the same reason, and deliberately the same shape of number.
+            target.ForcedTurns = _rng.Next(4) + 2;
+
+            events.Add(new BattleEvent.MustRepeat(at, target.MoveAt(again)?.Id ?? 0));
+
+            return;
+        }
+
         if (effect.Kind == EffectKind.Status)
         {
             // Sleep runs one to three turns. Chosen here rather than in the battler
@@ -1283,6 +1352,15 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         {
             Battler battler = Of(side);
             if (battler.HasFainted) continue;
+
+            // A block runs out. Counted down here with everything else that lasts turns,
+            // and cleared rather than left at nought so the slot is free again.
+            if (battler.DisabledTurns > 0 && --battler.DisabledTurns <= 0)
+            {
+                battler.DisabledSlot = null;
+
+                events.Add(new BattleEvent.CanUseAgain(side));
+            }
 
             // What is holding on, before what is inside. Both take a sixteenth and both
             // can finish somebody; the order between them is arbitrary and stated here

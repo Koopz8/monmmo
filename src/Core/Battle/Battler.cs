@@ -187,6 +187,24 @@ public sealed class Battler
     /// player is not asked this turn, and the engine takes the move it is holding.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// The last move this one actually used, as a slot, or nothing.
+    /// <para>
+    /// Needed by the two moves that take a choice away — one blocks what you just did,
+    /// the other makes you do it again — and by nothing else. Written when a move is
+    /// made rather than when it lands, because a miss is still what you did.
+    /// </para>
+    /// </summary>
+    public int? LastSlot { get; set; }
+
+    /// <summary>The slot this one may not use, and for how much longer.</summary>
+    public int? DisabledSlot { get; set; }
+
+    public int DisabledTurns { get; set; }
+
+    /// <summary>True when this slot is the one currently blocked.</summary>
+    public bool IsDisabled(int slot) => DisabledSlot == slot && DisabledTurns > 0;
+
     public int? ForcedSlot { get; set; }
 
     public int ForcedTurns { get; set; }
@@ -231,6 +249,9 @@ public sealed class Battler
         MustRecharge = false;
         ForcedSlot = null;
         ForcedTurns = 0;
+        LastSlot = null;
+        DisabledSlot = null;
+        DisabledTurns = 0;
         IsAway = false;
     }
 

@@ -3685,6 +3685,9 @@ public sealed class GameWorld
                                 .Range(0, duel.ActiveFor(side).Moves.Count)
                                 .Select(duel.ActiveFor(side).PpLeft),
                         ],
+                        Disabled = duel.ActiveFor(side).DisabledTurns > 0
+                            ? duel.ActiveFor(side).DisabledSlot
+                            : null,
                     },
                     OnlyTo: side));
 
@@ -4967,6 +4970,9 @@ public sealed class GameWorld
                         // And what is left, so the menu draws the truth rather than what
                         // the move's record says it started with.
                         Pp = [.. Enumerable.Range(0, battle.Player.Moves.Count).Select(battle.Player.PpLeft)],
+
+                        // And what cannot be pressed at all.
+                        Disabled = battle.Player.DisabledTurns > 0 ? battle.Player.DisabledSlot : null,
                     },
                     OnlyTo: playerId),
             };

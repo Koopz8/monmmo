@@ -25,6 +25,12 @@ public enum EffectKind
     /// <summary>Sleeps, and wakes whole.</summary>
     Sleeps,
 
+    /// <summary>Blocks the move the target just used.</summary>
+    Disable,
+
+    /// <summary>Makes the target repeat the move it just used.</summary>
+    Encore,
+
     /// <summary>Inflicts a lasting condition.</summary>
     Status,
 
@@ -369,6 +375,18 @@ public static class MoveEffects
         // says the number is not in the data. How long the sleep runs is this engine's
         // ordinary sleep, which is what every other sleep in it already gets.
         0x25 => new MoveEffect(EffectKind.Sleeps, OnUser: true, Status: StatusCondition.Sleep),
+
+        // The two that take a choice away. One removes an option, the other removes all
+        // the others, and both need the same thing: what the target just did.
+        //
+        //   0x56   1 move   DISABLE
+        //   0x5A   1 move   ENCORE
+        //
+        // Both aim at somebody else in their records, and neither has anything in its
+        // record about how long it lasts — so the count of turns is modelled and marked
+        // as such where it is written, and nothing else about them is.
+        0x56 => new MoveEffect(EffectKind.Disable, OnUser: false),
+        0x5A => new MoveEffect(EffectKind.Encore, OnUser: false),
 
         _ => Stages(effect),
     };

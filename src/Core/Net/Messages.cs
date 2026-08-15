@@ -862,6 +862,17 @@ public sealed record BattleUpdate(
     /// </para>
     /// </summary>
     public IReadOnlyList<int> Pp { get; init; } = [];
+
+    /// <summary>
+    /// The slot the player may not use, or nothing.
+    /// <para>
+    /// The counterpart of <see cref="NoChoiceBut"/> and here for the same reason: a rule
+    /// this side enforces and the other side does not know about is a button that is
+    /// offered and refused, which is the shape of every client/server disagreement this
+    /// project has had.
+    /// </para>
+    /// </summary>
+    public int? Disabled { get; init; }
 }
 
 /// <summary>
