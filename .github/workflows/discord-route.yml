@@ -11,11 +11,18 @@ name: Discord — route subsystem changes
 #
 # One message per push per channel, never one per commit.
 
+# TURNED OFF. The push trigger is commented out, so this never fires on its own.
+# It was too chatty: Client, Server, Core/World and Core/Battle all funnel into
+# two channels, so an ordinary day of commits reads as a stream of near-identical
+# notices. #commits already carries every push, and the daily recap already
+# carries the test delta with prose around it.
+#
+# To bring it back, uncomment the push block below.
 on:
-  push:
-    branches: [main, master]
-    paths:
-      - 'src/**'
+  # push:
+  #   branches: [main, master]
+  #   paths:
+  #     - 'src/**'
   workflow_dispatch:
 
 concurrency:
