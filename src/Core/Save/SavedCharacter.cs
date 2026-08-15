@@ -203,6 +203,25 @@ public sealed record SavedCharacter(
     public IReadOnlyList<SavedMon> Box { get; init; } = [];
 
     /// <summary>
+    /// The two left at the daycare, if any are.
+    /// <para>
+    /// A third list beside the party and the box rather than a place of its own, because
+    /// a daycare holds creatures for hours of real time and therefore has to be persisted
+    /// somewhere a crash cannot lose. The party and the box are already stored, loaded,
+    /// saved, compared and migrated by machinery that works; a second table would be a
+    /// second read path, a second write path and a second set of bugs, to hold at most
+    /// two rows.
+    /// </para>
+    /// <para>
+    /// So the column that says which list a row belongs to gained a third value, and this
+    /// list inherits everything that already works. It is the cheapest safe shape, and
+    /// the expensive unsafe one — holding them in memory on the server — loses somebody's
+    /// creature the first time a process restarts.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<SavedMon> Daycare { get; init; } = [];
+
+    /// <summary>
     /// Everything carried, as item ids and counts.
     /// <para>
     /// Init properties rather than positional members for the same reason the defeated
@@ -257,6 +276,7 @@ public sealed record SavedCharacter(
         Looks == other.Looks &&
         Party.SequenceEqual(other.Party) &&
         Box.SequenceEqual(other.Box) &&
+        Daycare.SequenceEqual(other.Daycare) &&
         Items.SequenceEqual(other.Items) &&
         Flags.SequenceEqual(other.Flags) &&
         Cosmetics.SequenceEqual(other.Cosmetics) &&
@@ -279,6 +299,7 @@ public sealed record SavedCharacter(
         // comparison would cost more than the save it is meant to avoid.
         hash.Add(Party.Count);
         hash.Add(Box.Count);
+        hash.Add(Daycare.Count);
         hash.Add(Items.Count);
         hash.Add(Flags.Count);
 

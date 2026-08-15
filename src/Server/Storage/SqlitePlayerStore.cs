@@ -552,7 +552,8 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
 
         bool partyChanged = previous is null
             || !character.Party.SequenceEqual(previous.Party)
-            || !character.Box.SequenceEqual(previous.Box);
+            || !character.Box.SequenceEqual(previous.Box)
+            || !character.Daycare.SequenceEqual(previous.Daycare);
 
         await using (SqliteCommand upsert = connection.CreateCommand())
         {
@@ -725,15 +726,19 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
         // Party first, then the box, numbering straight through. The slot is only row
         // order — which list a row belongs to is the column that says so — and keeping
         // them distinct is what the table's own uniqueness rule wants.
-        List<(SavedMon Mon, bool InBox)> stored =
+        // Nought is the party, one is the box, two is the daycare. A third value rather
+        // than a third table: the daycare holds at most two rows and needs every one of
+        // the things this table already does.
+        List<(SavedMon Mon, int Where)> stored =
         [
-            .. character.Party.Select(m => (m, false)),
-            .. character.Box.Select(m => (m, true)),
+            .. character.Party.Select(m => (m, 0)),
+            .. character.Box.Select(m => (m, 1)),
+            .. character.Daycare.Select(m => (m, 2)),
         ];
 
         for (int slot = 0; slot < stored.Count; slot++)
         {
-            (SavedMon mon, bool inBox) = stored[slot];
+            (SavedMon mon, int where) = stored[slot];
             long memberId;
 
             await using (SqliteCommand insert = connection.CreateCommand())
@@ -761,7 +766,7 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
                 insert.Parameters.AddWithValue("$nature", (int)mon.Nature);
                 insert.Parameters.AddWithValue("$experience", mon.Experience);
                 insert.Parameters.AddWithValue("$held", mon.HeldItem);
-                insert.Parameters.AddWithValue("$box", inBox ? 1 : 0);
+                insert.Parameters.AddWithValue("$box", where);
 
                 for (int stat = 0; stat < EffortColumns.Length; stat++)
                     insert.Parameters.AddWithValue($"$ev{stat}", stat < mon.Evs.Count ? mon.Evs[stat] : 0);
@@ -849,6 +854,7 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
 
         var party = new List<SavedMon>();
         var box = new List<SavedMon>();
+        var daycare = new List<SavedMon>();
 
         await using (SqliteCommand command = connection.CreateCommand())
         {
@@ -905,7 +911,7 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
                     Sex = (Gender)reader.GetInt32(22),
                 };
 
-                (reader.GetInt32(9) != 0 ? box : party).Add(mon);
+                (reader.GetInt32(9) switch { 0 => party, 1 => box, _ => daycare }).Add(mon);
             }
         }
 
@@ -1012,6 +1018,7 @@ public sealed class SqlitePlayerStore : IPlayerStore, IDisposable
         return new SavedCharacter(mapId, x, y, facing, party)
         {
             Box = box,
+            Daycare = daycare,
             ItemsTaken = taken,
             RestingAt = restingAt,
             RestingX = restingX,

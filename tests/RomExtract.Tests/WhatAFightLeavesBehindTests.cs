@@ -871,3 +871,108 @@ public class WhichSexItIsTests
         Assert.Equal(Gender.Male, BattleFactory.Save(factory.Restore(his)!).Sex);
     }
 }
+
+/// <summary>
+/// The daycare's shelf.
+/// <para>
+/// A daycare holds creatures for hours of real time, so the one thing it must not do is
+/// lose them. Holding them in memory on the server is the version that eats somebody's
+/// creature the first time a process restarts, and a silent loss is this project's worst
+/// known class of bug.
+/// </para>
+/// <para>
+/// So the daycare is a third value in the column that already says whether a row is in
+/// the party or the box. It inherits storage, loading, saving, the change comparison and
+/// the migration from machinery that is already written and already tested — and a second
+/// table, to hold two rows, would have been a second read path, a second write path and a
+/// second set of bugs.
+/// </para>
+/// <para>
+/// This is the test the whole feature turns on: what is left there is still there
+/// afterwards.
+/// </para>
+/// </summary>
+public class TheDaycareShelfTests
+{
+    private static SavedMon Mon(int species, Gender sex) =>
+        new(species, 20, null, 20, StatusCondition.None, Nature.Hardy, [33]) { Sex = sex, Ivs = [31, 0, 0, 0, 0, 0] };
+
+    [Fact]
+    public async Task WhatIsLeftThereIsStillThereAfterwards()
+    {
+        string path = TempDatabase.Path();
+
+        try
+        {
+            SavedCharacter character = new(
+                "1.0", 3, 4, Direction.Down, [Mon(1, Gender.Male)])
+            {
+                Box = [Mon(4, Gender.Male)],
+                Daycare = [Mon(16, Gender.Female), Mon(19, Gender.Male)],
+            };
+
+            using (var writing = new SqlitePlayerStore(path))
+                await writing.RegisterAsync("Mason", "a-good-password", character);
+
+            using (var reading = new SqlitePlayerStore(path))
+            {
+                var login = Assert.IsType<AuthOutcome.Success>(
+                    await reading.LoginAsync("Mason", "a-good-password"));
+
+                // Each list holds what it held, and nothing has wandered between them.
+                Assert.Equal([1], login.Character.Party.Select(m => m.Species));
+                Assert.Equal([4], login.Character.Box.Select(m => m.Species));
+                Assert.Equal([16, 19], login.Character.Daycare.Select(m => m.Species));
+
+                // And what was left there is the same creature, not a copy of the shape.
+                Assert.Equal(Gender.Female, login.Character.Daycare[0].Sex);
+                Assert.Equal([31, 0, 0, 0, 0, 0], login.Character.Daycare[1].Ivs);
+            }
+        }
+        finally
+        {
+            TempDatabase.Delete(path);
+        }
+    }
+
+    /// <summary>And an empty daycare comes back empty rather than absent.</summary>
+    [Fact]
+    public async Task AndAnEmptyOneComesBackEmpty()
+    {
+        string path = TempDatabase.Path();
+
+        try
+        {
+            using (var writing = new SqlitePlayerStore(path))
+            {
+                await writing.RegisterAsync(
+                    "Mason", "a-good-password",
+                    new SavedCharacter("1.0", 3, 4, Direction.Down, [Mon(1, Gender.Male)]));
+            }
+
+            using (var reading = new SqlitePlayerStore(path))
+            {
+                var login = Assert.IsType<AuthOutcome.Success>(
+                    await reading.LoginAsync("Mason", "a-good-password"));
+
+                Assert.Empty(login.Character.Daycare);
+            }
+        }
+        finally
+        {
+            TempDatabase.Delete(path);
+        }
+    }
+
+    /// <summary>
+    /// And putting somebody in the daycare counts as a change, so the save that skips
+    /// what has not changed does not skip this.
+    /// </summary>
+    [Fact]
+    public void AndLeavingSomebodyThereIsAChange()
+    {
+        SavedCharacter before = new("1.0", 3, 4, Direction.Down, [Mon(1, Gender.Male)]);
+
+        Assert.NotEqual(before, before with { Daycare = [Mon(16, Gender.Female)] });
+    }
+}
