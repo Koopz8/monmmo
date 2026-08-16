@@ -37,7 +37,7 @@ public sealed record SampleRecord(
     /// rather than a guess, so this stays on the read side of the line.
     /// </para>
     /// </summary>
-    public int Rate => (int)(Pitch / 1024);
+    public int Rate => (int)(Pitch / SampleLocator.PitchScale);
 }
 
 /// <summary>
@@ -49,17 +49,23 @@ public sealed record SampleRecord(
 /// </para>
 /// <code>
 /// 00 00 00        three zero bytes
-/// 00 or 40        whether it loops, and nothing else is allowed here
-/// pitch           four bytes, and one of a known dozen values
+/// 00 or 40 or 01  whether it loops, or is packed, and nothing else is allowed here
+/// pitch           four bytes, 1024 times the rate
 /// loop start      four bytes, an index into the sound
 /// length - 1      four bytes
 /// </code>
 /// <para>
-/// Three zeroes, a byte with two legal values, and a pitch drawn from a fixed set is
-/// enough that noise practically cannot produce one. That is what makes this the right
-/// place to start on sound: it is the one layer that can be found without knowing where
-/// anything else is, and every other layer — instruments, voicegroups, song headers — is
-/// found by pointing at something this class has already confirmed.
+/// Four bytes with three legal values and a pitch that is a whole number of samples a
+/// second is enough that noise practically cannot produce one. That is what makes this the
+/// right place to start on sound: it is the one layer that can be found without knowing
+/// where anything else is, and every other layer — instruments, voicegroups, song headers —
+/// is found by pointing at something this class has already confirmed.
+/// </para>
+/// <para>
+/// Which is exactly why the rule here has to be right. This layer used to insist a pitch be
+/// one of twelve listed values, and on a real cartridge that threw away 2367 recordings and
+/// left sixteen song headers on a file that has hundreds. Everything above it was starved by
+/// one line.
 /// </para>
 /// <para>
 /// Hardcodes nothing. It scans, it checks, and what it found is its return value; no
@@ -72,12 +78,12 @@ public static class SampleLocator
     /// The pitches the driver's own tooling emits, as the fixed-point values that appear in
     /// the header.
     /// <para>
-    /// This list is <b>read</b> in the sense that matters — every value in it comes from the
-    /// format's documentation rather than from measuring one cartridge — but it is worth
-    /// being honest that it is a whitelist, and a whitelist is a decision. A cartridge using
-    /// a rate outside it would have its samples missed rather than mangled, which is the
-    /// failure direction to prefer, and <see cref="Unusual"/> exists so that such a thing is
-    /// reported rather than silently absent.
+    /// <b>No longer a filter.</b> It was one, and it was wrong: a real cartridge carries 2367
+    /// headers that pass every other test and name a rate outside this list, and throwing
+    /// them away left sixteen song headers on a file with hundreds. The list is kept because
+    /// how many recordings use one of these rates is worth knowing — but it is now something
+    /// counted rather than something enforced, which is the difference between a fact and a
+    /// decision.
     /// </para>
     /// </summary>
     public static readonly IReadOnlyList<uint> KnownPitches =
@@ -86,6 +92,38 @@ public static class SampleLocator
         0x00F6_6000, 0x011B_B400, 0x0148_8000, 0x01A2_1800,
         0x01EC_C000, 0x0237_6800, 0x0273_2400, 0x0291_0000,
     ];
+
+    /// <summary>
+    /// What the pitch field is a fixed-point number of. <b>Read.</b>
+    /// <para>
+    /// The header stores 1024 times the rate. That is the format's own arrangement, and it
+    /// is what replaces the whitelist: a pitch that is not a whole multiple of this is not a
+    /// rate, whatever else it might be. Ten bits forced to zero is weaker evidence than a
+    /// list of twelve values and it is evidence about the <em>format</em> rather than about
+    /// which cartridges somebody happened to look at.
+    /// </para>
+    /// </summary>
+    public const uint PitchScale = 1024;
+
+    /// <summary>
+    /// The slowest and fastest a recording on this hardware plausibly is. <b>Modelled.</b>
+    /// <para>
+    /// Wide enough to hold every rate the list above uses, at both ends, with room either
+    /// side. These reject a pitch field that was never a pitch; they are not an opinion about
+    /// which rates a game may use.
+    /// </para>
+    /// </summary>
+    public const int SlowestBelievable = 4000;
+
+    public const int FastestBelievable = 48000;
+
+    /// <summary>
+    /// Whether these four bytes are a rate at all: a whole number of samples a second, and a
+    /// number of them somebody could have recorded at.
+    /// </summary>
+    public static bool IsARate(uint pitch) =>
+        pitch % PitchScale == 0
+        && pitch / PitchScale is >= SlowestBelievable and <= FastestBelievable;
 
     /// <summary>
     /// The three legal values of the header's first four bytes, read as one number.
@@ -147,14 +185,11 @@ public static class SampleLocator
 
             uint pitch = rom.ReadU32(offset + 4);
 
-            if (!KnownPitches.Contains(pitch))
-            {
-                // Counted rather than dropped in silence. A cartridge full of these is a
-                // cartridge this list is wrong about, and that is a finding.
-                if (Unusual(pitch)) unusual++;
+            if (!IsARate(pitch)) continue;
 
-                continue;
-            }
+            // Counted rather than enforced. A cartridge full of these is not a cartridge
+            // this build should refuse to read; it is a number worth printing.
+            if (!KnownPitches.Contains(pitch)) unusual++;
 
             long loopStart = rom.ReadU32(offset + 8);
             long length = (long)rom.ReadU32(offset + 12) + 1;
@@ -184,26 +219,24 @@ public static class SampleLocator
 
         if (found.Count > 0)
         {
+            List<int> rates = [.. found.Select(s => s.Rate).Distinct().Order()];
+
             log?.Invoke(
                 $"    {found.Count(s => s.Loops)} loop, " +
                 $"{found.Count(s => s.Compressed)} are packed; " +
-                $"rates {string.Join(", ", found.Select(s => s.Rate).Distinct().Order())}");
+                $"{rates.Count} distinct rates from {rates[0]} to {rates[^1]}");
+
+            log?.Invoke($"    rates: {string.Join(", ", rates.Take(24))}{(rates.Count > 24 ? ", ..." : "")}");
         }
 
         // Said out loud whether it is zero or not, because a number that only appears when
-        // it is inconvenient is a number nobody has a baseline for.
-        log?.Invoke($"    {unusual} headers looked right but carried a rate this build does not know");
+        // it is inconvenient is a number nobody has a baseline for. This one used to be the
+        // count of what was thrown away; it is now the count of what would have been.
+        log?.Invoke(
+            $"    {unusual} of them carry a rate outside the driver's usual twelve, "
+            + "which used to be grounds for throwing them away");
 
         return found;
     }
 
-    /// <summary>
-    /// Whether a pitch is plausible enough to be worth reporting as unrecognised.
-    /// <para>
-    /// Without this every run of zeroes in the file counts as a near miss and the number
-    /// above is meaningless. A real rate lands between about five and forty thousand samples
-    /// a second; anything else was never a pitch.
-    /// </para>
-    /// </summary>
-    private static bool Unusual(uint pitch) => pitch / 1024 is > 5000 and < 40000;
 }

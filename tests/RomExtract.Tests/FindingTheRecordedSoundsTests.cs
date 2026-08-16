@@ -55,9 +55,17 @@ public class FindingTheRecordedSoundsTests
         }
 
         // And the two that vary really do vary, so the loop above cannot be passing by
-        // comparing a constant with itself.
-        Assert.Equal(2, Found().Select(s => s.Pitch).Distinct().Count());
-        Assert.Equal(2, Found().Select(s => s.Loops).Distinct().Count());
+        // comparing a constant with itself. Asked of the six the loop walked rather than of
+        // everything found, because the fixture also carries a recording at a rate that is
+        // deliberately not one of these.
+        List<SampleRecord> six =
+        [
+            .. Enumerable.Range(0, SyntheticRom.SampleCount)
+                .Select(i => At(SyntheticRom.SamplesOffset + i * SyntheticRom.SampleStride)!),
+        ];
+
+        Assert.Equal(2, six.Select(s => s.Pitch).Distinct().Count());
+        Assert.Equal(2, six.Select(s => s.Loops).Distinct().Count());
     }
 
     /// <summary>
@@ -75,12 +83,51 @@ public class FindingTheRecordedSoundsTests
     }
 
     /// <summary>
-    /// A header that is right in every way except the rate is not a sound. This is the
-    /// check that would be quietly dropped by anybody who found the pitch list annoying.
+    /// A pitch that is not a whole number of samples a second is not a pitch.
+    /// <para>
+    /// This replaced a list of twelve permitted values. The list was not wrong about the
+    /// format — every value in it is real — it was wrong about being a filter: a real
+    /// cartridge carries 2367 recordings whose rates are not on it, and refusing them left
+    /// sixteen song headers on a file that has hundreds. Everything above this layer is
+    /// found by pointing at what this layer confirmed, so one line here starved all of it.
+    /// </para>
+    /// <para>
+    /// What is left says something stronger about the format and weaker about the world:
+    /// the pitch is 1024 times the rate, so ten bits of it are zero, and what remains is a
+    /// number of samples a second somebody could have recorded at.
+    /// </para>
     /// </summary>
     [Fact]
-    public void AndARateTheFormatDoesNotUseIsNotASound() =>
+    public void APitchThatIsNotAWholeRateIsNotASound() =>
         Assert.Null(At(SyntheticRom.SampleWithOddRateOffset));
+
+    /// <summary>And neither is a whole rate nobody records at, at either end.</summary>
+    [Fact]
+    public void AndNeitherIsARateNobodyRecordsAt()
+    {
+        Assert.Null(At(SyntheticRom.SampleTooSlowOffset));
+        Assert.Null(At(SyntheticRom.SampleTooFastOffset));
+    }
+
+    /// <summary>
+    /// But a rate the driver's usual twelve do not include <em>is</em> a sound.
+    /// <para>
+    /// The half of the change that matters. The other three tests here say what is still
+    /// rejected; this one says what is no longer rejected, and it is the one that would fail
+    /// if somebody put the whitelist back.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ButARateOutsideTheDriversUsualTwelveIs()
+    {
+        SampleRecord? found = At(SyntheticRom.SampleAtAnUnusualRateOffset);
+
+        Assert.NotNull(found);
+        Assert.Equal((int)SyntheticRom.UnusualRate, found.Rate);
+
+        // And it really is outside the list, or this proves nothing.
+        Assert.DoesNotContain(SyntheticRom.UnusualRate * 1024, SampleLocator.KnownPitches);
+    }
 
     /// <summary>
     /// And neither is one whose sound does not fit in the file. Every other check passes on
@@ -141,8 +188,13 @@ public class FindingTheRecordedSoundsTests
 
         Assert.Contains(said, line => line.Contains("recorded sounds"));
 
-        // The near-miss line is always printed, and here it has something real to report.
-        Assert.Contains(said, line => line.Contains("this build does not know"));
+        // The rates it found, listed rather than summarised — the number that says whether
+        // this layer is starving every layer above it.
+        Assert.Contains(said, line => line.Contains("rates:"));
+
+        // And how many carry a rate outside the driver's usual twelve. Always printed, and
+        // here it has something real to report.
+        Assert.Contains(said, line => line.Contains("outside the driver's usual twelve"));
     }
 
     /// <summary>

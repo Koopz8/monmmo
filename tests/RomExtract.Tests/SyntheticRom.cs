@@ -631,12 +631,40 @@ public sealed class SyntheticRom
                 _data[at + 16 + b] = (byte)(0x40 + ((i * 7 + b * 3) % 0x60));
         }
 
-        // Right in every way except the rate.
+        // Right in every way except that its pitch is not a whole number of samples a
+        // second, which is what says it was never a pitch. It used to be a rate outside a
+        // list of twelve, and that list turned out to throw away most of a real cartridge.
         WriteU32(SampleWithOddRateOffset + 0, 0);
         _data[SampleWithOddRateOffset + 3] = 0x00;
-        WriteU32(SampleWithOddRateOffset + 4, 12345 * 1024);
+        WriteU32(SampleWithOddRateOffset + 4, 12345 * 1024 + 1);
         WriteU32(SampleWithOddRateOffset + 8, 0);
         WriteU32(SampleWithOddRateOffset + 12, SampleBytes - 1);
+
+        // And two whose pitches are whole rates that nobody records at — one far too slow
+        // to be a sound and one faster than the hardware plays.
+        foreach ((int at, uint rate) in new[]
+                 {
+                     (SampleTooSlowOffset, 200u),
+                     (SampleTooFastOffset, 96_000u),
+                 })
+        {
+            WriteU32(at + 0, 0);
+            _data[at + 3] = 0x00;
+            WriteU32(at + 4, rate * 1024);
+            WriteU32(at + 8, 0);
+            WriteU32(at + 12, SampleBytes - 1);
+        }
+
+        // And one at a rate the driver's usual twelve do not include, which is now found
+        // rather than thrown away — 2367 of these sit on a real cartridge.
+        WriteU32(SampleAtAnUnusualRateOffset + 0, 0);
+        _data[SampleAtAnUnusualRateOffset + 3] = 0x00;
+        WriteU32(SampleAtAnUnusualRateOffset + 4, UnusualRate * 1024);
+        WriteU32(SampleAtAnUnusualRateOffset + 8, 0);
+        WriteU32(SampleAtAnUnusualRateOffset + 12, SampleBytes - 1);
+
+        for (int b = 0; b < SampleBytes; b++)
+            _data[SampleAtAnUnusualRateOffset + 16 + b] = (byte)(0x40 + (b * 5) % 0x60);
 
         // And one whose length does not fit in the file it claims to be in.
         WriteU32(SampleRunningOffTheEndOffset + 0, 0);
@@ -1383,6 +1411,15 @@ public sealed class SyntheticRom
     public const int SampleWithOddRateOffset = SamplesOffset + SampleCount * SampleStride + 0x100;
 
     /// <summary>
+    /// A whole rate, and one nobody records at — far too slow to be a sound. Header only:
+    /// nothing that is meant to be rejected needs audio after it.
+    /// </summary>
+    public const int SampleTooSlowOffset = SampleWithOddRateOffset + 0x40;
+
+    /// <summary>And one faster than this hardware plays.</summary>
+    public const int SampleTooFastOffset = SampleWithOddRateOffset + 0x80;
+
+    /// <summary>
     /// A header whose length runs off the end of the file. The one false positive shape that
     /// every other check passes.
     /// </summary>
@@ -1398,6 +1435,19 @@ public sealed class SyntheticRom
     /// </para>
     /// </summary>
     public const int SampleWithABadLoopFlagOffset = SampleRunningOffTheEndOffset + 0x100;
+
+    /// <summary>
+    /// A recording at a rate the driver's usual twelve do not include.
+    /// <para>
+    /// It is <b>found</b>, which is the whole point of it. A real cartridge carries 2367 of
+    /// these, and refusing them left sixteen song headers on a file that has hundreds. Placed
+    /// past the near-misses because unlike them it has audio after it.
+    /// </para>
+    /// </summary>
+    public const int SampleAtAnUnusualRateOffset = SampleWithABadLoopFlagOffset + 0x400;
+
+    /// <summary>The rate it carries — a whole number of samples a second, and not on the list.</summary>
+    public const uint UnusualRate = 22050;
 
     /// <summary>Where the synthetic voicegroups start.</summary>
     public const int VoicegroupsOffset = 0x130000;
