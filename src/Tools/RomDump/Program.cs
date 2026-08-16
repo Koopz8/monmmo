@@ -5935,21 +5935,16 @@ public static class Program
         // holding a ticket the whole time and nobody asked" are the same output otherwise.
         Console.WriteLine();
 
-        Console.WriteLine(world.FerryPasses.Count == 0
-            ? "  the ferry asks for nothing in this world file, which is itself a finding"
-            : played.RodeTheBoat
-                ? $"  the boat: RIDDEN — {(played.HeldATicket ? "it was holding a ticket" : "it never held a ticket, so it never sailed")}"
-                : $"  the boat: not taken (this run is a floor)."
-                  + (played.HeldATicket
-                      ? " IT WAS HOLDING A TICKET — try --boat and see what opens"
-                      : " It never held a ticket either, so --boat would change nothing"));
+        Console.WriteLine(played.RodeTheBoat
+            ? "  the boat: RIDDEN — every dock joined to every other, asking for nothing"
+            : "  the boat: not taken (this run is a floor). Try --boat and see what opens");
 
-        if (played.RodeTheBoat && played.HeldATicket)
+        if (played.RodeTheBoat)
         {
             Console.WriteLine(
-                "    where the boat goes is MODELLED as every dock — which places a ticket is worth");
+                "    both halves are MODELLED: where the boat goes is inside the routine that draws");
             Console.WriteLine(
-                "    is inside the routine that draws the menu. This reach is a ceiling, not a floor.");
+                "    the menu, and so is what it asks for. This reach is a ceiling, not a floor.");
         }
 
         // What the boat actually asks for, named. Without this the output can say the run
@@ -5957,8 +5952,10 @@ public static class Program
         // distance between an answer and being no further forward.
         foreach (FerryTicket ticket in played.Tickets)
         {
+            // Reported, never enforced. See FerryTicket: these are worth a destination
+            // rather than the boat, and this run found out the hard way.
             Console.WriteLine(
-                $"    asks flag 0x{ticket.Flag:X4} or {NameOf(ticket.ItemId)} — "
+                $"    a pass in the scripts: flag 0x{ticket.Flag:X4} or {NameOf(ticket.ItemId)} — "
                 + (ticket.Opens
                     ? ticket.FlagSet ? "has the flag" : "has one"
                     : "has neither"));

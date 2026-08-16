@@ -76,55 +76,45 @@ public class TakingTheBoatTests
             boat);
     }
 
-    // ---- the ticket, which is read ---------------------------------------------------
+    // ---- the boat asks for nothing, and that is a correction ---------------------------
 
     /// <summary>
-    /// The whole point, in one test: the same world, the same walk, and the difference is
-    /// whether the bag holds a ticket.
+    /// The boat carries anybody who can reach a jetty, and this test replaces one that said
+    /// the opposite.
+    /// <para>
+    /// The first version required a pass to sail at all, and the cartridge refuted it with
+    /// evidence already in the repository: the two passes <c>Ferries</c> can read are
+    /// MYSTICTICKET and AURORATICKET, and the dock numbering that same file derived says
+    /// docks 9 and 10 are NAVEL ROCK and BIRTH ISLAND. Those are tickets for two particular
+    /// destinations, and nothing on any map hands either of them over — so requiring one shut
+    /// the whole archipelago behind an item that does not exist in ordinary play, and called
+    /// the result a floor.
+    /// </para>
     /// </summary>
     [Fact]
-    public void TheItemHalfOfTheQuestionOpensTheBoat()
+    public void APassNothingHandsOverDoesNotLockTheWholeArchipelago()
     {
         WorldData world = Archipelago(new FerryPass(TicketFlag, Ticket));
 
-        Assert.DoesNotContain("2.0", Sail(world, boat: true).Reached);
-        Assert.Contains("2.0", Sail(world, boat: true, (Ticket, 1)).Reached);
+        Assert.Contains("2.0", Sail(world, boat: true).Reached);
     }
 
     /// <summary>
-    /// And the flag half opens it on its own, which is the cartridge's own "or". The two are
-    /// asked one after the other on the same branch and either answer sails.
+    /// And holding one changes nothing, which is the other half of the same correction: a
+    /// pass is worth a destination this project cannot read, so it can neither open nor shut
+    /// anything here.
     /// </summary>
     [Fact]
-    public void TheFlagHalfOpensItOnItsOwn()
+    public void AndHoldingOneChangesNothingEither()
     {
         WorldData world = Archipelago(new FerryPass(TicketFlag, Ticket));
 
-        Attempt played = Autoplayer.Play(
-            world,
-            "1.0",
-            TestRules.All,
-            (_, _, _) => new PlayedScript([TicketFlag], [], [], [], null, null),
-            null,
-            true);
-
-        Assert.Contains("2.0", played.Reached);
+        Assert.Equal(
+            Sail(world, boat: true).Reached.Count,
+            Sail(world, boat: true, (Ticket, 1)).Reached.Count);
     }
 
-    /// <summary>Some other item is not a ticket, which is the failure worth guarding.</summary>
-    [Fact]
-    public void SomethingElseInTheBagIsNotATicket()
-    {
-        WorldData world = Archipelago(new FerryPass(TicketFlag, Ticket));
-
-        Assert.DoesNotContain("2.0", Sail(world, boat: true, (TestRules.PotionItem, 1)).Reached);
-    }
-
-    /// <summary>
-    /// A ferry that asks for nothing is not a locked boat. An empty pass list is a fact about
-    /// the world file — a cartridge whose sailor asks no questions — and refusing to sail on
-    /// it would report an archipelago cut off by a ticket nobody sells.
-    /// </summary>
+    /// <summary>A ferry that asks for nothing carries anybody, which it always did.</summary>
     [Fact]
     public void AFerryThatAsksForNothingCarriesAnybody()
     {
@@ -134,29 +124,23 @@ public class TakingTheBoatTests
     // ---- and the floor, which is the reason it is off ---------------------------------
 
     /// <summary>
-    /// With the boat off, the walk is what it has always been: a floor. Switching it on joins
-    /// every dock to every other, which is an upper bound, so a run that took it silently
-    /// would be neither floor nor ceiling and would mean nothing at all.
+    /// With the boat off, nothing sails. The walk is what it has always been: a floor.
+    /// Switching it on joins every dock to every other and asks for nothing, which is an
+    /// upper bound in both directions at once — so a run that took it silently would be
+    /// neither floor nor ceiling and would mean nothing at all.
     /// </summary>
     [Fact]
-    public void WithTheBoatOffNothingSailsHoweverManyTicketsAreHeld()
+    public void WithTheBoatOffNothingSails()
     {
         WorldData world = Archipelago(new FerryPass(TicketFlag, Ticket));
 
         Attempt played = Sail(world, boat: false, (Ticket, 1));
 
         Assert.DoesNotContain("2.0", played.Reached);
-
-        // And it says so rather than looking like a run that simply never got there. Those
-        // are the same output otherwise, and one of them is an afternoon's work.
-        Assert.True(played.HeldATicket);
         Assert.False(played.RodeTheBoat);
     }
 
-    /// <summary>
-    /// And it does not claim a ticket it has not got. The nudge is only worth printing when
-    /// switching the boat on would actually change something.
-    /// </summary>
+    /// <summary>And it does not claim a pass it has not got.</summary>
     [Fact]
     public void ARunWithNoTicketDoesNotClaimOne()
     {

@@ -262,11 +262,13 @@ public sealed record Attempt(
     public IReadOnlyCollection<(string MapId, int LocalId)> Removed { get; init; } = [];
 
     /// <summary>
-    /// Whether the boat would have carried this character, whether or not it was allowed to.
+    /// Whether this run held any of the passes the scripts ask about.
     /// <para>
-    /// Reported apart from the riding so that a run with the ferry switched off still says
-    /// the useful thing. "It never got to the islands" and "it was holding a ticket the whole
-    /// time and nobody asked" are the same output otherwise.
+    /// Reported and <b>not</b> enforced. The two this cartridge asks about are MYSTICTICKET
+    /// and AURORATICKET, which nothing on any map hands over — they are worth two particular
+    /// destinations rather than the boat, and which destinations is inside the routine. A
+    /// walk that required one in order to sail at all shut the archipelago behind an item
+    /// that does not exist in ordinary play.
     /// </para>
     /// </summary>
     public bool HeldATicket { get; init; }
@@ -354,10 +356,9 @@ public static class Autoplayer
     /// <param name="ridingTheBoat">
     /// Whether the walk may take the ferry. <b>Off by default, and that is not timidity.</b>
     /// <para>
-    /// Whether the boat will carry this character is read off the scripts — a flag or an item,
-    /// and the item half only became answerable when there was a bag to ask. Where it goes is
-    /// not: which places a ticket is worth lives inside the routine that draws the menu, so
-    /// switching this on joins every dock to every other, which is an upper bound.
+    /// Where the boat goes is not readable: which places a ticket is worth lives inside the
+    /// routine that draws the menu, so switching this on joins every dock to every other and
+    /// asks for nothing, which is an upper bound in both directions at once.
     /// </para>
     /// <para>
     /// A run with it off is a floor, as this instrument has always been. A run with it on is
@@ -416,7 +417,7 @@ public static class Autoplayer
 
             Reach reach = WorldWalker.Walk(
                 world, startMapId, moves, flagsSet: flags, asIfGone: gone,
-                carrying: [.. bag.Entries.Select(e => e.ItemId)], ridingTheBoat: ridingTheBoat);
+                ridingTheBoat: ridingTheBoat);
 
             var stood = reach.Stood.ToHashSet();
 
@@ -555,7 +556,7 @@ public static class Autoplayer
 
         Reach last = WorldWalker.Walk(
             world, startMapId, moves, flagsSet: flags, asIfGone: gone,
-            carrying: [.. bag.Entries.Select(e => e.ItemId)], ridingTheBoat: ridingTheBoat);
+            ridingTheBoat: ridingTheBoat);
 
         // Built once. Inside the query below it would be rebuilt for every map in the world,
         // which is the same mistake the walker's own comment records making with its grids.

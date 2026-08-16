@@ -91,7 +91,6 @@ public static class WorldWalker
         IReadOnlyCollection<int>? flagsSet = null,
         GridPosition? startSquare = null,
         bool throughScriptedDoors = false,
-        IReadOnlyCollection<int>? carrying = null,
         bool ridingTheBoat = false)
     {
         IReadOnlyCollection<int> known = moves ?? [];
@@ -161,17 +160,19 @@ public static class WorldWalker
         var doorsWalked = new HashSet<string>();
         var docksSailed = new HashSet<string>();
 
-        // Whether the boat will carry this character at all.
+        // No ticket is asked for here, and the first version of this asked for one.
         //
-        // <b>Read.</b> Only one of the ten docks asks anything, and what it asks is in plain
-        // sight: a flag, and within a few commands the same checkitem the whole of milestone
-        // 172 was about. Either answer opens it, which is the cartridge's own "or" and not a
-        // convenience — the item half was unanswerable until there was a bag to ask.
+        // <b>The cartridge refuted it, using evidence already in this repository.</b> The two
+        // passes `Ferries` can read turn out to be MYSTICTICKET and AURORATICKET — and the
+        // dock numbering that same file derived says docks 9 and 10 are NAVEL ROCK and BIRTH
+        // ISLAND. Those are tickets for two particular destinations, not for the boat, and
+        // nothing on any map in the game hands either of them over. Requiring one in order to
+        // sail at all locked the whole archipelago behind an item that does not exist in
+        // ordinary play, and reported it as a floor.
         //
-        // The list itself is a fact about the world file: a cartridge whose ferry asks for
-        // nothing has an empty one, and an empty one is not a locked boat.
-        bool ticket = world.FerryPasses.Count == 0
-            || world.FerryPasses.Any(p => flags.Contains(p.Flag) || carrying?.Contains(p.ItemId) == true);
+        // Which places a ticket is worth is inside the routine that draws the menu, exactly
+        // as `Ferries` says in as many words. So the passes are reported rather than enforced
+        // and sailing is an upper bound — which is what `ridingTheBoat` already declares.
 
         while (queue.Count > 0)
         {
@@ -225,7 +226,7 @@ public static class WorldWalker
             // Sailed from the map rather than from the jetty, which is the same upper bound
             // the scripted doors take and is said out loud for the same reason: whether the
             // player can reach the sailor is a question this cannot ask.
-            if (ridingTheBoat && ticket && map.Ferry is not null && docksSailed.Add(map.Id))
+            if (ridingTheBoat && map.Ferry is not null && docksSailed.Add(map.Id))
             {
                 foreach (MapData port in maps.Values.Where(m => m.Ferry is not null && m.Id != map.Id))
                 {
