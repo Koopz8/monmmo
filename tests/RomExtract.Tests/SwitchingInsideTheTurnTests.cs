@@ -370,4 +370,34 @@ public class SwitchingInsideTheTurnTests
         Assert.Equal(PokemonType.Electric, after.Damped);
         Assert.Equal(3, after.DampedTurns);
     }
+
+    /// <summary>
+    /// Somebody who cannot fight cannot be brought in.
+    /// <para>
+    /// <b>A guard nothing could fail.</b> The server refuses this before the engine ever
+    /// sees it — <c>Allowed</c> checks the slot against the team and drops a fainted one —
+    /// so every test that had ever asked for a switch had already been filtered. The engine
+    /// is the last thing between a client and the field and it has to hold the rule itself,
+    /// because the check above it is a courtesy and not a wall.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void SomebodyWhoCannotFightCannotBeBroughtIn()
+    {
+        Battler a = One();
+        Battler down = One();
+        Battler b = One(moves: [Move(0, 40)]);
+
+        down.TakeDamage(down.MaxHp);
+
+        Assert.True(down.HasFainted, "the decoy is not actually down, so it proves nothing");
+
+        var battle = new Battle(a, b, 7) { PlayerParty = [a, down], OpponentParty = [b] };
+
+        List<BattleEvent> events = battle.ResolveTurn(
+            new BattleAction.SwitchTo(1), new BattleAction.UseMove(0));
+
+        Assert.Same(a, battle.Player);
+        Assert.DoesNotContain(events, e => e is BattleEvent.CameIn);
+    }
 }
