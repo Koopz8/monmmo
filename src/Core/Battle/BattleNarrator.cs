@@ -231,6 +231,20 @@ public static class BattleNarrator
 
         BattleEvent.PerishCount e => $"{names.Of(e.Side)}'s count fell to {e.Turns}!",
 
+        BattleEvent.Taunted e => $"{names.Of(e.Side)} fell for the taunt!",
+
+        BattleEvent.Tormented e => $"{names.Of(e.Side)} was subjected to torment!",
+
+        BattleEvent.BracedItself e => $"{names.Of(e.Side)} braced itself!",
+
+        BattleEvent.Endured e => $"{names.Of(e.Side)} endured the hit!",
+
+        BattleEvent.Bonded e => $"{names.Of(e.Side)} is trying to take its foe with it!",
+
+        BattleEvent.TookThemWith e => $"{names.Of(e.Side)} was taken down with it!",
+
+        BattleEvent.HealthShared e => $"The battlers shared their pain, at {e.Each} each.",
+
         BattleEvent.Grazed e => $"{names.Of(e.Side)} is hurt reaching them!",
 
         BattleEvent.BrokeFree e => $"{names.Of(e.Side)} got free of {names.MoveNamed(e.MoveId)}!",

@@ -86,6 +86,13 @@ public enum Side
 [JsonDerivedType(typeof(Drowsy), "drowsy")]
 [JsonDerivedType(typeof(TookRoot), "tookroot")]
 [JsonDerivedType(typeof(PerishCount), "perishcount")]
+[JsonDerivedType(typeof(Taunted), "taunted")]
+[JsonDerivedType(typeof(Tormented), "tormented")]
+[JsonDerivedType(typeof(BracedItself), "braced")]
+[JsonDerivedType(typeof(Endured), "endured")]
+[JsonDerivedType(typeof(Bonded), "bonded")]
+[JsonDerivedType(typeof(TookThemWith), "tookthemwith")]
+[JsonDerivedType(typeof(HealthShared), "healthshared")]
 [JsonDerivedType(typeof(MustRepeat), "mustrepeat")]
 [JsonDerivedType(typeof(GotAway), "gotaway")]
 [JsonDerivedType(typeof(CouldNotGetAway), "couldnotgetaway")]
@@ -327,6 +334,27 @@ public abstract record BattleEvent
     /// <summary>How many turns this side has left before it goes down regardless.</summary>
     public sealed record PerishCount(Side Side, int Turns) : BattleEvent;
 
+    /// <summary>This side has nothing to do but attack for a while.</summary>
+    public sealed record Taunted(Side Side) : BattleEvent;
+
+    /// <summary>This side may not do the same thing twice running.</summary>
+    public sealed record Tormented(Side Side) : BattleEvent;
+
+    /// <summary>This side is ready to survive whatever lands this turn.</summary>
+    public sealed record BracedItself(Side Side) : BattleEvent;
+
+    /// <summary>And did.</summary>
+    public sealed record Endured(Side Side) : BattleEvent;
+
+    /// <summary>This side will take whoever finishes it down as well.</summary>
+    public sealed record Bonded(Side Side) : BattleEvent;
+
+    /// <summary>And did. The side named is the one taken down with it.</summary>
+    public sealed record TookThemWith(Side Side) : BattleEvent;
+
+    /// <summary>Both sides ended up on the same health.</summary>
+    public sealed record HealthShared(Side Side, int Each) : BattleEvent;
+
     /// <summary>Made to do the same thing again.</summary>
     public sealed record MustRepeat(Side Side, int MoveId) : BattleEvent;
 
@@ -512,6 +540,13 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
     /// conditions, then uses, then stats.
     /// </para>
     /// </summary>
+    /// <summary>Puts somebody onto a particular number, whichever direction that is.</summary>
+    private static void Settle(Battler battler, int to)
+    {
+        if (to > battler.CurrentHp) battler.Heal(to - battler.CurrentHp);
+        else if (to < battler.CurrentHp) battler.TakeDamage(battler.CurrentHp - to);
+    }
+
     private void Nibble(Side side, Battler battler, List<BattleEvent> events)
     {
         if (battler.HasFainted || battler.Carried is not { } carried) return;
@@ -936,6 +971,10 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         // the start of the next turn so that the two are the same thing even when the
         // fight ends in between.
         Player.IsGuarded = false;
+        Player.IsEnduring = false;
+        Player.IsBonded = false;
+        Opponent.IsEnduring = false;
+        Opponent.IsBonded = false;
         Opponent.IsGuarded = false;
 
         // And the two that hold for a count rather than for the turn. Ticked in the same
@@ -1129,6 +1168,24 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         // creature whose only move is blocked and whose others are spent still struggles
         // rather than standing there.
         if (action is BattleAction.UseMove blocked && attacker.IsDisabled(blocked.Slot))
+        {
+            events.Add(new BattleEvent.CannotUse(side, move.Id));
+
+            return;
+        }
+
+        // Nothing but attacking, while that lasts. Checked here with the other refusals
+        // rather than where a move is chosen, because a client chooses and a server decides
+        // — and everything a server decides about a move belongs in one place.
+        if (attacker.TauntTurns > 0 && move.Category == DamageCategory.Status)
+        {
+            events.Add(new BattleEvent.CannotUse(side, move.Id));
+
+            return;
+        }
+
+        // And not the same thing twice running.
+        if (attacker.IsTormented && action is BattleAction.UseMove again && attacker.LastSlot == again.Slot)
         {
             events.Add(new BattleEvent.CannotUse(side, move.Id));
 
@@ -1346,6 +1403,17 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
                 held = true;
             }
 
+            // And bracing, which is the same shape and is certain rather than a chance —
+            // that is the whole difference between a move somebody chose and an item they
+            // happened to be carrying.
+            bool braced = false;
+
+            if (coming >= defender.CurrentHp && defender.IsEnduring)
+            {
+                coming = Math.Max(0, defender.CurrentHp - 1);
+                braced = true;
+            }
+
             int dealt = defender.TakeDamage(coming);
 
             total += dealt;
@@ -1354,6 +1422,17 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             events.Add(new BattleEvent.DamageDealt(Other(side), dealt, defender.CurrentHp, result));
 
             if (held) events.Add(new BattleEvent.HeldOn(Other(side), defender.Holding));
+            if (braced) events.Add(new BattleEvent.Endured(Other(side)));
+
+            // And the promise, kept. Whoever finished it goes down too, which is the only
+            // thing in this engine that can end a fight in a draw.
+            if (defender.HasFainted && defender.IsBonded)
+            {
+                attacker.TakeDamage(attacker.CurrentHp);
+
+                events.Add(new BattleEvent.TookThemWith(side));
+                events.Add(new BattleEvent.Fainted(side));
+            }
 
             if (defender.HasFainted) break;
         }
@@ -1695,6 +1774,73 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             Opponent.ResetStages();
 
             events.Add(new BattleEvent.StagesCleared(side));
+
+            return;
+        }
+
+        if (effect.Kind == EffectKind.Taunt)
+        {
+            if (target.TauntTurns > 0)
+            {
+                events.Add(new BattleEvent.NothingHappened(at));
+
+                return;
+            }
+
+            // Three turns. Modelled, and deliberately not the five every wall in this engine
+            // uses — this one is a nuisance rather than a wall, and giving it the same number
+            // would make it one.
+            target.TauntTurns = 3;
+
+            events.Add(new BattleEvent.Taunted(at));
+
+            return;
+        }
+
+        if (effect.Kind == EffectKind.Torment)
+        {
+            if (target.IsTormented)
+            {
+                events.Add(new BattleEvent.NothingHappened(at));
+
+                return;
+            }
+
+            target.IsTormented = true;
+
+            events.Add(new BattleEvent.Tormented(at));
+
+            return;
+        }
+
+        if (effect.Kind == EffectKind.Endure)
+        {
+            target.IsEnduring = true;
+
+            events.Add(new BattleEvent.BracedItself(at));
+
+            return;
+        }
+
+        if (effect.Kind == EffectKind.Bond)
+        {
+            target.IsBonded = true;
+
+            events.Add(new BattleEvent.Bonded(at));
+
+            return;
+        }
+
+        if (effect.Kind == EffectKind.Split)
+        {
+            // Both onto the average, which is the only move in this game that can put health
+            // back on somebody by hurting them and hurt somebody by healing them.
+            int each = (attacker.CurrentHp + defender.CurrentHp) / 2;
+
+            Settle(attacker, each);
+            Settle(defender, each);
+
+            events.Add(new BattleEvent.HealthShared(at, each));
 
             return;
         }
@@ -2497,6 +2643,8 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
                     continue;
                 }
             }
+
+            if (battler.TauntTurns > 0) battler.TauntTurns--;
 
             // And the walls, counted down with everything else that lasts turns.
             if (battler.ReflectTurns > 0) battler.ReflectTurns--;

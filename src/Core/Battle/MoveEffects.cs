@@ -116,6 +116,21 @@ public enum EffectKind
     /// <summary>Makes somebody stronger and too confused to use it.</summary>
     Goad,
 
+    /// <summary>Leaves them nothing to do but attack.</summary>
+    Taunt,
+
+    /// <summary>Leaves them unable to do the same thing twice running.</summary>
+    Torment,
+
+    /// <summary>Survives whatever lands this turn on a single point.</summary>
+    Endure,
+
+    /// <summary>Takes whoever finished it down as well.</summary>
+    Bond,
+
+    /// <summary>Both sides end up on the same health, whatever that comes to.</summary>
+    Split,
+
     /// <summary>Lands several times in one turn.</summary>
     MultiHit,
 
@@ -435,6 +450,12 @@ public static class MoveEffects
         0xBB => new MoveEffect(EffectKind.Yawn, OnUser: false),
         0xB5 => new MoveEffect(EffectKind.Ingrain, OnUser: true),
         0x72 => new MoveEffect(EffectKind.Perish, OnUser: false),
+
+        0xAF => new MoveEffect(EffectKind.Taunt, OnUser: false),
+        0xA5 => new MoveEffect(EffectKind.Torment, OnUser: false),
+        0x74 => new MoveEffect(EffectKind.Endure, OnUser: true),
+        0x62 => new MoveEffect(EffectKind.Bond, OnUser: true),
+        0x5B => new MoveEffect(EffectKind.Split, OnUser: false),
 
         // Two that make somebody stronger and then too confused to use it. Which stat is in
         // the game's code and is modelled; that they are one act is the group.

@@ -388,6 +388,24 @@ public sealed class Battler
     /// <summary>Turns until this one goes down regardless, or nought.</summary>
     public int PerishTurns { get; set; }
 
+    /// <summary>Turns left of having nothing to do but attack.</summary>
+    public int TauntTurns { get; set; }
+
+    /// <summary>True while this one may not do the same thing twice running.</summary>
+    public bool IsTormented { get; set; }
+
+    /// <summary>True for the one turn this one survives whatever lands.</summary>
+    public bool IsEnduring { get; set; }
+
+    /// <summary>
+    /// True while this one will take whoever finishes it down as well.
+    /// <para>
+    /// Lasts one turn, like a guard, because a promise that outlived the turn it was made in
+    /// would be a promise nobody could play around.
+    /// </para>
+    /// </summary>
+    public bool IsBonded { get; set; }
+
     /// <summary>True while nothing may lower this one's stats from outside.</summary>
     public bool IsMisted => MistTurns > 0;
 
@@ -460,6 +478,10 @@ public sealed class Battler
         InNightmare = false;
         DrowsyTurns = 0;
         IsRooted = false;
+        TauntTurns = 0;
+        IsTormented = false;
+        IsEnduring = false;
+        IsBonded = false;
 
         // Not the perish count. Everything else here is forgotten by leaving the field and
         // that is the point of leaving; this one follows whoever heard it, which is the whole
