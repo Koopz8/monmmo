@@ -28,6 +28,59 @@ public class CanItBeFinishedTests
     private static ScriptOutcome Nothing => new([], [], [], []);
 
     /// <summary>
+    /// The walk starts from the flags a new game already sets.
+    /// <para>
+    /// <b>The bug the first real run found.</b> A fresh save is not an empty save: the
+    /// cartridge sets forty-nine flags before the first frame and every one of them hides
+    /// somebody not yet met. Started from nothing, MR. FUJI stands in his own front room
+    /// holding the flute and the whole tower is scenery — milestone 56's lesson, walked
+    /// straight past by the instrument written to check the story.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ItStartsFromTheFlagsANewGameAlreadySets()
+    {
+        var world = new WorldData([Room("1.0")]) { FlagsAtStart = [0x0820, 0x0821] };
+
+        Closure closed = StoryClosure.Walk(world, "1.0", (_, _) => Nothing);
+
+        Assert.Contains(0x0820, closed.Flags);
+        Assert.Contains(0x0821, closed.Flags);
+    }
+
+    /// <summary>
+    /// And somebody a starting flag hides is not standing there to be talked to, which is
+    /// the whole point of those flags being set.
+    /// </summary>
+    [Fact]
+    public void AndSomebodyAStartingFlagHidesIsNotThere()
+    {
+        const int HidesHim = 0x0820;
+
+        var fuji = new MapObject(1, 1, 1, 1, Direction.Down, 0, false)
+        {
+            ScriptAddress = 0x7000,
+            HiddenBy = HidesHim,
+        };
+
+        MapData start = Room("1.0") with { Objects = [fuji] };
+
+        var ran = new List<uint>();
+
+        StoryClosure.Walk(
+            new WorldData([start]) { FlagsAtStart = [HidesHim] },
+            "1.0",
+            (address, _) =>
+            {
+                ran.Add(address);
+
+                return Nothing;
+            });
+
+        Assert.DoesNotContain(0x7000u, ran);
+    }
+
+    /// <summary>
     /// A world nothing gates opens completely on the first pass, and the loop notices there
     /// is nothing more to do rather than running to its backstop.
     /// </summary>
@@ -458,6 +511,19 @@ public class PlayingItThroughTests
 
         Assert.True(played.Passes > 1, "it only ran one pass, so nothing was given a second chance");
         Assert.True(played.FightsWon + played.FightsLost + played.FightsSkipped <= 1);
+    }
+
+    /// <summary>
+    /// The playthrough starts from the flags a new game already sets, same as the walk.
+    /// </summary>
+    [Fact]
+    public void ThePlaythroughStartsFromAFreshSaveRatherThanAnEmptyOne()
+    {
+        var world = new WorldData([Room("1.0")]) { FlagsAtStart = [0x0820] };
+
+        Attempt played = Autoplayer.Play(world, "1.0", TestRules.All, (_, _) => Nothing);
+
+        Assert.Contains(0x0820, played.Flags);
     }
 
     /// <summary>And the routines it could not answer are carried out, same as the walk.</summary>

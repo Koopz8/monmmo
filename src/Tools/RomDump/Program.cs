@@ -202,8 +202,8 @@ public static class Program
         if (options.Sound) WriteSound(rom);
         if (options.FlagGates) WriteFlagGates(rom);
         if (options.SpecialContracts) WriteSpecialContracts(rom);
-        if (options.Closure) WriteClosure(rom, options.RoutineAnswers);
-        if (options.Play) WritePlaythrough(rom, options.RoutineAnswers);
+        if (options.Closure) WriteClosure(rom, options.RoutineAnswers, options.StartAt);
+        if (options.Play) WritePlaythrough(rom, options.RoutineAnswers, options.StartAt);
 
         if (options.SequenceWidths) WriteSequenceWidths(rom);
 
@@ -5664,7 +5664,7 @@ public static class Program
     /// not proof a person would. A fight it <em>wins</em> is proof the fight works.
     /// </para>
     /// </summary>
-    private static void WritePlaythrough(Rom rom, IReadOnlyDictionary<int, int> answers)
+    private static void WritePlaythrough(Rom rom, IReadOnlyDictionary<int, int> answers, string startAt)
     {
         Console.WriteLine();
         Console.WriteLine("A PLAYTHROUGH");
@@ -5673,13 +5673,16 @@ public static class Program
         WorldData world = WorldExporter.Export(rom);
         GameRules rules = RulesExporter.Export(rom);
 
-        MapData first = world.Maps.First();
+        MapData first = world.Find(startAt) ?? world.Maps.First();
 
         Dictionary<int, int> teaches = TeachingMachines(rom);
 
         Console.WriteLine(
             $"  {world.Maps.Count} maps, {rules.TrainerCount} trainers, {teaches.Count} machines; "
             + $"starting at {first.Id} ({first.Name})");
+        Console.WriteLine(
+            $"  a new game sets {world.FlagsAtStart.Count} flags before the first frame, and this "
+            + "starts with them — a fresh save is not an empty save");
 
         if (answers.Count > 0)
         {
@@ -5825,7 +5828,18 @@ public static class Program
             "  their answer, so a stand-in for one of those buys no ground and is not worth writing");
     }
 
-    private static void WriteClosure(Rom rom, IReadOnlyDictionary<int, int> answers)
+    /// <summary>
+    /// Where a new character wakes up. The same default the server uses, and for the same
+    /// reason: it is not derived from anything, so it lives in one place and is overridable.
+    /// <para>
+    /// The first run of the playthrough started at <c>world.Maps.First()</c>, which is map
+    /// 0.0 — a floor of CELADON DEPT. It reached one map and stopped, and every number it
+    /// printed was about a shop.
+    /// </para>
+    /// </summary>
+    public const string DefaultStartingMap = "4.1";
+
+    private static void WriteClosure(Rom rom, IReadOnlyDictionary<int, int> answers, string startAt)
     {
         Console.WriteLine();
         Console.WriteLine("CAN IT BE FINISHED");
@@ -5833,9 +5847,11 @@ public static class Program
 
         WorldData world = WorldExporter.Export(rom);
 
-        MapData first = world.Maps.First();
+        MapData first = world.Find(startAt) ?? world.Maps.First();
 
-        Console.WriteLine($"  {world.Maps.Count} maps exported; walking from {first.Id}");
+        Console.WriteLine(
+            $"  {world.Maps.Count} maps exported; walking from {first.Id} ({first.Name}), "
+            + $"with {world.FlagsAtStart.Count} flags a new game already sets");
         Console.WriteLine();
 
         // Which item teaches which move, so that a script handing over HM01 counts as a
@@ -8484,6 +8500,8 @@ public static class Program
                                      arguments take, by trying every width against
                                      this cartridge and counting how many tracks
                                      reach an end
+              --from <map id>       where a new character wakes up (default 4.1, the same
+                                    one the server uses).
               --play                play the game from a fresh save, as far as it can get:
                                     walk, talk to everybody reachable, fight whoever picks
                                     a fight, take what is given, walk again. Says where it
@@ -8675,6 +8693,8 @@ public static class Program
 
         public bool Play { get; private init; }
 
+        public string StartAt { get; private init; } = DefaultStartingMap;
+
         public IReadOnlyDictionary<int, int> RoutineAnswers { get; private init; } = new Dictionary<int, int>();
 
         /// <summary>Measure how many bytes each sequence command's arguments take.</summary>
@@ -8791,6 +8811,7 @@ public static class Program
             bool closure = false;
             bool specialContracts = false;
             bool play = false;
+            string startAt = DefaultStartingMap;
             var routineAnswers = new Dictionary<int, int>();
             bool sequenceWidths = false;
             int? oneSong = null;
@@ -9024,6 +9045,9 @@ public static class Program
                     case "--play":
                         play = true;
                         break;
+                    case "--from":
+                        startAt = Next(args, ref i, "--from");
+                        break;
                     case "--answer":
                     {
                         // routine=value, so an experiment can be run without a rebuild.
@@ -9222,6 +9246,7 @@ public static class Program
                 Closure = closure,
                 SpecialContracts = specialContracts,
                 Play = play,
+                StartAt = startAt,
                 Answers = answers,
                 SequenceWidths = sequenceWidths,
                 OneSong = oneSong,

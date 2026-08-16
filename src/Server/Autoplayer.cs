@@ -100,7 +100,9 @@ public static class Autoplayer
     {
         var battles = new BattleFactory(rules);
 
-        var flags = new HashSet<int>();
+        // A fresh save is not an empty save — see StoryClosure, and milestone 56. Forty-nine
+        // flags are set before the first frame, and every one hides somebody not yet met.
+        var flags = new HashSet<int>(world.FlagsAtStart);
         var moves = new HashSet<int>();
         var specials = new Dictionary<int, int>();
         var party = new List<SavedMon>();

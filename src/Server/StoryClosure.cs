@@ -99,7 +99,18 @@ public static class StoryClosure
         Func<uint, IReadOnlyCollection<int>, ScriptOutcome> runScript,
         Action<string>? log = null)
     {
-        var flags = new HashSet<int>();
+        // A fresh save is not an empty save.
+        //
+        // This is milestone 56's lesson and this walk was written straight past it. The
+        // cartridge starts a new game by SETTING forty-nine flags, and every one of them
+        // hides somebody who has not been met yet — so an empty flag set is not the
+        // beginning of the story, it is a world where every ending has already happened at
+        // once. MR. FUJI stands in his own front room holding the flute and the whole tower
+        // is scenery.
+        //
+        // The exported world has carried these since that milestone. Ignoring them made the
+        // first run of this instrument measure a game nobody plays.
+        var flags = new HashSet<int>(world.FlagsAtStart);
         var moves = new HashSet<int>();
         var specials = new Dictionary<int, int>();
         var rounds = new List<ClosureRound>();
