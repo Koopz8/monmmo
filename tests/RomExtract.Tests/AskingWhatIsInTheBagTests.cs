@@ -232,6 +232,33 @@ public class AskingWhatIsInTheBagTests
         Assert.Null(ScriptRunner.Run(rom, Start).TakesItem);
     }
 
+    /// <summary>
+    /// And it answers nothing, unlike the two commands beside it.
+    /// <para>
+    /// Both of those write the result variable on evidence — the compare that follows them
+    /// and the bag-full line on the arm that reads zero. Nothing says what a script is told
+    /// after taking something away, or whether anybody asks, so nothing is written. This is
+    /// the guard for a number that was invented once to match the neighbours.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AndTakingSomethingAwayAnswersNothingBecauseNothingSaysItDoes()
+    {
+        Rom rom = Image(
+            (Start,
+            [
+                0x45, .. Word(Parcel), .. Word(1),
+                0x21, .. Word(0x800D), .. Word(1),
+                ScriptCommands.GotoIf, 0x01, .. At(Elsewhere),
+                .. Says(SaysNo),
+            ]),
+            (Elsewhere, Says(SaysYes)),
+            (SaysYes, Speech('A')),
+            (SaysNo, Speech('B')));
+
+        Assert.Equal("BBBBBB", Assert.Single(ScriptRunner.Run(rom, Start).Pages));
+    }
+
     // ---- the state carries the question across a copy ---------------------------------
 
     /// <summary>
@@ -251,6 +278,38 @@ public class AskingWhatIsInTheBagTests
         // And the runner copies before it runs, which is where it would be lost.
         Assert.Equal(
             "AAAAAA", Assert.Single(ScriptRunner.Run(Guard(), Start, state.WithParty([[1]])).Pages));
+    }
+
+    // ---- and a real player, who is the point of the whole thing -----------------------
+
+    /// <summary>
+    /// A player's own script state answers from the bag they are holding now.
+    /// <para>
+    /// The instrument opening SAFFRON and a player opening SAFFRON are two different
+    /// things, and only the second one matters. Asked through the player rather than
+    /// handed the bag, because the answer has to change when something is picked up —
+    /// a state built with a copy of the bag answers for the bag they signed in with.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void APlayersOwnScriptStateAnswersFromTheBagTheyAreHoldingNow()
+    {
+        const string town = "1.0";
+
+        var world = new GameWorld(
+            new WorldData([new MapData(town, "PALLET TOWN", 8, 8, new byte[64])]), town, TestRules.All);
+
+        (ServerPlayer player, _) = world.Join(1, "Mason", SavedCharacter.Fresh(town, 3, 4));
+
+        Assert.Equal(0, player.Script.Carried(TestRules.PotionItem));
+
+        player.Bag.Add(TestRules.PotionItem, 2);
+
+        Assert.Equal(2, player.Script.Carried(TestRules.PotionItem));
+
+        player.Bag.Remove(TestRules.PotionItem, 2);
+
+        Assert.Equal(0, player.Script.Carried(TestRules.PotionItem));
     }
 
     // ---- and the playthrough, which is what all of it is for ---------------------------

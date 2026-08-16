@@ -750,10 +750,17 @@ public static class ScriptRunner
                         takesCount = Math.Max(1, command.Word(2));
                     }
 
-                    // Answered, on the same evidence as its neighbours: a command that
-                    // hands something over answers into the result variable and a script
-                    // that is told nothing reads its own failure line.
-                    save.Write(0x800D, 1);
+                    // And it does NOT answer into the result variable, which its two
+                    // neighbours both do.
+                    //
+                    // Not an oversight. 0x44 and 0x46 write it on evidence — the compare
+                    // that follows them, and the "Too bad! The BAG is full..." line on
+                    // the arm taken when it reads zero. There is no such reading for this
+                    // one: nothing here says what a script that takes something away is
+                    // told, or whether anybody asks. Writing a one anyway would be a
+                    // number invented to match its neighbours, and it is exactly the kind
+                    // of rule this project has been unable to break on purpose — which is
+                    // the test it failed.
                     break;
 
                 // The pair that fights something out of nowhere. The first sets the
