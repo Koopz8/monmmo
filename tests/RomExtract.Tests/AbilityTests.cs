@@ -362,8 +362,21 @@ public class AbilityTests
             bool aboutLeaving = Abilities.HoldsGround(ability)
                 || Enum.GetValues<PokemonType>().Any(t => Abilities.Traps(ability, t, t, 0));
 
+            // And the ones that refuse something the engine already does — a ninth way, and
+            // the cheapest kind there is: not one of these needed anything built. The test
+            // failed the moment they were added, which is the whole reason it exists: a
+            // meta-guard that quietly accepted an ability it had no way of seeing would be
+            // no guard at all.
+            bool refusesWhatIsDone = Abilities.CannotBeEndedOutright(ability)
+                || Abilities.NeverCritical(ability)
+                || Abilities.PaysNoRecoil(ability)
+                || Abilities.NeverFlinches(ability)
+                || Abilities.StopsAnybodyBlowingUp(ability)
+                || Abilities.KeepsWhatItHolds(ability);
+
             if (!refuses && !changesDamage && !changesAttack && !readsTheSky && !arrives
-                && !answersATouch && !refusesToBeWorsened && !aboutLeaving)
+                && !answersATouch && !refusesToBeWorsened && !aboutLeaving
+                && !refusesWhatIsDone)
             {
                 inert.Add(ability);
             }

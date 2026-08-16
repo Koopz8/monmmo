@@ -59,6 +59,12 @@ public static class Abilities
     public const int AirLock = 77;
 
     public const int Sturdy = 5;
+    public const int Damp = 6;
+    public const int BattleArmor = 4;
+    public const int ShellArmor = 75;
+    public const int RockHead = 69;
+    public const int InnerFocus = 39;
+    public const int StickyHold = 60;
     public const int Limber = 7;
     public const int VoltAbsorb = 10;
     public const int WaterAbsorb = 11;
@@ -117,7 +123,47 @@ public static class Abilities
         // needing one filled: this engine has blocked running away since WRAP, and has
         // never once blocked switching.
         SuctionCups, ShadowTag, MagnetPull, ArenaTrap,
+
+        // And the seven that refuse something this engine already does. Not one of them
+        // needed anything built: a one-hit knockout, a critical, recoil, a flinch, blowing
+        // up and having an item taken were all here already and none of them had ever been
+        // asked whether the creature would allow it.
+        Sturdy, BattleArmor, ShellArmor, RockHead, InnerFocus, Damp, StickyHold,
     ];
+
+    /// <summary>Whether this one cannot simply be ended, however much is left.</summary>
+    public static bool CannotBeEndedOutright(int ability) => ability == Sturdy;
+
+    /// <summary>
+    /// Whether nothing against this one is ever a critical hit.
+    /// <para>
+    /// Two abilities, identical in every way, and both are in the table — which is a fact
+    /// about the cartridge rather than a redundancy worth collapsing. Two species families
+    /// carry one each.
+    /// </para>
+    /// </summary>
+    public static bool NeverCritical(int ability) => ability is BattleArmor or ShellArmor;
+
+    /// <summary>Whether this one pays nothing for the moves that cost their user.</summary>
+    public static bool PaysNoRecoil(int ability) => ability == RockHead;
+
+    /// <summary>Whether this one cannot be made to lose its turn by a flinch.</summary>
+    public static bool NeverFlinches(int ability) => ability == InnerFocus;
+
+    /// <summary>
+    /// Whether this one stops anybody blowing up, on either side.
+    /// <para>
+    /// The second ability in this file that decides something about somebody else's options
+    /// rather than about what happens to it, and the only one that reaches a move its owner
+    /// is not the target of. A creature that blows up while one of these is on the field
+    /// simply does not, and it is the presence on the field rather than the aim that stops
+    /// it.
+    /// </para>
+    /// </summary>
+    public static bool StopsAnybodyBlowingUp(int ability) => ability == Damp;
+
+    /// <summary>Whether what this one is carrying cannot be taken off it.</summary>
+    public static bool KeepsWhatItHolds(int ability) => ability == StickyHold;
 
     /// <summary>
     /// True when the creature opposite may not leave, because of what is standing there.

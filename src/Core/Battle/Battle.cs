@@ -1321,6 +1321,12 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
 
     private void SetFlinching(Side side, bool value)
     {
+        // Refused here rather than at each of the three places that cause one. A flinch
+        // arrives from a move's own effect, from a secondary chance and from an item, and
+        // an ability that stopped two of the three would be an ability that mostly works —
+        // which is worse than one that does not, because nobody would find out.
+        if (value && Abilities.NeverFlinches(Of(side).Ability)) return;
+
         if (side == Side.Player) _playerFlinching = value;
         else _opponentFlinching = value;
     }
@@ -1726,6 +1732,21 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         // here, after the move is announced and before anything is rolled, because both of
         // them are the move failing rather than the move missing — and the difference is
         // visible: a miss spends a guard's turn and a refusal does not.
+        // Nobody blows up while one of these is on the field. Refused here, where the move
+        // is used, rather than where the user would go down — because the move does not
+        // happen at all, and stopping only the fainting would leave two hundred power
+        // landing for free, which is the opposite of what the ability is for.
+        //
+        // Either side's, not the target's. It is the presence that stops it.
+        if (kind.Kind == EffectKind.UserFaints
+            && (Abilities.StopsAnybodyBlowingUp(Player.Ability)
+                || Abilities.StopsAnybodyBlowingUp(Opponent.Ability)))
+        {
+            events.Add(new BattleEvent.NothingHappened(side));
+
+            return;
+        }
+
         if (kind.Kind == EffectKind.FirstImpression && attacker.TurnsOut > 0)
         {
             events.Add(new BattleEvent.NothingHappened(side));
@@ -1904,6 +1925,15 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
                 return;
             }
 
+            // And somebody who cannot simply be ended. The same refusal as the level rule
+            // above and for the same reason — a move that takes everything left is the one
+            // move an ability about not being taken down has anything to say about.
+            if (carried.Kind == EffectKind.Knockout && Abilities.CannotBeEndedOutright(defender.Ability))
+            {
+                events.Add(new BattleEvent.Unaffected(Other(side)));
+                return;
+            }
+
             if (elsewhere <= 0)
             {
                 events.Add(new BattleEvent.Unaffected(Other(side)));
@@ -1948,7 +1978,12 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
 
         for (int hit = 0; hit < times; hit++)
         {
-            bool critical = DamageCalculator.RollCritical(_rng, criticalStage);
+            // Rolled, and then refused — rather than not rolled at all. A creature that
+            // skipped the roll would leave the seeded stream one number ahead of an
+            // identical fight against anybody else, and every later roll in that fight
+            // would differ. This engine has been caught by exactly that once already.
+            bool critical = DamageCalculator.RollCritical(_rng, criticalStage)
+                && !Abilities.NeverCritical(defender.Ability);
             DamageResult result = DamageCalculator.Calculate(
                 _rng, attacker, defender, move, critical, Overhead, Damping(move.Type), hit,
                 _leaving.Contains(Other(side)));
@@ -2093,7 +2128,7 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             SetFlinching(Other(side), true);
         }
 
-        if (carried.Kind == EffectKind.Recoil && total > 0)
+        if (carried.Kind == EffectKind.Recoil && total > 0 && !Abilities.PaysNoRecoil(attacker.Ability))
         {
             int cost = attacker.TakeDamage(Math.Max(1, total / 4));
 
@@ -2288,7 +2323,7 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
     /// be dead, and two ways to be dead is how a battle ends up with nobody in it.
     /// </para>
     /// </summary>
-    private static void BlowUp(Side side, Battler attacker, List<BattleEvent> events)
+    private void BlowUp(Side side, Battler attacker, List<BattleEvent> events)
     {
         if (attacker.HasFainted) return;
 
@@ -2851,6 +2886,13 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         if (effect.Kind == EffectKind.KnocksOff)
         {
             if (target.Holding == 0) return;
+
+            if (Abilities.KeepsWhatItHolds(target.Ability))
+            {
+                events.Add(new BattleEvent.NothingHappened(at));
+
+                return;
+            }
 
             events.Add(new BattleEvent.KnockedOff(at, target.Holding));
 
