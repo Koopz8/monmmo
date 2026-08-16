@@ -58,7 +58,24 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-export PATH="$PATH:$HOME/.dotnet"
+# Find dotnet, and say so when it is not there.
+#
+# This was "$HOME/.dotnet" and the script runs as a user whose home is somewhere else, so
+# every run failed to start dotnet at all — and reported that as "the run produced no
+# summary", which this script's own message then interpreted as a guard being caught loudly.
+# A tool for noticing silent failures, failing silently, and explaining its own silence as a
+# result. It is worth the four lines to make it impossible.
+for candidate in /home/claude/.dotnet "$HOME/.dotnet" /usr/share/dotnet /usr/local/share/dotnet; do
+    [ -x "$candidate/dotnet" ] && PATH="$PATH:$candidate"
+done
+
+export PATH
+
+if ! command -v dotnet >/dev/null 2>&1; then
+    echo "REFUSING: dotnet is not on the path, so nothing would have been tested." >&2
+    git checkout -- "$file"
+    exit 1
+fi
 
 raw="$(timeout 600 dotnet test --nologo -v q --filter "$filter" 2>&1)"
 
