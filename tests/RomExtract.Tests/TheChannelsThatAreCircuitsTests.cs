@@ -162,6 +162,71 @@ public class TheChannelsThatAreCircuitsTests
         Assert.Contains(narrow, s => s < 0);
     }
 
+    // ---- the envelope, on its own scale ------------------------------------------------
+
+    /// <summary>
+    /// A circuit channel counts its envelope in four bits, not eight.
+    /// <para>
+    /// A real cartridge's town theme has twenty-four circuit slots and every one of them
+    /// reads a sustain of exactly fifteen. Twenty-four coincidences is not a coincidence, it
+    /// is a scale — and read as the recorded channels' nought-to-255 it means six per cent,
+    /// which is why the melody was there and inaudible.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void FullOnACircuitIsFifteenRatherThanTwoHundredAndFiftyFive()
+    {
+        (byte _, byte _, byte sustain, byte _) =
+            PsgVoices.Shaping(0, 0, (byte)PsgVoices.EnvelopeFull, 0);
+
+        // Loud, rather than the six per cent it was.
+        Assert.True(sustain > 200, $"a full sustain came back as {sustain} of 255");
+    }
+
+    /// <summary>
+    /// And a nought means the opposite ends of the same byte: instantly for attack and
+    /// release, never for decay.
+    /// <para>
+    /// This is the half that is not a scale. Read as an ordinary number, a decay of nought
+    /// collapses a note to its sustain in a single step — so every circuit note jumped
+    /// straight to six per cent of its loudness and stayed there.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AndANoughtMeansOppositeEndsOfTheSameByte()
+    {
+        (byte attack, byte decay, byte _, byte release) = PsgVoices.Shaping(0, 0, 15, 0);
+
+        // Attack immediately, and do not decay at all.
+        Assert.Equal(255, attack);
+        Assert.Equal(255, decay);
+
+        // Release immediately, which the player's own floor carries to silence.
+        Assert.Equal(0, release);
+    }
+
+    /// <summary>
+    /// And a note shaped this way is actually loud, which is the whole of what was wrong.
+    /// </summary>
+    [Fact]
+    public void ANoteShapedThisWayIsLoud()
+    {
+        (byte attack, byte decay, byte sustain, byte release) = PsgVoices.Shaping(0, 0, 15, 0);
+
+        var envelope = new Envelope(attack, decay, sustain, release);
+
+        for (int step = 0; step < 8; step++) envelope.Step();
+
+        Assert.True(envelope.Level > 200, $"the note settled at {envelope.Level} of 255");
+
+        // While the reading it replaced settles almost silent, which is what it sounded like.
+        var raw = new Envelope(0, 0, 15, 0);
+
+        for (int step = 0; step < 8; step++) raw.Step();
+
+        Assert.True(raw.Level < 32, "the old reading was not quiet, so this proves nothing");
+    }
+
     // ---- and out of a cartridge ------------------------------------------------------------
 
     /// <summary>

@@ -142,13 +142,17 @@ public static class SongLoader
 
         if (voice.Audio.Length == 0) return Instrument.Nothing;
 
-        return new Instrument(
-            voice,
-            PsgVoices.MiddleCKey,
+        // The same four bytes as a recorded instrument, on a different scale. These channels
+        // count their envelope in four bits rather than eight, so a sustain of fifteen is
+        // full rather than six per cent — which is the difference between a melody and a
+        // melody nobody can hear.
+        (byte attack, byte decay, byte sustain, byte release) = PsgVoices.Shaping(
             rom.ReadU8(instrument.Offset + 8),
             rom.ReadU8(instrument.Offset + 9),
             rom.ReadU8(instrument.Offset + 10),
             rom.ReadU8(instrument.Offset + 11));
+
+        return new Instrument(voice, PsgVoices.MiddleCKey, attack, decay, sustain, release);
     }
 
     /// <summary>
