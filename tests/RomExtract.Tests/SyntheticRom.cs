@@ -1604,8 +1604,15 @@ public sealed class SyntheticRom
     /// </summary>
     public const byte CryTableType = 0x20;
 
-    /// <summary>A shorter run of the same shape, so "the longest wins" can lose to something.</summary>
-    public const int CryDecoyTableOffset = 0x1A2000;
+    /// <summary>
+    /// A shorter run of the same shape, so "the longest wins" can lose to something.
+    /// <para>
+    /// <b>Below</b> the real table on purpose. With it above, the first run found was also the
+    /// longest, and a walk that simply kept the first would have passed every test here —
+    /// which it did, until this was moved.
+    /// </para>
+    /// </summary>
+    public const int CryDecoyTableOffset = 0x19C000;
 
     public const int CryDecoyTableCount = 40;
 
