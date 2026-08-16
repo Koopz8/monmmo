@@ -315,7 +315,13 @@ public class BecomingSomethingElseTests
         // rather than a detail of it. Comparing the two damage numbers passes whether or not
         // the type reaches the sum, because the power doubles under rain either way — which
         // is exactly how the first version of this agreed with the code being broken.
-        Assert.Equal(TypeChart.Neutral, clear.EffectivenessHundredths);
+        // Through the result's own words rather than against TypeChart.Neutral, which is on
+        // a different scale — the chart counts in tenths and a result counts in hundredths.
+        // Comparing the two directly is a mistake that reads perfectly and fails with
+        // "expected 10, actual 100", and it is one this file made on the way here.
+        Assert.False(clear.NotVeryEffective);
+        Assert.False(clear.SuperEffective);
+
         Assert.True(rain.NotVeryEffective, "the ball did not come out as Water against a Water defender");
 
         Assert.True(clear.Damage > 0 && rain.Damage > 0);
