@@ -97,19 +97,18 @@ public class ShieldedTests
     }
 
     /// <summary>
-    /// None of them stops its owner spending its own stats — and that rule is written for a
-    /// case this cartridge's effect table does not yet contain.
+    /// None of them stops its owner spending its own stats, and there is now a move that
+    /// does exactly that to test it with.
     /// <para>
-    /// Worth a test that says so rather than one that pretends. Every stat-lowering effect
-    /// in the table is aimed at the other side; there is no modelled move that lowers the
-    /// user's own stats, so the <c>!OnUser</c> in the guard cannot be exercised through a
-    /// move today. It is still the right guard — BELLY DRUM and OVERHEAT are on this
-    /// cartridge and will reach that table eventually — and this test is what will notice
-    /// when they do.
+    /// This test used to assert the opposite — that the table contained no move which
+    /// lowered its own user's stats — and said in its own comment that OVERHEAT was on the
+    /// cartridge and would reach the table eventually, and that this was what would notice.
+    /// It noticed. The guard was written for a case that did not exist yet and is now
+    /// exercised by one.
     /// </para>
     /// </summary>
     [Fact]
-    public void NothingInTheTableLowersItsOwnUsersStatsYet()
+    public void AMoveThatSpendsItsOwnUsersStatsIsNotShielded()
     {
         MoveEffect[] lowering =
         [
@@ -119,7 +118,16 @@ public class ShieldedTests
         ];
 
         Assert.NotEmpty(lowering);
-        Assert.All(lowering, m => Assert.False(m.OnUser));
+
+        // Most of them are aimed at the other side, and at least one is not.
+        Assert.Contains(lowering, m => !m.OnUser);
+        Assert.Contains(lowering, m => m.OnUser);
+
+        // And the one that is not is refused by nothing: neither shield answers a cost its
+        // own user chose to pay.
+        MoveEffect own = lowering.First(m => m.OnUser);
+
+        Assert.False(Abilities.Protects(Abilities.ClearBody, own.Stat) && !own.OnUser);
     }
 
     /// <summary>

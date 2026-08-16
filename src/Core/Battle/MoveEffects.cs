@@ -52,6 +52,16 @@ public enum EffectKind
     /// <summary>Moves a stat stage up or down.</summary>
     Stage,
 
+    /// <summary>
+    /// Every one of the five, on the user, at once.
+    /// <para>
+    /// Its own kind rather than five <see cref="Stage"/> effects, because it is one roll:
+    /// ANCIENTPOWER either raises all five or raises none, and five separate chances would
+    /// be a move that usually raises two of them.
+    /// </para>
+    /// </summary>
+    AllStages,
+
     /// <summary>Lands several times in one turn.</summary>
     MultiHit,
 
@@ -279,6 +289,20 @@ public static class MoveEffects
         // has to know it.
         0x7D or 0xC8 => new MoveEffect(EffectKind.Status, OnUser: false, Status: StatusCondition.Burn),
         0xCA or 0xD1 => new MoveEffect(EffectKind.Status, OnUser: false, Status: StatusCondition.Poison),
+        // METAL CLAW and METEOR MASH: a chance, on the record, of the user coming out of
+        // it stronger. The chance is read and the stat is not — which stat it raises is in
+        // the game's code — so the stat is modelled and the odds are the cartridge's.
+        0x8B => new MoveEffect(EffectKind.Stage, OnUser: true, Stat: Stat.Attack, Stages: 1),
+
+        // ANCIENTPOWER and SILVER WIND: the same shape, on all five at once.
+        0x8C => new MoveEffect(EffectKind.AllStages, OnUser: true, Stages: 1),
+
+        // OVERHEAT and PSYCHO BOOST: the first two moves in this table that cost their own
+        // user something. Every stat drop the engine had ever applied came from the other
+        // side, which is why both shields ask "was this somebody else" — and there was a
+        // test asserting no such move existed, because until this line none did.
+        0xCC => new MoveEffect(EffectKind.Stage, OnUser: true, Stat: Stat.SpAttack, Stages: -2),
+
         0x2B => new MoveEffect(EffectKind.HighCritical, OnUser: false),
         0x1F or 0x96 => new MoveEffect(EffectKind.Flinch, OnUser: false),
         0x03 => new MoveEffect(EffectKind.Drain, OnUser: true),
@@ -458,6 +482,10 @@ public static class MoveEffects
     }
 
     private static bool In(byte effect, byte start) => effect >= start && effect < start + RunLength;
+
+    /// <summary>The five a stage can be raised or lowered on, which is every stat but health.</summary>
+    public static readonly IReadOnlyList<Stat> Five =
+        [Stat.Attack, Stat.Defense, Stat.Speed, Stat.SpAttack, Stat.SpDefense];
 
     private static MoveEffect Stage(int index, int stages, bool onUser) =>
         new(EffectKind.Stage, onUser, Stat: Order[index], Stages: stages);

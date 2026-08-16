@@ -1560,9 +1560,17 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         // where the turn was taken, and falling through to here gave them the default
         // effect — a stage change of nothing, to a stat that has no stages — so WRAP
         // landed and then said "The wild PIDGEY's HP won't go any lower!"
+        // And the one that means there is nothing more to do, which belongs in this list for
+        // exactly the reason the others do and was not in it. Effect 0 is twenty-three moves
+        // — TACKLE among them — and every one of them fell through to the stage code and
+        // said a stat had not moved. Nothing in the fight changed, so nothing looked wrong;
+        // what it cost was a message per hit that a client could draw.
+        //
+        // Found by a test counting the stage changes a different move produced and getting
+        // one more than there were stats.
         if (effect.Kind is EffectKind.Recharge or EffectKind.TwoTurn or EffectKind.LockedIn or EffectKind.Trap
             or EffectKind.Knockout or EffectKind.LevelDamage or EffectKind.HalfTheirHealth or EffectKind.DownToMine
-            or EffectKind.CrashOnMiss or EffectKind.UserFaints)
+            or EffectKind.CrashOnMiss or EffectKind.UserFaints or EffectKind.Nothing)
         {
             return;
         }
@@ -1839,6 +1847,25 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             && (target.IsMisted || Abilities.Protects(target.Ability, effect.Stat)))
         {
             if (!rolled) events.Add(new BattleEvent.Shielded(at));
+
+            return;
+        }
+
+        // All five at once, on one roll. Said as one message per stat that actually moved,
+        // because a screen has one line per stat and a single "everything went up" would be
+        // a line that is sometimes a lie — CLEAR BODY and a stage already at six both stop
+        // some of them.
+        if (effect.Kind == EffectKind.AllStages)
+        {
+            foreach (Stat stat in MoveEffects.Five)
+            {
+                int had = target.StageOf(stat);
+
+                target.ChangeStage(stat, effect.Stages);
+
+                events.Add(new BattleEvent.StageChanged(
+                    at, stat, effect.Stages, target.StageOf(stat) != had));
+            }
 
             return;
         }
