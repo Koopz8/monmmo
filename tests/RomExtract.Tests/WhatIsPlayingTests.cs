@@ -36,7 +36,7 @@ public class WhatIsPlayingTests
     [Fact]
     public void TheSameSongAskedForTwiceCarriesOn()
     {
-        var box = new Jukebox(_ => Anything());
+        var box = new Jukebox(_ => Anything(), new Mixer(8000));
 
         box.Play(3);
         box.Play(3);
@@ -50,7 +50,7 @@ public class WhatIsPlayingTests
     [Fact]
     public void AndADifferentOneChangesIt()
     {
-        var box = new Jukebox(_ => Anything());
+        var box = new Jukebox(_ => Anything(), new Mixer(8000));
 
         box.Play(3);
         box.Play(4);
@@ -63,7 +63,7 @@ public class WhatIsPlayingTests
     [Fact]
     public void StoppingClearsIt()
     {
-        var box = new Jukebox(_ => Anything());
+        var box = new Jukebox(_ => Anything(), new Mixer(8000));
 
         box.Play(3);
         box.Stop();
@@ -90,7 +90,7 @@ public class WhatIsPlayingTests
     [Fact]
     public void ASongThatIsNotThereIsNotLookedForTwice()
     {
-        var box = new Jukebox(_ => null);
+        var box = new Jukebox(_ => null, new Mixer(8000));
 
         box.Play(9);
         box.Play(9);
@@ -107,7 +107,7 @@ public class WhatIsPlayingTests
     [Fact]
     public void NoughtIsARealSong()
     {
-        var box = new Jukebox(_ => Anything());
+        var box = new Jukebox(_ => Anything(), new Mixer(8000));
 
         box.Play(0);
 
@@ -121,12 +121,14 @@ public class WhatIsPlayingTests
     {
         var fetched = new List<int>();
 
-        var box = new Jukebox(song =>
-        {
-            fetched.Add(song);
+        var box = new Jukebox(
+            song =>
+            {
+                fetched.Add(song);
 
-            return Anything();
-        });
+                return Anything();
+            },
+            new Mixer(8000));
 
         box.Play(2);
         box.Play(Jukebox.Nothing);
@@ -145,7 +147,7 @@ public class WhatIsPlayingTests
     [Fact]
     public void ItAlwaysGivesBackAsManySamplesAsWereAskedFor()
     {
-        var box = new Jukebox(_ => Anything());
+        var box = new Jukebox(_ => Anything(), new Mixer(8000));
 
         Assert.Equal(512, box.Render(512).Length);
 
@@ -162,7 +164,78 @@ public class WhatIsPlayingTests
     [Fact]
     public void AndWithNothingOnTheyAreSilence()
     {
-        var box = new Jukebox(_ => Anything());
+        var box = new Jukebox(_ => Anything(), new Mixer(8000));
+
+        Assert.All(box.Render(256), sample => Assert.Equal(0, sample));
+    }
+
+    // ---- a noise over the top --------------------------------------------------------------------
+
+    private static Voice Noise() =>
+        new([.. Enumerable.Range(0, 400).Select(i => (sbyte)(i % 2 == 0 ? 100 : -100))], 8000, false, 0);
+
+    /// <summary>
+    /// A cry sounds on a map with no music.
+    /// <para>
+    /// The case that would have been found only by standing in the one building where it
+    /// happens. With nothing playing there was nothing turning the mixer over, so a cry went
+    /// onto it and was never asked for.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ACrySoundsWithNoMusicOn()
+    {
+        var box = new Jukebox(_ => Anything(), new Mixer(8000));
+
+        Assert.True(box.IsSilent);
+
+        box.PlayOver(Noise(), 8000);
+
+        Assert.Contains(box.Render(400), sample => sample != 0);
+    }
+
+    /// <summary>
+    /// And over the music rather than instead of it. A jukebox that swapped one for the other
+    /// would silence a town every time somebody sent something out.
+    /// </summary>
+    [Fact]
+    public void AndOverTheMusicRatherThanInsteadOfIt()
+    {
+        var mixer = new Mixer(8000);
+
+        var box = new Jukebox(
+            _ => new SongPlayer(
+                [
+                    new Track(
+                    [
+                        new SequenceEvent(0, 0xD4, SequenceCommand.NoteOn, [60, 127]),
+                        new SequenceEvent(3, 0x90, SequenceCommand.Wait, []),
+                    ]),
+                ],
+                [new Instrument(Noise(), 60, 255, 255, 255, 255)],
+                mixer),
+            mixer);
+
+        box.Play(1);
+
+        int music = box.Render(400).Max(s => Math.Abs((int)s));
+
+        box.Play(2);
+        box.PlayOver(Noise(), 8000);
+
+        int both = box.Render(400).Max(s => Math.Abs((int)s));
+
+        Assert.True(music > 0, "the music was silent, so nothing could be over it");
+        Assert.True(both > music, $"{both} was no louder than {music}, so the cry replaced the song");
+    }
+
+    /// <summary>And a recording with nothing in it is nothing rather than a crash.</summary>
+    [Fact]
+    public void AndAnEmptyRecordingIsNothing()
+    {
+        var box = new Jukebox(_ => Anything(), new Mixer(8000));
+
+        box.PlayOver(new Voice([], 8000, false, 0), 8000);
 
         Assert.All(box.Render(256), sample => Assert.Equal(0, sample));
     }
@@ -209,7 +282,7 @@ public class WhatIsPlayingTests
         SoundTreeResult tree = SoundLocator.Walk(rom);
 
         var mixer = new Mixer(8000);
-        var box = new Jukebox(song => SongLoader.Load(rom, tree, song, mixer));
+        var box = new Jukebox(song => SongLoader.Load(rom, tree, song, mixer), mixer);
 
         box.Play(0);
 

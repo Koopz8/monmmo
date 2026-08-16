@@ -420,7 +420,55 @@ public sealed class SyntheticRom
         WriteSoundTree();
         WriteAnimations();
         WriteCries();
+        WriteCryTable();
     }
+
+    /// <summary>
+    /// The table that says which noise belongs to which creature, and two things that look
+    /// like it.
+    /// <para>
+    /// The real one is the longest run of twelve-byte entries sharing a type byte and all
+    /// pointing at confirmed recordings. The decoy is the same shape and shorter, so "the
+    /// longest wins" has something to win against; the third is longer than the real one in
+    /// total and changes its type byte half way, so the rule that a table is written by one
+    /// macro has something to reject.
+    /// </para>
+    /// </summary>
+    private void WriteCryTable()
+    {
+        Table(CryTableOffset, CryTableCount, CryTableType);
+        Table(CryDecoyTableOffset, CryDecoyTableCount, CryDecoyTableType);
+
+        // Longer than the real table between them, and neither half is. A walk that let the
+        // type byte change would find this one and prefer it.
+        Table(CryChangingTypeOffset, CryTableCount - 1, 0x50);
+        Table(CryChangingTypeOffset + (CryTableCount - 1) * 12, CryTableCount - 1, 0x51);
+
+        void Table(int at, int entries, byte type)
+        {
+            for (int entry = 0; entry < entries; entry++)
+            {
+                int record = at + entry * 12;
+
+                _data[record] = type;
+                _data[record + 1] = 60;   // the key it was recorded at
+
+                WriteU32(record + 4, Rom.BaseAddress + (uint)CrySampleFor(entry));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Which recording a given entry of the cry table names. Three of them in turn, so that
+    /// a species number arriving at the wrong entry is visible in what comes out.
+    /// </summary>
+    public static int CrySampleFor(int entry) =>
+        (entry % 3) switch
+        {
+            0 => FlatCryOffset,
+            1 => RampCryOffset,
+            _ => ZigZagCryOffset,
+        };
 
     /// <summary>
     /// Two packed recordings whose contents can be checked without reimplementing the
@@ -1537,6 +1585,37 @@ public sealed class SyntheticRom
 
     /// <summary>Where the zigzag sits.</summary>
     public const sbyte ZigZagCryStart = 0;
+
+    // --- the table that says whose cry is whose -------------------------------------------
+
+    /// <summary>Where the run that should be found begins.</summary>
+    public const int CryTableOffset = 0x1A0000;
+
+    /// <summary>
+    /// How many creatures it names. Fewer than <see cref="SpeciesCount"/> on purpose: a
+    /// cartridge's table and its species list need not agree, and code that assumed they did
+    /// would walk off the end of one of them.
+    /// </summary>
+    public const int CryTableCount = 200;
+
+    /// <summary>
+    /// The byte every one of its entries carries. Not a number this project claims to know —
+    /// the locator reports whatever it finds, and this is what it should report here.
+    /// </summary>
+    public const byte CryTableType = 0x20;
+
+    /// <summary>A shorter run of the same shape, so "the longest wins" can lose to something.</summary>
+    public const int CryDecoyTableOffset = 0x1A2000;
+
+    public const int CryDecoyTableCount = 40;
+
+    public const byte CryDecoyTableType = 0x30;
+
+    /// <summary>
+    /// Two runs end to end, longer together than the real table and each shorter alone. A
+    /// walk that let the type byte change part way would prefer this one.
+    /// </summary>
+    public const int CryChangingTypeOffset = 0x1A4000;
 
     public const int ItemTableOffset = 0x110000;
     public const int ItemDescriptionsOffset = 0x114000;

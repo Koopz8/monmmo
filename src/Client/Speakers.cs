@@ -38,6 +38,7 @@ public sealed class Speakers : IDisposable
     private const int BufferSamples = 2048;
 
     private readonly Jukebox _box;
+    private readonly CryLibrary _cries;
     private readonly short[] _buffer = new short[BufferSamples];
     private readonly bool _ready;
 
@@ -52,11 +53,12 @@ public sealed class Speakers : IDisposable
     /// because nobody plugged in speakers.
     /// </para>
     /// </summary>
-    public Speakers(Rom rom, SoundTreeResult tree)
+    public Speakers(Rom rom, SoundTreeResult tree, CryTableResult? cries)
     {
         var mixer = new Mixer(Rate);
 
-        _box = new Jukebox(song => SongLoader.Load(rom, tree, song, mixer));
+        _box = new Jukebox(song => SongLoader.Load(rom, tree, song, mixer), mixer);
+        _cries = new CryLibrary(rom, tree.Samples, cries);
 
         Raylib.InitAudioDevice();
 
@@ -93,6 +95,26 @@ public sealed class Speakers : IDisposable
     {
         if (_ready) _box.Stop();
     }
+
+    /// <summary>
+    /// The noise one creature makes, over the top of whatever is playing.
+    /// <para>
+    /// A creature with no noise on this cartridge makes none, rather than a click. The whole
+    /// decision about which recording belongs to which creature was made before the window
+    /// opened; this is the part that puts it on.
+    /// </para>
+    /// </summary>
+    public void Cry(int species)
+    {
+        if (!_ready) return;
+
+        if (_cries.For(species) is not { } voice) return;
+
+        _box.PlayOver(voice, voice.Rate);
+    }
+
+    /// <summary>How many creatures this cartridge has a noise for.</summary>
+    public int CryCount => _cries.Count;
 
     /// <summary>
     /// Fills whatever the sound card has finished with. Called once a frame.

@@ -299,9 +299,19 @@ public static class Program
         Note($"sound: {sound.Table.Count} songs, {sound.Voicegroups.Count} voicegroups, "
              + $"{sound.Samples.Count} recordings");
 
-        using var speakers = new Speakers(data.Rom, sound);
+        // Which noise belongs to which creature — a table the sound walk could not see,
+        // because its entries carry a type byte outside the driver's kind enumeration.
+        CryTableResult? cries = CryTableLocator.Locate(data.Rom, sound.Samples, Note);
+
+        using var speakers = new Speakers(data.Rom, sound, cries);
 
         if (!speakers.IsReady) Note("no sound card, so the game is silent");
+
+        if (cries is not null && cries.Count < data.Species.Count)
+        {
+            Note($"the cry table names {cries.Count} creatures and the species table names "
+                 + $"{data.Species.Count}, so {data.Species.Count - cries.Count} will be quiet");
+        }
 
         // Located while the window is opening rather than in the moment somebody steps
         // into a trainer's line of sight — locating walks the whole image.
@@ -496,7 +506,7 @@ public static class Program
             }
 
             ApplyServerMessages(
-                network, others, player, view, data, trainers, items, script, carrying, storing, looking,
+                network, others, player, view, data, trainers, items, speakers, script, carrying, storing, looking,
                 ref talking, ref battle, ref shop, ref minding, ref market, ref band, ref boat, ref bag, ref party, ref box, ref boxSize, ref money,
                 ref correction, ref looks, ref owned, ref trading, ref askedBy, ref challengedBy, ref watching, ref exclaimFor, ref scene, ref arrived, ref fadingIn, ref holdInput,
                 ref afterTheFight, ref cameOut, outcomes, rival, console);
@@ -1991,6 +2001,7 @@ public static class Program
         GameData data,
         TrainerNames trainers,
         ItemNames items,
+        Speakers speakers,
         ScriptState script,
         BagScreen? carrying,
         BoxScreen? storing,
@@ -2372,6 +2383,12 @@ public static class Program
                         Active = started.Slot,
                     };
 
+                    // The noise the thing in front of you makes. Theirs only: yours has
+                    // not been sent out yet — the server sends a BattlerSentOut for it
+                    // straight after, and crying here as well would be the same creature
+                    // twice, a fifth of a second apart.
+                    speakers.Cry(started.Opponent.Species);
+
                     // The walk is over the moment the fight begins, which is the ending
                     // almost every walk has.
                     watching = null;
@@ -2380,6 +2397,7 @@ public static class Program
 
                 case BattlerSentOut sent when sent.Side == Side.Player:
                     battle?.Apply(sent);
+                    speakers.Cry(sent.Battler.Species);
 
                     // And which slot, so the list offers the other five rather than the
                     // one already standing there.
@@ -2389,6 +2407,7 @@ public static class Program
 
                 case BattlerSentOut sent:
                     battle?.Apply(sent);
+                    speakers.Cry(sent.Battler.Species);
                     break;
 
                 case ShopOpened opened:

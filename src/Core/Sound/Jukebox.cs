@@ -15,9 +15,10 @@ namespace PokeMmo.Core.Sound;
 /// be, and everything between them is here.
 /// </para>
 /// </summary>
-public sealed class Jukebox(Func<int, SongPlayer?> load)
+public sealed class Jukebox(Func<int, SongPlayer?> load, Mixer mixer)
 {
     private readonly Func<int, SongPlayer?> _load = load;
+    private readonly Mixer _mixer = mixer;
 
     private SongPlayer? _player;
 
@@ -83,20 +84,47 @@ public sealed class Jukebox(Func<int, SongPlayer?> load)
     }
 
     /// <summary>
+    /// A one-off noise, over the top of whatever is playing.
+    /// <para>
+    /// Over the top rather than instead of. A creature's cry is the sound the game makes when
+    /// it comes out, and the music does not stop for it — a jukebox that swapped one for the
+    /// other would silence a town every time somebody sent something out.
+    /// </para>
+    /// <para>
+    /// It goes straight onto the mixer, which is the same mixer the song is being performed
+    /// onto. The mixer has always been able to hold more than one thing at once; this is the
+    /// first caller that wanted it to.
+    /// </para>
+    /// </summary>
+    public void PlayOver(Voice voice, int rate)
+    {
+        if (voice.Audio.Length == 0) return;
+
+        // Held at full and let go at once, which is what a recording of a whole noise wants:
+        // the shaping is already in the recording, and putting an envelope over it would be
+        // shaping it twice.
+        _mixer.Play(voice, Math.Max(1, rate), new Envelope(255, 255, 255, 255));
+    }
+
+    /// <summary>
     /// Samples, however many were asked for.
     /// <para>
     /// Always exactly that many, even with nothing playing. A sound card asks for a fixed
     /// buffer and does not care that the game has nothing to say; handing back a short one
     /// would be handing back a click.
     /// </para>
+    /// <para>
+    /// With no song on, the mixer is still turned over. Otherwise a cry on a map with no
+    /// music would be put onto a mixer nobody was asking for samples from, and would be
+    /// silent — which is exactly the sort of thing that is only ever found in the one place
+    /// it happens.
+    /// </para>
     /// </summary>
     public short[] Render(int samples)
     {
         int wanted = Math.Max(0, samples);
 
-        if (_player is null) return new short[wanted];
-
-        short[] played = _player.Render(wanted);
+        short[] played = _player is null ? _mixer.Render(wanted) : _player.Render(wanted);
 
         if (played.Length == wanted) return played;
 
