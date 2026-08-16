@@ -416,6 +416,50 @@ public sealed class SyntheticRom
         WriteOverworldSprites();
         WriteTrainers();
         WriteItems();
+        WriteSamples();
+    }
+
+    /// <summary>
+    /// Recorded sounds in the shape the GBA's standard sound driver uses, plus the two
+    /// near-misses that a locator has to reject for the right reason.
+    /// </summary>
+    private void WriteSamples()
+    {
+        for (int i = 0; i < SampleCount; i++)
+        {
+            int at = SamplesOffset + i * SampleStride;
+
+            _data[at] = 0;
+            _data[at + 1] = 0;
+            _data[at + 2] = 0;
+            _data[at + 3] = (byte)(SampleLoopsAt(i) ? 0x40 : 0x00);
+
+            WriteU32(at + 4, SamplePitchFor(i));
+
+            // A loop point inside the sound for the ones that loop, and nought for the ones
+            // that do not — which is what the format requires and what the locator checks.
+            WriteU32(at + 8, (uint)(SampleLoopsAt(i) ? SampleBytes / 4 : 0));
+            WriteU32(at + 12, SampleBytes - 1);
+
+            // Audio that is obviously not zeroes, so a scan cannot find a second header
+            // inside the sound itself.
+            for (int b = 0; b < SampleBytes; b++)
+                _data[at + 16 + b] = (byte)(0x40 + ((i * 7 + b * 3) % 0x60));
+        }
+
+        // Right in every way except the rate.
+        WriteU32(SampleWithOddRateOffset + 0, 0);
+        _data[SampleWithOddRateOffset + 3] = 0x00;
+        WriteU32(SampleWithOddRateOffset + 4, 12345 * 1024);
+        WriteU32(SampleWithOddRateOffset + 8, 0);
+        WriteU32(SampleWithOddRateOffset + 12, SampleBytes - 1);
+
+        // And one whose length does not fit in the file it claims to be in.
+        WriteU32(SampleRunningOffTheEndOffset + 0, 0);
+        _data[SampleRunningOffTheEndOffset + 3] = 0x00;
+        WriteU32(SampleRunningOffTheEndOffset + 4, 0x00D10C00);
+        WriteU32(SampleRunningOffTheEndOffset + 8, 0);
+        WriteU32(SampleRunningOffTheEndOffset + 12, (uint)RomSize);
     }
 
     /// <summary>Palette 0 of the synthetic tileset — what a rendered map is checked against.</summary>
@@ -869,6 +913,45 @@ public sealed class SyntheticRom
     private const int ShopListStride = 64;
 
     // --- items -------------------------------------------------------------------
+
+    // --- sound ------------------------------------------------------------------
+    // Placed above everything else so a sample scan cannot be confused by a table that
+    // happens to begin with zeroes.
+
+    /// <summary>Where the synthetic recorded sounds start.</summary>
+    public const int SamplesOffset = 0x120000;
+
+    /// <summary>How many are written. Some loop and some do not, deliberately.</summary>
+    public const int SampleCount = 6;
+
+    /// <summary>Bytes of audio in each, before the sixteen-byte header.</summary>
+    public const int SampleBytes = 512;
+
+    /// <summary>Stride between them — the audio, the header, and a gap that is not audio.</summary>
+    public const int SampleStride = 16 + SampleBytes + 64;
+
+    /// <summary>
+    /// The pitch written for a given sample. Two of the format's known values, alternating,
+    /// so a test can tell the field is being read rather than assumed.
+    /// </summary>
+    public static uint SamplePitchFor(int index) => index % 2 == 0 ? 0x00D10C00u : 0x00F66000u;
+
+    /// <summary>Every other one loops.</summary>
+    public static bool SampleLoopsAt(int index) => index % 2 == 1;
+
+    /// <summary>
+    /// A header that is right in every way except the pitch, which is a plausible rate the
+    /// format does not use. It exists so the near-miss count has something to count, and so
+    /// that a locator which stopped checking pitches would be caught by a test rather than
+    /// by a cartridge.
+    /// </summary>
+    public const int SampleWithOddRateOffset = SamplesOffset + SampleCount * SampleStride + 0x100;
+
+    /// <summary>
+    /// A header whose length runs off the end of the file. The one false positive shape that
+    /// every other check passes.
+    /// </summary>
+    public const int SampleRunningOffTheEndOffset = SampleWithOddRateOffset + 0x100;
 
     public const int ItemTableOffset = 0x110000;
     public const int ItemDescriptionsOffset = 0x114000;
