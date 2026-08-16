@@ -304,6 +304,12 @@ public sealed class GameRules
     public ItemData? ItemAt(int id) => _items.GetValueOrDefault(id);
 
     /// <summary>
+    /// Every item this rules file knows, for the two questions that are about the table
+    /// rather than about one row: how many effects exist, and how many of them do anything.
+    /// </summary>
+    public IEnumerable<ItemData> EveryItem => _items.Values;
+
+    /// <summary>
     /// The moves a wild creature of this species and level would know — the last four
     /// it would have learned. Empty when the learnset is missing.
     /// </summary>

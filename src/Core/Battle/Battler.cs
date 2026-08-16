@@ -184,6 +184,18 @@ public sealed class Battler
     /// </summary>
     public int Holding { get; set; }
 
+    /// <summary>
+    /// What that item's record says, when the rules were to hand.
+    /// <para>
+    /// Beside the id rather than instead of it, because the two answer different questions
+    /// and one of them is answerable without a rules file. <see cref="Holding"/> is what a
+    /// save carries and what THIEF moves; this is the two bytes that say what carrying it is
+    /// worth, and it is null on any battler built without rules — a battle that does not know
+    /// what an item does is a battle where items do nothing, rather than one that throws.
+    /// </para>
+    /// </summary>
+    public ItemData? Carried { get; set; }
+
     /// <summary>Turns of sleep remaining, counted down at the start of each of this battler's turns.</summary>
     public int SleepTurns { get; set; }
 
@@ -317,12 +329,24 @@ public sealed class Battler
 
     public int TrappedBy { get; set; }
 
+    /// <summary>
+    /// The one move this one is allowed, once something it is carrying has decided.
+    /// <para>
+    /// Separate from <see cref="ForcedSlot"/> even though both mean "you are using this".
+    /// A forced slot is the middle of something — THRASH, FLY — and ends when that thing
+    /// does; this one has no end except leaving the field, and folding the two together
+    /// would mean a CHOICE BAND that let go the moment a two-turn move finished.
+    /// </para>
+    /// </summary>
+    public int? ChoiceSlot { get; set; }
+
     /// <summary>Everything a turn can owe the next one, forgotten at once.</summary>
     public void ForgetWhatWasStarted()
     {
         MustRecharge = false;
         ForcedSlot = null;
         ForcedTurns = 0;
+        ChoiceSlot = null;
         LastSlot = null;
         DisabledSlot = null;
         DisabledTurns = 0;

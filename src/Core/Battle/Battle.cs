@@ -71,6 +71,9 @@ public enum Side
 [JsonDerivedType(typeof(WeatherEnded), "weatheroff")]
 [JsonDerivedType(typeof(WeatherHurt), "weatherhurt")]
 [JsonDerivedType(typeof(WeatherHealed), "weatherheal")]
+[JsonDerivedType(typeof(ItemHealed), "itemhealed")]
+[JsonDerivedType(typeof(HeldOn), "heldon")]
+[JsonDerivedType(typeof(WentFirst), "wentfirst")]
 [JsonDerivedType(typeof(MustRepeat), "mustrepeat")]
 [JsonDerivedType(typeof(GotAway), "gotaway")]
 [JsonDerivedType(typeof(CouldNotGetAway), "couldnotgetaway")]
@@ -257,6 +260,18 @@ public abstract record BattleEvent
     /// <summary>And somebody the weather agrees with.</summary>
     public sealed record WeatherHealed(Side Side, Weather Weather, int Healed, int RemainingHp) : BattleEvent;
 
+    /// <summary>
+    /// Something being carried put health back. The item id rather than a name, like every
+    /// other message in this project that is about an item.
+    /// </summary>
+    public sealed record ItemHealed(Side Side, int ItemId, int Healed, int RemainingHp) : BattleEvent;
+
+    /// <summary>Something being carried turned a knockout into one point of health.</summary>
+    public sealed record HeldOn(Side Side, int ItemId) : BattleEvent;
+
+    /// <summary>Something being carried took the turn out of order.</summary>
+    public sealed record WentFirst(Side Side, int ItemId) : BattleEvent;
+
     /// <summary>Made to do the same thing again.</summary>
     public sealed record MustRepeat(Side Side, int MoveId) : BattleEvent;
 
@@ -414,8 +429,22 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
     /// every screen that draws one.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// A chance in a hundred, rolled only when there is one.
+    /// <para>
+    /// The guard is the whole point rather than an optimisation. Every fight in this project
+    /// runs off one seeded stream, so a die rolled for something that cannot happen moves
+    /// every die after it — and the first version of this rolled a QUICK CLAW for two
+    /// creatures carrying nothing and changed the outcome of a DISABLE test three turns
+    /// later. Dice are only rolled for things that could go either way.
+    /// </para>
+    /// </summary>
+    private bool Rolls(int chance) => chance > 0 && _rng.Next(100) < chance;
+
     private int SpeedOf(Battler battler) =>
-        battler.EffectiveStat(Stat.Speed) * Abilities.Speed(battler.Ability, Overhead) / 100;
+        battler.EffectiveStat(Stat.Speed)
+        * Abilities.Speed(battler.Ability, Overhead) / 100
+        * HeldItems.Multiplies(battler.Carried, battler.Species.Index, Stat.Speed) / 100;
 
     /// <summary>
     /// Carries what is already true across a switch.
@@ -647,6 +676,16 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
     /// is not one.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Who a claw let in front this turn, so the line can be said once the turn starts.
+    /// <para>
+    /// Held rather than said where it happens, because the order is decided before anybody
+    /// has done anything and a message about an item arriving before the move it changed the
+    /// order of would read as though it had happened out of nowhere.
+    /// </para>
+    /// </summary>
+    private Side? _clawed;
+
     private bool _playerFlinching;
 
     private bool _opponentFlinching;
@@ -673,7 +712,13 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         playerAction = Forced(Player) ?? playerAction;
         opponentAction = Forced(Opponent) ?? opponentAction;
 
-        foreach (Side side in DecideOrder(playerAction, opponentAction))
+        _clawed = null;
+
+        Side[] order = DecideOrder(playerAction, opponentAction);
+
+        if (_clawed is { } hurried) events.Add(new BattleEvent.WentFirst(hurried, Of(hurried).Holding));
+
+        foreach (Side side in order)
         {
             if (IsOver) break;
 
@@ -712,6 +757,22 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         if (playerPriority != opponentPriority)
             return playerPriority > opponentPriority ? [Side.Player, Side.Opponent] : [Side.Opponent, Side.Player];
 
+        // A claw, which reaches inside the bracket rather than over it. In these games it
+        // does not beat a priority move — it beats Speed — so it is asked here, after
+        // priority has already decided and before Speed gets to.
+        //
+        // Both may roll it. When both do, it has decided nothing and Speed decides, which is
+        // simpler than picking a winner between two identical claws and is what the games do.
+        bool playerClawed = Rolls(HeldItems.Hurries(Player.Carried));
+        bool opponentClawed = Rolls(HeldItems.Hurries(Opponent.Carried));
+
+        if (playerClawed != opponentClawed)
+        {
+            _clawed = playerClawed ? Side.Player : Side.Opponent;
+
+            return playerClawed ? [Side.Player, Side.Opponent] : [Side.Opponent, Side.Player];
+        }
+
         int playerSpeed = SpeedOf(Player);
         int opponentSpeed = SpeedOf(Opponent);
 
@@ -729,8 +790,20 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
     /// stopped from asking — it does not know — and the answer is simply not used.
     /// </para>
     /// </summary>
-    private static BattleAction? Forced(Battler battler) =>
-        battler.ForcedSlot is { } slot && !battler.HasFainted ? new BattleAction.UseMove(slot) : null;
+    private static BattleAction? Forced(Battler battler)
+    {
+        if (battler.HasFainted) return null;
+
+        if (battler.ForcedSlot is { } slot) return new BattleAction.UseMove(slot);
+
+        // And the band, which is the same discarding of what the player pressed for a
+        // different reason. Only while that move can still be made: a creature locked into a
+        // move it has run out of is a creature that must Struggle, and forcing an empty slot
+        // here would hand it a turn of nothing instead.
+        return battler.ChoiceSlot is { } only && battler.PpLeft(only) > 0
+            ? new BattleAction.UseMove(only)
+            : null;
+    }
 
     private static int PriorityOf(Battler battler, BattleAction action) =>
         action is BattleAction.UseMove use && battler.MoveAt(use.Slot) is { } move ? move.Priority : 0;
@@ -859,7 +932,16 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
 
         // What this one just did, for the two moves that care. Written when the move is
         // made rather than when it lands, because a miss is still what you did.
-        if (action is BattleAction.UseMove made) attacker.LastSlot = made.Slot;
+        if (action is BattleAction.UseMove made)
+        {
+            attacker.LastSlot = made.Slot;
+
+            // And what it has now committed to, if it is carrying the thing that commits.
+            // Set after the move rather than before it, so the move that decided is itself
+            // freely chosen — a band that locked before the first choice would be a band
+            // that chose for you.
+            if (HeldItems.Locks(attacker.Carried)) attacker.ChoiceSlot ??= made.Slot;
+        }
 
         events.Add(new BattleEvent.MoveUsed(side, move.Id));
 
@@ -1018,7 +1100,11 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             EffectKind.Twice => 2,
             _ => 1,
         };
-        int criticalStage = carried.Kind == EffectKind.HighCritical ? 1 : 0;
+        // The move's own sharpness, plus whatever the attacker is carrying to add to it.
+        // They add rather than replace, which is the games' rule and the reason a FARFETCH'D
+        // holding a STICK and using SLASH crits about half the time.
+        int criticalStage = (carried.Kind == EffectKind.HighCritical ? 1 : 0)
+            + HeldItems.Sharpens(attacker.Carried, attacker.Species.Index);
 
         int total = 0;
         int landed = 0;
@@ -1034,12 +1120,28 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
                 return;
             }
 
-            int dealt = defender.TakeDamage(result.Damage);
+            // A band, asked only of a hit that would finish it. One point left rather than
+            // none, which is the whole rule — and asked per hit rather than per move, so a
+            // DOUBLESLAP has to get through it five times.
+            int coming = result.Damage;
+            bool held = false;
+
+            if (coming >= defender.CurrentHp
+                && defender.CurrentHp > 1
+                && Rolls(HeldItems.Endures(defender.Carried)))
+            {
+                coming = defender.CurrentHp - 1;
+                held = true;
+            }
+
+            int dealt = defender.TakeDamage(coming);
 
             total += dealt;
             landed++;
 
             events.Add(new BattleEvent.DamageDealt(Other(side), dealt, defender.CurrentHp, result));
+
+            if (held) events.Add(new BattleEvent.HeldOn(Other(side), defender.Holding));
 
             if (defender.HasFainted) break;
         }
@@ -1066,6 +1168,27 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             int given = attacker.Heal(back);
 
             if (given > 0) events.Add(new BattleEvent.Drained(side, given));
+        }
+
+        // A bell, which takes a share of what was dealt regardless of what the move was.
+        // After the move's own drain rather than instead of it: a creature holding one and
+        // using ABSORB gets both, which is what the games do.
+        if (total > 0 && HeldItems.Drains(attacker.Carried) is { } share)
+        {
+            int back = attacker.Heal(Math.Max(1, total / share));
+
+            if (back > 0)
+                events.Add(new BattleEvent.ItemHealed(side, attacker.Holding, back, attacker.CurrentHp));
+        }
+
+        // And a rock, which is a flinch that belongs to the carrier rather than to the move.
+        // Only on a hit that landed, and not on something already finished — a flinch is a
+        // lost turn, and something that has fainted has no turn to lose.
+        if (landed > 0
+            && !defender.HasFainted
+            && Rolls(HeldItems.Startles(attacker.Carried)))
+        {
+            SetFlinching(Other(side), true);
         }
 
         if (carried.Kind == EffectKind.Recoil && total > 0)
@@ -1310,7 +1433,9 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             }
 
             attacker.Holding = defender.Holding;
+            attacker.Carried = defender.Carried;
             defender.Holding = 0;
+            defender.Carried = null;
 
             events.Add(new BattleEvent.Stole(side, attacker.Holding));
 
@@ -1743,6 +1868,17 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         {
             Battler battler = Of(side);
             if (battler.HasFainted) continue;
+
+            // What it is carrying, before anything that hurts. A sixteenth, which is
+            // modelled — the item's own parameter is ten and the two are not the same
+            // number, so the ten is left alone rather than pressed into meaning something.
+            if (HeldItems.Feeds(battler.Carried) && battler.CurrentHp < battler.MaxHp)
+            {
+                int fed = battler.Heal(Math.Max(1, battler.MaxHp / HeldItems.ScrapsFraction));
+
+                if (fed > 0)
+                    events.Add(new BattleEvent.ItemHealed(side, battler.Holding, fed, battler.CurrentHp));
+            }
 
             // A block runs out. Counted down here with everything else that lasts turns,
             // and cleared rather than left at nought so the slot is free again.

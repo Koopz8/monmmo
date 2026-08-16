@@ -57,6 +57,10 @@ public sealed class BattleFactory(GameRules rules)
         battler.Status = saved.Status;
         battler.Holding = saved.HeldItem;
 
+        // And what that item does, looked up once here rather than on every hit. The
+        // battle has no rules file of its own and must not need one.
+        battler.Carried = rules.ItemAt(battler.Holding);
+
         // And what is left of each move. Empty means full, which is what everything
         // written before PP existed comes back as.
         battler.RestorePp(saved.Pp);
@@ -122,7 +126,11 @@ public sealed class BattleFactory(GameRules rules)
 
         // And whatever it happens to be carrying, which THIEF has been able to take off
         // somebody since it was written and which nothing has ever been carrying.
-        if (rng is not null) battler.Holding = HeldBy(record, rng);
+        if (rng is not null)
+        {
+            battler.Holding = HeldBy(record, rng);
+            battler.Carried = rules.ItemAt(battler.Holding);
+        }
 
         // A creature with no moves at all cannot take a turn, so it gets the first
         // move in the table rather than standing there.
@@ -162,6 +170,7 @@ public sealed class BattleFactory(GameRules rules)
             // What the cartridge says they are carrying. This number has been read off
             // every trainer's party since trainers existed and thrown away here.
             battler.Holding = member.HeldItem;
+            battler.Carried = rules.ItemAt(battler.Holding);
 
             built.Add(battler);
         }

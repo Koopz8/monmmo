@@ -56,6 +56,12 @@ public static class DamageCalculator
 
         int accuracy = Stats.ApplyAccuracyStage(move.Accuracy, combinedStage);
 
+        // What the defender is carrying to make itself harder to find. Taken off the
+        // accuracy as a percentage of it rather than as a stage, because it is not a stage:
+        // it survives a HAZE, it does not stack with itself, and CLEAR BODY has nothing to
+        // say about it.
+        accuracy = accuracy * (100 - HeldItems.Slipperiness(defender.Carried)) / 100;
+
         return rng.Next(100) < Math.Clamp(accuracy, 1, 100);
     }
 
@@ -122,6 +128,15 @@ public static class DamageCalculator
         // multiplier on the far end of the division is not.
         attack = attack * Abilities.Attacking(attacker.Ability, attacker, move, physical) / 100;
 
+        // And what it is carrying, on the same stat and for the same reason an ability goes
+        // here: a CHOICE BAND and a HUGE POWER are the same arithmetic in either order only
+        // while they are both on this side of the division.
+        attack = attack * HeldItems.Multiplies(
+            attacker.Carried, attacker.Species.Index, physical ? Stat.Attack : Stat.SpAttack) / 100;
+
+        defence = defence * HeldItems.Multiplies(
+            defender.Carried, defender.Species.Index, physical ? Stat.Defense : Stat.SpDefense) / 100;
+
         // Burn halves physical damage, and does so by halving Attack here rather than
         // in the battler, so a burned attacker's Speed and displayed stats are untouched.
         //
@@ -155,6 +170,10 @@ public static class DamageCalculator
         // And what the sky is doing to it. Last, with the other multiplier on the finished
         // number — rain makes water and unmakes fire, and sun does the reverse.
         damage = damage * Skies.Damage(weather, move.Type) / 100;
+
+        // And the seventeen items that are worth a percentage on one type of move, whose
+        // percentage is the number on their own record rather than one written here.
+        damage = damage * HeldItems.Boosting(attacker.Carried, move.Type) / 100;
 
         // A hit that connects always does something, unless the type chart said the
         // move does not affect the target at all.

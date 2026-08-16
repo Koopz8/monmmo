@@ -144,6 +144,25 @@ public static class RulesExporter
             $"  rules: {fielded.Length} abilities are fielded by somebody; " +
             $"{modelled} of them do something here and {fielded.Length - modelled} are carried and silent");
 
+        // And the same honest split for what those items do. Better placed than abilities
+        // were: the effect number and its magnitude are both on the record, so only the
+        // meaning had to be written. Printed the same way and for the same reason — the
+        // number that matters is not "held items: yes" but how many of the ones this
+        // cartridge fields have a rule, and how many are carried and silent.
+        int[] effects =
+        [
+            .. rules.EveryItem
+                .Select(i => i.HoldEffect)
+                .Where(e => e != 0)
+                .Distinct(),
+        ];
+
+        int understood = effects.Count(Core.Battle.HeldItems.DoesSomething);
+
+        log?.Invoke(
+            $"  rules: {effects.Length} held-item effects exist on this cartridge; " +
+            $"{understood} of them do something here and {effects.Length - understood} are carried and silent");
+
         ReportUsableness(rules, log);
 
         return rules;

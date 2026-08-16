@@ -130,6 +130,9 @@ public static class Program
         if (options.DumpItems)
             WriteItems(rom);
 
+        if (options.DumpHolds)
+            WriteHolds(rom);
+
         if (options.DumpScripts)
             WriteScripts(rom);
 
@@ -6662,6 +6665,84 @@ public static class Program
             $"{sites.Values.SelectMany(w => w).Select(w => w.Split(' ')[0]).Distinct().Count()} maps");
     }
 
+    /// <summary>
+    /// Every item this cartridge says can be carried, grouped by the effect number it
+    /// carries.
+    /// <para>
+    /// The field has been extracted since the item table was first read and has never been
+    /// looked at. This is the same position abilities were in before they were modelled,
+    /// and the same first step: find out what is actually there before writing a line of
+    /// rules about it.
+    /// </para>
+    /// <para>
+    /// Grouped by effect rather than listed by item, because the question is not "what does
+    /// LEFTOVERS do" — it is "how many distinct things does this cartridge think an item can
+    /// do, and which items share each one". A group with eight members is one rule worth
+    /// eight items; a group with one member is a rule worth one, and the two deserve
+    /// different amounts of attention.
+    /// </para>
+    /// <para>
+    /// The parameter comes with it because the two fields are read together everywhere else
+    /// on this cartridge — the same byte that says how much a POTION restores is the one
+    /// beside the hold effect — so a group whose members all share a parameter and a group
+    /// whose members each have their own are different shapes of rule.
+    /// </para>
+    /// </summary>
+    private static void WriteHolds(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("Held items");
+
+        if (ItemTable.Locate(rom) is not { } table)
+        {
+            Console.WriteLine("  no item table, so nothing to say");
+            return;
+        }
+
+        List<ItemRecord> items = [.. ItemTable.Read(rom, table)];
+        List<ItemRecord> carried = [.. items.Where(i => i.HoldEffect != 0)];
+
+        Console.WriteLine(
+            $"  {carried.Count} of {items.Count} items carry an effect, " +
+            $"across {carried.Select(i => i.HoldEffect).Distinct().Count()} distinct effect numbers");
+
+        Console.WriteLine();
+
+        foreach (var group in carried
+                     .GroupBy(i => i.HoldEffect)
+                     .OrderByDescending(g => g.Count())
+                     .ThenBy(g => g.Key))
+        {
+            bool sameParam = group.Select(i => i.HoldEffectParam).Distinct().Count() == 1;
+
+            Console.WriteLine(
+                $"  effect {group.Key,3} — {group.Count(),2} item(s), " +
+                (sameParam ? $"all with parameter {group.First().HoldEffectParam}" : "each with its own parameter"));
+
+            foreach (ItemRecord item in group.OrderBy(i => i.Id))
+            {
+                Console.WriteLine(
+                    $"      {item.Id,4} {item.Name,-14} param {item.HoldEffectParam,3}  {item.Pocket}");
+            }
+        }
+
+        // And the other half of the same question: what is in the pockets things are
+        // carried from that carries nothing. A berry with no effect number is either a
+        // berry whose effect lives elsewhere or a berry that does nothing, and which of
+        // those it is decides whether there is a second table to go and find.
+        Console.WriteLine();
+        Console.WriteLine("  In the same pockets, carrying nothing:");
+
+        var pockets = carried.Select(i => i.Pocket).Distinct().ToHashSet();
+
+        foreach (var pocket in items
+                     .Where(i => pockets.Contains(i.Pocket) && i.HoldEffect == 0)
+                     .GroupBy(i => i.Pocket))
+        {
+            Console.WriteLine($"      {pocket.Key,-9} {pocket.Count(),3}   e.g. {string.Join(", ", pocket.Take(4).Select(i => i.Name))}");
+        }
+    }
+
     private static void WriteItems(Rom rom)
     {
         Console.WriteLine();
@@ -7005,6 +7086,8 @@ public static class Program
         public bool DumpOverworld { get; private init; }
         public bool DumpTrainers { get; private init; }
         public bool DumpItems { get; private init; }
+
+        public bool DumpHolds { get; private init; }
         public bool DumpScripts { get; private init; }
         public string ScriptMap { get; private init; } = "";
 
@@ -7167,6 +7250,7 @@ public static class Program
             bool overworld = false;
             bool trainers = false;
             bool items = false;
+            bool holds = false;
             bool scripts = false;
             string scriptMap = "";
             string at = "";
@@ -7283,6 +7367,9 @@ public static class Program
                         break;
                     case "--items":
                         items = true;
+                        break;
+                    case "--holds":
+                        holds = true;
                         break;
                     case "--scripts":
                         scripts = true;
@@ -7525,6 +7612,7 @@ public static class Program
                 DumpOverworld = overworld,
                 DumpTrainers = trainers,
                 DumpItems = items,
+                DumpHolds = holds,
                 DumpScripts = scripts,
                 ScriptMap = scriptMap,
                 At = at,

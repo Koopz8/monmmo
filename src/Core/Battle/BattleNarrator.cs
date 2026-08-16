@@ -199,6 +199,13 @@ public static class BattleNarrator
 
         BattleEvent.WeatherHealed e => $"{names.Of(e.Side)} drinks it in!",
 
+        BattleEvent.ItemHealed e =>
+            $"{names.Of(e.Side)} restored a little health with its {names.ItemNamed(e.ItemId)}!",
+
+        BattleEvent.HeldOn e => $"{names.Of(e.Side)} hung on using its {names.ItemNamed(e.ItemId)}!",
+
+        BattleEvent.WentFirst e => $"{names.Of(e.Side)}'s {names.ItemNamed(e.ItemId)} let it move first!",
+
         BattleEvent.Grazed e => $"{names.Of(e.Side)} is hurt reaching them!",
 
         BattleEvent.BrokeFree e => $"{names.Of(e.Side)} got free of {names.MoveNamed(e.MoveId)}!",
