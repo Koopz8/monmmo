@@ -7,6 +7,7 @@ using PokeMmo.Core.World;
 using PokeMmo.RomExtract;
 using PokeMmo.RomExtract.Maps;
 using PokeMmo.RomExtract.Scripts;
+using PokeMmo.RomExtract.Sound;
 using Raylib_cs;
 
 namespace PokeMmo.Client;
@@ -290,6 +291,18 @@ public static class Program
         // not find a sprite table is worse than one that draws a box.
         using var sprites = new CharacterSprites(data.Rom);
 
+        // The music, out of the same file. Located here for the same reason everything
+        // else is: walking the tables scans the whole image, which is fine while a window
+        // is opening and not fine when somebody opens a door.
+        SoundTreeResult sound = SoundLocator.Walk(data.Rom);
+
+        Note($"sound: {sound.Table.Count} songs, {sound.Voicegroups.Count} voicegroups, "
+             + $"{sound.Samples.Count} recordings");
+
+        using var speakers = new Speakers(data.Rom, sound);
+
+        if (!speakers.IsReady) Note("no sound card, so the game is silent");
+
         // Located while the window is opening rather than in the moment somebody steps
         // into a trainer's line of sight — locating walks the whole image.
         var trainers = new TrainerNames(data.Rom, data.Species.Count);
@@ -462,6 +475,13 @@ public static class Program
         while (!Raylib.WindowShouldClose())
         {
             float delta = Raylib.GetFrameTime();
+
+            // Asked for every frame rather than on the frames a map changes. The rule
+            // about a song already playing lives in the jukebox and is tested there; a
+            // caller that had to remember whether the map had changed would be a second
+            // copy of it, kept in the one file that has no tests.
+            speakers.Play(view.Map.Music);
+            speakers.Pump();
 
             worstUntil -= delta;
 

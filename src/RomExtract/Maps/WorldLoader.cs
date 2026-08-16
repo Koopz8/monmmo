@@ -23,6 +23,16 @@ public sealed record LoadedMap(
     public byte[] Behaviours { get; init; } = [];
 
     /// <summary>
+    /// Which song plays here, by the number this map's own header carries.
+    /// <para>
+    /// A number rather than a name, like everything else the server holds about a map — and
+    /// the client is where it becomes a sound, because the client is the side with the
+    /// cartridge that the recordings are in.
+    /// </para>
+    /// </summary>
+    public int Music { get; init; } = -1;
+
+    /// <summary>
     /// True when everybody on this map is deliberately quiet.
     /// <para>
     /// The client's half of the rule, derived from the same fact the server derives it
@@ -157,6 +167,7 @@ public static class WorldLoader
             chosen.Header.Layout.ReadCollision(rom))
         {
             Behaviours = chosen.Header.Layout.ReadBehaviours(rom),
+            Music = chosen.Header.Music,
         };
     }
 

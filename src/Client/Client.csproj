@@ -6,6 +6,9 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>PokeMmo.Client</RootNamespace>
+
+    <!-- The sound card takes a pointer to a buffer. It is the only place. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>monmmo</AssemblyName>
   </PropertyGroup>
 
