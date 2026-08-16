@@ -127,7 +127,7 @@ public static class DamageCalculator
         // And what type it is, when the record does not say that either. HIDDEN POWER is the
         // only move in this game whose type depends on the creature using it, and the six
         // numbers it depends on are read off a save rather than guessed at.
-        PokemonType type = MovePower.TypeOf(move, attacker) ?? move.Type;
+        PokemonType type = MovePower.TypeOf(move, attacker, weather) ?? move.Type;
 
         int effectiveness = TypeChart.Effectiveness(type, defender.Type1, defender.Type2);
 
@@ -151,7 +151,7 @@ public static class DamageCalculator
         // What this move actually hits for, when its record's number is a placeholder. Asked
         // before the "no power" refusal below, because FLAIL's record says one and one is a
         // record saying the number is somewhere else.
-        int power = MovePower.Of(move, attacker, defender) ?? move.Power;
+        int power = MovePower.Of(move, attacker, defender, weather) ?? move.Power;
 
         // The one move whose power depends on which go of itself this is. Multiplying rather
         // than doubling, because the three goes are worth one, two and three of it rather

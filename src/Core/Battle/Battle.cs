@@ -98,6 +98,7 @@ public enum Side
 [JsonDerivedType(typeof(LearnedMove), "learnedmove")]
 [JsonDerivedType(typeof(AbilityMoved), "abilitymoved")]
 [JsonDerivedType(typeof(LostItsNerve), "lostitsnerve")]
+[JsonDerivedType(typeof(ChangedType), "changedtype")]
 [JsonDerivedType(typeof(Damped), "damped")]
 [JsonDerivedType(typeof(MustRepeat), "mustrepeat")]
 [JsonDerivedType(typeof(GotAway), "gotaway")]
@@ -382,6 +383,9 @@ public abstract record BattleEvent
     /// </para>
     /// </summary>
     public sealed record LostItsNerve(Side Side) : BattleEvent;
+
+    /// <summary>Became a different type than the one it was born with.</summary>
+    public sealed record ChangedType(Side Side, PokemonType Type) : BattleEvent;
 
     /// <summary>Turned one kind of move down, for the room rather than for anybody.</summary>
     public sealed record Damped(Side Side) : BattleEvent;
@@ -961,6 +965,70 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
     public Battler Of(Side side) => side == Side.Player ? Player : Opponent;
 
     private static Side Other(Side side) => side == Side.Player ? Side.Opponent : Side.Player;
+
+    /// <summary>
+    /// What this place is made of, for the move that becomes it.
+    /// <para>
+    /// Supplied from outside, like the move table and the move a creature is left with, and
+    /// for the same reason: a battle does not know where it is. What a square is made of is
+    /// on the map, the map belongs to the world, and the world is not something this class
+    /// has ever been handed.
+    /// </para>
+    /// <para>
+    /// Normal when nobody says otherwise, which is both the commonest answer on this
+    /// cartridge and the one that makes the move do the least — a default that flattered the
+    /// move would be a default nobody noticed was wrong.
+    /// </para>
+    /// </summary>
+    public PokemonType Ground { get; init; } = PokemonType.Normal;
+
+    /// <summary>
+    /// What one of the three type-changing moves turns its user into, or nothing when there
+    /// is no answer.
+    /// </summary>
+    private PokemonType? BecomingWhat(Battler attacker, Battler defender, EffectKind kind)
+    {
+        switch (kind)
+        {
+            case EffectKind.BecomesItsMove:
+            {
+                // One of its own, and not one it already is — becoming what you already are
+                // is the move doing nothing, and it should say so rather than announce a
+                // change that changed nothing.
+                List<PokemonType> could =
+                    [.. attacker.Moves.Select(m => m.Type).Where(t => !attacker.Is(t)).Distinct()];
+
+                return could.Count == 0 ? null : could[_rng.Next(could.Count)];
+            }
+
+            case EffectKind.BecomesTheAnswer:
+            {
+                // Something that stands up to whatever they last threw. Resisting rather
+                // than immune, because an immunity would make one move a complete answer to
+                // whatever the other side had committed to — and because the game's own
+                // version takes whatever it finds first.
+                if (defender.LastMove is not { } theirs) return null;
+
+                List<PokemonType> resists =
+                [
+                    .. Enum.GetValues<PokemonType>()
+                        // Not the placeholder the cartridge uses to pad its own table,
+                        // which is a value in the enumeration and is not a type anybody is.
+                        .Where(t => t != PokemonType.Mystery)
+                        .Where(t => TypeChart.Against(theirs.Type, t) < TypeChart.Neutral)
+                        .Where(t => !attacker.Is(t)),
+                ];
+
+                return resists.Count == 0 ? null : resists[_rng.Next(resists.Count)];
+            }
+
+            case EffectKind.BecomesTheGround:
+                return attacker.Is(Ground) ? null : Ground;
+
+            default:
+                return null;
+        }
+    }
 
     /// <summary>Whether this kind does nothing itself and uses another move instead.</summary>
     private static bool Borrows(EffectKind kind) =>
@@ -2112,6 +2180,24 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             Settle(defender, each);
 
             events.Add(new BattleEvent.HealthShared(at, each));
+
+            return;
+        }
+
+        if (effect.Kind is EffectKind.BecomesItsMove
+            or EffectKind.BecomesTheAnswer
+            or EffectKind.BecomesTheGround)
+        {
+            if (BecomingWhat(attacker, defender, effect.Kind) is not { } becoming)
+            {
+                events.Add(new BattleEvent.NothingHappened(at));
+
+                return;
+            }
+
+            attacker.BorrowedType = becoming;
+
+            events.Add(new BattleEvent.ChangedType(at, becoming));
 
             return;
         }

@@ -595,6 +595,7 @@ public sealed class Battler
         LastSlot = null;
         LastMove = null;
         BorrowedAbility = null;
+        BorrowedType = null;
         HurtThisTurn = 0;
         HurtThisTurnBy = null;
 
@@ -606,8 +607,27 @@ public sealed class Battler
         IsAway = false;
     }
 
-    public PokemonType Type1 => Species.Type1;
-    public PokemonType Type2 => Species.Type2;
+    /// <summary>
+    /// A type put on this one by a move, for the length of the fight.
+    /// <para>
+    /// Null almost always. When it is not, it replaces <em>both</em> of them and the creature
+    /// is that one type and nothing else — which is what the four moves that do this all
+    /// mean, and is why this is one field rather than two. A creature that kept half of what
+    /// it was would be a different rule than any of them.
+    /// </para>
+    /// <para>
+    /// It goes when its owner does. What a creature <em>is</em> is not something a battle may
+    /// write to a save, and every one of these moves is over when the fight is.
+    /// </para>
+    /// </summary>
+    public PokemonType? BorrowedType { get; set; }
+
+    public PokemonType Type1 => BorrowedType ?? Species.Type1;
+
+    public PokemonType Type2 => BorrowedType ?? Species.Type2;
+
+    /// <summary>True when this one is that type, by birth or by a move.</summary>
+    public bool Is(PokemonType type) => Type1 == type || Type2 == type;
 
     public bool HasFainted => CurrentHp <= 0;
 

@@ -257,6 +257,8 @@ public static class BattleNarrator
 
         BattleEvent.LostItsNerve e => $"{names.Of(e.Side)} lost its focus and could not move!",
 
+        BattleEvent.ChangedType e => $"{names.Of(e.Side)} transformed into the {e.Type} type!",
+
         BattleEvent.Damped e => $"{names.Of(e.Side)} damped one kind of move down!",
 
         BattleEvent.Grazed e => $"{names.Of(e.Side)} is hurt reaching them!",

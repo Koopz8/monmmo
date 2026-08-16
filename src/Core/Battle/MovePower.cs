@@ -46,6 +46,9 @@ public static class MovePower
     /// <summary>REVENGE: twice as hard when its user has already been hit this turn.</summary>
     public const byte Answering = 0xB9;
 
+    /// <summary>WEATHER BALL: whatever the sky is, and twice as hard when the sky is anything.</summary>
+    public const byte Skyward = 0xCB;
+
     /// <summary>FURY CUTTER: twice as hard for every turn running it has already landed.</summary>
     public const byte Building = 0x77;
 
@@ -95,7 +98,9 @@ public static class MovePower
     /// move would be one nobody could tell had done anything.
     /// </para>
     /// </summary>
-    public static int? Of(MoveData move, Battler attacker, Battler? defender = null) => move.Effect switch
+    public static int? Of(
+        MoveData move, Battler attacker, Battler? defender = null, Weather weather = Weather.None) =>
+        move.Effect switch
     {
         // The three that answer somebody who is not standing where they were. This engine has
         // one "away" state rather than one per move — a creature halfway through FLY and one
@@ -109,6 +114,10 @@ public static class MovePower
         // than on anything about either creature. It goes last in a turn, so by the time it
         // is asked the answer is settled.
         Answering when attacker.HurtThisTurn > 0 => move.Power * 2,
+
+        // Twice as hard under any sky at all, and its record's own power under none. The
+        // doubling is modelled; that the sky is what it depends on is the move's group.
+        Skyward when weather != Weather.None => move.Power * 2,
 
         // The two that climb. What they climb from is the battle's count of how many turns
         // running this same slot has been used — the only power here that depends on a turn
@@ -141,8 +150,20 @@ public static class MovePower
     /// is why the ordering below starts at Fighting.
     /// </para>
     /// </summary>
-    public static PokemonType? TypeOf(MoveData move, Battler attacker) =>
-        move.Effect == Hidden ? Sixteen[From(attacker.Born, 0, Sixteen.Count - 1, second: false)] : null;
+    public static PokemonType? TypeOf(
+        MoveData move, Battler attacker, Weather weather = Weather.None) => move.Effect switch
+    {
+        Hidden => Sixteen[From(attacker.Born, 0, Sixteen.Count - 1, second: false)],
+
+        // The second move whose type is not the one on its record, and the only one whose
+        // type is a fact about the room rather than about its user. Under a clear sky it is
+        // Normal, which is also what its record says — so this returns an answer either way
+        // rather than falling through, because "the sky decided Normal" and "nobody asked"
+        // are different claims and only one of them is true here.
+        Skyward => Skies.Lends(weather),
+
+        _ => null,
+    };
 
     /// <summary>
     /// The sixteen, in the order the games count them. <b>Modelled</b> — the order is in the

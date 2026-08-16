@@ -185,6 +185,18 @@ public enum EffectKind
     /// <summary>Comes last, and never misses.</summary>
     SlowAndSure,
 
+    /// <summary>Becomes the type of one of its own moves.</summary>
+    BecomesItsMove,
+
+    /// <summary>Becomes a type that resists what the other one just used.</summary>
+    BecomesTheAnswer,
+
+    /// <summary>Becomes whatever the ground here is made of.</summary>
+    BecomesTheGround,
+
+    /// <summary>Its own type is whatever the sky is doing.</summary>
+    TakesTheSky,
+
     /// <summary>Lands several times in one turn.</summary>
     MultiHit,
 
@@ -537,6 +549,14 @@ public static class MoveEffects
         0x9E => new MoveEffect(EffectKind.FirstImpression, OnUser: false),
         0xAA => new MoveEffect(EffectKind.NeedsQuiet, OnUser: false),
         0x4E => new MoveEffect(EffectKind.SlowAndSure, OnUser: false),
+
+        // The four that change a type. Three change their user's; the fourth changes its
+        // own, which is a different thing wearing the same word and is why it is a separate
+        // kind rather than a flag on one.
+        0x1E => new MoveEffect(EffectKind.BecomesItsMove, OnUser: true),
+        0x5D => new MoveEffect(EffectKind.BecomesTheAnswer, OnUser: true),
+        0xD5 => new MoveEffect(EffectKind.BecomesTheGround, OnUser: true),
+        0xCB => new MoveEffect(EffectKind.TakesTheSky, OnUser: false),
 
         // Which type each damps is the item-name problem again: MUD SPORT is about Electric
         // because of what it is called, so the pairing is modelled and the grouping is read.

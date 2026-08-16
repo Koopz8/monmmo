@@ -104,6 +104,25 @@ public static class Skies
     /// <summary>
     /// True when this weather takes something off whoever is standing in it.
     /// </summary>
+    /// <summary>
+    /// The type the sky lends to the one move that takes it.
+    /// <para>
+    /// Normal under a clear sky, which is the move's own record's type and therefore not a
+    /// choice — the other four are, and they are the obvious ones: rain is Water, sun is
+    /// Fire, a sandstorm is Rock and hail is Ice. Each is the type that <em>causes</em> that
+    /// weather in this game, which is what makes the mapping a reading of the game's own
+    /// arrangement rather than an opinion about meteorology.
+    /// </para>
+    /// </summary>
+    public static PokemonType Lends(Weather weather) => weather switch
+    {
+        Weather.Rain => PokemonType.Water,
+        Weather.Sun => PokemonType.Fire,
+        Weather.Sandstorm => PokemonType.Rock,
+        Weather.Hail => PokemonType.Ice,
+        _ => PokemonType.Normal,
+    };
+
     public static bool Bites(Weather weather) => weather is Weather.Sandstorm or Weather.Hail;
 
     /// <summary>
