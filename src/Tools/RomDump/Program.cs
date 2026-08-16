@@ -124,6 +124,9 @@ public static class Program
         if (options.DumpOverworld)
             WriteOverworldSprites(rom, options.OutputDirectory);
 
+        if (options.Character is { } who)
+            WriteOneCharacter(rom, who, options.OutputDirectory);
+
         if (options.DumpTrainers)
             WriteTrainers(rom, speciesCount);
 
@@ -6954,6 +6957,188 @@ public static class Program
         }
     }
 
+    /// <summary>
+    /// Writes one character's walking frames out, plus the silhouette and the outline that
+    /// the cosmetic art is actually placed against.
+    /// <para>
+    /// This exists because somebody drawing clothes needs to know what they are drawing them
+    /// on, and the answer is not in this repository and never will be: the figure comes off
+    /// the player's own cartridge. So it is a command they run on their own machine against
+    /// their own file, writing to their own directory. Nothing it produces is committed,
+    /// shipped, or sent anywhere.
+    /// </para>
+    /// <para>
+    /// Three things come out, and the third is the one worth having:
+    /// </para>
+    /// <list type="number">
+    /// <item>every frame as it is, so the proportions can be seen exactly;</item>
+    /// <item>the frames again at eight times, because sixteen by thirty-two is small;</item>
+    /// <item>a <b>silhouette</b> — the exact shape with every pixel flattened to one colour.</item>
+    /// </list>
+    /// <para>
+    /// The silhouette is the honest thing to hand an artist. It carries the whole of what
+    /// they need — where the head ends, how wide the shoulders are, where the feet sit — and
+    /// none of the pixels somebody else drew. Art made to fit a silhouette is art this
+    /// project owns; art traced over the original is not, and the difference matters for
+    /// exactly the thing the cosmetics are for.
+    /// </para>
+    /// </summary>
+    private static void WriteOneCharacter(Rom rom, int graphicsId, string outputDirectory)
+    {
+        Console.WriteLine();
+        Console.WriteLine($"Character {graphicsId}");
+
+        if (OverworldSprites.LocateGraphicsTable(rom, Console.WriteLine) is not { } table)
+        {
+            Console.WriteLine("  no graphics table found");
+            return;
+        }
+
+        if (OverworldSprites.LocatePaletteTable(rom, Console.WriteLine) is not { } palettes)
+        {
+            Console.WriteLine("  no palette table found");
+            return;
+        }
+
+        List<ObjectGraphicsInfo?> records = OverworldSprites.ReadGraphics(rom, table, 256);
+
+        if (records.ElementAtOrDefault(graphicsId) is not { } info)
+        {
+            Console.WriteLine($"  nothing at slot {graphicsId}");
+            return;
+        }
+
+        Dictionary<int, int> boundaries = OverworldSprites.FrameListBoundaries(rom, records);
+
+        List<IndexedImage> frames = OverworldSprites.ReadFrames(rom, info, boundaries);
+
+        if (frames.Count == 0)
+        {
+            Console.WriteLine("  no frames");
+            return;
+        }
+
+        if (OverworldSprites.PaletteForTag(rom, palettes, info.PaletteTag) is not { } palette)
+        {
+            Console.WriteLine("  no palette for this one's tag");
+            return;
+        }
+
+        string directory = Path.Combine(outputDirectory, $"character-{graphicsId:D3}");
+        Directory.CreateDirectory(directory);
+
+        Console.WriteLine($"  {info.Width}x{info.Height}, {frames.Count} frames");
+
+        // The nine, named for what they are rather than for where they sit. Somebody drawing
+        // a hat should not have to know that frame seven is a left-facing stride.
+        string[] named =
+        [
+            "0-down-still", "1-up-still", "2-left-still",
+            "3-down-step-a", "4-down-step-b",
+            "5-up-step-a", "6-up-step-b",
+            "7-left-step-a", "8-left-step-b",
+        ];
+
+        for (int frame = 0; frame < frames.Count; frame++)
+        {
+            string name = frame < named.Length ? named[frame] : $"{frame}";
+
+            byte[] rgba = frames[frame].ToRgba(palette);
+
+            PngWriter.Write(
+                Path.Combine(directory, $"frame-{name}.png"),
+                frames[frame].Width, frames[frame].Height, rgba);
+
+            PngWriter.Write(
+                Path.Combine(directory, $"frame-{name}@8x.png"),
+                frames[frame].Width * 8, frames[frame].Height * 8,
+                Enlarge(rgba, frames[frame].Width, frames[frame].Height, 8));
+
+            PngWriter.Write(
+                Path.Combine(directory, $"silhouette-{name}.png"),
+                frames[frame].Width, frames[frame].Height,
+                Flatten(rgba, frames[frame].Width, frames[frame].Height));
+        }
+
+        Console.WriteLine($"  wrote {frames.Count * 3} files to {directory}");
+
+        // And the rectangle everything is actually placed against, which is measured rather
+        // than assumed — see CharacterSprite, where getting this wrong put hats in the air.
+        (int x, int y, int w, int h) = Bounds(frames[0].ToRgba(palette), frames[0].Width, frames[0].Height);
+
+        Console.WriteLine();
+        Console.WriteLine("  The figure inside the frame, which is what cosmetic art is scaled onto:");
+        Console.WriteLine($"    frame   {frames[0].Width} x {frames[0].Height}");
+        Console.WriteLine($"    figure  {w} x {h} at ({x}, {y})");
+        Console.WriteLine();
+        Console.WriteLine("  In the sixteen-by-thirty-two box the art is drawn in, one box step is");
+        Console.WriteLine($"    {w / 16.0:0.00} pixels across and {h / 32.0:0.00} pixels down.");
+        Console.WriteLine();
+        Console.WriteLine("  Hand an artist the silhouettes rather than the frames. They carry the");
+        Console.WriteLine("  whole of the shape and none of somebody else's pixels, and art drawn to");
+        Console.WriteLine("  fit one is art this project owns.");
+    }
+
+    /// <summary>Nearest-neighbour, because pixels have to stay pixels.</summary>
+    private static byte[] Enlarge(byte[] rgba, int width, int height, int by)
+    {
+        var bigger = new byte[width * by * height * by * 4];
+
+        for (int y = 0; y < height * by; y++)
+        {
+            for (int x = 0; x < width * by; x++)
+            {
+                int from = ((y / by) * width + x / by) * 4;
+                int to = (y * width * by + x) * 4;
+
+                Array.Copy(rgba, from, bigger, to, 4);
+            }
+        }
+
+        return bigger;
+    }
+
+    /// <summary>
+    /// Every pixel that is there at all, in one flat colour. The shape without the drawing.
+    /// </summary>
+    private static byte[] Flatten(byte[] rgba, int width, int height)
+    {
+        var flat = new byte[rgba.Length];
+
+        for (int i = 0; i < width * height; i++)
+        {
+            if (rgba[i * 4 + 3] == 0) continue;
+
+            flat[i * 4] = 90;
+            flat[i * 4 + 1] = 90;
+            flat[i * 4 + 2] = 100;
+            flat[i * 4 + 3] = 255;
+        }
+
+        return flat;
+    }
+
+    /// <summary>The smallest rectangle holding everything that is not transparent.</summary>
+    private static (int X, int Y, int Width, int Height) Bounds(byte[] rgba, int width, int height)
+    {
+        int left = width, top = height, right = -1, bottom = -1;
+
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                if (rgba[(y * width + x) * 4 + 3] == 0) continue;
+
+                left = Math.Min(left, x);
+                top = Math.Min(top, y);
+                right = Math.Max(right, x);
+                bottom = Math.Max(bottom, y);
+            }
+        }
+
+        return right < 0 ? (0, 0, width, height) : (left, top, right - left + 1, bottom - top + 1);
+    }
+
     private static void WriteOverworldSprites(Rom rom, string outputDirectory)
     {
         Console.WriteLine();
@@ -7083,6 +7268,10 @@ public static class Program
               --encounters           dump wild encounter tables
               --behaviours <name>    report metatile behaviours for a named map
                                      (implies --encounters, does not render anything)
+              --character [id]       write one character's walking frames, the same
+                                     frames at eight times, and a silhouette of each.
+                                     Defaults to 0, the player. Writes to your own
+                                     output directory and nowhere else.
               --overworld            report the overworld sprite tables and write a
                                      few of the walking figures as PNGs
               --trainers             report the trainer table: where it starts, what
@@ -7139,6 +7328,12 @@ public static class Program
         public string? ExportRulesPath { get; private init; }
 
         public bool DumpOverworld { get; private init; }
+
+        /// <summary>
+        /// Write one character's walking frames out as PNGs, for somebody drawing clothes to
+        /// put on them. Null unless asked for.
+        /// </summary>
+        public int? Character { get; private init; }
         public bool DumpTrainers { get; private init; }
         public bool DumpItems { get; private init; }
 
@@ -7305,6 +7500,7 @@ public static class Program
             string? exportWorld = null;
             string? exportRules = null;
             bool overworld = false;
+            int? character = null;
             bool trainers = false;
             bool items = false;
             bool holds = false;
@@ -7419,6 +7615,21 @@ public static class Program
                         break;
                     case "--overworld":
                         overworld = true;
+                        break;
+                    case "--character":
+                        // The graphics id, defaulting to the first player character, which is
+                        // index zero. Given as a number so every other character in the game
+                        // can be looked at with the same command.
+                        if (i + 1 < args.Length && int.TryParse(args[i + 1], out int who))
+                        {
+                            character = who;
+                            i++;
+                        }
+                        else
+                        {
+                            character = 0;
+                        }
+
                         break;
                     case "--trainers":
                         trainers = true;
@@ -7671,6 +7882,7 @@ public static class Program
                 ExportWorldPath = exportWorld,
                 ExportRulesPath = exportRules,
                 DumpOverworld = overworld,
+                Character = character,
                 DumpTrainers = trainers,
                 DumpItems = items,
                 DumpHolds = holds,

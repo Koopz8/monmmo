@@ -969,12 +969,12 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         switch (kind)
         {
             case EffectKind.Mirrors:
-                // Whatever they last did — and only a move that can be mirrored, which for
-                // this engine means one that is not itself a borrower. Without that, two
-                // creatures each holding MIRROR MOVE reflect each other.
-                return defender.LastMove is { } theirs && !Borrows(MoveEffects.Of(theirs.Effect).Kind)
-                    ? theirs
-                    : null;
+                // Whatever they last did, whatever that was — including another borrower.
+                // Nothing is filtered here on purpose: the once-only rule above already
+                // makes mirroring a mirror come to nothing, and a second rule saying the
+                // same thing would be a rule no test could ever fail. It was written that
+                // way first, and breaking it proved exactly that.
+                return defender.LastMove;
 
             case EffectKind.AtRandom:
             {

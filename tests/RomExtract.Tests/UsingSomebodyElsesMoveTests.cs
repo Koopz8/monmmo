@@ -132,8 +132,42 @@ public class UsingSomebodyElsesMoveTests
     }
 
     /// <summary>
-    /// Two of them cannot reflect each other for ever. A borrowed move that borrows finds
-    /// nothing, which is a rule rather than a stack overflow avoided by luck.
+    /// Mirroring something that itself borrows comes to nothing, and comes to nothing
+    /// <em>once</em>.
+    /// <para>
+    /// This is the whole of the once-only rule, and it is the only place it can be seen. It
+    /// used to be guarded twice — once here and once by a filter refusing to mirror a
+    /// borrower at all — and breaking either changed nothing, because each was covered by
+    /// the other. The filter is gone; this is the rule that remains, and it is the one that
+    /// holds no matter what a future source of borrowed moves does.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void MirroringSomethingThatItselfBorrowsComesToNothingOnce()
+    {
+        Battler you = Make(10, Move(MirrorMove));
+        Battler them = Make(200, Move(Metronome));
+
+        var battle = new Battle(you, them, 7)
+        {
+            EveryMove = [Move(0x00, 60, id: 500)],
+        };
+
+        List<BattleEvent> events = Turn(battle);
+
+        List<BattleEvent.UsedInstead> mine =
+            [.. events.OfType<BattleEvent.UsedInstead>().Where(e => e.Side == Side.Player)];
+
+        // Exactly one. The mirror reached for what they did, which was a borrower, and the
+        // borrower did not go round again.
+        Assert.Single(mine);
+
+        Assert.False(battle.IsOver);
+    }
+
+    /// <summary>
+    /// And two of them do not reflect each other for ever, which is the same rule seen from
+    /// the side where getting it wrong is a stack that never comes back.
     /// </summary>
     [Fact]
     public void AndTwoOfThemDoNotReflectEachOtherForEver()
