@@ -5665,7 +5665,9 @@ public static class Program
         var after = new Dictionary<byte, int>();
         var overBudget = 0;
 
-        foreach (SongHeaderRecord header in tree.Songs)
+        var tableNames = tree.Table.Select(e => e.HeaderOffset).ToHashSet();
+
+        foreach (SongHeaderRecord header in tree.Songs.Where(s => tableNames.Contains(s.Offset)))
         {
             foreach (int track in header.TrackOffsets)
             {
@@ -5751,63 +5753,119 @@ public static class Program
 
         SoundTreeResult tree = SoundLocator.Walk(rom);
 
-        // A sample rather than all of them, and a small budget rather than the real one. The
-        // sweep is a hundred and fifty reads of every track, and the question it asks — does
-        // this track reach an end — is answered early or not at all.
+        // Only the songs the table names.
+        //
+        // A song header found by shape alone is much easier to believe in than it was: a
+        // voicegroup pointer may now land on any instrument boundary in a run, and the
+        // longest run on this cartridge is 854 instruments. So there are false headers, and
+        // their track pointers name arbitrary addresses — reads that were never going to end
+        // and that say nothing about argument widths. The table is the filter that removes
+        // them, and measuring without it was measuring mostly noise.
+        var named = tree.Table.Select(e => e.HeaderOffset).ToHashSet();
+
         List<int> tracks =
         [
-            .. tree.Songs.SelectMany(s => s.TrackOffsets).Take(SweepTracks),
+            .. tree.Songs.Where(s => named.Contains(s.Offset))
+                .SelectMany(s => s.TrackOffsets)
+                .Take(SweepTracks),
         ];
 
-        Console.WriteLine($"  {tracks.Count} tracks sampled, {SweepBudget} commands each");
+        Console.WriteLine(
+            $"  {tracks.Count} tracks sampled from songs the table names, {SweepBudget} commands each");
 
-        int Ends(IReadOnlyDictionary<byte, int>? widths) =>
-            tracks.Count(t => SequenceReader.Read(rom, t, widths, SweepBudget).EndedProperly);
+        // Two numbers, because one of them can be got at by cheating. Making a command eat
+        // more bytes makes the read advance faster, and a faster read stumbles onto an end
+        // byte more often — so "reaches an end" alone rewards any width that is simply
+        // larger. A track read correctly ends in tens of commands, not thousands, so how many
+        // end *promptly* is the number that cannot be had that way.
+        (int Ends, int Promptly) Score(IReadOnlyDictionary<byte, int>? widths)
+        {
+            var ends = 0;
+            var promptly = 0;
 
-        int plain = Ends(null);
+            foreach (int track in tracks)
+            {
+                TrackRead read = SequenceReader.Read(rom, track, widths, SweepBudget);
 
-        Console.WriteLine($"  {plain} of them reach an end as things stand");
+                if (!read.EndedProperly) continue;
+
+                ends++;
+
+                if (read.Events.Count <= PromptlyCommands) promptly++;
+            }
+
+            return (ends, promptly);
+        }
+
+        (int Ends, int Promptly) plain = Score(null);
+
+        Console.WriteLine(
+            $"  {plain.Ends} reach an end as things stand, {plain.Promptly} of them within "
+            + $"{PromptlyCommands} commands");
+
         Console.WriteLine();
 
         var better = new Dictionary<byte, int>();
 
         for (byte opcode = 0xB5; opcode <= 0xCD; opcode++)
         {
-            var scores = new List<(int Width, int Ends)>();
+            var scores = new List<(int Width, int Ends, int Promptly)>();
 
             for (int width = 0; width <= 5; width++)
-                scores.Add((width, Ends(new Dictionary<byte, int> { [opcode] = width })));
+            {
+                (int ends, int promptly) = Score(new Dictionary<byte, int> { [opcode] = width });
 
-            (int Width, int Ends) best = scores.OrderByDescending(s => s.Ends).First();
+                scores.Add((width, ends, promptly));
+            }
 
-            // Only worth printing when a width does better than leaving it alone, which for
-            // most of these it will not.
-            if (best.Ends <= plain) continue;
+            (int Width, int Ends, int Promptly) best =
+                scores.OrderByDescending(s => s.Promptly).ThenByDescending(s => s.Ends).First();
+
+            // Judged on the number that cannot be had by eating bytes. Most of these will
+            // not beat leaving the command alone, and saying nothing about them is the point.
+            if (best.Promptly <= plain.Promptly) continue;
 
             better[opcode] = best.Width;
 
             Console.WriteLine(
-                $"  0x{opcode:X2}  {best.Width} bytes -> {best.Ends} ends (was {plain})   "
-                + string.Join(" ", scores.Select(x => $"{x.Width}:{x.Ends}")));
+                $"  0x{opcode:X2}  {best.Width} bytes -> {best.Promptly} prompt ends "
+                + $"(was {plain.Promptly}), {best.Ends} in all   "
+                + string.Join(" ", scores.Select(x => $"{x.Width}:{x.Promptly}/{x.Ends}")));
         }
 
         if (better.Count == 0)
         {
-            Console.WriteLine("  no single width beats the greedy rule, so the trouble is elsewhere");
+            Console.WriteLine(
+                "  no width reads more tracks promptly to an end than the greedy rule does, so");
+            Console.WriteLine(
+                "  the trouble is not argument widths and looking harder here would be wasted");
 
             return;
         }
 
         // And all of them together, which is not the same as each of them separately: two
         // commands can each derail the same tracks, so fixing one alone shows nothing.
+        (int Ends, int Promptly) all = Score(better);
+
         Console.WriteLine();
-        Console.WriteLine($"  all of those together: {Ends(better)} of {tracks.Count} reach an end");
+        Console.WriteLine(
+            $"  all of those together: {all.Promptly} of {tracks.Count} end promptly, "
+            + $"{all.Ends} end at all");
     }
 
     /// <summary>How many tracks the width sweep looks at. <b>Modelled</b>, for speed only.</summary>
     private const int SweepTracks = 300;
 
     private const int SweepBudget = 3000;
+
+    /// <summary>
+    /// How few commands make an ending believable. <b>Modelled.</b>
+    /// <para>
+    /// A track read correctly ends in tens of commands. One that ends after two thousand did
+    /// not find its own end command; it wandered onto a byte that happened to be one.
+    /// </para>
+    /// </summary>
+    private const int PromptlyCommands = 400;
 
     private static void WriteSilentPeople(Rom rom)
     {
