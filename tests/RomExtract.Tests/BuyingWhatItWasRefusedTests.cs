@@ -177,6 +177,41 @@ public class BuyingWhatItWasRefusedTests
     }
 
     /// <summary>
+    /// And a counter a flag has taken off the map is not one at all.
+    /// <para>
+    /// The same rule everything else on a map already gets, and it needed its own decoy: with
+    /// no hidden shopkeeper in the fixture, nothing could fail it. Several counters in this
+    /// game come and go with the story — the shop that only opens once somebody has been
+    /// dealt with — and buying from one before it exists would put an item in the bag that
+    /// the save cannot account for.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ACounterAFlagHasTakenOffTheMapIsNotOne()
+    {
+        const int shut = 0x0900;
+
+        var world = new WorldData(
+        [
+            Room("1.0") with
+            {
+                Objects =
+                [
+                    new MapObject(1, 1, 1, 1, Direction.Down, 0, false) { ScriptAddress = 0x1000 },
+                    new MapObject(2, 1, 2, 1, Direction.Down, 0, false, Sells: [TestRules.PotionItem])
+                        with { HiddenBy = shut },
+                ],
+            },
+        ])
+        {
+            // A fresh save is not an empty save, and this is one of the flags it starts with.
+            FlagsAtStart = [shut],
+        };
+
+        Assert.Empty(Run(world, 9999, TestRules.PotionItem).Bought);
+    }
+
+    /// <summary>
     /// And it cannot spend what it has not got. The price is read off the cartridge's own item
     /// record; the purse is the one modelled number in the whole arrangement.
     /// </summary>
