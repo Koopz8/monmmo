@@ -602,7 +602,11 @@ public static class Autoplayer
 
         foreach (MapData map in world.Maps)
         {
-            foreach (string leadsTo in map.Warps.Where(w => !w.IsDynamic).Select(w => w.TargetMapId)
+            // The 127.127 sentinels are not filtered out, and deliberately. A dynamic warp's
+            // target is the string "127.127", which is not a map any world file has — so it
+            // becomes a way in to a map nobody ever asks about, and skipping it is a rule
+            // that cannot be broken. It was written, it failed to fail, and it went.
+            foreach (string leadsTo in map.Warps.Select(w => w.TargetMapId)
                          .Concat(map.Connections.Select(c => c.MapId)))
             {
                 if (!into.TryGetValue(leadsTo, out List<string>? from)) into[leadsTo] = from = [];
