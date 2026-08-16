@@ -1,9 +1,9 @@
 {
   "pins": {
     "welcome": {
-      "hash": "be6a97417093",
-      "at": "2026-08-16T03:45:34.008Z",
-      "messageId": "1538393253303418991"
+      "hash": "a5dbf5fa1542",
+      "at": "2026-08-16T06:43:14.865Z",
+      "messageId": "1538437968686092319"
     },
     "rules": {
       "hash": "4d849a035ae9",
@@ -44,14 +44,14 @@
       "messageId": "1538393255593517167"
     },
     "battle-engine": {
-      "hash": "74804ef1ba5f",
-      "at": "2026-08-16T03:45:35.555Z",
-      "messageId": "1538393259406004345"
+      "hash": "cf78b37bb0cc",
+      "at": "2026-08-16T06:43:15.751Z",
+      "messageId": "1538437970472992819"
     },
     "data-and-extraction": {
-      "hash": "604e19555d4d",
-      "at": "2026-08-16T00:57:40.287Z",
-      "messageId": "1538351000258084864"
+      "hash": "7d38b6b4716e",
+      "at": "2026-08-16T06:43:16.320Z",
+      "messageId": "1538437974235152444"
     },
     "suggestions": {
       "hash": "bec587d9b77d",
@@ -87,9 +87,9 @@
       "at": "2026-08-15T04:35:57.787Z"
     },
     "known-issues": {
-      "hash": "2f9cfbfb1e71",
-      "at": "2026-08-16T03:45:36.687Z",
-      "messageId": "1538393262090363020"
+      "hash": "9721f156e1a9",
+      "at": "2026-08-16T06:43:17.352Z",
+      "messageId": "1538437976567058543"
     },
     "staff-chat": {
       "hash": "4fcbaa3b05b2",
@@ -124,11 +124,6 @@
       "at": "2026-08-15T05:43:07.888Z",
       "channel": "devlog",
       "messageId": "1538060451743797269"
-    },
-    "discord/posts/2026-08-16-sound-and-the-silent-half.md": {
-      "at": "2026-08-16T06:43:16.835Z",
-      "channel": "devlog",
-      "messageId": "1538437974834946058"
     }
   },
   "routing": {
