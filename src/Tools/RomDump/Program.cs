@@ -5760,10 +5760,15 @@ public static class Program
                     ? "THE DOOR SQUARE IS NOT WALKABLE — an export fault, not a gate"
                     : door.SomebodyIsInTheWay
                         ? "somebody is standing in the way"
-                        : "never reached the door";
+                        : door.ArrivedOnAnIsland
+                            ? "ARRIVED ON AN ISLAND — it never walked this map at all"
+                            : "never reached the door";
 
             Console.WriteLine(
                 $"    {door.FromMapId,-8} {door.Square} -> {door.ToMapId,-8} {door.ToName,-16} {why}");
+            Console.WriteLine(
+                $"             stood on {door.StoodOnThisMap} of {door.WalkableOnThisMap} walkable "
+                + $"squares of {door.FromMapId}");
         }
 
         if (real.Count > 30) Console.WriteLine($"    ... and {real.Count - 30} more");

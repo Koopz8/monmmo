@@ -715,3 +715,64 @@ public class EverybodyStartsInTheSamePlaceTests
         Assert.Equal("PALLET TOWN", world.Find(Beginning.MapId)?.Name);
     }
 }
+
+/// <summary>
+/// Telling a door behind a story gate from a door nothing can approach.
+/// <para>
+/// A walkable door that was never stood on has two very different causes and the same
+/// appearance. Either something on this side of it is a gate — a guard, a tree — or the walk
+/// arrived on the map and could not step off, which is what an <em>island</em> is.
+/// </para>
+/// <para>
+/// Islands are made deliberately: <c>ToGrid</c> opens every warp square, because a door that
+/// cannot be stood on is a map that cannot be entered. A warp sitting in a wall therefore
+/// becomes a square nothing can reach from inside and nothing can leave.
+/// </para>
+/// </summary>
+public class TellingAnIslandFromAGateTests
+{
+    /// <summary>A map walked end to end is not an island, whatever else is wrong with it.</summary>
+    [Fact]
+    public void AMapWalkedEndToEndIsNotAnIsland()
+    {
+        var door = new ShutDoor(
+            "1.0", new GridPosition(9, 1), "0.1", "CELADON DEPT.",
+            CouldStandOnIt: false, SquareIsWalkable: true, SomebodyIsInTheWay: false,
+            StoodOnThisMap: 60, WalkableOnThisMap: 64);
+
+        Assert.False(door.ArrivedOnAnIsland);
+    }
+
+    /// <summary>
+    /// And one where the walk stood on a handful of squares out of many is.
+    /// <para>
+    /// This is the shape to look for: arrived, could not move, and every door on the map
+    /// therefore reads as "never reached".
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AndOneWalkedAlmostNotAtAllIs()
+    {
+        var door = new ShutDoor(
+            "1.0", new GridPosition(9, 1), "0.1", "CELADON DEPT.",
+            CouldStandOnIt: false, SquareIsWalkable: true, SomebodyIsInTheWay: false,
+            StoodOnThisMap: 1, WalkableOnThisMap: 64);
+
+        Assert.True(door.ArrivedOnAnIsland);
+    }
+
+    /// <summary>
+    /// A tiny map is never called an island, because on a map of four squares standing on one
+    /// says nothing.
+    /// </summary>
+    [Fact]
+    public void ButATinyMapIsNeverCalledOne()
+    {
+        var door = new ShutDoor(
+            "1.0", new GridPosition(1, 1), "0.1", "SOMEWHERE",
+            CouldStandOnIt: false, SquareIsWalkable: true, SomebodyIsInTheWay: false,
+            StoodOnThisMap: 1, WalkableOnThisMap: 4);
+
+        Assert.False(door.ArrivedOnAnIsland);
+    }
+}

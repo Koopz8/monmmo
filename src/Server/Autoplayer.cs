@@ -49,6 +49,20 @@ public sealed record PlayedScript(
 /// Somebody rooted on or beside the door. This is the shape most of FireRed's story gates
 /// take: a guard who wants a drink, a man who has not been given a reason to move.
 /// </param>
+/// <param name="StoodOnThisMap">
+/// How many squares of the map the door leads out of were actually stood on.
+/// </param>
+/// <param name="WalkableOnThisMap">
+/// How many squares of it are walkable at all. The two together settle the question a
+/// walkable-but-unreached door raises: one out of many means the walk arrived somewhere it
+/// could not step off, which is what an <em>island</em> is.
+/// <para>
+/// Islands are made deliberately. <c>ToGrid</c> opens every warp square — "a door that cannot
+/// be stood on is a map that cannot be entered" — so a warp sitting in a wall becomes a square
+/// nothing can reach from inside the map and nothing can leave. <c>WarpsOnSolidSquares</c>
+/// already exists, which means somebody has met this before.
+/// </para>
+/// </param>
 /// <param name="IsDynamic">
 /// True when the target is the 127.127 sentinel — a warp a script fills in at the moment it is
 /// used, rather than a door to a fixed place. Nothing is missing when one of these is unopened
@@ -62,7 +76,17 @@ public sealed record ShutDoor(
     bool CouldStandOnIt,
     bool SquareIsWalkable = true,
     bool SomebodyIsInTheWay = false,
-    bool IsDynamic = false);
+    int StoodOnThisMap = 0,
+    int WalkableOnThisMap = 0,
+    bool IsDynamic = false)
+{
+    /// <summary>
+    /// True when the walk reached almost none of the map this door leads out of — the
+    /// signature of having arrived on a square it could not step off.
+    /// </summary>
+    public bool ArrivedOnAnIsland =>
+        WalkableOnThisMap > 4 && StoodOnThisMap * 8 < WalkableOnThisMap;
+}
 
 /// <summary>Why the playthrough stopped.</summary>
 public enum StoppedBecause
@@ -274,6 +298,12 @@ public static class Autoplayer
         var reached = last.Maps.ToHashSet();
         var stoodAtTheEnd = last.Stood.ToHashSet();
 
+        // How much of each map was actually walked, which is the number that tells a door
+        // behind a story gate from a door on a square nothing can approach.
+        Dictionary<string, int> stoodPerMap = last.Stood
+            .GroupBy(s => s.MapId)
+            .ToDictionary(g => g.Key, g => g.Count());
+
         // Every door out of somewhere it got to, into somewhere it did not. This is the list
         // "246 maps unreached" should have been: most of those are behind each other, and only
         // these sit one step from ground already under the player's feet.
@@ -291,6 +321,8 @@ public static class Autoplayer
                         stoodAtTheEnd.Contains((m.Id, w.Square)),
                         m.ToGrid().IsWalkable(w.Square),
                         last.People.Any(p => p.MapId == m.Id && Near(p.Square, w.Square)),
+                        stoodPerMap.GetValueOrDefault(m.Id),
+                        Walkable(m),
                         w.IsDynamic)))
                 .DistinctBy(d => (d.FromMapId, d.ToMapId, d.Square)),
         ];
@@ -474,6 +506,24 @@ public static class Autoplayer
         {
             if (entry.ScriptAddress != 0) yield return entry.ScriptAddress;
         }
+    }
+
+    /// <summary>How many squares of a map anybody could stand on at all.</summary>
+    private static int Walkable(MapData map)
+    {
+        CollisionGrid grid = map.ToGrid();
+
+        var count = 0;
+
+        for (var y = 0; y < map.Height; y++)
+        {
+            for (var x = 0; x < map.Width; x++)
+            {
+                if (grid.IsWalkable(new GridPosition(x, y))) count++;
+            }
+        }
+
+        return count;
     }
 
     /// <summary>Whether two squares are the same one or touching, which is close enough to be
