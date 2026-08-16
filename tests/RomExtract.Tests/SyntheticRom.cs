@@ -577,6 +577,57 @@ public sealed class SyntheticRom
 
         // Something that holds the table's address, standing in for whatever loads it.
         WriteU32(PointerToSongTableOffset, Rom.BaseAddress + SongTableOffset);
+
+        // A valid but short table, below the real one, so that "the longest run wins" has
+        // something it could lose to.
+        for (int song = 0; song < ShortDecoyTableCount; song++)
+        {
+            int at = ShortDecoyTableOffset + song * SongTableEntryBytes;
+
+            WriteU32(at, Rom.BaseAddress + (uint)(SongHeadersOffset + song * SongStride));
+
+            _data[at + 4] = 1;
+            _data[at + 5] = 0;
+            _data[at + 6] = 1;
+            _data[at + 7] = 0;
+        }
+
+        // Longer than the real table, and wrong only in that the group number disagrees with
+        // itself.
+        for (int song = 0; song < DecoyTableCount; song++)
+        {
+            int at = WrongGroupTableOffset + song * SongTableEntryBytes;
+
+            WriteU32(at, Rom.BaseAddress + (uint)(SongHeadersOffset + (song % SongCount) * SongStride));
+
+            _data[at + 4] = 1;
+            _data[at + 5] = 0;
+            _data[at + 6] = 2;
+            _data[at + 7] = 0;
+        }
+
+        // Longer than the real table, shaped correctly, and naming things that are not songs.
+        for (int song = 0; song < DecoyTableCount; song++)
+        {
+            int at = NotSongsTableOffset + song * SongTableEntryBytes;
+
+            WriteU32(at, Rom.BaseAddress + (uint)SampleOffsetAt(song % SampleCount));
+
+            _data[at + 4] = 1;
+            _data[at + 5] = 0;
+            _data[at + 6] = 1;
+            _data[at + 7] = 0;
+        }
+
+        // A song header whose voicegroup pointer resolves to somewhere that is not one.
+        _data[SongWithNoVoicegroupOffset] = 2;              // tracks
+        _data[SongWithNoVoicegroupOffset + 1] = 1;
+        _data[SongWithNoVoicegroupOffset + 2] = 0x30;
+        _data[SongWithNoVoicegroupOffset + 3] = 0;
+
+        WriteU32(SongWithNoVoicegroupOffset + 4, Rom.BaseAddress + (uint)SampleOffsetAt(0));
+        WriteU32(SongWithNoVoicegroupOffset + 8, Rom.BaseAddress + (uint)SequencesOffset);
+        WriteU32(SongWithNoVoicegroupOffset + 12, Rom.BaseAddress + (uint)SequencesOffset);
     }
 
     private const int SongTableEntryBytes = 8;
@@ -1125,6 +1176,43 @@ public sealed class SyntheticRom
     /// whatever loads it on a real cartridge — so the corroboration count is not zero.
     /// </summary>
     public const int PointerToSongTableOffset = 0x161000;
+
+    // Three decoy tables, each wrong in exactly one way. They exist because the break-it
+    // pass deleted four of the song-table checks and no test noticed: the fixture had only
+    // one thing that looked like a table, so every rule about telling tables apart was
+    // guarding against a case that was not present.
+
+    /// <summary>
+    /// A perfectly valid table of three entries, sitting at a lower offset than the real
+    /// one. Only the rule that the longest run wins keeps it from being chosen — and being
+    /// under the shortest-table floor, choosing it means finding no table at all.
+    /// </summary>
+    public const int ShortDecoyTableOffset = 0x15F000;
+
+    public const int ShortDecoyTableCount = 3;
+
+    /// <summary>
+    /// Longer than the real table and correct in every way except that the group number is
+    /// not written twice. Only the doubled-number rule rejects it.
+    /// </summary>
+    public const int WrongGroupTableOffset = 0x162000;
+
+    /// <summary>
+    /// Longer than the real table, with the group bytes written properly, and pointing at
+    /// things that are not song headers. Only the rule that an entry must name a song this
+    /// build already found rejects it.
+    /// </summary>
+    public const int NotSongsTableOffset = 0x164000;
+
+    public const int DecoyTableCount = 20;
+
+    /// <summary>
+    /// A song header right in every way except that its voicegroup pointer resolves to
+    /// somewhere that is not a voicegroup. Only the rule that a song must name a voicegroup
+    /// this build already found rejects it — and until this existed, deleting that rule
+    /// changed nothing.
+    /// </summary>
+    public const int SongWithNoVoicegroupOffset = 0x166000;
 
     public const int ItemTableOffset = 0x110000;
     public const int ItemDescriptionsOffset = 0x114000;

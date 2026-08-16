@@ -165,6 +165,41 @@ public class WalkingUpToTheSongsTests
     }
 
     /// <summary>
+    /// Three things that look like tables and are not, each wrong in exactly one way.
+    /// <para>
+    /// These exist because the break-it pass deleted four of the rules that tell tables
+    /// apart and no test noticed. The fixture had one table-shaped thing in it, so every
+    /// rule about choosing between candidates was guarding a case that was not there. Each
+    /// decoy below fails exactly one rule and passes the rest, so deleting that rule makes
+    /// the decoy win and this test say so.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AndTheThingsThatLookLikeTablesAndAreNotAreNotChosen()
+    {
+        SoundTreeResult tree = Walked();
+
+        Assert.NotEqual(SyntheticRom.ShortDecoyTableOffset, tree.SongTableOffset);
+        Assert.NotEqual(SyntheticRom.WrongGroupTableOffset, tree.SongTableOffset);
+        Assert.NotEqual(SyntheticRom.NotSongsTableOffset, tree.SongTableOffset);
+
+        // And the two long ones are longer than the real table, which is what makes them
+        // dangerous rather than merely wrong.
+        Assert.True(SyntheticRom.DecoyTableCount > SyntheticRom.SongCount);
+    }
+
+    /// <summary>
+    /// A song header that names a voicegroup nobody found is not a song header.
+    /// <para>
+    /// The fixture writes one that is right in every other way, because deleting this rule
+    /// in the source changed nothing until there was something for it to reject.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AndASongNamingAVoicegroupNobodyFoundIsNotASong() =>
+        Assert.DoesNotContain(Walked().Songs, s => s.Offset == SyntheticRom.SongWithNoVoicegroupOffset);
+
+    /// <summary>
     /// The corroboration: something in the file holds the table's own address.
     /// <para>
     /// It is deliberately weaker evidence than decoding the sound driver's prologue would
