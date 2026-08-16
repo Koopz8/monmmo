@@ -37,4 +37,14 @@ public sealed record Listing(
 
     /// <summary>The same six numbers as something that knows what they mean.</summary>
     public Genes Born => Genes.Of(Ivs);
+
+    /// <summary>
+    /// What the six add up to, which is the one number anybody sorts a market by.
+    /// <para>
+    /// Out of a hundred and eighty-six. Kept as a property rather than a column because it
+    /// is a sum of columns that are already there, and a stored total is a second copy of
+    /// six facts — the copy that goes wrong when somebody edits one of them.
+    /// </para>
+    /// </summary>
+    public int Total => Ivs.Sum();
 }

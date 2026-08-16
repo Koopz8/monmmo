@@ -502,12 +502,21 @@ public class MarketTests
 
                 Assert.Equal(5_000, before.Character.Money);
 
-                Assert.Equal(2_500, await store.CollectAsync(sellerId, without, ceiling: 999_999));
+                // What a seller actually gets is the price less the market's cut, which is
+                // taken here rather than at the sale — taking it at the sale would leave
+                // the listing no longer saying what it sold for, and what a thing sold for
+                // is the only price history this market has.
+                int paid = 2_500 - (2_500 * IMarketStore.Cut / 100);
+
+                Assert.Equal(paid, await store.CollectAsync(sellerId, without, ceiling: 999_999));
 
                 var after = Assert.IsType<AuthOutcome.Success>(
                     await store.LoginAsync("Mason", "a-good-password"));
 
-                Assert.Equal(7_500, after.Character.Money);
+                Assert.Equal(5_000 + paid, after.Character.Money);
+
+                // And the listing still says the full price it went for.
+                Assert.Equal(2_500, sold.Price);
 
                 // And collecting twice pays nothing, because the ledger is gone.
                 Assert.Equal(0, await store.CollectAsync(sellerId, after.Character, ceiling: 999_999));
@@ -665,6 +674,174 @@ public class MarketTests
 
                 Assert.Empty(await store.BrowseAsync());
             }
+        }
+        finally
+        {
+            TempDatabase.Delete(path);
+        }
+    }
+
+    // ---- searching -------------------------------------------------------------------------
+
+    /// <summary>
+    /// A market you can only read newest-first is unusable past a hundred listings, which
+    /// one afternoon of play would pass. This is the difference between a board and a
+    /// market.
+    /// </summary>
+    [Fact]
+    public async Task SearchingFindsTheOnesAskedFor()
+    {
+        string path = TempDatabase.Path();
+
+        try
+        {
+            using var store = new SqlitePlayerStore(path);
+
+            var made = Assert.IsType<AuthOutcome.Success>(await store.RegisterAsync(
+                "Mason", "a-good-password", Character()));
+
+            long sellerId = made.Account.Id;
+
+            SavedMon cheap = Mon(150) with { Ivs = [10, 10, 10, 10, 10, 10] };
+            SavedMon dear = Mon(150) with { Ivs = [31, 31, 31, 31, 31, 31] };
+            SavedMon other = Mon(151) with { Ivs = [31, 31, 31, 31, 31, 31] };
+
+            SavedCharacter bare = Character();
+
+            await store.ListAsync(sellerId, bare, cheap, 500);
+            await store.ListAsync(sellerId, bare, dear, 9_000);
+            await store.ListAsync(sellerId, bare, other, 100);
+
+            // By species.
+            IReadOnlyList<Listing> ofOne = await store.SearchAsync(new MarketSearch { Species = 150 });
+
+            Assert.Equal(2, ofOne.Count);
+            Assert.All(ofOne, l => Assert.Equal(150, l.Species));
+
+            // Cheapest first, which is the question anybody actually has.
+            Assert.Equal(500, ofOne[0].Price);
+
+            // By price.
+            Assert.Equal(2, (await store.SearchAsync(new MarketSearch { Most = 1_000 })).Count);
+
+            // And by what they were born with, added across the six.
+            IReadOnlyList<Listing> good = await store.SearchAsync(new MarketSearch { Born = 180 });
+
+            Assert.Equal(2, good.Count);
+            Assert.All(good, l => Assert.True(l.Total >= 180));
+        }
+        finally
+        {
+            TempDatabase.Delete(path);
+        }
+    }
+
+    /// <summary>And the three narrow each other rather than competing.</summary>
+    [Fact]
+    public async Task AndTheThreeNarrowEachOther()
+    {
+        string path = TempDatabase.Path();
+
+        try
+        {
+            using var store = new SqlitePlayerStore(path);
+
+            var made = Assert.IsType<AuthOutcome.Success>(await store.RegisterAsync(
+                "Mason", "a-good-password", Character()));
+
+            SavedCharacter bare = Character();
+
+            await store.ListAsync(made.Account.Id, bare, Mon(150) with { Ivs = [31, 31, 31, 31, 31, 31] }, 500);
+            await store.ListAsync(made.Account.Id, bare, Mon(150) with { Ivs = [1, 1, 1, 1, 1, 1] }, 400);
+            await store.ListAsync(made.Account.Id, bare, Mon(151) with { Ivs = [31, 31, 31, 31, 31, 31] }, 400);
+
+            IReadOnlyList<Listing> found = await store.SearchAsync(
+                new MarketSearch { Species = 150, Most = 600, Born = 180 });
+
+            Assert.Equal(150, Assert.Single(found).Species);
+        }
+        finally
+        {
+            TempDatabase.Delete(path);
+        }
+    }
+
+    /// <summary>And a search that asks for nothing is not a search.</summary>
+    [Fact]
+    public void AndASearchForNothingKnowsItIsNothing()
+    {
+        Assert.True(new MarketSearch().IsEverything);
+        Assert.False(new MarketSearch { Species = 1 }.IsEverything);
+        Assert.False(new MarketSearch { Most = 1 }.IsEverything);
+        Assert.False(new MarketSearch { Born = 1 }.IsEverything);
+    }
+
+    /// <summary>And nothing already sold is ever on it.</summary>
+    [Fact]
+    public async Task AndNothingSoldIsEverFound()
+    {
+        string path = TempDatabase.Path();
+
+        try
+        {
+            using var store = new SqlitePlayerStore(path);
+
+            SavedMon offered = Mon(150);
+            SavedCharacter mason = Character(offered);
+
+            var made = Assert.IsType<AuthOutcome.Success>(await store.RegisterAsync(
+                "Mason", "a-good-password", mason));
+
+            var koop = Assert.IsType<AuthOutcome.Success>(await store.RegisterAsync(
+                "Koop", "a-good-password", Character()));
+
+            long listingId = await store.ListAsync(made.Account.Id, mason with { Box = [] }, offered, 2_500);
+
+            Assert.Single(await store.SearchAsync(new MarketSearch { Species = 150 }));
+
+            await store.BuyAsync(koop.Account.Id, listingId, koop.Character);
+
+            Assert.Empty(await store.SearchAsync(new MarketSearch { Species = 150 }));
+        }
+        finally
+        {
+            TempDatabase.Delete(path);
+        }
+    }
+
+    /// <summary>
+    /// A seller can list more than one thing, which they could not before the search tests
+    /// were written.
+    /// <para>
+    /// Every escrowed row took the same slot number, and the table's uniqueness rule is
+    /// (account, slot) — so the second listing from one account threw. No test noticed
+    /// because none of them had ever listed twice from one seller, which is a thing every
+    /// real seller does immediately.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task ASellerCanListMoreThanOneThing()
+    {
+        string path = TempDatabase.Path();
+
+        try
+        {
+            using var store = new SqlitePlayerStore(path);
+
+            var made = Assert.IsType<AuthOutcome.Success>(await store.RegisterAsync(
+                "Mason", "a-good-password", Character()));
+
+            SavedCharacter bare = Character();
+
+            for (int which = 0; which < 5; which++)
+                await store.ListAsync(made.Account.Id, bare, Mon(150 + which), 100 + which);
+
+            Assert.Equal(5, (await store.BrowseAsync()).Count);
+            Assert.Equal(5, (await store.MineAsync(made.Account.Id)).Count);
+
+            // And every one of them comes back whole.
+            foreach (Listing listing in await store.MineAsync(made.Account.Id))
+                Assert.NotNull(await store.CancelAsync(made.Account.Id, listing.Id, bare));
         }
         finally
         {

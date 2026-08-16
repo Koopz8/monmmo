@@ -189,11 +189,16 @@ public class MarketConsoleTests
 
             await RunAsync(market, world, koop, koopId, $"/buy {listingId}");
 
-            Assert.Contains("collected 2500", Said(await RunAsync(market, world, mason, masonId, "/collect")));
-            Assert.Equal(7_500, mason.Money);
+            // Less the market's cut, which is why this is not 2500.
+            int paid = 2_500 - (2_500 * IMarketStore.Cut / 100);
+
+            Assert.Contains(
+                $"collected {paid}", Said(await RunAsync(market, world, mason, masonId, "/collect")));
+
+            Assert.Equal(5_000 + paid, mason.Money);
 
             Assert.Contains("nothing has sold", Said(await RunAsync(market, world, mason, masonId, "/collect")));
-            Assert.Equal(7_500, mason.Money);
+            Assert.Equal(5_000 + paid, mason.Money);
         }
         finally
         {

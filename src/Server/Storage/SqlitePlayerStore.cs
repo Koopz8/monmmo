@@ -1209,8 +1209,18 @@ public sealed class SqlitePlayerStore : IPlayerStore, IMarketStore, IFriendStore
         // failure worth having.
         await WriteCharacterAsync(connection, transaction, sellerId, withoutIt, cancellationToken);
 
+        // A slot of its own. The table's uniqueness rule is (account, slot), and every
+        // escrowed row used to take the same number — so a seller could list one thing and
+        // never a second, which no test noticed because none of them listed twice from one
+        // account. Found by writing the search tests.
         long memberId = await WriteMemberAsync(
-            connection, transaction, sellerId, MarketSlot, offered, OnTheMarket, cancellationToken);
+            connection,
+            transaction,
+            sellerId,
+            await NextMarketSlotAsync(connection, transaction, sellerId, cancellationToken),
+            offered,
+            OnTheMarket,
+            cancellationToken);
 
         long listingId;
 
@@ -1258,6 +1268,69 @@ public sealed class SqlitePlayerStore : IPlayerStore, IMarketStore, IFriendStore
             connection,
             $"WHERE l.state = {ForSale} ORDER BY l.id DESC LIMIT {Math.Clamp(most, 1, 500)}",
             [],
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// The next free slot number for something going into escrow.
+    /// <para>
+    /// A slot is only row order within a character's own lists, and a creature on the
+    /// market is in none of them — so the number means nothing except that it must not
+    /// collide. Counted from the rows already there rather than kept anywhere, because a
+    /// stored counter would be a second thing to keep in step with the rows it counts.
+    /// </para>
+    /// </summary>
+    private static async Task<int> NextMarketSlotAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        long sellerId,
+        CancellationToken cancellationToken)
+    {
+        await using SqliteCommand highest = connection.CreateCommand();
+        highest.Transaction = transaction;
+
+        highest.CommandText =
+            $"SELECT COALESCE(MAX(slot), {MarketSlot - 1}) FROM party_members " +
+            $"WHERE account_id = $id AND in_box = {OnTheMarket};";
+
+        highest.Parameters.AddWithValue("$id", sellerId);
+
+        return Math.Max(MarketSlot, Convert.ToInt32(await highest.ExecuteScalarAsync(cancellationToken)) + 1);
+    }
+
+    public async Task<IReadOnlyList<Listing>> SearchAsync(
+        MarketSearch what, int most = 50, CancellationToken cancellationToken = default)
+    {
+        await using SqliteConnection connection = Open();
+
+        var where = new List<string> { $"l.state = {ForSale}" };
+        var parameters = new List<(string, object)>();
+
+        if (what.Species is { } species)
+        {
+            where.Add("l.species = $species");
+            parameters.Add(("$species", species));
+        }
+
+        if (what.Most is { } ceiling)
+        {
+            where.Add("l.price <= $most");
+            parameters.Add(("$most", ceiling));
+        }
+
+        // The six added up, in the query rather than after it. Filtering in memory would
+        // mean fetching every listing in the market to throw most of them away, which is
+        // the one thing a search exists not to do.
+        if (what.Born is { } born)
+        {
+            where.Add($"({string.Join(" + ", ListingGeneColumns.Select(c => $"l.{c}"))}) >= $born");
+            parameters.Add(("$born", born));
+        }
+
+        return await ReadListingsAsync(
+            connection,
+            $"WHERE {string.Join(" AND ", where)} ORDER BY l.price ASC, l.id DESC LIMIT {Math.Clamp(most, 1, 500)}",
+            parameters,
             cancellationToken);
     }
 
@@ -1449,6 +1522,11 @@ public sealed class SqlitePlayerStore : IPlayerStore, IMarketStore, IFriendStore
         }
 
         if (owed == 0) return 0;
+
+        // The market's share, taken here rather than at the sale. Taking it at the sale
+        // would mean the listing no longer said what it sold for, and what a thing sold for
+        // is the only price history this market has.
+        owed -= owed * IMarketStore.Cut / 100;
 
         // Deleted in the same breath as being paid. A listing whose money has been
         // collected is kept for nothing, and one kept by accident is one that pays twice.

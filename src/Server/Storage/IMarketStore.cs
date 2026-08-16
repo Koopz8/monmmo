@@ -19,8 +19,55 @@ namespace PokeMmo.Server.Storage;
 /// without it, and escrow it, and do both or neither".
 /// </para>
 /// </summary>
+/// <summary>
+/// What somebody is looking for.
+/// <para>
+/// Every part optional, because a market is searched by whatever the person searching
+/// happens to care about — and a search type with four required fields is a search nobody
+/// can start.
+/// </para>
+/// </summary>
+public sealed record MarketSearch
+{
+    /// <summary>Only this species, or anything.</summary>
+    public int? Species { get; init; }
+
+    /// <summary>Nothing dearer than this.</summary>
+    public int? Most { get; init; }
+
+    /// <summary>
+    /// Nothing born with less than this, added across the six.
+    /// <para>
+    /// A total rather than a floor per stat. Somebody shopping for a parent wants "good
+    /// enough overall" far more often than they want a particular number in a particular
+    /// slot, and the per-stat version can be added the day anybody asks for it.
+    /// </para>
+    /// </summary>
+    public int? Born { get; init; }
+
+    /// <summary>True when this asks for nothing in particular.</summary>
+    public bool IsEverything => Species is null && Most is null && Born is null;
+}
+
 public interface IMarketStore
 {
+    /// <summary>
+    /// What the market keeps out of every sale, as a percentage. <b>Modelled</b>, and the
+    /// only number here that is an opinion rather than a rule.
+    /// <para>
+    /// Five per cent. It exists because a game where money is only ever created is a game
+    /// whose prices go one way, and a market is the one place in this project where every
+    /// coin that changes hands is visible. Real markets take a cut for the same reason
+    /// rather than out of greed.
+    /// </para>
+    /// <para>
+    /// Taken from the seller rather than added to the buyer, so a listed price is the price
+    /// — a buyer who is quoted one number and charged another is a buyer who stops
+    /// trusting the board.
+    /// </para>
+    /// </summary>
+    public const int Cut = 5;
+
     /// <summary>
     /// Puts one creature up at a price, in the same transaction that writes its seller
     /// down without it.
@@ -41,6 +88,22 @@ public interface IMarketStore
 
     /// <summary>What is for sale, newest first, and never anything already sold.</summary>
     Task<IReadOnlyList<Listing>> BrowseAsync(int most = 50, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// What is for sale that matches, cheapest first.
+    /// <para>
+    /// A market you can only read newest-first is unusable past a hundred listings, which
+    /// is a number one afternoon of play would pass. This is the difference between a board
+    /// and a market.
+    /// </para>
+    /// <para>
+    /// Cheapest first rather than newest, because the question anybody actually has is
+    /// "what is the least I can pay for one of these" and a newest-first list answers it by
+    /// making them read the whole thing.
+    /// </para>
+    /// </summary>
+    Task<IReadOnlyList<Listing>> SearchAsync(
+        MarketSearch what, int most = 50, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// This seller's own listings, sold ones included — those are the ones with money

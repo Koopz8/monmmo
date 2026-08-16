@@ -1,3 +1,4 @@
+using PokeMmo.Core.Battle;
 using PokeMmo.Core.Net;
 using PokeMmo.Core.Save;
 using PokeMmo.Server.Storage;
@@ -50,8 +51,70 @@ public sealed class Market(IMarketStore store, Action<long>? forget = null)
             "buy" => await BuyAsync(world, playerId, accountId, line, cancellationToken),
             "collect" => await CollectAsync(world, playerId, accountId, cancellationToken),
             "mine" => Show(playerId, await store.MineAsync(accountId, cancellationToken), mine: true),
-            _ => Show(playerId, await store.BrowseAsync(APageful, cancellationToken), mine: false),
+            _ => await BoardAsync(playerId, line, cancellationToken),
         };
+    }
+
+    /// <summary>
+    /// The board, or the part of it somebody asked about.
+    /// <para>
+    /// With no arguments this is the newest listings, which is the right answer to "what is
+    /// going on". With any argument it is a search, cheapest first, which is the right
+    /// answer to every other question anybody has.
+    /// </para>
+    /// </summary>
+    private async Task<List<Outgoing>> BoardAsync(
+        int playerId, ConsoleLine line, CancellationToken cancellationToken)
+    {
+        MarketSearch what = new()
+        {
+            Species = Argument(line, "species"),
+            Most = Argument(line, "under"),
+            Born = Argument(line, "born"),
+        };
+
+        if (what.IsEverything)
+            return Show(playerId, await store.BrowseAsync(APageful, cancellationToken), mine: false);
+
+        List<Outgoing> found = Show(
+            playerId, await store.SearchAsync(what, APageful, cancellationToken), mine: false);
+
+        return
+        [
+            Said(playerId, Describing(what)),
+            .. found,
+        ];
+    }
+
+    /// <summary>
+    /// A named number out of a console line — <c>species 25</c>, <c>under 5000</c>,
+    /// <c>born 150</c>.
+    /// <para>
+    /// Named rather than positional because a search has three optional parts and nobody
+    /// can be asked to remember which of three blanks to leave empty.
+    /// </para>
+    /// </summary>
+    private static int? Argument(ConsoleLine line, string named)
+    {
+        for (int at = 0; at + 1 < line.Words.Count; at++)
+        {
+            if (string.Equals(line.Word(at), named, StringComparison.OrdinalIgnoreCase))
+                return ConsoleLine.Number(line.Word(at + 1));
+        }
+
+        return null;
+    }
+
+    /// <summary>What was asked for, said back, so a search with a typo in it is obvious.</summary>
+    private static string Describing(MarketSearch what)
+    {
+        var parts = new List<string>();
+
+        if (what.Species is { } species) parts.Add($"species {species}");
+        if (what.Most is { } most) parts.Add($"under {most}");
+        if (what.Born is { } born) parts.Add($"born {born}+ of {Genes.Best * 6}");
+
+        return $"cheapest first, {string.Join(", ", parts)}";
     }
 
     private async Task<List<Outgoing>> SellAsync(
@@ -170,7 +233,7 @@ public sealed class Market(IMarketStore store, Action<long>? forget = null)
         said.AddRange(listings.Select(l => Said(
             playerId,
             $"  {l.Id,4}  species {l.Species,3} Lv{l.Level,-3} {l.Sex,-6} " +
-            $"ivs {string.Join("/", l.Ivs),-17} {l.Price,7}" +
+            $"ivs {string.Join("/", l.Ivs),-17} {l.Total,3}/{Genes.Best * 6} {l.Price,7}" +
             (l.Sold ? "   SOLD, collect it" : mine ? "" : $"   from {l.Seller}"))));
 
         return said;
