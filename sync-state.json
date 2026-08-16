@@ -1,9 +1,9 @@
 {
   "pins": {
     "welcome": {
-      "hash": "fc02ffa2ed0e",
-      "at": "2026-08-16T15:07:52.754Z",
-      "messageId": "1538564963193327620"
+      "hash": "a5dbf5fa1542",
+      "at": "2026-08-16T06:43:14.865Z",
+      "messageId": "1538437968686092319"
     },
     "rules": {
       "hash": "4d849a035ae9",
@@ -124,6 +124,11 @@
       "at": "2026-08-15T05:43:07.888Z",
       "channel": "devlog",
       "messageId": "1538060451743797269"
+    },
+    "discord/posts/2026-08-16-sound-meets-a-real-cartridge.md": {
+      "at": "2026-08-16T15:07:53.943Z",
+      "channel": "devlog",
+      "messageId": "1538564968520089680"
     }
   },
   "routing": {
