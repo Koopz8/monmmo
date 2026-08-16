@@ -838,11 +838,19 @@ public sealed class SyntheticRom
                 bool unfinished = (song == SongWithAnUnfinishedTrack && track == tracks - 1)
                                   || song == SongWhoseEveryTrackIsBroken;
 
+                // And one song's first track repeats rather than stopping, so that a loader
+                // dropping whether a track loops has something to drop. Every song's tracks
+                // used to run to an end command, which is a fixture in which "written to
+                // repeat" and "written to stop" are the same thing.
+                bool repeats = song == SongWithALoopingTrack && track == 0;
+
                 WriteU32(
                     at + 8 + track * 4,
                     Rom.BaseAddress + (uint)(unfinished
                         ? UnendedTrackOffset
-                        : SequencesOffset + (song * 4 + track) * SequenceStride));
+                        : repeats
+                            ? RepeatedCallTrackOffset
+                            : SequencesOffset + (song * 4 + track) * SequenceStride));
             }
         }
 
@@ -1660,6 +1668,17 @@ public sealed class SyntheticRom
     /// </para>
     /// </summary>
     public const int SongNamingAMergedVoicegroup = 5;
+
+    /// <summary>
+    /// A song whose first track repeats rather than stopping.
+    /// <para>
+    /// Six, which is none of the other special ones. Its first track is the phrase-called-
+    /// twice track, so this one fixture carries both halves: the track has to be read past
+    /// its second call, and the fact that it repeats has to survive the trip through the
+    /// loader into the performer.
+    /// </para>
+    /// </summary>
+    public const int SongWithALoopingTrack = 6;
 
     /// <summary>Where each song's track sequences live.</summary>
     public const int SequencesOffset = 0x150000;

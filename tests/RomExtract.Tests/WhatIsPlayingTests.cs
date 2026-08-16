@@ -508,6 +508,66 @@ public class WhatIsPlayingTests
             + "the mixer is being turned more than once a sample");
     }
 
+    /// <summary>
+    /// An effect ending lets go of its own notes and nothing else's.
+    /// <para>
+    /// <b>This is the one nothing could fail.</b> The first version of this file tested that
+    /// the music survived an effect — and it did, however the letting-go was done, because
+    /// every fixture instrument here had a release of 255 and its track looped. A release of
+    /// 255 never fades and a looping track starts the note again a moment later, so a music
+    /// note wrongly released came straight back and the test could not see it.
+    /// </para>
+    /// <para>
+    /// So this one is built the other way round: the music is one long note that is never
+    /// started again, on an instrument whose release actually falls. Release the wrong note
+    /// and the music is gone and stays gone.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AnEffectEndingLetsGoOfItsOwnNotesAndNoOthers()
+    {
+        var mixer = new Mixer(8000);
+
+        // A recording that goes round and round, so the note sounds for as long as it is
+        // held rather than running out on its own.
+        var held = new Voice([.. Enumerable.Range(0, 64).Select(i => (sbyte)(i % 2 == 0 ? 100 : -100))], 8000, true, 0);
+
+        // Sustain full, release 32 — held for ever until let go, and gone within a few steps
+        // once it is.
+        var instrument = new Instrument(held, 60, 255, 255, 255, 32);
+
+        SongPlayer LongNote() =>
+            new(
+                [
+                    new Track(
+                    [
+                        new SequenceEvent(0, 0xD4, SequenceCommand.NoteOn, [60, 127]),
+                        new SequenceEvent(3, 0xB1, SequenceCommand.End, []),
+                    ]),
+                ],
+                [instrument],
+                mixer);
+
+        var box = new Jukebox(song => song == 1 ? LongNote() : Effect(mixer), mixer);
+
+        box.Play(1);
+        box.Render(2000);
+
+        Assert.Contains(box.Render(400), sample => sample != 0);
+
+        box.PlayOver(2, group: 0);
+
+        // Long enough for the effect to finish and be let go of, and for a wrongly released
+        // music note to have faded to nothing several times over.
+        box.Render(40_000);
+
+        Assert.Equal(0, box.Effects);
+
+        Assert.Contains(
+            box.Render(400),
+            sample => sample != 0);
+    }
+
     // ---- which song a map names ------------------------------------------------------------------
 
     /// <summary>
