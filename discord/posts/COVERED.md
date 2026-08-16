@@ -11,6 +11,7 @@ Add a line here whenever you post.
 | 2026-08-15 | the-scaling-run | The crowd tool. The login door being the wall, not the game. Interest instead of broadcast. Saves moved off the input path, then reduced to what changed. Instancing and copies of a place. Milestones 111–124. |
 | 2026-08-16 | guilds-tiers-and-a-ladder | The market bug that could put a creature in your box and on the market at once. Guilds. Tiers computed from base stats. The Elo ladder, one rating per band. Eight boxes. Held items. Milestones 137–144. |
 | 2026-08-16 | sound-and-the-silent-half | Sound and music. Attack animations. Every move effect finished. The cry format bug where a whole category was silently missing. Milestones 145–167. |
+| 2026-08-16 | sound-meets-a-real-cartridge | Sound tested against a real game file and mostly failing. The voicegroup assumption that was starving everything (8 → 113 songs). The song table starting an entry earlier. 142 songs still not assembling, now split into three named causes. The measurement that could be gamed, and building a tool to look at raw bytes instead of reasoning a third time. |
 
 ## Things already said more than once — stop saying them
 

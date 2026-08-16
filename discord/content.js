@@ -22,7 +22,7 @@ the ROM you already own, on your own machine, at runtime**. The client ships non
 of it. The server never sees any of it.
 
 This is a solo engineering project, built in public, one measured milestone at a
-time. **2,274 tests**, none of which need a cartridge. An authoritative server, a
+time. **2,411 tests**, none of which need a cartridge. An authoritative server, a
 Gen III battle engine accurate down to truncation order, and a growing list of
 things two people can do to each other: **see each other, chat, add friends,
 form a guild, trade, duel, climb a ladder, and buy and sell on a player market**.
