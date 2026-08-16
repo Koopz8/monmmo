@@ -70,6 +70,26 @@ public static class Abilities
     public const int Forecast = 59;
     public const int ShedSkin = 61;
     public const int SpeedBoost = 3;
+    public const int CompoundEyes = 14;
+    public const int Hustle = 55;
+    public const int MarvelScale = 63;
+    public const int SereneGrace = 32;
+    public const int LiquidOoze = 64;
+    public const int EarlyBird = 48;
+    public const int Truant = 54;
+
+    // And the ones that genuinely do nothing in a fight of one against one on this
+    // cartridge. They are not silent — they are finished, which is a different answer and
+    // the same distinction the move-effect table draws between "nothing to do" and "nobody
+    // has written it". Counting them as unmodelled makes the number of things left to build
+    // wrong for ever, because nothing will ever be built for them.
+    public const int Stench = 1;
+    public const int Illuminate = 35;
+    public const int Pickup = 53;
+    public const int Plus = 57;
+    public const int Minus = 58;
+    public const int LightningRod = 31;
+    public const int Cacophony = 76;
     public const int Limber = 7;
     public const int VoltAbsorb = 10;
     public const int WaterAbsorb = 11;
@@ -140,7 +160,75 @@ public static class Abilities
         // wanted somewhere to happen at the end of a turn, which arrived with the berries.
         // None of them is new machinery either — all five are old hooks with a new caller.
         Trace, ColorChange, Forecast, ShedSkin, SpeedBoost,
+
+        // And the ones that change a number somebody was already working out.
+        CompoundEyes, Hustle, MarvelScale, SereneGrace, LiquidOoze, EarlyBird, Truant,
+
+        // And the ones that are finished rather than silent.
+        Stench, Illuminate, Pickup, Plus, Minus, LightningRod, Cacophony,
     ];
+
+    /// <summary>
+    /// Whether this one has nothing to do in a fight of one against one, and that is the
+    /// answer rather than a gap.
+    /// <para>
+    /// Seven of them. Two act outside a battle entirely; two need a partner this game mode
+    /// does not have; one draws a move away from somebody who is not there; and two do
+    /// nothing anywhere on this cartridge at all — one of which no species even carries.
+    /// </para>
+    /// <para>
+    /// Told apart from unmodelled on purpose, and it is the same distinction the move-effect
+    /// table draws between a move that is finished and a move nobody has written. A count of
+    /// what is left to build that includes things nothing will ever be built for is a count
+    /// that can never reach zero.
+    /// </para>
+    /// </summary>
+    public static bool NothingToDoHere(int ability) =>
+        ability is Stench or Illuminate or Pickup or Plus or Minus or LightningRod or Cacophony;
+
+    /// <summary>
+    /// What this one does to the accuracy of its own moves, as a percentage.
+    /// <para>
+    /// Two of them, in opposite directions, and the second is the interesting one: it is the
+    /// only ability in the game that makes its owner worse at something in exchange for
+    /// making it better at something else.
+    /// </para>
+    /// </summary>
+    public static int Aiming(int ability) => ability switch
+    {
+        CompoundEyes => 130,
+        Hustle => 80,
+        _ => 100,
+    };
+
+    /// <summary>
+    /// What this one does to its own defence, as a percentage.
+    /// <para>
+    /// One of them, and only while its owner is suffering — the second ability on this
+    /// cartridge whose whole point is that being ill helps, and the mirror of the one that
+    /// raises Attack for the same reason.
+    /// </para>
+    /// </summary>
+    public static int Guarding(int ability, Battler battler) =>
+        ability == MarvelScale && battler.Status != StatusCondition.None ? 150 : 100;
+
+    /// <summary>Whether the chances riding on this one's moves are doubled.</summary>
+    public static bool SharpensChances(int ability) => ability == SereneGrace;
+
+    /// <summary>
+    /// Whether draining health from this one hurts instead.
+    /// <para>
+    /// Asked of the creature being drained rather than the one draining, which is what makes
+    /// it a punishment rather than a defence.
+    /// </para>
+    /// </summary>
+    public static bool PoisonsWhoDrinks(int ability) => ability == LiquidOoze;
+
+    /// <summary>How many turns of sleep this one loses per turn. Two for one of them.</summary>
+    public static int WakesInTurns(int ability) => ability == EarlyBird ? 2 : 1;
+
+    /// <summary>Whether this one can only manage every other turn.</summary>
+    public static bool ActsEveryOtherTurn(int ability) => ability == Truant;
 
     /// <summary>Whether this one takes on the ability of whoever it is standing opposite.</summary>
     public static bool CopiesTheirAbility(int ability) => ability == Trace;

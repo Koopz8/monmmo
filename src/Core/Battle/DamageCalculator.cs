@@ -72,6 +72,11 @@ public static class DamageCalculator
         // say about it.
         accuracy = accuracy * (100 - HeldItems.Slipperiness(defender.Carried)) / 100;
 
+        // And what the one aiming is worth, in either direction. Applied to the accuracy
+        // rather than to the stage, because it is not a stage: it survives a HAZE and does
+        // not stack with itself.
+        accuracy = accuracy * Abilities.Aiming(attacker.Ability) / 100;
+
         return rng.Next(100) < Math.Clamp(accuracy, 1, 100);
     }
 
@@ -184,6 +189,11 @@ public static class DamageCalculator
         // while they are both on this side of the division.
         attack = attack * HeldItems.Multiplies(
             attacker.Carried, attacker.Species.Index, physical ? Stat.Attack : Stat.SpAttack) / 100;
+
+        // What the defender's own ability is worth to its defence, on the stat and for the
+        // same reason an attacking one goes on the stat: it composes with everything else
+        // there, and a multiplier on the far side of the division does not.
+        defence = defence * Abilities.Guarding(defender.Ability, defender) / 100;
 
         defence = defence * HeldItems.Multiplies(
             defender.Carried, defender.Species.Index, physical ? Stat.Defense : Stat.SpDefense) / 100;

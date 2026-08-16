@@ -2179,9 +2179,25 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         if (carried.Kind == EffectKind.Drain && total > 0)
         {
             int back = Math.Max(1, total / 2);
-            int given = attacker.Heal(back);
 
-            if (given > 0) events.Add(new BattleEvent.Drained(side, given));
+            // Unless what is being drained does not agree with being drunk. Asked of the
+            // creature being drained rather than of the one draining, which is what makes it
+            // a punishment rather than a defence — and it costs exactly what it would have
+            // given, so the move is as bad for its user as it would have been good.
+            if (Abilities.PoisonsWhoDrinks(defender.Ability))
+            {
+                int cost = attacker.TakeDamage(back);
+
+                events.Add(new BattleEvent.Recoiled(side, cost));
+
+                if (attacker.HasFainted) events.Add(new BattleEvent.Fainted(side));
+            }
+            else
+            {
+                int given = attacker.Heal(back);
+
+                if (given > 0) events.Add(new BattleEvent.Drained(side, given));
+            }
         }
 
         // A bell, which takes a share of what was dealt regardless of what the move was.
@@ -2442,7 +2458,14 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             return;
         }
 
-        if (rolled && !_rng.Chance(move.SecondaryChance)) return;
+        // Doubled for the one ability that sharpens what rides on a move. Clamped, because
+        // a chance above certainty is still certainty and a number that goes past it would
+        // read as a bug the first time somebody printed it.
+        int riding = Abilities.SharpensChances(attacker.Ability)
+            ? Math.Min(100, move.SecondaryChance * 2)
+            : move.SecondaryChance;
+
+        if (rolled && !_rng.Chance(riding)) return;
 
         // Made sure of. It lasts as long as they are standing there rather than for a
         // count, which is what makes it worse than being wrapped.
@@ -3367,6 +3390,20 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             return false;
         }
 
+        // Every other turn, for the one that cannot manage more. Before the conditions and
+        // after the debts, because it is neither: it is not something done to the creature
+        // and it is not owed for anything it did. It is simply how often it can be bothered.
+        //
+        // Counted from how long it has been standing there, so arriving is always a turn it
+        // can act on — a creature that had to wait for its first go would be one nobody
+        // could ever switch in usefully.
+        if (Abilities.ActsEveryOtherTurn(battler.Ability) && battler.TurnsOut % 2 == 1)
+        {
+            events.Add(new BattleEvent.NothingHappened(side));
+
+            return false;
+        }
+
         // Before the conditions, because a flinch is not one. It lasts exactly as long
         // as the turn it was caused in, and it only reaches somebody who had not moved
         // yet — which is why nothing has to clear it for the loser of the speed roll.
@@ -3381,7 +3418,11 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         switch (battler.Status)
         {
             case StatusCondition.Sleep:
-                battler.SleepTurns--;
+                // One turn, or two for the one that sleeps lightly. The counter comes down
+                // rather than the sleep being refused, so a light sleeper and an ordinary
+                // one are told apart by how long they are out rather than by whether they
+                // ever were.
+                battler.SleepTurns -= Abilities.WakesInTurns(battler.Ability);
 
                 if (battler.SleepTurns <= 0)
                 {

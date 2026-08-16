@@ -370,6 +370,24 @@ public class AbilityTests
             // And a tenth way: the ones that change what their owner is, or that happen at
             // the end of a turn. Both of those needed something the engine did not have
             // until the moves that move a type and an ability were written.
+            // And an eleventh way: changing a number somebody was already working out. Plus
+            // the ones that are FINISHED rather than silent — nothing to do in a fight of
+            // one against one, which is an answer rather than a gap and is the same
+            // distinction the move-effect table draws.
+            bool changesANumber = Abilities.Aiming(ability) != 100
+                || Abilities.SharpensChances(ability)
+                || Abilities.PoisonsWhoDrinks(ability)
+                || Abilities.WakesInTurns(ability) != 1
+                || Abilities.ActsEveryOtherTurn(ability)
+                || Abilities.NothingToDoHere(ability)
+                || Enum.GetValues<StatusCondition>().Any(c =>
+                {
+                    var ill = new Battler(With(ability), 50) { AbilitySlot = 0 };
+                    ill.Status = c;
+
+                    return Abilities.Guarding(ability, ill) != 100;
+                });
+
             bool changesWhatItIs = Abilities.CopiesTheirAbility(ability)
                 || Abilities.BecomesWhatHitIt(ability)
                 || Abilities.FollowsTheSky(ability)
@@ -385,7 +403,7 @@ public class AbilityTests
 
             if (!refuses && !changesDamage && !changesAttack && !readsTheSky && !arrives
                 && !answersATouch && !refusesToBeWorsened && !aboutLeaving
-                && !refusesWhatIsDone && !changesWhatItIs)
+                && !refusesWhatIsDone && !changesWhatItIs && !changesANumber)
             {
                 inert.Add(ability);
             }
