@@ -165,6 +165,67 @@ public class TakingTheBoatTests
         Assert.False(played.HeldATicket);
     }
 
+    // ---- and what a ticket is, which is the whole point of saying it has none -----------
+
+    /// <summary>
+    /// A run that has no ticket says what a ticket <em>is</em>, and where one comes from.
+    /// <para>
+    /// Otherwise the output is the shortest possible distance between an answer and being no
+    /// further forward: it held no ticket, and nothing anywhere says what one looks like.
+    /// The flag and the item are both read, and the item gets the same treatment every other
+    /// refusal gets — everywhere in the world one could be got, and the way in to each.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ARunWithNoTicketSaysWhatOneIsAndWhereItComesFrom()
+    {
+        var world = new WorldData(
+        [
+            .. Archipelago(new FerryPass(TicketFlag, Ticket)).Maps,
+
+            // Somebody, somewhere it never got to, who hands one over.
+            Room("5.0") with
+            {
+                Objects =
+                [
+                    new MapObject(1, 1, 1, 1, Direction.Down, 0, false)
+                        with { GivesItemId = Ticket, HiddenBy = 0x263 },
+                ],
+            },
+        ])
+        {
+            FerryPasses = [new FerryPass(TicketFlag, Ticket)],
+        };
+
+        FerryTicket ticket = Assert.Single(Sail(world, boat: false).Tickets);
+
+        Assert.Equal(TicketFlag, ticket.Flag);
+        Assert.Equal(Ticket, ticket.ItemId);
+        Assert.False(ticket.Opens);
+
+        FoundAt from = Assert.Single(ticket.Sources);
+
+        Assert.Equal("5.0", from.MapId);
+        Assert.Equal("lying there", from.How);
+        Assert.False(from.Reached);
+    }
+
+    /// <summary>
+    /// And a ticket it is holding is not put on a shopping list. The decoy for the rule
+    /// above: a list that named the ticket whatever the bag held would send somebody after
+    /// something already in their pocket.
+    /// </summary>
+    [Fact]
+    public void ATicketAlreadyHeldIsNotAskedFor()
+    {
+        FerryTicket ticket = Assert.Single(
+            Sail(Archipelago(new FerryPass(TicketFlag, Ticket)), boat: false, (Ticket, 1)).Tickets);
+
+        Assert.True(ticket.Opens);
+        Assert.True(ticket.Carried);
+        Assert.False(ticket.FlagSet);
+    }
+
     // ---- what a dock is, and what it is not -------------------------------------------
 
     /// <summary>
