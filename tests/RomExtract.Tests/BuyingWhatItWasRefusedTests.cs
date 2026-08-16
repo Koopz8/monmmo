@@ -1,3 +1,4 @@
+using PokeMmo.Core.Save;
 using PokeMmo.Core.World;
 using PokeMmo.Server;
 using Xunit;
@@ -240,6 +241,109 @@ public class BuyingWhatItWasRefusedTests
         Attempt played = Run(Shop(TestRules.BicycleItem), 9999, TestRules.BicycleItem);
 
         Assert.Empty(played.Bought);
+    }
+
+    // ---- the cap that was named for one thing and counted across another ----------------
+
+    /// <summary>
+    /// A full pocket does not shut the whole bag, and this is the fault that made the first
+    /// real run of the shopping buy nothing at all.
+    /// <para>
+    /// <c>PocketCapacity</c> is named for a pocket and was counted across every item carried.
+    /// The playthrough was holding exactly sixty different things — the cap — so every
+    /// purchase and every ball on the floor was refused from then on, silently, and the
+    /// output read as a shop that sold nothing rather than a bag with no room. A limit
+    /// described as one thing and applied as another.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AFullPocketDoesNotShutTheWholeBag()
+    {
+        var bag = new Bag();
+
+        // A pocket filled to its cap, all of them sharing one pocket.
+        for (var i = 0; i < Bag.PocketCapacity; i++) bag.Add(9000 + i);
+
+        Assert.Equal(Bag.PocketCapacity, bag.DistinctItems);
+
+        // Counted across the whole bag, nothing else fits — which is what used to happen.
+        Assert.Equal(0, bag.Add(TestRules.PotionItem));
+
+        // Counted by pocket, something from a different one still does. The predicate says
+        // which of the things already carried share a pocket with the one going in, and none
+        // of the sixty fillers share this one's.
+        Assert.Equal(
+            1,
+            bag.Add(TestRules.PotionItem, 1, Bag.MaxStack, other => other < 9000));
+    }
+
+    /// <summary>
+    /// And a pocket that <em>is</em> full still refuses, which is the decoy: a capacity that
+    /// stopped applying at all would be no better than one that applied everywhere.
+    /// </summary>
+    [Fact]
+    public void AndAPocketThatIsFullStillRefuses()
+    {
+        var bag = new Bag();
+
+        for (var i = 0; i < Bag.PocketCapacity; i++) bag.Add(9000 + i);
+
+        // The same pocket as everything already in it.
+        Assert.Equal(0, bag.Add(8999, 1, Bag.MaxStack, other => other >= 9000 || other == 8999));
+    }
+
+    /// <summary>
+    /// And something already carried still stacks when its pocket is full, because a stack is
+    /// not a new slot. Otherwise a full pocket would stop a player topping up potions.
+    /// </summary>
+    [Fact]
+    public void SomethingAlreadyCarriedStillStacksInAFullPocket()
+    {
+        var bag = new Bag();
+
+        for (var i = 0; i < Bag.PocketCapacity; i++) bag.Add(9000 + i);
+
+        Assert.Equal(1, bag.Add(9000, 1, Bag.MaxStack, other => other >= 9000));
+        Assert.Equal(2, bag.CountOf(9000));
+    }
+
+    // ---- and why it did not, when it did not --------------------------------------------
+
+    /// <summary>
+    /// Not being able to afford one says so, by name and by number. Four things stop a
+    /// purchase and they are not alike; the run that found this hit the one nobody would
+    /// have guessed and it read as this one.
+    /// </summary>
+    [Fact]
+    public void NotBeingAbleToAffordOneSaysSo()
+    {
+        int price = TestRules.All.ItemAt(TestRules.PotionItem)!.Price;
+
+        Attempt played = Run(Shop(TestRules.PotionItem), price - 1, TestRules.PotionItem);
+
+        NotBought missed = Assert.Single(played.CouldNotBuy);
+
+        Assert.Equal(TestRules.PotionItem, missed.ItemId);
+        Assert.Contains("afford", missed.Why);
+    }
+
+    /// <summary>And something the cartridge does not sell says that instead.</summary>
+    [Fact]
+    public void SomethingTheCartridgeWillNotSellSaysThatInstead()
+    {
+        Attempt played = Run(Shop(TestRules.BicycleItem), 9999, TestRules.BicycleItem);
+
+        Assert.Contains("does not sell", Assert.Single(played.CouldNotBuy).Why);
+    }
+
+    /// <summary>
+    /// And a purchase that went through leaves nothing on the list. A reason recorded on the
+    /// pass it failed and never cleared would report every bought item as unbought.
+    /// </summary>
+    [Fact]
+    public void SomethingItDidBuyIsNotAlsoReportedAsMissed()
+    {
+        Assert.Empty(Run(Shop(TestRules.PotionItem), 9999, TestRules.PotionItem).CouldNotBuy);
     }
 
     /// <summary>And what it spent is subtracted, so a purse cannot buy the same thing forever.</summary>

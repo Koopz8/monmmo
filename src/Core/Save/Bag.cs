@@ -85,13 +85,33 @@ public sealed class Bag
     /// over twice should leave you with one. The bag does not know which items those
     /// are; whoever has the rules does.
     /// </param>
-    public int Add(int itemId, int count = 1, int most = MaxStack)
+    /// <param name="sharesAPocketWith">
+    /// Which of the things already carried live in the same pocket as this one, so that
+    /// <see cref="PocketCapacity"/> can mean what it is called.
+    /// <para>
+    /// It did not. The cap is named for a pocket and was counted across the whole bag, and
+    /// the two are only the same thing until somebody fills it — at which point a playthrough
+    /// carrying exactly sixty different things stopped being able to pick anything up, went
+    /// on walking, and reported a shop it was standing in front of as one it bought nothing
+    /// from. A limit described as one thing and applied as another, failing silently.
+    /// </para>
+    /// <para>
+    /// Supplied rather than worked out here for the reason the pocket is not stored here:
+    /// which pocket an item lives in is on the cartridge, and this class has never seen one.
+    /// Nothing supplied keeps the old whole-bag counting, which is what the callers that have
+    /// no rules to hand need.
+    /// </para>
+    /// </param>
+    public int Add(
+        int itemId, int count = 1, int most = MaxStack, Func<int, bool>? sharesAPocketWith = null)
     {
         if (itemId <= 0 || count <= 0) return 0;
 
         int held = _counts.GetValueOrDefault(itemId);
 
-        if (held == 0 && _order.Count >= PocketCapacity) return 0;
+        int alongside = sharesAPocketWith is null ? _order.Count : _order.Count(sharesAPocketWith);
+
+        if (held == 0 && alongside >= PocketCapacity) return 0;
 
         int taken = Math.Min(count, Math.Min(most, MaxStack) - held);
         if (taken <= 0) return 0;
