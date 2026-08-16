@@ -94,6 +94,7 @@ public enum Side
 [JsonDerivedType(typeof(TookThemWith), "tookthemwith")]
 [JsonDerivedType(typeof(HealthShared), "healthshared")]
 [JsonDerivedType(typeof(CopiedStages), "copiedstages")]
+[JsonDerivedType(typeof(CameIn), "camein")]
 [JsonDerivedType(typeof(UsedInstead), "usedinstead")]
 [JsonDerivedType(typeof(LearnedMove), "learnedmove")]
 [JsonDerivedType(typeof(AbilityMoved), "abilitymoved")]
@@ -371,6 +372,18 @@ public abstract record BattleEvent
 
     /// <summary>Took the other one's stat changes for its own — all of them.</summary>
     public sealed record CopiedStages(Side Side) : BattleEvent;
+
+    /// <summary>
+    /// Somebody swapped, inside the turn.
+    /// <para>
+    /// Distinct from the message a client already gets when a fight sends the next one out
+    /// after a faint: that is the server saying who is standing there now, and this is the
+    /// battle saying a turn was spent doing it. Both clients need to see it in the order it
+    /// happened relative to the moves either side of it, which is the whole reason the
+    /// switch moved in here.
+    /// </para>
+    /// </summary>
+    public sealed record CameIn(Side Side) : BattleEvent;
 
     /// <summary>Used a move that was not the one chosen, and which one it turned out to be.</summary>
     public sealed record UsedInstead(Side Side, int MoveId) : BattleEvent;
@@ -776,10 +789,76 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
     /// battle from a previous one should have to say that it is doing so.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Sets the sky directly. For tests that need a room in a known state without spending
+    /// turns getting it there — nothing in the game calls this.
+    /// </summary>
+    public void SetSkyForTest(Weather weather, int turns)
+    {
+        Sky = weather;
+        SkyTurns = turns;
+    }
+
+    /// <summary>The same, for the room's damping. Nothing in the game calls this either.</summary>
+    public void SetDampingForTest(PokemonType type, int turns)
+    {
+        Damped = type;
+        DampedTurns = turns;
+    }
+
     public void ContinueFrom(Battle previous)
     {
         Sky = previous.Sky;
         SkyTurns = previous.SkyTurns;
+
+        // And the other thing that belongs to the room rather than to either creature. It
+        // was left out of here, which is the same fault as not calling this at all, only
+        // quieter — a rule with one of its two fields carried looks exactly like a rule that
+        // works. Every field on this class that outlives a turn and names no side belongs in
+        // this method, and there is a test that says so by listing them.
+        Damped = previous.Damped;
+        DampedTurns = previous.DampedTurns;
+    }
+
+    /// <summary>
+    /// Brings somebody in, inside the turn, and lets go of whoever was standing there.
+    /// <para>
+    /// <b>This is the change milestone 167 wrote down as not done.</b> Switching used to
+    /// happen outside this class: the server built a new battle around the creature that had
+    /// not moved, and called in afterwards. Everything about that worked except ordering —
+    /// there was nobody left to go before, so a rule giving a move first place against a
+    /// leaver was a rule nothing could observe, and it was removed rather than propped up.
+    /// </para>
+    /// <para>
+    /// What leaves the field loses what it had made of itself. Stages, and the things that
+    /// are true only while standing there, go — which is the games' own rule and is why
+    /// switching out and back in is not a way to keep a boost. What is <em>done to</em> a
+    /// creature stays with it, exactly as <see cref="Passed"/> already draws that line.
+    /// </para>
+    /// </summary>
+    /// <returns>What the arrival itself caused, which is the incoming one's ability.</returns>
+    public List<BattleEvent> Bring(Side side, Battler incoming)
+    {
+        Battler going = Of(side);
+
+        if (ReferenceEquals(going, incoming)) return [];
+
+        // Let go of what it built. Not of what was done to it: a condition and a count of
+        // turns asleep travel with the creature, because they are not its to drop.
+        going.ResetStages();
+        going.LeaveTheField();
+
+        if (side == Side.Player) Player = incoming; else Opponent = incoming;
+
+        // Anything one side handed on deliberately, before the ability that fires on
+        // arrival — what was passed is part of how the newcomer arrives rather than
+        // something that happens to it afterwards.
+        GiveWhatWasPassed(side, incoming);
+
+        // Only the arrival. Whether this was a turn somebody spent or a replacement for
+        // somebody who fainted is not this method's to know, and the two read differently
+        // to a player — so the sentence about it belongs to whoever asked.
+        return Arrival(side);
     }
 
     /// <summary>
@@ -925,9 +1004,19 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         FollowTheSky(Side.Opponent, Opponent, events);
     }
 
-    public Battler Player { get; } = player;
+    /// <summary>
+    /// Whoever is standing there for each side.
+    /// <para>
+    /// Settable from inside this class only, and that is new. A switch used to be something
+    /// the server did <em>between</em> calls into here — it built a whole new battle around
+    /// the creature that had not moved — which meant that by the time an order was decided
+    /// there was nobody left to go before, and the move that catches somebody leaving could
+    /// never be made to matter. See <see cref="Bring"/>.
+    /// </para>
+    /// </summary>
+    public Battler Player { get; private set; } = player;
 
-    public Battler Opponent { get; } = opponent;
+    public Battler Opponent { get; private set; } = opponent;
 
     public uint Seed => _rng.Seed;
 
@@ -1543,26 +1632,45 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             : null;
     }
 
+    /// <summary>
+    /// Where a switch sits in the order. <b>Modelled.</b>
+    /// <para>
+    /// Above every move, because leaving is not something the other side gets to interrupt
+    /// — that is the games' own arrangement and it is what makes switching a real decision
+    /// rather than a gamble. Seven, because the highest priority any move on this cartridge
+    /// carries is well below it and the number only has to win.
+    /// </para>
+    /// </summary>
+    public const int SwitchPriority = 7;
+
+    /// <summary>
+    /// And the one thing that goes before a switch: the move that catches somebody leaving.
+    /// </summary>
+    public const int CatchingPriority = SwitchPriority + 1;
+
     private int PriorityOf(Battler battler, BattleAction action)
     {
+        // A switch outranks every move. This is the line milestone 167 could not write:
+        // a switch was not resolved in here at all, so by the time an order was decided
+        // there was nobody left to go before, and a rule about going first against a leaver
+        // was a rule nothing could ever observe. It was removed rather than propped up with
+        // a test written to fit it, and this is it coming back now that it can be seen.
+        if (action is BattleAction.SwitchTo) return SwitchPriority;
+
         if (action is not BattleAction.UseMove use || battler.MoveAt(use.Slot) is not { } move)
             return 0;
 
-        // No special case here for the move that catches somebody leaving, and its absence
-        // is deliberate rather than an omission.
-        //
-        // It wants to go before they go. But a switch is not resolved inside this class at
-        // all — the server does both switches before it calls this, precisely because a
-        // switch is not a turn — so by the time an order is decided there is nobody left to
-        // go before. A rule saying "first against a leaver" would be a rule nothing could
-        // ever observe, which is the shape this project has now found nine times by breaking
-        // things on purpose, and it would have gone in here as the tenth.
-        //
-        // What the doubling needs is only that this class be TOLD, which it can be and is.
-        // Making the order matter as well means moving the switch inside the turn, and that
-        // is a change to how a duel is run rather than a line here.
+        // The move that catches a leaver goes before the leaving. Only against somebody who
+        // has actually said they are going — against anybody else it is an ordinary move at
+        // its own priority, which is what stops this being a free first strike every turn.
+        if (move.Effect == MovePower.Chasing && _leaving.Contains(Other(SideOf(battler))))
+            return CatchingPriority;
+
         return move.Priority;
     }
+
+    private Side SideOf(Battler battler) =>
+        ReferenceEquals(battler, Player) ? Side.Player : Side.Opponent;
 
     /// <summary>
     /// One side's go.
@@ -1592,6 +1700,29 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         Battler defender = Of(Other(side));
 
         if (attacker.HasFainted) return;
+
+        // Leaving, which is now something that happens here rather than something the
+        // server did before calling in. It comes first in the method for the same reason
+        // the bag does: it is not this creature moving, so nothing that stops a creature
+        // moving stops it.
+        if (action is BattleAction.SwitchTo going)
+        {
+            // Whoever is on the bench, which this class is handed rather than owns. A
+            // battle told about no party has nobody to bring in, and says so by doing
+            // nothing — the same answer it gives the move that reaches past the field.
+            IReadOnlyList<Battler> bench = PartyOf(side);
+
+            if (going.Slot < 0 || going.Slot >= bench.Count) return;
+
+            Battler incoming = bench[going.Slot];
+
+            if (incoming.HasFainted || ReferenceEquals(incoming, attacker)) return;
+
+            events.Add(new BattleEvent.CameIn(side));
+            events.AddRange(Bring(side, incoming));
+
+            return;
+        }
 
         // The bag, the door and a ball come before the question of whether this one can
         // move, because none of them are it moving — a trainer reaching into a bag is

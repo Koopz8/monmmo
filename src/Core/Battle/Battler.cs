@@ -684,6 +684,68 @@ public sealed class Battler
     public void ResetStages() => _stages.Clear();
 
     /// <summary>
+    /// Everything that was true only while this one was standing there, let go of.
+    /// <para>
+    /// The line is the same one <c>Passed</c> draws and is worth stating once here: what a
+    /// creature <em>built</em> or had <em>started on it in this fight</em> ends when it
+    /// leaves; what was <em>done to</em> it — a condition, a count of turns asleep, what it
+    /// is carrying — travels with it, because those are facts about the creature rather than
+    /// about the square it was standing on.
+    /// </para>
+    /// <para>
+    /// <b>Not in here, deliberately:</b> the four that are properties of a <em>side</em>
+    /// rather than of a creature — mist, safeguard, and the two screens. They are kept on
+    /// this class because there is nowhere else for a side's state to live yet, and a
+    /// switch ending a screen the whole team was under would be wrong. That is a modelling
+    /// limit and it is written down rather than quietly corrected here.
+    /// </para>
+    /// </summary>
+    public void LeaveTheField()
+    {
+        ConfusedTurns = 0;
+        IsSeeded = false;
+        IsIdentified = false;
+        IsRooted = false;
+        PerishTurns = 0;
+        TauntTurns = 0;
+        IsTormented = false;
+        DisabledTurns = 0;
+        ForcedTurns = 0;
+        HasAimed = false;
+        IsFocused = false;
+        CannotEscape = false;
+        TrappedTurns = 0;
+        TrappedBy = 0;
+        InNightmare = false;
+        DrowsyTurns = 0;
+
+        // The stand-in goes with it — it is a thing this creature put up, and one left
+        // behind would absorb hits meant for whoever came in.
+        StandInHp = 0;
+
+        // What it had gathered, and what it was locked into. Both are half-finished things
+        // belonging to a creature that is no longer there to finish them.
+        Gathered = 0;
+        GatheringTurns = 0;
+        MustRecharge = false;
+        RechargingAfter = 0;
+        RunningCount = 0;
+
+        // How long it has been standing there, which is nought again the moment it comes
+        // back — the move that only works on arrival has to work on a second arrival too.
+        TurnsOut = 0;
+
+        LastMove = null;
+        HurtThisTurn = 0;
+        HurtThisTurnBy = null;
+
+        IsGuarded = false;
+        IsEnduring = false;
+        IsBonded = false;
+        IsAway = false;
+    }
+
+    /// <summary>
     /// A battle stat with its stage applied. Critical hits ignore stages that would
     /// help the defender or hinder the attacker, which is what
     /// <paramref name="ignoreUnfavourableStages"/> models.

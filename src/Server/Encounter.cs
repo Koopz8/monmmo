@@ -94,6 +94,12 @@ public sealed class Encounter
         {
             IsWild = !IsTrainerBattle,
             Struggle = _struggle,
+            // The trainer's bench, which this class does hold. The player's does not
+            // live here — a party is SavedMon on the save until somebody is restored into
+            // a Battler — so the one move that reaches past the field still reaches only
+            // the other side's party in a fight against the game. Written down rather than
+            // half-wired: half of a rule looks exactly like the whole of it.
+            OpponentParty = _opponents,
         };
 
         // The sky belongs to the room rather than to either creature, so it does not stop
@@ -116,6 +122,12 @@ public sealed class Encounter
         {
             IsWild = !IsTrainerBattle,
             Struggle = _struggle,
+            // The trainer's bench, which this class does hold. The player's does not
+            // live here — a party is SavedMon on the save until somebody is restored into
+            // a Battler — so the one move that reaches past the field still reaches only
+            // the other side's party in a fight against the game. Written down rather than
+            // half-wired: half of a rule looks exactly like the whole of it.
+            OpponentParty = _opponents,
         };
 
         Current.ContinueFrom(before);

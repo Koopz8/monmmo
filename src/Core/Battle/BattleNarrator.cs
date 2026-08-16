@@ -247,6 +247,11 @@ public static class BattleNarrator
 
         BattleEvent.CopiedStages e => $"{names.Of(e.Side)} copied its foe's changes!",
 
+        // Said by the battle rather than by the server, because the moment it happened in
+        // relative to the moves either side of it is the whole point of the switch having
+        // moved inside the turn.
+        BattleEvent.CameIn e => $"{names.Of(e.Side)} came back!",
+
         BattleEvent.UsedInstead e => $"{names.Of(e.Side)} used {names.MoveNamed(e.MoveId)} instead!",
 
         BattleEvent.LearnedMove e => e.ForGood

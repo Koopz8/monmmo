@@ -50,7 +50,7 @@ public sealed class Duel
 
         _struggle = struggle;
 
-        Current = new Battle(_ones[0], _twos[0], seed) { IsWild = false, Struggle = struggle };
+        Current = Built(_ones[0], _twos[0], seed);
     }
 
     /// <summary>Whoever is <see cref="Side.Player"/> in the engine.</summary>
@@ -169,18 +169,77 @@ public sealed class Duel
     {
         List<Battler> team = Team(playerId);
 
-        if (playerId == One)
-        {
-            _oneSlot = slot;
-            Current = new Battle(team[slot], Current.Opponent, Current.State) { IsWild = false, Struggle = _struggle };
-        }
-        else
-        {
-            _twoSlot = slot;
-            Current = new Battle(Current.Player, team[slot], Current.State) { IsWild = false, Struggle = _struggle };
-        }
+        if (playerId == One) _oneSlot = slot; else _twoSlot = slot;
+
+        // Swapped in place rather than rebuilt around.
+        //
+        // This used to build a whole new battle and keep only where the dice had got to,
+        // which meant every field belonging to the *room* had to be copied across by hand
+        // — and the call that does that was never made here. A duel's weather stopped the
+        // moment anybody swapped, and the moment anybody fainted, because replacing a
+        // fainted creature comes through this same method.
+        //
+        // Not fixed by adding the missing call. Fixed by removing the rebuild, so there is
+        // nothing left to remember: the room is never torn down, so it cannot be dropped.
+        Arriving = Current.Bring(playerId == One ? Side.Player : Side.Opponent, team[slot]);
 
         return team[slot];
+    }
+
+    /// <summary>
+    /// A battle around these two, knowing both benches.
+    /// <para>
+    /// One place rather than three, because the three had drifted: the two that rebuilt on a
+    /// switch forgot the room, and all three forgot the parties — so the one move that
+    /// reaches past the field reached an empty list in every duel ever fought. A constructor
+    /// call repeated is a constructor call that will differ.
+    /// </para>
+    /// </summary>
+    private Battle Built(Battler one, Battler two, uint seed) =>
+        new(one, two, seed)
+        {
+            IsWild = false,
+            Struggle = _struggle,
+            PlayerParty = _ones,
+            OpponentParty = _twos,
+        };
+
+    /// <summary>
+    /// What the last send-out caused, which is the incoming one's ability having its say.
+    /// Held rather than returned, because every caller already wanted the creature back.
+    /// </summary>
+    public List<BattleEvent> Arriving { get; private set; } = [];
+
+    /// <summary>
+    /// Catches up with whatever the engine did to the field during a turn, and says who
+    /// changed.
+    /// <para>
+    /// The switch is the engine's now, so the two slot numbers this class keeps are no
+    /// longer the only record of who is standing there — they are a cache of it, and a
+    /// cache has to be reconciled rather than trusted. Asked once after every turn, and it
+    /// answers nothing on the ordinary turn where nobody swapped.
+    /// </para>
+    /// </summary>
+    public List<(int Who, Battler Sent)> CatchUp()
+    {
+        var changed = new List<(int, Battler)>();
+
+        int one = _ones.FindIndex(b => ReferenceEquals(b, Current.Player));
+        int two = _twos.FindIndex(b => ReferenceEquals(b, Current.Opponent));
+
+        if (one >= 0 && one != _oneSlot)
+        {
+            _oneSlot = one;
+            changed.Add((One, _ones[one]));
+        }
+
+        if (two >= 0 && two != _twoSlot)
+        {
+            _twoSlot = two;
+            changed.Add((Two, _twos[two]));
+        }
+
+        return changed;
     }
 
     private List<Battler> Team(int playerId) => playerId == One ? _ones : _twos;

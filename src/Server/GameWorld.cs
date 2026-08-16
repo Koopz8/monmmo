@@ -4672,18 +4672,20 @@ public sealed class GameWorld
                 return [];
             }
 
-            // Both switches before either action, because a switch is not a turn — it is
-            // the pair the turn is about to happen to. Applied one at a time, and each
-            // rebuild carries the other side exactly as it stands.
-            var next = new List<(int Who, Battler Sent)>();
-
-            foreach (int side in new[] { duel.One, duel.Two })
-            {
-                if (duel.ChoiceOf(side) is not BattleAction.SwitchTo going) continue;
-                if (duel.SwitchTo(side, going.Slot) is { } sent) next.Add((side, sent));
-            }
-
+            // The switches are the engine's now, and are ordered against the moves rather
+            // than done before them.
+            //
+            // They used to happen here, one at a time, before the turn — which worked for
+            // everything except order. A move that catches somebody leaving wants to go
+            // before they go, and there was nobody left to go before: by the time the
+            // engine was called, both creatures had already swapped. That is why milestone
+            // 167 wrote the rule down as not done rather than shipping one nothing could
+            // observe.
             List<BattleEvent> events = duel.Resolve();
+
+            // And who is standing there now, which this side of the wire has to catch up
+            // with rather than decide.
+            var next = new List<(int Who, Battler Sent)>(duel.CatchUp());
 
             // Somebody who fainted is replaced before the turn is reported, so both
             // clients are told about the next one in the same breath as the last one
@@ -6056,10 +6058,20 @@ public sealed class GameWorld
             if (!_players.TryGetValue(playerId, out ServerPlayer? player) || player.Battle is not { } encounter)
                 return [new Outgoing(new Rejected("You are not in a battle."), OnlyTo: playerId)];
 
-            // Somebody else, before anything else. A switch is not a move and the engine
-            // has no idea a party exists — so it happens here, and what reaches the
-            // engine is a side that does nothing this turn, which is exactly what a
-            // switch costs.
+            // Somebody else, before anything else.
+            //
+            // A duel does this inside the turn now; a fight against the game still does it
+            // here, and the difference is not tidiness. This class holds the trainer's bench
+            // but not the player's — a party is SavedMon on the save until somebody is
+            // restored into a Battler — so there is nobody for the engine to bring in on
+            // this side.
+            //
+            // The switch is still handed to the engine afterwards, and the engine does
+            // nothing with it, because a battle given no bench for a side has nobody to
+            // bring in. That is a stated rule with a test on it rather than a coincidence:
+            // see ASwitchWithNoBenchDoesNothing. What it costs is that the move which
+            // catches a leaver cannot catch a player switching in a trainer fight, which is
+            // written down as not done rather than quietly assumed.
             List<Outgoing> swapped = [];
 
             if (action is BattleAction.SwitchTo going)
