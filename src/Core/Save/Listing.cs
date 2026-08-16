@@ -35,6 +35,28 @@ public sealed record Listing(
 
     public Gender Sex { get; init; }
 
+    /// <summary>
+    /// Which item this is a pile of, or zero when it is a creature.
+    /// <para>
+    /// One table for both, because everything a market does around the edges — the board,
+    /// the search, whose it is, what it sold for, the money waiting to be collected — is
+    /// the same question for a pile of REVIVEs as for a DRAGONITE, and a second table
+    /// would be a second copy of all of it that drifts out of step with the first.
+    /// </para>
+    /// <para>
+    /// <see cref="Species"/> is nought on one of these, which is what makes a species
+    /// search skip them without being told to. That is a happy accident of ids starting
+    /// at one rather than a rule, and the search says so where it relies on it.
+    /// </para>
+    /// </summary>
+    public int Item { get; init; }
+
+    /// <summary>How many of it, when it is a pile.</summary>
+    public int Count { get; init; }
+
+    /// <summary>True when this is a pile of items rather than a creature.</summary>
+    public bool IsItem => Item > 0;
+
     /// <summary>The same six numbers as something that knows what they mean.</summary>
     public Genes Born => Genes.Of(Ivs);
 

@@ -1039,6 +1039,25 @@ public sealed class GameWorld
         return player.Bag.Add(itemId, count, key ? 1 : Bag.MaxStack);
     }
 
+    /// <summary>
+    /// Whether something in a bag is a thing a player may put on the market.
+    /// <para>
+    /// Here rather than in the market because it is a question about the cartridge, and the
+    /// market has never seen one. Key items are the whole of the answer: there is one BIKE
+    /// VOUCHER and one S.S. TICKET, and a market that let somebody sell theirs would be a
+    /// market that could strand them behind a door their own game had already opened.
+    /// </para>
+    /// <para>
+    /// A world with no rules loaded says yes, which is the same answer <see cref="BoxSize"/>
+    /// gives when it does not know how big a box is. Not knowing a limit and having no limit
+    /// are different things, but a server with no rules is a test fixture rather than
+    /// somewhere anybody is playing, and the alternative is a market that refuses everything
+    /// in one.
+    /// </para>
+    /// </summary>
+    public bool MayBeSold(int itemId) =>
+        itemId > 0 && (_rules is null || _rules.ItemAt(itemId) is { IsKeyItem: false });
+
     /// <summary>Whether an object on a map is one of the six hundred that can be hidden.</summary>
     private bool HiddenOn(string where, int localId) =>
         (_populated.TryGetValue(where, out MapPopulation? people)

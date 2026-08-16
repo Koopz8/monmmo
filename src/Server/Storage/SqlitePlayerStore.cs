@@ -200,6 +200,18 @@ public sealed class SqlitePlayerStore : IPlayerStore, IMarketStore, IFriendStore
                 iv_spattack INTEGER NOT NULL DEFAULT 0,
                 iv_spdefense INTEGER NOT NULL DEFAULT 0,
 
+                -- Which item, and how many, when this is a pile rather than a creature.
+                -- Nought in item_id means creature, which works because item ids start at
+                -- one on the cartridge and is the reason a species search skips these
+                -- without being told to.
+                --
+                -- These two columns are the escrow. A creature is held by moving its row
+                -- somewhere nobody owns, because a creature is a row; a number has no row
+                -- to move, so the seller's bag is written down short and this is written
+                -- up, and there is nowhere else the number lives.
+                item_id    INTEGER NOT NULL DEFAULT 0,
+                item_count INTEGER NOT NULL DEFAULT 0,
+
                 price      INTEGER NOT NULL,
 
                 -- Nought is for sale, one is sold and owing. There is no third: a listing
@@ -225,6 +237,12 @@ public sealed class SqlitePlayerStore : IPlayerStore, IMarketStore, IFriendStore
         command.ExecuteNonQuery();
 
         AddColumnIfMissing(connection, "party_members", "experience", "INTEGER NOT NULL DEFAULT 0");
+
+        // What a listing is a pile of, for markets that existed before anything but
+        // creatures could be sold. Nought on every one of those, which reads as "this is a
+        // creature" — which is what every one of them was.
+        AddColumnIfMissing(connection, "market_listings", "item_id", "INTEGER NOT NULL DEFAULT 0");
+        AddColumnIfMissing(connection, "market_listings", "item_count", "INTEGER NOT NULL DEFAULT 0");
 
         // What it is carrying. Zero for everything that already existed, which is right:
         // nothing could be carrying anything before there was anything to carry.
@@ -1259,6 +1277,57 @@ public sealed class SqlitePlayerStore : IPlayerStore, IMarketStore, IFriendStore
         return listingId;
     }
 
+    public async Task<long> ListItemsAsync(
+        long sellerId,
+        SavedCharacter withoutThem,
+        int itemId,
+        int count,
+        int price,
+        CancellationToken cancellationToken = default)
+    {
+        if (itemId <= 0 || count <= 0) return 0;
+
+        await using SqliteConnection connection = Open();
+
+        await using SqliteTransaction transaction =
+            (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+
+        // The seller, already short of them. Same order and same reason as the creature
+        // above: if the insert below throws, the rollback leaves somebody who still has
+        // their items.
+        await WriteCharacterAsync(connection, transaction, sellerId, withoutThem, cancellationToken);
+
+        long listingId;
+
+        await using (SqliteCommand insert = connection.CreateCommand())
+        {
+            insert.Transaction = transaction;
+
+            // No member_id and no escrowed row. Species and level stay nought, which is
+            // what makes this listing invisible to a species search rather than something
+            // a species search has to be taught to skip.
+            insert.CommandText =
+                $"""
+                INSERT INTO market_listings
+                    (seller_id, member_id, species, level, sex, item_id, item_count, price, state, listed_at)
+                VALUES ($seller, NULL, 0, 0, 0, $item, $count, $price, {ForSale}, $now);
+                SELECT last_insert_rowid();
+                """;
+
+            insert.Parameters.AddWithValue("$seller", sellerId);
+            insert.Parameters.AddWithValue("$item", itemId);
+            insert.Parameters.AddWithValue("$count", count);
+            insert.Parameters.AddWithValue("$price", price);
+            insert.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
+
+            listingId = Convert.ToInt64(await insert.ExecuteScalarAsync(cancellationToken));
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+
+        return listingId;
+    }
+
     public async Task<IReadOnlyList<Listing>> BrowseAsync(
         int most = 50, CancellationToken cancellationToken = default)
     {
@@ -1306,6 +1375,19 @@ public sealed class SqlitePlayerStore : IPlayerStore, IMarketStore, IFriendStore
         var where = new List<string> { $"l.state = {ForSale}" };
         var parameters = new List<(string, object)>();
 
+        if (what.Item is { } item)
+        {
+            where.Add("l.item_id = $item");
+            parameters.Add(("$item", item));
+        }
+
+        // Asking about creatures says so out loud rather than leaning on a pile of items
+        // having species nought and no genes. Both of those are true, and both would go on
+        // being true — but a search for "born 0 or better" would quietly return every
+        // POTION in the market, and a filter that only works for most of its range is a
+        // filter somebody will eventually be surprised by.
+        if (what.Species is not null || what.Born is not null) where.Add("l.item_id = 0");
+
         if (what.Species is { } species)
         {
             where.Add("l.species = $species");
@@ -1346,7 +1428,7 @@ public sealed class SqlitePlayerStore : IPlayerStore, IMarketStore, IFriendStore
             cancellationToken);
     }
 
-    public async Task<SavedMon?> CancelAsync(
+    public async Task<Parcel?> CancelAsync(
         long sellerId,
         long listingId,
         SavedCharacter current,
@@ -1357,7 +1439,9 @@ public sealed class SqlitePlayerStore : IPlayerStore, IMarketStore, IFriendStore
         await using SqliteTransaction transaction =
             (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
 
-        long memberId;
+        long? memberId;
+        int itemId;
+        int howMany;
 
         await using (SqliteCommand find = connection.CreateCommand())
         {
@@ -1367,22 +1451,51 @@ public sealed class SqlitePlayerStore : IPlayerStore, IMarketStore, IFriendStore
             // check beforehand, because "still for sale" stops being true the instant
             // somebody else buys it and a check would be reading the past.
             find.CommandText =
-                $"SELECT member_id FROM market_listings " +
-                $"WHERE id = $id AND seller_id = $seller AND state = {ForSale} AND member_id IS NOT NULL;";
+                $"SELECT member_id, item_id, item_count FROM market_listings " +
+                $"WHERE id = $id AND seller_id = $seller AND state = {ForSale} " +
+                $"AND (member_id IS NOT NULL OR item_id > 0);";
 
             find.Parameters.AddWithValue("$id", listingId);
             find.Parameters.AddWithValue("$seller", sellerId);
 
-            if (await find.ExecuteScalarAsync(cancellationToken) is not long found) return null;
+            await using SqliteDataReader reading = await find.ExecuteReaderAsync(cancellationToken);
 
-            memberId = found;
+            if (!await reading.ReadAsync(cancellationToken)) return null;
+
+            memberId = reading.IsDBNull(0) ? null : reading.GetInt64(0);
+            itemId = reading.GetInt32(1);
+            howMany = reading.GetInt32(2);
         }
 
-        SavedMon? coming = await ReadMemberAsync(connection, transaction, memberId, cancellationToken);
+        Parcel coming;
+        SavedCharacter after;
 
-        if (coming is null) return null;
+        if (itemId > 0)
+        {
+            // The whole lot or none of it, same as buying, and for a better reason: what
+            // is being handed back is the seller's own property. A bag too full to take it
+            // means they are told to make room and can try again, which is recoverable —
+            // handing back nine of ten and dropping the tenth is not.
+            var bag = new Bag(current.Items);
 
-        // The escrowed row goes, the listing goes, and the creature comes back inside the
+            if (bag.Add(itemId, howMany) != howMany) return null;
+
+            coming = Parcel.Of(itemId, howMany);
+            after = current with { Items = bag.Entries };
+        }
+        else
+        {
+            if (await ReadMemberAsync(connection, transaction, memberId!.Value, cancellationToken)
+                is not { } creature)
+            {
+                return null;
+            }
+
+            coming = Parcel.Of(creature);
+            after = current with { Box = [.. current.Box, creature] };
+        }
+
+        // The escrowed row goes, the listing goes, and what was on it comes back inside the
         // character written below. Moving the row instead would leave it holding a slot
         // number that means nothing and a state the next save disagrees with.
         await using (SqliteCommand clear = connection.CreateCommand())
@@ -1390,25 +1503,20 @@ public sealed class SqlitePlayerStore : IPlayerStore, IMarketStore, IFriendStore
             clear.Transaction = transaction;
             clear.CommandText =
                 "DELETE FROM party_members WHERE id = $member; DELETE FROM market_listings WHERE id = $listing;";
-            clear.Parameters.AddWithValue("$member", memberId);
+            clear.Parameters.AddWithValue("$member", memberId ?? -1);
             clear.Parameters.AddWithValue("$listing", listingId);
 
             await clear.ExecuteNonQueryAsync(cancellationToken);
         }
 
-        await WriteCharacterAsync(
-            connection,
-            transaction,
-            sellerId,
-            current with { Box = [.. current.Box, coming] },
-            cancellationToken);
+        await WriteCharacterAsync(connection, transaction, sellerId, after, cancellationToken);
 
         await transaction.CommitAsync(cancellationToken);
 
         return coming;
     }
 
-    public async Task<(SavedMon Bought, int Price)?> BuyAsync(
+    public async Task<(Parcel Bought, int Price)?> BuyAsync(
         long buyerId,
         long listingId,
         SavedCharacter buyer,
@@ -1419,16 +1527,22 @@ public sealed class SqlitePlayerStore : IPlayerStore, IMarketStore, IFriendStore
         await using SqliteTransaction transaction =
             (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
 
-        long memberId;
+        long? memberId;
         long sellerId;
         int price;
+        int itemId;
+        int howMany;
 
         await using (SqliteCommand find = connection.CreateCommand())
         {
             find.Transaction = transaction;
+
+            // Either kind, told apart by which of the two things the row has. This used to
+            // ask for member_id IS NOT NULL, which meant the same thing back when a listing
+            // could only be a creature and would now hide every pile of items in the market.
             find.CommandText =
-                $"SELECT member_id, seller_id, price FROM market_listings " +
-                $"WHERE id = $id AND state = {ForSale} AND member_id IS NOT NULL;";
+                $"SELECT member_id, seller_id, price, item_id, item_count FROM market_listings " +
+                $"WHERE id = $id AND state = {ForSale} AND (member_id IS NOT NULL OR item_id > 0);";
 
             find.Parameters.AddWithValue("$id", listingId);
 
@@ -1436,9 +1550,11 @@ public sealed class SqlitePlayerStore : IPlayerStore, IMarketStore, IFriendStore
 
             if (!await reading.ReadAsync(cancellationToken)) return null;
 
-            memberId = reading.GetInt64(0);
+            memberId = reading.IsDBNull(0) ? null : reading.GetInt64(0);
             sellerId = reading.GetInt64(1);
             price = reading.GetInt32(2);
+            itemId = reading.GetInt32(3);
+            howMany = reading.GetInt32(4);
         }
 
         // Nobody buys their own. It would work — the money would go round in a circle and
@@ -1448,9 +1564,33 @@ public sealed class SqlitePlayerStore : IPlayerStore, IMarketStore, IFriendStore
 
         if (buyer.Money < price) return null;
 
-        SavedMon? bought = await ReadMemberAsync(connection, transaction, memberId, cancellationToken);
+        Parcel bought;
+        SavedCharacter after;
 
-        if (bought is null) return null;
+        if (itemId > 0)
+        {
+            // The bag decides, because the bag is the thing that knows its own ceilings —
+            // ninety-nine of one item and sixty distinct ones. Asked as "did all of them
+            // fit" rather than "how many fitted": a lot is bought whole or not at all, and
+            // a buyer charged for ten who received four has been robbed politely.
+            var bag = new Bag(buyer.Items);
+
+            if (bag.Add(itemId, howMany) != howMany) return null;
+
+            bought = Parcel.Of(itemId, howMany);
+            after = buyer with { Items = bag.Entries, Money = buyer.Money - price };
+        }
+        else
+        {
+            if (await ReadMemberAsync(connection, transaction, memberId!.Value, cancellationToken)
+                is not { } creature)
+            {
+                return null;
+            }
+
+            bought = Parcel.Of(creature);
+            after = buyer with { Box = [.. buyer.Box, creature], Money = buyer.Money - price };
+        }
 
         // The guard, and the whole of what settles two people pressing buy at once. Not a
         // lock and not a check beforehand: a check reads the past, and by the time it has
@@ -1476,21 +1616,21 @@ public sealed class SqlitePlayerStore : IPlayerStore, IMarketStore, IFriendStore
         // The escrowed row goes rather than being re-parented: the buyer's copy is written
         // below as part of their own character, where every save after this expects to
         // find it. A row left behind in the fourth state would be a creature nobody owns.
-        await using (SqliteCommand clear = connection.CreateCommand())
+        //
+        // Nothing to do for a pile of items, and that is the point of storing them the way
+        // they are stored. The count was written on the listing and the listing has just
+        // been marked sold; there is no second place holding it that could be missed.
+        if (memberId is { } escrowed)
         {
+            await using SqliteCommand clear = connection.CreateCommand();
             clear.Transaction = transaction;
             clear.CommandText = "DELETE FROM party_members WHERE id = $member;";
-            clear.Parameters.AddWithValue("$member", memberId);
+            clear.Parameters.AddWithValue("$member", escrowed);
 
             await clear.ExecuteNonQueryAsync(cancellationToken);
         }
 
-        await WriteCharacterAsync(
-            connection,
-            transaction,
-            buyerId,
-            buyer with { Box = [.. buyer.Box, bought], Money = buyer.Money - price },
-            cancellationToken);
+        await WriteCharacterAsync(connection, transaction, buyerId, after, cancellationToken);
 
         await transaction.CommitAsync(cancellationToken);
 
@@ -1636,7 +1776,7 @@ public sealed class SqlitePlayerStore : IPlayerStore, IMarketStore, IFriendStore
         command.CommandText =
             $"""
             SELECT l.id, a.username, l.species, l.level, l.price, l.state, l.sex,
-                   l.{string.Join(", l.", ListingGeneColumns)}
+                   l.{string.Join(", l.", ListingGeneColumns)}, l.item_id, l.item_count
             FROM market_listings l
             JOIN accounts a ON a.id = l.seller_id
             {where};
@@ -1660,6 +1800,8 @@ public sealed class SqlitePlayerStore : IPlayerStore, IMarketStore, IFriendStore
                 Sold = reader.GetInt32(5) != ForSale,
                 Sex = (Gender)reader.GetInt32(6),
                 Ivs = [.. Enumerable.Range(7, 6).Select(reader.GetInt32)],
+                Item = reader.GetInt32(13),
+                Count = reader.GetInt32(14),
             });
         }
 

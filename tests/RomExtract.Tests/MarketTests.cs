@@ -135,16 +135,16 @@ public class MarketTests
 
                 long listingId = await store.ListAsync(sellerId, without, offered, 2_500);
 
-                SavedMon? back = await store.CancelAsync(sellerId, listingId, without);
+                Parcel? back = await store.CancelAsync(sellerId, listingId, without);
 
                 Assert.NotNull(back);
-                Assert.Equal(150, back!.Species);
-                Assert.Equal(44, back.Level);
-                Assert.Equal([1, 2], back.Moves);
-                Assert.Equal([30, 25], back.Pp);
-                Assert.Equal([31, 30, 29, 28, 27, 26], back.Ivs);
-                Assert.Equal(Gender.Female, back.Sex);
-                Assert.Equal(1, back.AbilitySlot);
+                Assert.Equal(150, back!.Creature!.Species);
+                Assert.Equal(44, back.Creature.Level);
+                Assert.Equal([1, 2], back.Creature.Moves);
+                Assert.Equal([30, 25], back.Creature.Pp);
+                Assert.Equal([31, 30, 29, 28, 27, 26], back.Creature.Ivs);
+                Assert.Equal(Gender.Female, back.Creature.Sex);
+                Assert.Equal(1, back.Creature.AbilitySlot);
 
                 // In the box, off the board, and only once.
                 var login = Assert.IsType<AuthOutcome.Success>(
@@ -289,10 +289,10 @@ public class MarketTests
                 Assert.Single(await store.BrowseAsync());
 
                 // And it still comes back whole.
-                SavedMon? back = await store.CancelAsync(
+                Parcel? back = await store.CancelAsync(
                     sellerId, listingId, without with { X = 12, Box = [Mon(7)], Money = 3_998 });
 
-                Assert.Equal(150, back?.Species);
+                Assert.Equal(150, back?.Creature?.Species);
             }
         }
         finally
@@ -329,8 +329,8 @@ public class MarketTests
                 var bought = await store.BuyAsync(koop.Account.Id, listingId, koop.Character);
 
                 Assert.NotNull(bought);
-                Assert.Equal(150, bought!.Value.Bought.Species);
-                Assert.Equal(44, bought.Value.Bought.Level);
+                Assert.Equal(150, bought!.Value.Bought.Creature!.Species);
+                Assert.Equal(44, bought.Value.Bought.Creature.Level);
                 Assert.Equal(2_500, bought.Value.Price);
 
                 var theirs = Assert.IsType<AuthOutcome.Success>(

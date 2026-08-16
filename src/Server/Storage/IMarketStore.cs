@@ -45,8 +45,19 @@ public sealed record MarketSearch
     /// </summary>
     public int? Born { get; init; }
 
+    /// <summary>
+    /// Only piles of this item.
+    /// <para>
+    /// Its own field rather than a second meaning for <see cref="Species"/>, even though
+    /// both are an index into a table on a cartridge. They are indices into
+    /// <em>different</em> tables, and the day somebody searched species 4 and was shown
+    /// four hundred POKé BALLs would be the day that shortcut cost more than it saved.
+    /// </para>
+    /// </summary>
+    public int? Item { get; init; }
+
     /// <summary>True when this asks for nothing in particular.</summary>
-    public bool IsEverything => Species is null && Most is null && Born is null;
+    public bool IsEverything => Species is null && Most is null && Born is null && Item is null;
 }
 
 public interface IMarketStore
@@ -83,6 +94,32 @@ public interface IMarketStore
         long sellerId,
         SavedCharacter withoutIt,
         SavedMon offered,
+        int price,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Puts a number of one item up at a price, in the same transaction that writes its
+    /// seller down without them.
+    /// <para>
+    /// The count on the listing row <em>is</em> the escrow, and that is the whole
+    /// difference between this and the creature above. A creature is escrowed by moving
+    /// its row into a list nobody owns, because a creature is a row and moving it is the
+    /// only way to hold it without duplicating it. A number has no row to move: writing
+    /// the seller's bag down short by five and the listing up by five is the entire act,
+    /// and a second table holding those five would be a second place the number can be
+    /// wrong.
+    /// </para>
+    /// <para>
+    /// <paramref name="price"/> is for the lot rather than for each, because that is what
+    /// a buyer is agreeing to and a market that quotes per-item and charges per-lot is a
+    /// market that has surprised somebody.
+    /// </para>
+    /// </summary>
+    Task<long> ListItemsAsync(
+        long sellerId,
+        SavedCharacter withoutThem,
+        int itemId,
+        int count,
         int price,
         CancellationToken cancellationToken = default);
 
@@ -127,7 +164,12 @@ public interface IMarketStore
     /// the loser is told rather than left holding a creature that was already sold.
     /// </para>
     /// </summary>
-    Task<(SavedMon Bought, int Price)?> BuyAsync(
+    /// <para>
+    /// A buyer whose bag cannot take the whole lot is refused rather than given what fits.
+    /// Half a lot is somebody who paid for five and got two, and the fixing of that is a
+    /// conversation rather than a query.
+    /// </para>
+    Task<(Parcel Bought, int Price)?> BuyAsync(
         long buyerId,
         long listingId,
         SavedCharacter buyer,
@@ -155,11 +197,17 @@ public interface IMarketStore
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Takes one back off the market, returning it to the seller's box.
+    /// Takes one back off the market, returning it to the seller's box or bag.
     /// <para>
     /// The box rather than the party, for the reason an egg goes to the box: a party that
     /// fills itself while somebody is elsewhere is a party that stops them catching
     /// anything.
+    /// </para>
+    /// <para>
+    /// Items come back to the bag, and a bag with no room for them refuses the whole
+    /// cancellation rather than taking what fits. The seller keeps the listing and is told
+    /// to make room, which is recoverable; handing back nine of a lot of ten and dropping
+    /// the tenth is not.
     /// </para>
     /// <para>
     /// Returns what came back, or nothing when the listing is not theirs, is already sold,
@@ -167,7 +215,7 @@ public interface IMarketStore
     /// can legitimately ask by being slightly out of date.
     /// </para>
     /// </summary>
-    Task<SavedMon?> CancelAsync(
+    Task<Parcel?> CancelAsync(
         long sellerId,
         long listingId,
         SavedCharacter current,
