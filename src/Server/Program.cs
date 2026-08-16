@@ -789,6 +789,9 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
 
     /// <summary>Friend lists, on the same terms.</summary>
     private Friends? _friends;
+
+    /// <summary>Guilds, when the store behind this server can keep them.</summary>
+    private Guilds? _guilds;
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private readonly TaskCompletionSource<int> _listening =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -834,6 +837,7 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
         // than a market that loses things.
         _market = store is IMarketStore selling ? new Market(selling, _scribe.HoldAsync) : null;
         _friends = store is IFriendStore listing ? new Friends(listing) : null;
+        _guilds = store is IGuildStore grouping ? new Guilds(grouping) : null;
 
         _ = TickAsync(cancellationToken);
 
@@ -1341,6 +1345,26 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                                 .ConfigureAwait(false);
 
                             if (_market.Last is { } shopped) Console.WriteLine($"~ #{playerId} {shopped}");
+                            break;
+
+                        // Guilds, which anybody may use. Not behind /op for the reason the
+                        // market screen is not: a guild is a thing players have, and a
+                        // console verb being the only way in is an accident of there being
+                        // no screen yet rather than a decision about who may.
+                        case ConsoleCommand grouped
+                            when playerId != 0
+                                && _guilds is not null
+                                && Guilds.Handles(ConsoleLine.Of(grouped.Text).Verb):
+
+                            await DispatchAsync(
+                                    await _guilds
+                                        .RunAsync(world, playerId, accountId, ConsoleLine.Of(grouped.Text), cancellationToken)
+                                        .ConfigureAwait(false),
+                                    playerId,
+                                    cancellationToken)
+                                .ConfigureAwait(false);
+
+                            if (_guilds.Last is { } grouping) Console.WriteLine($"# #{playerId} {grouping}");
                             break;
 
                         case ConsoleCommand market

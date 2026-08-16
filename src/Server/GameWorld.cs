@@ -517,6 +517,20 @@ public sealed class GameWorld
         }
     }
 
+    /// <summary>
+    /// Whoever is playing this account right now, or nobody.
+    /// <para>
+    /// By account rather than by name, which is what makes it different from
+    /// <see cref="Named"/> and why it exists. A guild is a list of accounts; a message to one
+    /// has to find the people online without going through a spelling that could have been
+    /// typed by somebody else.
+    /// </para>
+    /// </summary>
+    public ServerPlayer? PlayingAs(long accountId)
+    {
+        lock (_gate) return _players.Values.FirstOrDefault(p => p.AccountId == accountId);
+    }
+
     /// <summary>What a map is called, for saying where somebody is.</summary>
     public string NameOfMap(string mapId) => _world.Find(mapId)?.Name ?? mapId;
 

@@ -14,7 +14,7 @@ namespace PokeMmo.Server.Storage;
 /// readers out during every save, and saves happen while people are playing.
 /// </para>
 /// </summary>
-public sealed class SqlitePlayerStore : IPlayerStore, IMarketStore, IFriendStore, IDisposable
+public sealed class SqlitePlayerStore : IPlayerStore, IMarketStore, IFriendStore, IGuildStore, IDisposable
 {
     /// <summary>Where the database lives unless told otherwise.</summary>
     public const string DefaultFileName = "players.db";
@@ -176,6 +176,38 @@ public sealed class SqlitePlayerStore : IPlayerStore, IMarketStore, IFriendStore
                 -- The pair, so adding the same person twice is refused by the table rather
                 -- than by a check that has to be remembered at every call site.
                 PRIMARY KEY (account_id, friend_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS guilds (
+                id      INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                -- Case-insensitively unique, because two guilds whose names differ only in
+                -- capitals are two guilds nobody can tell apart in a chat line.
+                name    TEXT NOT NULL COLLATE NOCASE UNIQUE,
+                made_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS guild_members (
+                guild_id   INTEGER NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
+
+                -- The account alone is the key, and that is the whole of "one guild each".
+                -- A check would be something two acceptances in the same breath could both
+                -- pass; this is the database refusing the second.
+                account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+                is_leader  INTEGER NOT NULL DEFAULT 0,
+                joined_at  TEXT NOT NULL,
+
+                PRIMARY KEY (account_id)
+            );
+
+            CREATE INDEX IF NOT EXISTS guild_roll ON guild_members (guild_id, joined_at);
+
+            CREATE TABLE IF NOT EXISTS guild_invitations (
+                guild_id   INTEGER NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
+                account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+                asked_at   TEXT NOT NULL,
+
+                PRIMARY KEY (guild_id, account_id)
             );
 
             CREATE TABLE IF NOT EXISTS market_listings (
@@ -1806,6 +1838,396 @@ public sealed class SqlitePlayerStore : IPlayerStore, IMarketStore, IFriendStore
         }
 
         return listings;
+    }
+
+    // ---- guilds ----------------------------------------------------------------------
+
+    public async Task<Guild?> FoundAsync(
+        long accountId, string name, CancellationToken cancellationToken = default)
+    {
+        if (!Guild.IsAName(name)) return null;
+
+        await using SqliteConnection connection = Open();
+
+        await using SqliteTransaction transaction =
+            (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+
+        long guildId;
+
+        try
+        {
+            await using (SqliteCommand insert = connection.CreateCommand())
+            {
+                insert.Transaction = transaction;
+                insert.CommandText =
+                    "INSERT INTO guilds (name, made_at) VALUES ($name, $now) RETURNING id;";
+
+                insert.Parameters.AddWithValue("$name", name);
+                insert.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
+
+                guildId = (long)(await insert.ExecuteScalarAsync(cancellationToken))!;
+            }
+
+            await using (SqliteCommand join = connection.CreateCommand())
+            {
+                join.Transaction = transaction;
+                join.CommandText =
+                    "INSERT INTO guild_members (guild_id, account_id, is_leader, joined_at) " +
+                    "VALUES ($guild, $me, 1, $now);";
+
+                join.Parameters.AddWithValue("$guild", guildId);
+                join.Parameters.AddWithValue("$me", accountId);
+                join.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
+
+                await join.ExecuteNonQueryAsync(cancellationToken);
+            }
+        }
+        catch (SqliteException)
+        {
+            // The name was taken, or the founder is already in one. Both are refusals by the
+            // table rather than by a check beforehand, and both are things a player can ask
+            // for by being a moment out of date rather than by doing anything wrong.
+            await transaction.RollbackAsync(cancellationToken);
+
+            return null;
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+
+        return new Guild(guildId, name, 1);
+    }
+
+    public async Task<Guild?> OfAsync(long accountId, CancellationToken cancellationToken = default)
+    {
+        await using SqliteConnection connection = Open();
+
+        return await GuildOfAsync(connection, null, accountId, cancellationToken);
+    }
+
+    private static async Task<Guild?> GuildOfAsync(
+        SqliteConnection connection,
+        SqliteTransaction? transaction,
+        long accountId,
+        CancellationToken cancellationToken)
+    {
+        await using SqliteCommand find = connection.CreateCommand();
+        find.Transaction = transaction;
+
+        find.CommandText =
+            """
+            SELECT g.id, g.name, (SELECT COUNT(*) FROM guild_members WHERE guild_id = g.id)
+            FROM guilds g
+            JOIN guild_members m ON m.guild_id = g.id
+            WHERE m.account_id = $me;
+            """;
+
+        find.Parameters.AddWithValue("$me", accountId);
+
+        await using SqliteDataReader reading = await find.ExecuteReaderAsync(cancellationToken);
+
+        return await reading.ReadAsync(cancellationToken)
+            ? new Guild(reading.GetInt64(0), reading.GetString(1), reading.GetInt32(2))
+            : null;
+    }
+
+    public async Task<IReadOnlyList<GuildMember>> MembersAsync(
+        long guildId, CancellationToken cancellationToken = default)
+    {
+        await using SqliteConnection connection = Open();
+
+        await using SqliteCommand command = connection.CreateCommand();
+
+        command.CommandText =
+            """
+            SELECT a.username, m.is_leader
+            FROM guild_members m
+            JOIN accounts a ON a.id = m.account_id
+            WHERE m.guild_id = $guild
+            ORDER BY m.is_leader DESC, m.joined_at ASC;
+            """;
+
+        command.Parameters.AddWithValue("$guild", guildId);
+
+        var members = new List<GuildMember>();
+
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        while (await reader.ReadAsync(cancellationToken))
+            members.Add(new GuildMember(reader.GetString(0), reader.GetInt32(1) != 0));
+
+        return members;
+    }
+
+    public async Task<IReadOnlyList<long>> MemberIdsAsync(
+        long guildId, CancellationToken cancellationToken = default)
+    {
+        await using SqliteConnection connection = Open();
+
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = "SELECT account_id FROM guild_members WHERE guild_id = $guild;";
+        command.Parameters.AddWithValue("$guild", guildId);
+
+        var ids = new List<long>();
+
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        while (await reader.ReadAsync(cancellationToken)) ids.Add(reader.GetInt64(0));
+
+        return ids;
+    }
+
+    public async Task<bool> InviteAsync(
+        long leaderId, string name, CancellationToken cancellationToken = default)
+    {
+        await using SqliteConnection connection = Open();
+
+        if (await LeaderOfAsync(connection, leaderId, cancellationToken) is not { } guildId) return false;
+        if (await AccountNamedAsync(connection, name, cancellationToken) is not { } theirs) return false;
+
+        // Already in one — including this one. Asked here rather than left to the membership
+        // table, because an invitation is not a membership and would be accepted quite
+        // happily by a table that only refuses the second join.
+        if (await GuildOfAsync(connection, null, theirs, cancellationToken) is not null) return false;
+
+        await using SqliteCommand insert = connection.CreateCommand();
+
+        insert.CommandText =
+            "INSERT OR IGNORE INTO guild_invitations (guild_id, account_id, asked_at) " +
+            "VALUES ($guild, $them, $now);";
+
+        insert.Parameters.AddWithValue("$guild", guildId);
+        insert.Parameters.AddWithValue("$them", theirs);
+        insert.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
+
+        // Asking twice is not an error and is not a second invitation, so a row that was
+        // already there still counts as having asked.
+        await insert.ExecuteNonQueryAsync(cancellationToken);
+
+        return true;
+    }
+
+    private static async Task<long?> LeaderOfAsync(
+        SqliteConnection connection, long accountId, CancellationToken cancellationToken)
+    {
+        await using SqliteCommand find = connection.CreateCommand();
+
+        find.CommandText =
+            "SELECT guild_id FROM guild_members WHERE account_id = $me AND is_leader = 1;";
+
+        find.Parameters.AddWithValue("$me", accountId);
+
+        return await find.ExecuteScalarAsync(cancellationToken) is long guildId ? guildId : null;
+    }
+
+    public async Task<IReadOnlyList<Guild>> InvitationsAsync(
+        long accountId, CancellationToken cancellationToken = default)
+    {
+        await using SqliteConnection connection = Open();
+
+        await using SqliteCommand command = connection.CreateCommand();
+
+        command.CommandText =
+            """
+            SELECT g.id, g.name, (SELECT COUNT(*) FROM guild_members WHERE guild_id = g.id)
+            FROM guild_invitations i
+            JOIN guilds g ON g.id = i.guild_id
+            WHERE i.account_id = $me
+            ORDER BY i.asked_at DESC;
+            """;
+
+        command.Parameters.AddWithValue("$me", accountId);
+
+        return await ReadGuildsAsync(command, cancellationToken);
+    }
+
+    private static async Task<IReadOnlyList<Guild>> ReadGuildsAsync(
+        SqliteCommand command, CancellationToken cancellationToken)
+    {
+        var guilds = new List<Guild>();
+
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        while (await reader.ReadAsync(cancellationToken))
+            guilds.Add(new Guild(reader.GetInt64(0), reader.GetString(1), reader.GetInt32(2)));
+
+        return guilds;
+    }
+
+    public async Task<Guild?> AcceptAsync(
+        long accountId, string guildName, CancellationToken cancellationToken = default)
+    {
+        await using SqliteConnection connection = Open();
+
+        await using SqliteTransaction transaction =
+            (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+
+        long guildId;
+        string name;
+        int members;
+
+        await using (SqliteCommand find = connection.CreateCommand())
+        {
+            find.Transaction = transaction;
+
+            // The invitation and the guild in one question, because an invitation to a guild
+            // that has since been disbanded is not an invitation.
+            find.CommandText =
+                """
+                SELECT g.id, g.name, (SELECT COUNT(*) FROM guild_members WHERE guild_id = g.id)
+                FROM guild_invitations i
+                JOIN guilds g ON g.id = i.guild_id
+                WHERE i.account_id = $me AND g.name = $name COLLATE NOCASE;
+                """;
+
+            find.Parameters.AddWithValue("$me", accountId);
+            find.Parameters.AddWithValue("$name", guildName);
+
+            await using SqliteDataReader reading = await find.ExecuteReaderAsync(cancellationToken);
+
+            if (!await reading.ReadAsync(cancellationToken)) return null;
+
+            guildId = reading.GetInt64(0);
+            name = reading.GetString(1);
+            members = reading.GetInt32(2);
+        }
+
+        try
+        {
+            await using SqliteCommand join = connection.CreateCommand();
+            join.Transaction = transaction;
+
+            join.CommandText =
+                "INSERT INTO guild_members (guild_id, account_id, is_leader, joined_at) " +
+                "VALUES ($guild, $me, 0, $now);";
+
+            join.Parameters.AddWithValue("$guild", guildId);
+            join.Parameters.AddWithValue("$me", accountId);
+            join.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
+
+            await join.ExecuteNonQueryAsync(cancellationToken);
+        }
+        catch (SqliteException)
+        {
+            // Already in one, refused by the key. This is the race the key exists for:
+            // two acceptances in the same instant, and exactly one of them wins.
+            await transaction.RollbackAsync(cancellationToken);
+
+            return null;
+        }
+
+        // Every invitation, not only this one. Somebody who has joined is not still being
+        // asked, and a stale invitation is a thing they could accept from inside a guild.
+        await using (SqliteCommand clear = connection.CreateCommand())
+        {
+            clear.Transaction = transaction;
+            clear.CommandText = "DELETE FROM guild_invitations WHERE account_id = $me;";
+            clear.Parameters.AddWithValue("$me", accountId);
+
+            await clear.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+
+        return new Guild(guildId, name, members + 1);
+    }
+
+    public async Task<bool> LeaveAsync(long accountId, CancellationToken cancellationToken = default)
+    {
+        await using SqliteConnection connection = Open();
+
+        await using SqliteTransaction transaction =
+            (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+
+        if (await GuildOfAsync(connection, transaction, accountId, cancellationToken) is not { } guild)
+            return false;
+
+        bool wasLeader = await LeaderOfAsync(connection, accountId, cancellationToken) == guild.Id;
+
+        await using (SqliteCommand remove = connection.CreateCommand())
+        {
+            remove.Transaction = transaction;
+            remove.CommandText = "DELETE FROM guild_members WHERE account_id = $me;";
+            remove.Parameters.AddWithValue("$me", accountId);
+
+            await remove.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        if (guild.Members <= 1)
+        {
+            // The last one out takes it with them. A guild with nobody in it is a name
+            // nobody can join and nobody can free up, which is worse than no guild.
+            await using SqliteCommand disband = connection.CreateCommand();
+            disband.Transaction = transaction;
+            disband.CommandText = "DELETE FROM guilds WHERE id = $guild;";
+            disband.Parameters.AddWithValue("$guild", guild.Id);
+
+            await disband.ExecuteNonQueryAsync(cancellationToken);
+        }
+        else if (wasLeader)
+        {
+            // Handed to whoever has been in it longest, which is the only choice that needs
+            // no opinion — and a guild whose leader stopped playing would otherwise be a
+            // guild nobody can ever invite anybody to.
+            await using SqliteCommand hand = connection.CreateCommand();
+            hand.Transaction = transaction;
+
+            hand.CommandText =
+                """
+                UPDATE guild_members SET is_leader = 1
+                WHERE account_id = (
+                    SELECT account_id FROM guild_members
+                    WHERE guild_id = $guild ORDER BY joined_at ASC LIMIT 1);
+                """;
+
+            hand.Parameters.AddWithValue("$guild", guild.Id);
+
+            await hand.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+
+        return true;
+    }
+
+    public async Task<bool> KickAsync(
+        long leaderId, string name, CancellationToken cancellationToken = default)
+    {
+        await using SqliteConnection connection = Open();
+
+        if (await LeaderOfAsync(connection, leaderId, cancellationToken) is not { } guildId) return false;
+        if (await AccountNamedAsync(connection, name, cancellationToken) is not { } theirs) return false;
+
+        // Nobody puts themselves out. It would leave a guild with no leader, and leaving is
+        // the verb for that and hands over properly.
+        if (theirs == leaderId) return false;
+
+        await using SqliteCommand remove = connection.CreateCommand();
+
+        remove.CommandText =
+            "DELETE FROM guild_members WHERE account_id = $them AND guild_id = $guild;";
+
+        remove.Parameters.AddWithValue("$them", theirs);
+        remove.Parameters.AddWithValue("$guild", guildId);
+
+        return await remove.ExecuteNonQueryAsync(cancellationToken) > 0;
+    }
+
+    public async Task<IReadOnlyList<Guild>> AllAsync(
+        int most = 50, CancellationToken cancellationToken = default)
+    {
+        await using SqliteConnection connection = Open();
+
+        await using SqliteCommand command = connection.CreateCommand();
+
+        command.CommandText =
+            $"""
+            SELECT g.id, g.name, (SELECT COUNT(*) FROM guild_members WHERE guild_id = g.id) AS people
+            FROM guilds g
+            ORDER BY people DESC, g.name ASC
+            LIMIT {Math.Clamp(most, 1, 200)};
+            """;
+
+        return await ReadGuildsAsync(command, cancellationToken);
     }
 
     // ---- friends ---------------------------------------------------------------------
