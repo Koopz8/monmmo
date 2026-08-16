@@ -417,6 +417,7 @@ public sealed class SyntheticRom
         WriteTrainers();
         WriteItems();
         WriteSamples();
+        WriteSoundTree();
     }
 
     /// <summary>
@@ -469,6 +470,116 @@ public sealed class SyntheticRom
         WriteU32(SampleWithABadLoopFlagOffset + 8, 0);
         WriteU32(SampleWithABadLoopFlagOffset + 12, SampleBytes - 1);
     }
+
+    /// <summary>The address a given synthetic sample sits at.</summary>
+    public static int SampleOffsetAt(int index) => SamplesOffset + index * SampleStride;
+
+    /// <summary>
+    /// The three layers above the recordings: instruments gathered into voicegroups, songs
+    /// that draw on them, and a table naming the songs.
+    /// <para>
+    /// Each layer points at the one below it exactly as the cartridge's does, because
+    /// pointing at the layer below is the entire mechanism the locator relies on. A fixture
+    /// that faked the shapes without the pointers would prove nothing at all.
+    /// </para>
+    /// </summary>
+    private void WriteSoundTree()
+    {
+        // Voicegroups. Every fourth instrument is a shape rather than a recording, so a test
+        // can tell the kinds apart and the "names a recording" rule has something to bite on.
+        for (int group = 0; group < VoicegroupCount; group++)
+        {
+            for (int i = 0; i < InstrumentsPerVoicegroup; i++)
+            {
+                int at = VoicegroupsOffset + group * VoicegroupStride + i * 12;
+
+                bool shape = i % 4 == 3;
+
+                _data[at] = shape ? (byte)0x01 : (byte)0x00;
+                _data[at + 1] = 60;
+                _data[at + 2] = 0;
+                _data[at + 3] = 0;
+
+                WriteU32(
+                    at + 4,
+                    shape
+                        ? 0x0000_0001u
+                        : Rom.BaseAddress + (uint)SampleOffsetAt((group + i) % SampleCount));
+
+                _data[at + 8] = 0xFF;
+                _data[at + 9] = 0x00;
+                _data[at + 10] = 0xFF;
+                _data[at + 11] = 0x00;
+            }
+
+            // A byte the instrument reader rejects, so a run ends where it is meant to
+            // rather than running into whatever is next.
+            _data[VoicegroupsOffset + group * VoicegroupStride + InstrumentsPerVoicegroup * 12] = 0x7F;
+        }
+
+        // And a run of two, which is instrument-shaped and too short to be anything.
+        for (int i = 0; i < 2; i++)
+        {
+            int at = ShortVoicegroupOffset + i * 12;
+
+            _data[at] = 0x00;
+            WriteU32(at + 4, Rom.BaseAddress + (uint)SampleOffsetAt(i % SampleCount));
+        }
+
+        _data[ShortVoicegroupOffset + 2 * 12] = 0x7F;
+
+        // Sequences for the tracks to point at. Their contents do not matter yet — the
+        // reader for them is the next step — but they have to be real addresses.
+        for (int i = 0; i < SongCount * 4; i++)
+        {
+            int at = SequencesOffset + i * SequenceStride;
+
+            _data[at] = 0xBB;         // tempo
+            _data[at + 1] = 75;
+            _data[at + 2] = 0xB1;     // end of track
+        }
+
+        // Songs.
+        for (int song = 0; song < SongCount; song++)
+        {
+            int at = SongHeadersOffset + song * SongStride;
+            int tracks = TracksInSong(song);
+
+            _data[at] = (byte)tracks;
+            _data[at + 1] = 1;
+            _data[at + 2] = (byte)(0x20 + song);   // priority
+            _data[at + 3] = (byte)(song % 128);    // reverb
+
+            WriteU32(
+                at + 4,
+                Rom.BaseAddress + (uint)(VoicegroupsOffset + VoicegroupForSong(song) * VoicegroupStride));
+
+            for (int track = 0; track < tracks; track++)
+            {
+                WriteU32(
+                    at + 8 + track * 4,
+                    Rom.BaseAddress + (uint)(SequencesOffset + (song * 4 + track) * SequenceStride));
+            }
+        }
+
+        // The table, eight bytes an entry with the group number written twice.
+        for (int song = 0; song < SongCount; song++)
+        {
+            int at = SongTableOffset + song * SongTableEntryBytes;
+
+            WriteU32(at, Rom.BaseAddress + (uint)(SongHeadersOffset + song * SongStride));
+
+            _data[at + 4] = (byte)(song % 3);
+            _data[at + 5] = 0;
+            _data[at + 6] = (byte)(song % 3);
+            _data[at + 7] = 0;
+        }
+
+        // Something that holds the table's address, standing in for whatever loads it.
+        WriteU32(PointerToSongTableOffset, Rom.BaseAddress + SongTableOffset);
+    }
+
+    private const int SongTableEntryBytes = 8;
 
     /// <summary>Palette 0 of the synthetic tileset — what a rendered map is checked against.</summary>
     public Rgba32[] ExpectedTilesetPalette { get; } = BuildTilesetPalette();
@@ -971,6 +1082,49 @@ public sealed class SyntheticRom
     /// </para>
     /// </summary>
     public const int SampleWithABadLoopFlagOffset = SampleRunningOffTheEndOffset + 0x100;
+
+    /// <summary>Where the synthetic voicegroups start.</summary>
+    public const int VoicegroupsOffset = 0x130000;
+
+    public const int VoicegroupCount = 3;
+
+    /// <summary>Instruments in each. Comfortably over the shortest run the locator believes.</summary>
+    public const int InstrumentsPerVoicegroup = 8;
+
+    public const int VoicegroupStride = InstrumentsPerVoicegroup * 12 + 64;
+
+    /// <summary>
+    /// A run of instrument-shaped bytes too short to be a voicegroup, so the rejected-run
+    /// count has something real to count.
+    /// </summary>
+    public const int ShortVoicegroupOffset = VoicegroupsOffset + VoicegroupCount * VoicegroupStride + 0x100;
+
+    /// <summary>Where the synthetic song headers start.</summary>
+    public const int SongHeadersOffset = 0x140000;
+
+    public const int SongCount = 12;
+
+    public const int SongStride = 128;
+
+    /// <summary>Tracks in a given song — between one and four, so the field has to be read.</summary>
+    public static int TracksInSong(int index) => 1 + index % 4;
+
+    /// <summary>Which voicegroup a given song draws on.</summary>
+    public static int VoicegroupForSong(int index) => index % VoicegroupCount;
+
+    /// <summary>Where each song's track sequences live.</summary>
+    public const int SequencesOffset = 0x150000;
+
+    public const int SequenceStride = 64;
+
+    /// <summary>Where the synthetic song table starts.</summary>
+    public const int SongTableOffset = 0x160000;
+
+    /// <summary>
+    /// A place that holds the song table's address as a plain pointer, standing in for
+    /// whatever loads it on a real cartridge — so the corroboration count is not zero.
+    /// </summary>
+    public const int PointerToSongTableOffset = 0x161000;
 
     public const int ItemTableOffset = 0x110000;
     public const int ItemDescriptionsOffset = 0x114000;
