@@ -203,6 +203,7 @@ public static class Program
         if (options.FlagGates) WriteFlagGates(rom);
         if (options.SpecialContracts) WriteSpecialContracts(rom);
         if (options.Closure) WriteClosure(rom, options.RoutineAnswers);
+        if (options.Play) WritePlaythrough(rom, options.RoutineAnswers);
 
         if (options.SequenceWidths) WriteSequenceWidths(rom);
 
@@ -5648,6 +5649,140 @@ public static class Program
         return int.TryParse(text, out value);
     }
 
+    /// <summary>
+    /// Plays the game from a fresh save and says how far it got.
+    /// <para>
+    /// The instrument the question "can I finish it" actually wants. The closure walk answers
+    /// where somebody could <em>stand</em>; this one talks to people, takes what they hand
+    /// over, and fights what fights back — so it can tell a door that will not open from a
+    /// fight that cannot be won, which are two very different things to have to fix.
+    /// </para>
+    /// <para>
+    /// It is a floor twice over: a routine this project cannot execute answers zero and its
+    /// callers take the zero arm, and this plays badly on purpose — best move by raw power,
+    /// never switches, never buys anything, never heals between fights. A fight it loses is
+    /// not proof a person would. A fight it <em>wins</em> is proof the fight works.
+    /// </para>
+    /// </summary>
+    private static void WritePlaythrough(Rom rom, IReadOnlyDictionary<int, int> answers)
+    {
+        Console.WriteLine();
+        Console.WriteLine("A PLAYTHROUGH");
+        Console.WriteLine();
+
+        WorldData world = WorldExporter.Export(rom);
+        GameRules rules = RulesExporter.Export(rom);
+
+        MapData first = world.Maps.First();
+
+        Dictionary<int, int> teaches = TeachingMachines(rom);
+
+        Console.WriteLine(
+            $"  {world.Maps.Count} maps, {rules.TrainerCount} trainers, {teaches.Count} machines; "
+            + $"starting at {first.Id} ({first.Name})");
+
+        if (answers.Count > 0)
+        {
+            Console.WriteLine(
+                "  standing in for " + string.Join(
+                    ", ", answers.Select(a => $"0x{a.Key:X3}={a.Value}")) + " (modelled)");
+        }
+
+        Console.WriteLine();
+
+        PlayedScript Run(uint address, IReadOnlyCollection<int> flags)
+        {
+            var state = new ScriptState();
+
+            foreach (int flag in flags) state.Set(flag);
+
+            ScriptRun run = ScriptRunner.Run(rom, address, state, answers: answers);
+
+            return new PlayedScript(
+                run.FlagsSet,
+                run.FlagsCleared,
+                run.GivesItem is { } item && teaches.TryGetValue(item, out int move) ? [move] : [],
+                run.SpecialsCalled,
+                run.GivesMon?.Species,
+                run.TrainerId);
+        }
+
+        Attempt played = Autoplayer.Play(world, first.Id, rules, Run, Console.WriteLine);
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  it got to {played.Reached.Count} of {world.Maps.Count} maps in {played.Passes} pass(es), "
+            + $"and stopped because {Why(played.Stopped)}");
+        Console.WriteLine(
+            $"    {played.Flags.Count} flags, {played.Moves.Count} field moves, "
+            + $"{played.Party.Count} in the party, highest level {played.HighestLevel}");
+        Console.WriteLine(
+            $"    {played.FightsWon} fights won, {played.FightsLost} lost, "
+            + $"{played.FightsSkipped} never fought at all");
+
+        if (played.FightsSkipped > 0)
+        {
+            Console.WriteLine(
+                "    a fight never had is a trainer whose party this build could not assemble,");
+            Console.WriteLine(
+                "    or one reached before anything had been handed over to fight with");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine($"  {played.Unreached.Count} maps it never got to");
+
+        foreach (string mapId in played.Unreached.Take(40))
+            Console.WriteLine($"    {mapId,-8} {world.Find(mapId)?.Name ?? string.Empty}");
+
+        if (played.Unreached.Count > 40)
+            Console.WriteLine($"    ... and {played.Unreached.Count - 40} more");
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  {played.Specials.Values.Sum()} calls to {played.Specials.Count} routines it could "
+            + "not answer — every one took the zero arm");
+
+        foreach ((int routine, int times) in played.Specials.OrderByDescending(p => p.Value).Take(8))
+            Console.WriteLine($"    routine 0x{routine:X3} asked {times} time(s)");
+
+        Console.WriteLine();
+        Console.WriteLine("    try --routines to see what each of those is asked, then --answer");
+        Console.WriteLine("    one of them and run this again. What opens is the measurement.");
+
+        static string Why(StoppedBecause stopped) => stopped switch
+        {
+            StoppedBecause.NothingMoreOpened => "a pass opened nothing new",
+            StoppedBecause.ItNeverSettled => "it hit the pass backstop, so something never settles",
+            _ => stopped.ToString(),
+        };
+    }
+
+    /// <summary>Which item teaches which move, so a script handing one over counts as a move.</summary>
+    private static Dictionary<int, int> TeachingMachines(Rom rom)
+    {
+        var teaches = new Dictionary<int, int>();
+
+        List<ItemData> allItems = ItemTable.Locate(rom) is { } itemsAt
+            ? [.. ItemTable.Read(rom, itemsAt).Select(i => i.ToData())]
+            : [];
+
+        List<int> machineItems =
+            [.. allItems.Where(i => i.Pocket == Pocket.Machines).OrderBy(i => i.Id).Select(i => i.Id)];
+
+        List<MoveData> allMoves = MoveExtractor.Extract(rom);
+
+        if (machineItems.Count == MachineMoves.Count
+            && MachineMoves.Locate(rom, allMoves.Count, ObstacleMoves.Find(rom)) is { } at)
+        {
+            List<int> taughtBy = MachineMoves.Read(rom, at);
+
+            for (int i = 0; i < Math.Min(machineItems.Count, taughtBy.Count); i++)
+                teaches[machineItems[i]] = taughtBy[i];
+        }
+
+        return teaches;
+    }
+
     private static void WriteSpecialContracts(Rom rom)
     {
         Console.WriteLine();
@@ -8349,6 +8484,10 @@ public static class Program
                                      arguments take, by trying every width against
                                      this cartridge and counting how many tracks
                                      reach an end
+              --play                play the game from a fresh save, as far as it can get:
+                                    walk, talk to everybody reachable, fight whoever picks
+                                    a fight, take what is given, walk again. Says where it
+                                    stopped and what it never got to. Takes --answer too.
               --routines            what every routine this project cannot execute is
                                     asked: how many arguments, what its answer is compared
                                     against, how many sites branch on it.
@@ -8534,6 +8673,8 @@ public static class Program
 
         public bool SpecialContracts { get; private init; }
 
+        public bool Play { get; private init; }
+
         public IReadOnlyDictionary<int, int> RoutineAnswers { get; private init; } = new Dictionary<int, int>();
 
         /// <summary>Measure how many bytes each sequence command's arguments take.</summary>
@@ -8649,6 +8790,7 @@ public static class Program
             bool flagGates = false;
             bool closure = false;
             bool specialContracts = false;
+            bool play = false;
             var routineAnswers = new Dictionary<int, int>();
             bool sequenceWidths = false;
             int? oneSong = null;
@@ -8879,6 +9021,9 @@ public static class Program
                     case "--routines":
                         specialContracts = true;
                         break;
+                    case "--play":
+                        play = true;
+                        break;
                     case "--answer":
                     {
                         // routine=value, so an experiment can be run without a rebuild.
@@ -9076,6 +9221,7 @@ public static class Program
                 FlagGates = flagGates,
                 Closure = closure,
                 SpecialContracts = specialContracts,
+                Play = play,
                 Answers = answers,
                 SequenceWidths = sequenceWidths,
                 OneSong = oneSong,

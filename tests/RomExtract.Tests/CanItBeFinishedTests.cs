@@ -344,3 +344,134 @@ public class StandingInForARoutineTests
         Assert.False(yesNo.LooksLikeACount);
     }
 }
+
+/// <summary>
+/// Playing the game from a fresh save, as far as it can get.
+/// <para>
+/// The closure walk answers where somebody could <em>stand</em>. This one talks to people,
+/// takes what they hand over, and fights what fights back — so it can tell a door that will
+/// not open from a fight that cannot be won, which are two very different things to fix.
+/// </para>
+/// </summary>
+public class PlayingItThroughTests
+{
+    private static MapData Room(string id) => new(id, id, 4, 4, new byte[16]);
+
+    private static PlayedScript Nothing => new([], [], [], [], null, null);
+
+    private static MapObject Person(uint at, int x = 1, int y = 1) =>
+        new(1, 1, x, y, Direction.Down, 0, false) { ScriptAddress = at };
+
+    /// <summary>
+    /// A world with nothing in it stops on the first pass and says why, rather than running
+    /// to its backstop.
+    /// </summary>
+    [Fact]
+    public void AnEmptyWorldStopsAtOnceAndSaysWhy()
+    {
+        Attempt played = Autoplayer.Play(
+            new WorldData([Room("1.0")]), "1.0", TestRules.All, (_, _) => Nothing);
+
+        Assert.Equal(StoppedBecause.NothingMoreOpened, played.Stopped);
+        Assert.Equal(1, played.Passes);
+    }
+
+    /// <summary>
+    /// Somebody handing over a creature puts it in the party, which is what makes every fight
+    /// after it possible.
+    /// </summary>
+    [Fact]
+    public void SomebodyHandingOverACreaturePutsItInTheParty()
+    {
+        MapData start = Room("1.0") with { Objects = [Person(0x1000)] };
+
+        var given = false;
+
+        Attempt played = Autoplayer.Play(
+            new WorldData([start]),
+            "1.0",
+            TestRules.All,
+            (_, _) =>
+            {
+                if (given) return Nothing;
+
+                given = true;
+
+                return new PlayedScript([], [], [], [], 1, null);
+            });
+
+        Assert.Single(played.Party);
+    }
+
+    /// <summary>
+    /// A fight reached before anything has been handed over is counted rather than crashed
+    /// on.
+    /// <para>
+    /// The case that would otherwise throw: a trainer standing on the first map, and a party
+    /// of nobody. Counting it is what makes "it never got there" tellable from "it got there
+    /// and could not fight".
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AFightWithNobodyToSendOutIsCountedRatherThanCrashedOn()
+    {
+        MapData start = Room("1.0") with { Objects = [Person(0x2000)] };
+
+        Attempt played = Autoplayer.Play(
+            new WorldData([start]),
+            "1.0",
+            TestRules.All,
+            (_, _) => new PlayedScript([], [], [], [], null, 1));
+
+        Assert.True(played.FightsSkipped >= 1);
+        Assert.Equal(0, played.FightsWon);
+    }
+
+    /// <summary>
+    /// The same trainer is only fought once, however many passes walk past them.
+    /// <para>
+    /// A trainer beaten stays beaten — that is what the flag they set means — and a loop that
+    /// re-fought everybody every pass would report a fight count that measured the number of
+    /// passes rather than the number of trainers.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ATrainerIsOnlyFoughtOnce()
+    {
+        MapData start = Room("1.0") with { Objects = [Person(0x3000)] };
+
+        var asked = 0;
+        var opened = 0x100;
+
+        Attempt played = Autoplayer.Play(
+            new WorldData([start]),
+            "1.0",
+            TestRules.All,
+            (_, _) =>
+            {
+                // Keeps opening something for a few passes, so the loop keeps going and has
+                // every chance to fight the same person again.
+                asked++;
+
+                return new PlayedScript(asked < 4 ? [opened++] : [], [], [], [], null, 7);
+            });
+
+        Assert.True(played.Passes > 1, "it only ran one pass, so nothing was given a second chance");
+        Assert.True(played.FightsWon + played.FightsLost + played.FightsSkipped <= 1);
+    }
+
+    /// <summary>And the routines it could not answer are carried out, same as the walk.</summary>
+    [Fact]
+    public void TheRoutinesItCouldNotAnswerAreCarriedOut()
+    {
+        MapData start = Room("1.0") with { Objects = [Person(0x4000)] };
+
+        Attempt played = Autoplayer.Play(
+            new WorldData([start]),
+            "1.0",
+            TestRules.All,
+            (_, _) => new PlayedScript([], [], [], [0x1B5], null, null));
+
+        Assert.True(played.Specials[0x1B5] >= 1);
+    }
+}
