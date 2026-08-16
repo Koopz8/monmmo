@@ -120,7 +120,13 @@ public class MessageChannelTests
                 [new BagEntry(13, 2)],
                 TrainerId: 214),
             new BattleUpdate(
-                [new BattleEvent.MoveUsed(Side.Player, 33), new BattleEvent.Fainted(Side.Opponent)],
+                [
+                    new BattleEvent.MoveUsed(Side.Player, 33),
+                    new BattleEvent.ScreenRose(Side.Player, Physical: true),
+                    new BattleEvent.Seeded(Side.Opponent),
+                    new BattleEvent.Sapped(Side.Opponent, 6, 12),
+                    new BattleEvent.Fainted(Side.Opponent),
+                ],
                 19, 0, [new BagEntry(4, 12)], [new BagEntry(13, 2)]),
             new BattleFinished(
                 Side.Player, true, 5400, 400, [new BagEntry(4, 11)],

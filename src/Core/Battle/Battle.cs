@@ -75,6 +75,9 @@ public enum Side
 [JsonDerivedType(typeof(HeldOn), "heldon")]
 [JsonDerivedType(typeof(WentFirst), "wentfirst")]
 [JsonDerivedType(typeof(AteIt), "ateit")]
+[JsonDerivedType(typeof(ScreenRose), "screenrose")]
+[JsonDerivedType(typeof(Seeded), "seeded")]
+[JsonDerivedType(typeof(Sapped), "sapped")]
 [JsonDerivedType(typeof(MustRepeat), "mustrepeat")]
 [JsonDerivedType(typeof(GotAway), "gotaway")]
 [JsonDerivedType(typeof(CouldNotGetAway), "couldnotgetaway")]
@@ -282,6 +285,15 @@ public abstract record BattleEvent
     /// </para>
     /// </summary>
     public sealed record AteIt(Side Side, int ItemId) : BattleEvent;
+
+    /// <summary>A screen went up on this side. Physical, or the other one.</summary>
+    public sealed record ScreenRose(Side Side, bool Physical) : BattleEvent;
+
+    /// <summary>Something is now taking a share of this side's health every turn.</summary>
+    public sealed record Seeded(Side Side) : BattleEvent;
+
+    /// <summary>And it took some. The side named is the one that lost it.</summary>
+    public sealed record Sapped(Side Side, int Amount, int RemainingHp) : BattleEvent;
 
     /// <summary>Made to do the same thing again.</summary>
     public sealed record MustRepeat(Side Side, int MoveId) : BattleEvent;
@@ -1655,6 +1667,57 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             return;
         }
 
+        if (effect.Kind == EffectKind.Screen)
+        {
+            bool physical = effect.Stat == Stat.Defense;
+
+            int already = physical ? target.ReflectTurns : target.ScreenTurns;
+
+            if (already > 0)
+            {
+                events.Add(new BattleEvent.NothingHappened(at));
+
+                return;
+            }
+
+            // Five turns. Modelled, and deliberately the same five MIST and SAFEGUARD use —
+            // one number for every wall in this engine rather than three that could drift.
+            if (physical) target.ReflectTurns = Skies.Turns;
+            else target.ScreenTurns = Skies.Turns;
+
+            events.Add(new BattleEvent.ScreenRose(at, physical));
+
+            return;
+        }
+
+        if (effect.Kind == EffectKind.Seed)
+        {
+            // Nothing may be seeded twice, and there is no Grass type in this engine to be
+            // immune — that rule is about a type chart this move does not consult.
+            if (target.IsSeeded)
+            {
+                events.Add(new BattleEvent.NothingHappened(at));
+
+                return;
+            }
+
+            target.IsSeeded = true;
+
+            events.Add(new BattleEvent.Seeded(at));
+
+            return;
+        }
+
+        if (effect.Kind == EffectKind.Leave)
+        {
+            // The same code running away uses, reached by a move instead of by a choice.
+            Escaped = true;
+
+            events.Add(new BattleEvent.GotAway(side));
+
+            return;
+        }
+
         if (effect.Kind == EffectKind.Mist)
         {
             // Five turns. Modelled, not read.
@@ -2115,6 +2178,32 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
                 if (fed > 0)
                     events.Add(new BattleEvent.ItemHealed(side, battler.Holding, fed, battler.CurrentHp));
             }
+
+            // What is being drained, before what is holding on. A share of its own maximum
+            // to whoever put it there, and it lasts as long as its target is standing on the
+            // field rather than for a count — which is what makes leaving the only answer.
+            if (battler.IsSeeded)
+            {
+                int taken = battler.TakeDamage(Math.Max(1, battler.MaxHp / Skies.Share));
+
+                events.Add(new BattleEvent.Sapped(side, taken, battler.CurrentHp));
+
+                Battler other = Of(Other(side));
+
+                if (!other.HasFainted && other.Heal(taken) > 0)
+                    events.Add(new BattleEvent.Recovered(Other(side), taken));
+
+                if (battler.HasFainted)
+                {
+                    events.Add(new BattleEvent.Fainted(side));
+
+                    continue;
+                }
+            }
+
+            // And the walls, counted down with everything else that lasts turns.
+            if (battler.ReflectTurns > 0) battler.ReflectTurns--;
+            if (battler.ScreenTurns > 0) battler.ScreenTurns--;
 
             // And again at the end, because poison and a sandstorm both land here and a
             // berry that only ever answered a move would sit uneaten while its carrier

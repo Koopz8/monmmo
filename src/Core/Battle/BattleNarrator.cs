@@ -208,6 +208,13 @@ public static class BattleNarrator
 
         BattleEvent.AteIt e => $"{names.Of(e.Side)} used up its {names.ItemNamed(e.ItemId)}.",
 
+        BattleEvent.ScreenRose e =>
+            $"{names.Of(e.Side)} is shielded against {(e.Physical ? "physical" : "special")} moves!",
+
+        BattleEvent.Seeded e => $"{names.Of(e.Side)} was seeded!",
+
+        BattleEvent.Sapped e => $"{names.Of(e.Side)}'s health was sapped!",
+
         BattleEvent.Grazed e => $"{names.Of(e.Side)} is hurt reaching them!",
 
         BattleEvent.BrokeFree e => $"{names.Of(e.Side)} got free of {names.MoveNamed(e.MoveId)}!",

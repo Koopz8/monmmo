@@ -335,6 +335,30 @@ public sealed class Battler
     /// </summary>
     public int MistTurns { get; set; }
 
+    /// <summary>
+    /// Turns left of the screen that halves physical damage, and of the one that halves
+    /// special.
+    /// <para>
+    /// On the battler rather than on the battle because everything else that lasts a count
+    /// of turns is, and because this engine fights one creature a side — the day it does not,
+    /// these move to the side along with MIST and SAFEGUARD, which have the same problem and
+    /// have had it longer.
+    /// </para>
+    /// </summary>
+    public int ReflectTurns { get; set; }
+
+    public int ScreenTurns { get; set; }
+
+    /// <summary>
+    /// True while something is taking a share of this one's health every turn.
+    /// <para>
+    /// A flag rather than a count, because it lasts as long as its target is standing there —
+    /// which is what makes it worse than being wrapped, and what makes leaving the field the
+    /// only answer to it.
+    /// </para>
+    /// </summary>
+    public bool IsSeeded { get; set; }
+
     /// <summary>True while nothing may lower this one's stats from outside.</summary>
     public bool IsMisted => MistTurns > 0;
 
@@ -402,6 +426,9 @@ public sealed class Battler
         ForcedTurns = 0;
         ChoiceSlot = null;
         IsFocused = false;
+        IsSeeded = false;
+        ReflectTurns = 0;
+        ScreenTurns = 0;
         LastSlot = null;
         DisabledSlot = null;
         DisabledTurns = 0;

@@ -71,6 +71,15 @@ public enum EffectKind
     /// <summary>Never takes the last point.</summary>
     LeavesOne,
 
+    /// <summary>Halves what comes at this side for a count of turns.</summary>
+    Screen,
+
+    /// <summary>Takes a share of its target's health every turn and gives it away.</summary>
+    Seed,
+
+    /// <summary>Leaves the fight, whatever the speeds say.</summary>
+    Leave,
+
     /// <summary>Lands several times in one turn.</summary>
     MultiHit,
 
@@ -362,6 +371,18 @@ public static class MoveEffects
 
         // FALSE SWIPE: always leaves one.
         0x65 => new MoveEffect(EffectKind.LeavesOne, OnUser: false),
+
+        // The two screens, told apart by which stat they are about — Defense for the one
+        // that answers a physical hit and SpDefense for the other. Which is which is in the
+        // game's code; that they are a pair with one shape is the record.
+        0x41 => new MoveEffect(EffectKind.Screen, OnUser: true, Stat: Stat.Defense),
+        0x23 => new MoveEffect(EffectKind.Screen, OnUser: true, Stat: Stat.SpDefense),
+
+        // LEECH SEED, which needed the end-of-turn hook the berries were built on.
+        0x54 => new MoveEffect(EffectKind.Seed, OnUser: false),
+
+        // TELEPORT, which is running away by another name and reaches the same code.
+        0x99 => new MoveEffect(EffectKind.Leave, OnUser: true),
 
         0x2B => new MoveEffect(EffectKind.HighCritical, OnUser: false),
         0x1F or 0x96 => new MoveEffect(EffectKind.Flinch, OnUser: false),

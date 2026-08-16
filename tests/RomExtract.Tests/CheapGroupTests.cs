@@ -435,13 +435,43 @@ public class CheapGroupTests
         Assert.Equal(StatusCondition.None, you.Status);
     }
 
-    /// <summary>And an effect nobody has written still says so.</summary>
+    /// <summary>
+    /// And an effect nobody has written still says so.
+    /// <para>
+    /// The effect is found rather than named, and that is a repair. This test and the one
+    /// below used to name LEECH SEED as their example of something unwritten; the milestone
+    /// that wrote LEECH SEED broke both of them, which is a test failing because the project
+    /// got better. Asking the table for something still silent means they go on meaning what
+    /// they mean until there is nothing silent left — at which point they say so.
+    /// </para>
+    /// </summary>
     [Fact]
     public void AndTheOtherKindOfSilenceSaysSo()
     {
-        // METRONOME, and the hundred-odd like it.
-        Assert.Equal(EffectKind.None, MoveEffects.Of(0x54).Kind);
-        Assert.True(MoveEffects.IsSilent(0x54));
+        byte silent = AStillSilentEffect();
+
+        Assert.Equal(EffectKind.None, MoveEffects.Of(silent).Kind);
+        Assert.True(MoveEffects.IsSilent(silent));
+    }
+
+    /// <summary>
+    /// Any effect byte this engine still has nothing to say about.
+    /// <para>
+    /// Fails loudly rather than skipping when there are none left, because "there is nothing
+    /// unwritten to test with" is the best news this project could have and is not something
+    /// a green run should hide.
+    /// </para>
+    /// </summary>
+    private static byte AStillSilentEffect()
+    {
+        for (int effect = 0; effect < 256; effect++)
+        {
+            if (MoveEffects.IsSilent((byte)effect)) return (byte)effect;
+        }
+
+        throw new InvalidOperationException(
+            "Nothing in the effect table is silent any more, so these two tests have no "
+            + "subject. That is worth celebrating and then deleting them over.");
     }
 
     /// <summary>
@@ -451,7 +481,7 @@ public class CheapGroupTests
     [Fact]
     public void AFightCountsWhatItSteppedOver()
     {
-        Battler you = Make(250, Move(9, 0x54, 40));
+        Battler you = Make(250, Move(9, AStillSilentEffect(), 40));
         Battler them = Make(250, Move(Plain, 0x00, 10));
 
         var battle = new Battle(you, them, 7);

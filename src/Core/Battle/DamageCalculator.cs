@@ -97,6 +97,10 @@ public static class DamageCalculator
         int randomPercent,
         Weather weather = Weather.None)
     {
+        // What the defender has put up against this kind of move. Halved, and applied at the
+        // end with the other multipliers on the finished number rather than to the defence
+        // stat — a screen is a wall in front of somebody rather than somebody being tougher,
+        // and a critical hit goes through it for exactly that reason.
         int effectiveness = TypeChart.Effectiveness(move.Type, defender.Type1, defender.Type2);
 
         // What the defender's ability says about being hit by this at all. Asked before
@@ -170,6 +174,11 @@ public static class DamageCalculator
         // And what the sky is doing to it. Last, with the other multiplier on the finished
         // number — rain makes water and unmakes fire, and sun does the reverse.
         damage = damage * Skies.Damage(weather, move.Type) / 100;
+
+        // And the wall, which a critical hit ignores. That is the games' rule and it is also
+        // the only reading that makes a screen a wall rather than a stat: something that got
+        // through cleanly got through it.
+        if (!critical && (physical ? defender.ReflectTurns : defender.ScreenTurns) > 0) damage /= 2;
 
         // And the seventeen items that are worth a percentage on one type of move, whose
         // percentage is the number on their own record rather than one written here.
