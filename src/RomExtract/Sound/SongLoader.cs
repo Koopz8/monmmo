@@ -112,6 +112,46 @@ public static class SongLoader
     }
 
     /// <summary>
+    /// One of the circuit channels, as something that can be played.
+    /// <para>
+    /// <b>Where the numbers come from.</b> A square instrument keeps its duty in the same
+    /// four bytes a recorded one keeps its pointer — there is no recording to point at, so
+    /// the field holds a small number instead. The wave channel does point at something: the
+    /// sixteen bytes that describe its shape. Both of those are modelled readings of a field
+    /// whose meaning depends on the kind, and both are wrong in an audible rather than a
+    /// destructive way.
+    /// </para>
+    /// </summary>
+    private static Instrument Circuit(Rom rom, InstrumentRecord instrument)
+    {
+        Voice voice = instrument.Kind switch
+        {
+            InstrumentKind.Square => PsgVoices.Square((int)(instrument.Pointer & 3)),
+
+            InstrumentKind.Wave => PsgVoices.Wave(
+                rom.ToOffsetOrNull(instrument.Pointer) is { } at && at + 16 <= rom.Length
+                    ? rom.Slice(at, 16)
+                    : []),
+
+            InstrumentKind.Noise => PsgVoices.Noise((instrument.Pointer & 1) != 0),
+
+            // The two composite kinds hand a range of keys to other instruments, which is a
+            // table this build does not walk. Silent rather than guessed at.
+            _ => Instrument.Nothing.Voice,
+        };
+
+        if (voice.Audio.Length == 0) return Instrument.Nothing;
+
+        return new Instrument(
+            voice,
+            PsgVoices.MiddleCKey,
+            rom.ReadU8(instrument.Offset + 8),
+            rom.ReadU8(instrument.Offset + 9),
+            rom.ReadU8(instrument.Offset + 10),
+            rom.ReadU8(instrument.Offset + 11));
+    }
+
+    /// <summary>
     /// The instruments a song draws on, in the order the song asks for them by number.
     /// <para>
     /// Every slot is filled, including the ones this build cannot play. A voicegroup with
@@ -135,10 +175,14 @@ public static class SongLoader
         {
             if (!instrument.IsSampled)
             {
-                // The shapes are the four channels that are circuits rather than recordings.
-                // They have their own machinery and this is not it, so the slot is held open
-                // and silent — see PokeMmo.Core.Sound.Psg, which plays them.
-                built.Add(Instrument.Nothing);
+                // The four channels that are circuits rather than recordings — and on a real
+                // cartridge they are most of a voicegroup, not an afterthought. Twenty-two of
+                // twenty-four slots in the town theme's group are these, so a build that held
+                // them open and silent played a twelfth of the music.
+                //
+                // A cycle of a square wave is a recording played round and round, so each one
+                // becomes a looping Voice and everything above this works on it unchanged.
+                built.Add(Circuit(rom, instrument));
 
                 continue;
             }
