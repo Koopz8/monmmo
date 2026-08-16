@@ -132,6 +132,11 @@ public static class Program
             }
         }
 
+        // The engine's own commentary, quietened. It prints a line for every texture it
+        // uploads, which on a map with fifty people is fifty lines nobody reads and which
+        // buries the lines this client prints on purpose.
+        Raylib.SetTraceLogLevel(TraceLogLevel.Warning);
+
         Raylib.InitWindow(WindowWidth, WindowHeight, $"MonMMO — {map.Name}");
         Raylib.SetTargetFPS(60);
 
@@ -353,10 +358,6 @@ public static class Program
         // they say afterwards — which for the rival is losing gracefully and leaving.
         uint? afterTheFight = null;
 
-        // And the same for a fight with nobody in it. A wild fight a script started stops
-        // that script where it stands; what comes after is behind the question "how did
-        // it go", which is a question only the server can answer.
-        uint? afterTheWildFight = null;
         int? cameOut = null;
 
         // Which of the fights ahead is with him, set by whichever script picks one.
@@ -494,6 +495,12 @@ public static class Program
             // copy of it, kept in the one file that has no tests.
             speakers.Play(view.Map.Music);
             speakers.Pump();
+
+            // What the sequencer is actually doing, once a second. A song that plays one
+            // note and never moves on looks exactly like a song that is playing, from
+            // outside — and the four numbers here say which of the four possible reasons
+            // it is: no ticks, no commands, no notes, or every track already finished.
+            if (speakers.TakeReport() is { } heard) Note(heard);
 
             worstUntil -= delta;
 

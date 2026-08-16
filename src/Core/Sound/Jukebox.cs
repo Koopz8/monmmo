@@ -40,6 +40,9 @@ public sealed class Jukebox(Func<int, SongPlayer?> load, Mixer mixer)
     /// <summary>True when nothing is being performed, whether or not something was asked for.</summary>
     public bool IsSilent => _player is null;
 
+    /// <summary>What is being performed, for anybody who wants to ask it how it is going.</summary>
+    public SongPlayer? Performing => _player;
+
     /// <summary>
     /// How many times a song has actually been fetched, which is the number that says whether
     /// asking for the same one twice did anything.

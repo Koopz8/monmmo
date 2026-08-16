@@ -38,6 +38,7 @@ public sealed class Speakers : IDisposable
     private const int BufferSamples = 2048;
 
     private readonly Jukebox _box;
+    private readonly Mixer _mixer;
     private readonly CryLibrary _cries;
     private readonly short[] _buffer = new short[BufferSamples];
     private readonly bool _ready;
@@ -62,6 +63,8 @@ public sealed class Speakers : IDisposable
         Rom rom, SoundTreeResult tree, CryTableResult? cries, IReadOnlyDictionary<int, int>? entryFor)
     {
         var mixer = new Mixer(Rate);
+
+        _mixer = mixer;
 
         _box = new Jukebox(song => SongLoader.Load(rom, tree, song, mixer), mixer);
         _cries = new CryLibrary(rom, tree.Samples, cries, entryFor);
@@ -128,6 +131,37 @@ public sealed class Speakers : IDisposable
     /// <summary>How many creatures this cartridge has a noise for.</summary>
     public int CryCount => _cries.Count;
 
+    private int _filled;
+    private int _reported;
+
+    /// <summary>
+    /// A line about what the sequencer is doing, about once a second, or nothing.
+    /// <para>
+    /// A song that plays one note and never moves on sounds, from outside, exactly like a
+    /// song playing quietly — and looks from the log exactly like a song playing correctly.
+    /// The four numbers say which it is: no ticks means the clock is not running, ticks with
+    /// no commands means every track is waiting for ever, commands with no notes means the
+    /// tracks are running settings, and tracks that have all run out means it is over.
+    /// </para>
+    /// </summary>
+    public string? TakeReport()
+    {
+        if (!_ready) return null;
+
+        // Buffers rather than seconds, because this is the one clock the sound side has.
+        // At 32768 samples a second and 2048 to a buffer, sixteen of them is a second.
+        if (_filled - _reported < 16) return null;
+
+        _reported = _filled;
+
+        if (_box.Performing is not { } player)
+            return $"sound: song {_box.Playing} is not playing — nothing was assembled for it";
+
+        return $"sound: song {_box.Playing}, {player.BeatsPerMinute}bpm, {player.Ticks} ticks, "
+               + $"{player.Commands} commands, {player.Notes} notes, "
+               + $"{player.Ran}/{player.TrackCount} tracks run out, {_mixer.Sounding} sounding";
+    }
+
     /// <summary>
     /// Fills whatever the sound card has finished with. Called once a frame.
     /// <para>
@@ -147,6 +181,8 @@ public sealed class Speakers : IDisposable
             short[] samples = _box.Render(BufferSamples);
 
             samples.CopyTo(_buffer, 0);
+
+            _filled++;
 
             unsafe
             {
