@@ -22,6 +22,17 @@ public abstract record SceneBeat
     }
 }
 
+/// <summary>
+/// Something a script asked the bag for, and what it was told.
+/// <para>
+/// The answer is recorded beside the question because the interesting one is "no". A
+/// script that asks for something and is told no takes the arm where the guard stays in
+/// the doorway — so a list of refused questions is a list of the things a playthrough
+/// would have to be carrying, which is not otherwise anywhere.
+/// </para>
+/// </summary>
+public sealed record ItemAsked(int ItemId, int Count, bool Carried);
+
 /// <summary>What running a script actually came to.</summary>
 public sealed record ScriptRun
 {
@@ -134,6 +145,29 @@ public sealed record ScriptRun
     public int? GivesItem { get; init; }
 
     public int GivesCount { get; init; }
+
+    /// <summary>
+    /// What this run took off the player, if it took anything.
+    /// <para>
+    /// The other half of a delivery. Oak receives the parcel with <c>45 5D 01 01 00</c>,
+    /// and a run that hands things over and never takes one away leaves a bag holding
+    /// every key item in the game at once — a save whose own inventory cannot justify
+    /// the flags beside it.
+    /// </para>
+    /// </summary>
+    public int? TakesItem { get; init; }
+
+    public int TakesCount { get; init; }
+
+    /// <summary>
+    /// Every question this run asked the bag, in order, with the answer it got.
+    /// <para>
+    /// Recorded rather than only acted on, for the reason the stepped-over routines are:
+    /// a script that quietly does less looks exactly like a script that does less. The
+    /// refusals in here are the shopping list for whatever the run could not get past.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<ItemAsked> ItemsAsked { get; init; } = [];
 
     /// <summary>
     /// The monster this script hands over, if it hands one over.
@@ -365,6 +399,9 @@ public static class ScriptRunner
         int? trainerId = null;
         int? gives = null;
         int givesCount = 0;
+        int? takes = null;
+        int takesCount = 0;
+        var itemsAsked = new List<ItemAsked>();
         (int Species, int Level)? givesMon = null;
 
         // What a scripted fight was set up with, and what actually got started.
@@ -664,6 +701,61 @@ public static class ScriptRunner
                     save.Write(0x800D, 1);
                     break;
 
+                case 0x47:                              // checkitem
+                    // The question this runner has never been able to answer, and the
+                    // reason SAFFRON is shut. Its width was adopted at milestone 100-odd
+                    // on the shape alone, and the shape says what it is:
+                    //
+                    //   47 | 1A 00 01 00 | 21 0D 80 01 00 | 07 01 ...
+                    //   47 | 50 00 01 00 | 21 0D 80 01 00 | 06 01 ...
+                    //
+                    // An item and a count, then the answer variable compared against
+                    // ONE and a branch — where giveitem's own compare is against zero.
+                    // Compared against one is asked-and-answered-yes; the arm taken when
+                    // it is not one is the arm where nothing happens.
+                    //
+                    // Left unwritten, the variable holds nought at every one of those
+                    // sites, and nought is not one. Every script in this game that asks
+                    // whether you are carrying something has been told no since the
+                    // runner was written — which is exactly the shape of a guard who
+                    // wants a drink and never gets one.
+                    {
+                        // A number or a variable holding one, the same as givemon's
+                        // species and hideobject's person. Nothing else in this command
+                        // is read: which pocket, whether it fits, and what it is called
+                        // are all on the far side of a routine this project cannot run.
+                        int named = command.Word();
+                        int item = named >= 0x4000 ? save.Read(named) : named;
+                        int wanted = Math.Max(1, command.Word(2));
+
+                        bool carried = item > 0 && save.Carried(item) >= wanted;
+
+                        if (item > 0) itemsAsked.Add(new ItemAsked(item, wanted, carried));
+
+                        save.Write(SpecialContracts.AnswerVariable, carried ? 1 : 0);
+                    }
+
+                    break;
+
+                case 0x45:                              // takes an item away
+                    // The other half of a handover, and the same two words in the same
+                    // order as the command that gives. Recorded rather than applied: a
+                    // run is copied and not written through, so what a bag loses is the
+                    // caller's to apply exactly as a flag is.
+                    //
+                    // Item zero is not an item, for the reason 0x46 says so.
+                    if (command.Word() != 0)
+                    {
+                        takes ??= command.Word();
+                        takesCount = Math.Max(1, command.Word(2));
+                    }
+
+                    // Answered, on the same evidence as its neighbours: a command that
+                    // hands something over answers into the result variable and a script
+                    // that is told nothing reads its own failure line.
+                    save.Write(0x800D, 1);
+                    break;
+
                 // The pair that fights something out of nowhere. The first sets the
                 // creature up and the second starts it, and they are not adjacent: the
                 // sleeper on ROUTE 12 sets a SNORLAX at 30, takes itself off the map, and
@@ -861,6 +953,9 @@ public static class ScriptRunner
             TrainerId = trainerId,
             GivesItem = gives,
             GivesCount = givesCount,
+            TakesItem = takes,
+            TakesCount = takesCount,
+            ItemsAsked = itemsAsked,
             GivesMon = givesMon,
             WildBattle = wild,
             ResumesAfterTheFight = resumes,

@@ -22,7 +22,28 @@ public sealed record PlayedScript(
     IReadOnlyList<int> Teaches,
     IReadOnlyList<int> Specials,
     (int Species, int Level)? Gives,
-    int? Fights);
+    int? Fights)
+{
+    /// <summary>An item it handed over, and how many.</summary>
+    public (int ItemId, int Count)? Gets { get; init; }
+
+    /// <summary>An item it took away, and how many.</summary>
+    public (int ItemId, int Count)? Takes { get; init; }
+
+    /// <summary>
+    /// People it took off the map, by their number on it.
+    /// <para>
+    /// Read and thrown away until now, by both this and the closure walk. It is how a
+    /// guard stops being in a doorway: the script does not move him, it removes him —
+    /// and a walker that never hears about it sees the same person standing there
+    /// forever, however the conversation went.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<int> Hides { get; init; } = [];
+
+    /// <summary>What it asked the bag for, and what it was told.</summary>
+    public IReadOnlyList<(int ItemId, int Count, bool Carried)> Asked { get; init; } = [];
+}
 
 /// <summary>
 /// A door out of somewhere it reached, into somewhere it never did.
@@ -88,6 +109,16 @@ public sealed record ShutDoor(
         WalkableOnThisMap > 4 && StoodOnThisMap * 8 < WalkableOnThisMap;
 }
 
+/// <summary>
+/// Something a script wanted that the playthrough was not carrying, and where.
+/// <para>
+/// The list this instrument never had. "It stopped at SAFFRON" says where; this says
+/// what it would have needed to be holding, in the cartridge's own item numbers, at the
+/// exact person who asked.
+/// </para>
+/// </summary>
+public sealed record Wanted(int ItemId, int Count, string MapId, int Times);
+
 /// <summary>Why the playthrough stopped.</summary>
 public enum StoppedBecause
 {
@@ -120,6 +151,22 @@ public sealed record Attempt(
 {
     /// <summary>The highest level anything in the party reached, which is the shape of a run.</summary>
     public int HighestLevel => Party.Count == 0 ? 0 : Party.Max(m => m.Level);
+
+    /// <summary>What it was carrying when it stopped.</summary>
+    public IReadOnlyList<BagEntry> Carried { get; init; } = [];
+
+    /// <summary>
+    /// Everything a script asked it for and it did not have, commonest first.
+    /// <para>
+    /// The useful half of the bag. An empty bag makes every one of these a refusal and a
+    /// full one makes them all silent, so the length of this list is the distance between
+    /// where the story stopped and where it could go.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<Wanted> Refused { get; init; } = [];
+
+    /// <summary>People a script took off a map, which is how a doorway stops being blocked.</summary>
+    public IReadOnlyCollection<(string MapId, int LocalId)> Removed { get; init; } = [];
 }
 
 /// <summary>
@@ -162,11 +209,21 @@ public static class Autoplayer
     /// </summary>
     public const int MostTurns = 300;
 
+    /// <param name="runScript">
+    /// Runs one script with the flags and the bag it should see, and says what it did.
+    /// <para>
+    /// The bag is handed in rather than kept on the far side because a script asks about
+    /// it: two hundred-odd sites in this cartridge check whether the player is carrying
+    /// something, and a runner with no bag answers no at every one of them. Passed rather
+    /// than copied because it changes inside the pass that reads it — the ball picked up
+    /// at one end of a map is in the bag by the time the person at the other end asks.
+    /// </para>
+    /// </param>
     public static Attempt Play(
         WorldData world,
         string startMapId,
         GameRules rules,
-        Func<uint, IReadOnlyCollection<int>, PlayedScript> runScript,
+        Func<uint, IReadOnlyCollection<int>, Bag, PlayedScript> runScript,
         Action<string>? log = null)
     {
         var battles = new BattleFactory(rules);
@@ -188,6 +245,17 @@ public static class Autoplayer
         var party = new List<SavedMon>();
         var fought = new HashSet<int>();
 
+        // What it is carrying. One bag for the whole run, written as it goes — the point
+        // of it is that something picked up on ROUTE 2 is in hand at a door in SAFFRON.
+        var bag = new Bag();
+
+        // People a script has taken off a map. The walker has always been able to be told
+        // this — `asIfGone` is its own parameter — and nothing has ever told it.
+        var gone = new HashSet<(string MapId, int LocalId)>();
+
+        // Everything asked for and not carried, by item and by where it was asked.
+        var refused = new Dictionary<(int ItemId, int Count, string MapId), int>();
+
         var won = 0;
         var lost = 0;
         var skipped = 0;
@@ -199,7 +267,7 @@ public static class Autoplayer
         {
             passes = pass;
 
-            Reach reach = WorldWalker.Walk(world, startMapId, moves, flagsSet: flags);
+            Reach reach = WorldWalker.Walk(world, startMapId, moves, flagsSet: flags, asIfGone: gone);
 
             var stood = reach.Stood.ToHashSet();
 
@@ -210,12 +278,14 @@ public static class Autoplayer
             int flagsWere = flags.Count;
             int movesWere = moves.Count;
             int partyWas = party.Count;
+            int carriedWas = bag.DistinctItems;
+            int goneWere = gone.Count;
 
             foreach (MapData map in world.Maps.Where(m => reach.Maps.Contains(m.Id)))
             {
-                foreach (uint address in Reachable(map, stood, flags))
+                foreach (Runnable what in Reachable(map, stood, flags, gone))
                 {
-                    PlayedScript did = runScript(address, flags);
+                    PlayedScript did = runScript(what.Address, flags, bag);
 
                     foreach (int routine in did.Specials)
                         specials[routine] = specials.GetValueOrDefault(routine) + 1;
@@ -225,6 +295,42 @@ public static class Autoplayer
                     foreach (int flag in did.FlagsCleared) flags.Remove(flag);
 
                     foreach (int move in did.Teaches) moves.Add(move);
+
+                    // Somebody this script removed. A guard who steps out of a doorway
+                    // does it here and nowhere else, and until now the walk was never
+                    // told: the same person stood in the same door on every pass, however
+                    // the conversation had gone.
+                    foreach (int who in did.Hides) gone.Add((map.Id, who));
+
+                    // What it handed over, and what it asked for and did not get. The
+                    // refusals are the shopping list — the one thing that says what the
+                    // story is actually waiting on rather than where it stopped.
+                    foreach ((int itemId, int count, bool carried) in did.Asked)
+                    {
+                        if (carried) continue;
+
+                        var key = (itemId, count, map.Id);
+                        refused[key] = refused.GetValueOrDefault(key) + 1;
+                    }
+
+                    if (did.Takes is { } handedOver) bag.Remove(handedOver.ItemId, handedOver.Count);
+
+                    if (did.Gets is { } got)
+                    {
+                        bag.Add(got.ItemId, got.Count, Most(rules, got.ItemId));
+
+                        // And a thing that is picked up is gone from the floor. The
+                        // cartridge sets that flag inside the standard routine that does
+                        // the handing over — code this project cannot follow, which is
+                        // why only 7 of the 575 objects carrying a hide flag have a
+                        // script that sets it. The object's own record says which flag,
+                        // so the bookkeeping is readable even though the routine is not.
+                        //
+                        // Without it every ball in the world is picked up again on every
+                        // pass, and a bag that refills itself is a bag whose counts mean
+                        // nothing.
+                        if (what.TakenAway != 0) flags.Add(what.TakenAway);
+                    }
 
                     // Whatever it hands over. The first of these is the starter, and without
                     // it nothing after it can be fought at all.
@@ -283,9 +389,14 @@ public static class Autoplayer
             log?.Invoke(
                 $"  pass {pass,2}: {reach.Maps.Count,3} maps, {flags.Count,4} flags, "
                 + $"{party.Count} in the party (highest level {(party.Count == 0 ? 0 : party.Max(m => m.Level))}), "
-                + $"{won} won / {lost} lost");
+                + $"{bag.DistinctItems} things carried, {won} won / {lost} lost");
 
-            if (flags.Count == flagsWere && moves.Count == movesWere && party.Count == partyWas)
+            // A pass that only picked something up has opened nothing yet and has still
+            // changed the game — the door the thing unlocks is asked about by a script on
+            // the next pass, not this one. Left out of this test, the loop stops one pass
+            // before the bag is ever used and the whole of the above buys nothing.
+            if (flags.Count == flagsWere && moves.Count == movesWere && party.Count == partyWas
+                && bag.DistinctItems == carriedWas && gone.Count == goneWere)
             {
                 stopped = StoppedBecause.NothingMoreOpened;
 
@@ -293,7 +404,7 @@ public static class Autoplayer
             }
         }
 
-        Reach last = WorldWalker.Walk(world, startMapId, moves, flagsSet: flags);
+        Reach last = WorldWalker.Walk(world, startMapId, moves, flagsSet: flags, asIfGone: gone);
 
         var reached = last.Maps.ToHashSet();
         var stoodAtTheEnd = last.Stood.ToHashSet();
@@ -341,8 +452,33 @@ public static class Autoplayer
             healed,
             specials,
             shut,
-            last.Blocked);
+            last.Blocked)
+        {
+            Carried = bag.Entries,
+            Removed = gone,
+            Refused =
+            [
+                .. refused
+                    .Select(r => new Wanted(r.Key.ItemId, r.Key.Count, r.Key.MapId, r.Value))
+                    .OrderByDescending(w => w.Times)
+                    .ThenBy(w => w.ItemId)
+                    .ThenBy(w => w.MapId),
+            ],
+        };
     }
+
+    /// <summary>
+    /// The most of one item a bag may hold, which is one for anything the games call a key
+    /// item and a full stack for everything else.
+    /// <para>
+    /// Read off the rules rather than decided here. It matters for exactly the items this
+    /// run is about: a script that hands over the parcel or the tea is reached on every
+    /// pass, and a bag that ends up holding ninety-nine of a thing there is only one of in
+    /// the world is a bag nobody should trust about anything else either.
+    /// </para>
+    /// </summary>
+    private static int Most(GameRules rules, int itemId) =>
+        rules.ItemAt(itemId)?.IsKeyItem == true ? 1 : Bag.MaxStack;
 
     /// <summary>
     /// What a creature handed over by a script comes out at. <b>Modelled</b> — the level is in
@@ -485,28 +621,52 @@ public static class Autoplayer
     /// and for the same reason: a person behind a locked door is on a map you have been to and
     /// is not somebody you can talk to.
     /// </summary>
-    private static IEnumerable<uint> Reachable(
-        MapData map, HashSet<(string MapId, GridPosition Square)> stood, HashSet<int> flags)
+    private static IEnumerable<Runnable> Reachable(
+        MapData map,
+        HashSet<(string MapId, GridPosition Square)> stood,
+        HashSet<int> flags,
+        HashSet<(string MapId, int LocalId)> gone)
     {
         foreach (MapObject person in map.Objects)
         {
             if (!person.HasScript) continue;
             if (!person.IsHereFor(flags.Contains)) continue;
 
-            if (Beside(map.Id, person.Square).Any(stood.Contains)) yield return person.ScriptAddress;
+            // And not somebody a script has already taken off the map. Being hidden by a
+            // flag and being removed by a command are the same thing to a player and two
+            // different things in the file, and only the first was being asked about.
+            if (gone.Contains((map.Id, person.LocalId))) continue;
+
+            if (Beside(map.Id, person.Square).Any(stood.Contains))
+            {
+                yield return new Runnable(
+                    person.ScriptAddress, person.CanBeTakenAway ? person.HiddenBy : 0);
+            }
         }
 
         foreach (MapTrigger trigger in map.Triggers)
         {
             if (trigger.HasScript && stood.Contains((map.Id, trigger.Square)))
-                yield return trigger.ScriptAddress;
+                yield return new Runnable(trigger.ScriptAddress, 0);
         }
 
         foreach (MapEntryScript entry in map.OnEntry)
         {
-            if (entry.ScriptAddress != 0) yield return entry.ScriptAddress;
+            if (entry.ScriptAddress != 0) yield return new Runnable(entry.ScriptAddress, 0);
         }
     }
+
+    /// <summary>
+    /// A script a playthrough can actually run, and the flag that takes its owner off the
+    /// map once whatever it is holding has been taken.
+    /// <para>
+    /// The second half is only ever set for a thing on the floor — <c>CanBeTakenAway</c> is
+    /// the world file's own name for "gives something and has a flag to vanish behind".
+    /// A person who hands you a parcel and stays put has a hide flag too, and setting it
+    /// would delete them from the world for the rest of the run.
+    /// </para>
+    /// </summary>
+    private sealed record Runnable(uint Address, int TakenAway);
 
     /// <summary>How many squares of a map anybody could stand on at all.</summary>
     private static int Walkable(MapData map)

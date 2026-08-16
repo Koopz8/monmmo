@@ -414,6 +414,13 @@ public static class Program
             RivalName = NameSuggestions.FirstName(data.SuggestedNames) ?? "RIVAL",
             NameOfSpecies = species => data.SpeciesAt(species)?.Name ?? "",
             NameOfItem = items.Of,
+
+            // And what is in the bag, which a script asks about at rather a lot of the
+            // doors in this game. Read through the list rather than off a copy: the
+            // server sends a new one every time anything is picked up, spent or sold, and
+            // a state holding the list it was built with would answer for the bag the
+            // player had when they signed in.
+            CountOfItem = itemId => bag.FirstOrDefault(e => e.ItemId == itemId)?.Count ?? 0,
         };
 
         // The party, out of a fight. Held because the bag has to say who a potion would

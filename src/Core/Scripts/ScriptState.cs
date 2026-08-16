@@ -116,6 +116,34 @@ public sealed class ScriptState
     /// </summary>
     public Func<int, string>? NameOfItem { get; set; }
 
+    /// <summary>
+    /// How many of an item the player is carrying, when anybody has said.
+    /// <para>
+    /// A delegate rather than a bag, for the reason the bag is not held here: what a
+    /// player carries changes every time they pick something up, and each of the three
+    /// callers keeps it somewhere different. The server has a <c>Bag</c> on the player,
+    /// the client has whatever the last <c>BagUpdated</c> said, and the playthrough has
+    /// one of its own. A copy taken here would be right until the next ball on the floor.
+    /// </para>
+    /// <para>
+    /// The same arrangement <see cref="PartyMoves"/> has and for the same reason —
+    /// attached at the point of asking rather than kept — and the same one
+    /// <see cref="NameOfItem"/> has, for a different one.
+    /// </para>
+    /// </summary>
+    public Func<int, int>? CountOfItem { get; set; }
+
+    /// <summary>
+    /// How many of an item this save holds. None when nobody has said.
+    /// <para>
+    /// Nothing rather than a refusal, because that is what the cartridge's own answer
+    /// is worth here: a script asking whether you have something and being told nothing
+    /// takes the arm it takes for a player who has not got one, which is the arm the
+    /// whole game took before anybody was carrying anything.
+    /// </para>
+    /// </summary>
+    public int Carried(int itemId) => itemId <= 0 ? 0 : CountOfItem?.Invoke(itemId) ?? 0;
+
     private readonly HashSet<int> _flags;
     private readonly Dictionary<int, int> _variables;
     private readonly HashSet<int> _beaten;
@@ -257,6 +285,7 @@ public sealed class ScriptState
         RivalName = other.RivalName;
         NameOfSpecies = other.NameOfSpecies;
         NameOfItem = other.NameOfItem;
+        CountOfItem = other.CountOfItem;
 
         return this;
     }

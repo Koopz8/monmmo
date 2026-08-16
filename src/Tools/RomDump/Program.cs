@@ -12,6 +12,7 @@ using PokeMmo.RomExtract.Scripts;
 using PokeMmo.RomExtract.Sound;
 using PokeMmo.Core.Sound;
 using PokeMmo.RomExtract.Trainers;
+using PokeMmo.Core.Save;
 using PokeMmo.Server;
 
 namespace PokeMmo.Tools.RomDump;
@@ -5693,9 +5694,14 @@ public static class Program
 
         Console.WriteLine();
 
-        PlayedScript Run(uint address, IReadOnlyCollection<int> flags)
+        PlayedScript Run(uint address, IReadOnlyCollection<int> flags, Bag carrying)
         {
-            var state = new ScriptState();
+            var state = new ScriptState
+            {
+                // What the playthrough is holding, asked rather than copied — the bag
+                // changes underneath this between one person and the next.
+                CountOfItem = carrying.CountOf,
+            };
 
             foreach (int flag in flags) state.Set(flag);
 
@@ -5707,7 +5713,13 @@ public static class Program
                 run.GivesItem is { } item && teaches.TryGetValue(item, out int move) ? [move] : [],
                 run.SpecialsCalled,
                 run.GivesMon,
-                run.TrainerId);
+                run.TrainerId)
+            {
+                Gets = run.GivesItem is { } got ? (got, Math.Max(1, run.GivesCount)) : null,
+                Takes = run.TakesItem is { } gave ? (gave, Math.Max(1, run.TakesCount)) : null,
+                Hides = run.Hides,
+                Asked = [.. run.ItemsAsked.Select(a => (a.ItemId, a.Count, a.Carried))],
+            };
         }
 
         Attempt played = Autoplayer.Play(world, first.Id, rules, Run, Console.WriteLine);
@@ -5730,6 +5742,67 @@ public static class Program
                 "    a fight never had is a trainer whose party this build could not assemble,");
             Console.WriteLine(
                 "    or one reached before anything had been handed over to fight with");
+        }
+
+        // The bag, which is new and is the whole of this milestone. Both halves are worth
+        // printing: what it managed to pick up says whether collecting works at all, and
+        // what it was asked for and did not have is the shopping list for whatever is
+        // still shut.
+        // Names, off the cartridge, purely so the shopping list below reads as something
+        // rather than as a column of numbers. The rules file carries no names by design,
+        // so this is the only side of the project that can do it.
+        Dictionary<int, string> itemNames = ItemTable.Locate(rom) is { } itemsAt
+            ? ItemTable.Read(rom, itemsAt).ToDictionary(i => i.Id, i => i.Name)
+            : [];
+
+        string NameOf(int itemId) =>
+            itemNames.GetValueOrDefault(itemId) is { Length: > 0 } name
+                ? $"{name} (0x{itemId:X3})"
+                : $"item 0x{itemId:X3}";
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  it ended up carrying {played.Carried.Count} different things, "
+            + $"{played.Carried.Sum(e => e.Count)} in total");
+
+        foreach (BagEntry entry in played.Carried.OrderByDescending(e => e.Count).Take(12))
+            Console.WriteLine($"    {entry.Count,3} x {NameOf(entry.ItemId)}");
+
+        if (played.Carried.Count > 12)
+            Console.WriteLine($"    ... and {played.Carried.Count - 12} more");
+
+        Console.WriteLine();
+
+        if (played.Refused.Count == 0)
+        {
+            Console.WriteLine(
+                "  nothing asked it for anything it did not have — either the bag covers every");
+            Console.WriteLine(
+                "  check in the reachable world, or nothing reachable checks (which is a finding)");
+        }
+        else
+        {
+            Console.WriteLine(
+                $"  {played.Refused.Count} places asked for something it was not carrying — "
+                + "this is the shopping list");
+
+            foreach (Wanted want in played.Refused.Take(20))
+            {
+                Console.WriteLine(
+                    $"    {want.MapId,-8} wants {want.Count} x {NameOf(want.ItemId)}"
+                    + (want.Times > 1 ? $"  (asked {want.Times} times)" : ""));
+            }
+
+            if (played.Refused.Count > 20)
+                Console.WriteLine($"    ... and {played.Refused.Count - 20} more");
+        }
+
+        if (played.Removed.Count > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine(
+                $"  {played.Removed.Count} people were taken off a map by a script it ran — a person "
+                + "removed is a person not in a doorway");
         }
 
         // What actually stopped it, which is a much shorter list than what it never reached.

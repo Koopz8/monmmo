@@ -694,6 +694,15 @@ public sealed class GameWorld
                 RestingSquare = new GridPosition(saved.RestingX, saved.RestingY),
             };
 
+            // What a script is told when it asks whether this player is carrying
+            // something. Asked through the player rather than handed the bag, so that it
+            // is the bag they have now and not the one they joined with — the whole point
+            // of the question is that the answer changes when something is picked up.
+            //
+            // Attached here rather than in the initialiser above because it is the same
+            // object asking about itself, which an initialiser cannot express.
+            player.Script.CountOfItem = itemId => player.Bag.CountOf(itemId);
+
             foreach (int owned in saved.Cosmetics) player.Owns.Add(owned);
 
             player.Looks = saved.Looks;

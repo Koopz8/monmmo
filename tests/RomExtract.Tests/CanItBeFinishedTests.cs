@@ -423,7 +423,7 @@ public class PlayingItThroughTests
     public void AnEmptyWorldStopsAtOnceAndSaysWhy()
     {
         Attempt played = Autoplayer.Play(
-            new WorldData([Room("1.0")]), "1.0", TestRules.All, (_, _) => Nothing);
+            new WorldData([Room("1.0")]), "1.0", TestRules.All, (_, _, _) => Nothing);
 
         Assert.Equal(StoppedBecause.NothingMoreOpened, played.Stopped);
         Assert.Equal(1, played.Passes);
@@ -444,7 +444,7 @@ public class PlayingItThroughTests
             new WorldData([start]),
             "1.0",
             TestRules.All,
-            (_, _) =>
+            (_, _, _) =>
             {
                 if (given) return Nothing;
 
@@ -474,7 +474,7 @@ public class PlayingItThroughTests
             new WorldData([start]),
             "1.0",
             TestRules.All,
-            (_, _) => new PlayedScript([], [], [], [], null, 1));
+            (_, _, _) => new PlayedScript([], [], [], [], null, 1));
 
         Assert.True(played.FightsSkipped >= 1);
         Assert.Equal(0, played.FightsWon);
@@ -500,7 +500,7 @@ public class PlayingItThroughTests
             new WorldData([start]),
             "1.0",
             TestRules.All,
-            (_, _) =>
+            (_, _, _) =>
             {
                 // Keeps opening something for a few passes, so the loop keeps going and has
                 // every chance to fight the same person again.
@@ -521,7 +521,7 @@ public class PlayingItThroughTests
     {
         var world = new WorldData([Room("1.0")]) { FlagsAtStart = [0x0820] };
 
-        Attempt played = Autoplayer.Play(world, "1.0", TestRules.All, (_, _) => Nothing);
+        Attempt played = Autoplayer.Play(world, "1.0", TestRules.All, (_, _, _) => Nothing);
 
         Assert.Contains(0x0820, played.Flags);
     }
@@ -536,7 +536,7 @@ public class PlayingItThroughTests
             new WorldData([start]),
             "1.0",
             TestRules.All,
-            (_, _) => new PlayedScript([], [], [], [0x1B5], null, null));
+            (_, _, _) => new PlayedScript([], [], [], [0x1B5], null, null));
 
         Assert.True(played.Specials[0x1B5] >= 1);
     }
@@ -575,7 +575,7 @@ public class WhatTheFirstRealRunFoundTests
             new WorldData([start]),
             "1.0",
             TestRules.All,
-            (_, _) =>
+            (_, _, _) =>
             {
                 if (given) return new PlayedScript([], [], [], [], null, null);
 
@@ -611,7 +611,7 @@ public class WhatTheFirstRealRunFoundTests
             TestRules.All,
 
             // One sets it, the next clears it, for ever. Nothing is ever actually learned.
-            (_, _) => ++turn % 2 == 1
+            (_, _, _) => ++turn % 2 == 1
                 ? new PlayedScript([0x0100], [], [], [], null, null)
                 : new PlayedScript([], [0x0100], [], [], null, null));
 
@@ -643,7 +643,7 @@ public class WhatTheFirstRealRunFoundTests
             new WorldData([start]),
             "1.0",
             TestRules.All,
-            (_, _) =>
+            (_, _, _) =>
             {
                 if (handed) return new PlayedScript([], [], [], [], null, 1);
 
@@ -665,7 +665,7 @@ public class WhatTheFirstRealRunFoundTests
             new WorldData([start]),
             "1.0",
             TestRules.All,
-            (_, _) => new PlayedScript([], [], [], [], null, 1));
+            (_, _, _) => new PlayedScript([], [], [], [], null, 1));
 
         Assert.Equal(0, played.PartiesHealed);
     }
