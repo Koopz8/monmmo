@@ -65,6 +65,11 @@ public static class Abilities
     public const int RockHead = 69;
     public const int InnerFocus = 39;
     public const int StickyHold = 60;
+    public const int Trace = 36;
+    public const int ColorChange = 16;
+    public const int Forecast = 59;
+    public const int ShedSkin = 61;
+    public const int SpeedBoost = 3;
     public const int Limber = 7;
     public const int VoltAbsorb = 10;
     public const int WaterAbsorb = 11;
@@ -129,7 +134,50 @@ public static class Abilities
         // up and having an item taken were all here already and none of them had ever been
         // asked whether the creature would allow it.
         Sturdy, BattleArmor, ShellArmor, RockHead, InnerFocus, Damp, StickyHold,
+
+        // And the five that were waiting for something. Three wanted a creature whose type
+        // or ability a fight can change, which arrived with the moves that move them; two
+        // wanted somewhere to happen at the end of a turn, which arrived with the berries.
+        // None of them is new machinery either — all five are old hooks with a new caller.
+        Trace, ColorChange, Forecast, ShedSkin, SpeedBoost,
     ];
+
+    /// <summary>Whether this one takes on the ability of whoever it is standing opposite.</summary>
+    public static bool CopiesTheirAbility(int ability) => ability == Trace;
+
+    /// <summary>
+    /// Whether this one becomes the type of whatever just hit it.
+    /// <para>
+    /// The only ability in the game whose owner is a different creature after every
+    /// exchange, and it could not be written at all until a type was something a fight
+    /// could change.
+    /// </para>
+    /// </summary>
+    public static bool BecomesWhatHitIt(int ability) => ability == ColorChange;
+
+    /// <summary>
+    /// Whether this one's type follows the sky.
+    /// <para>
+    /// One species has it. Under a clear sky it is what it was born as, and under each of
+    /// the four it is the type that causes that weather — the same mapping the move whose
+    /// type follows the sky uses, and the same reason: it is the game's own arrangement
+    /// rather than an opinion about weather.
+    /// </para>
+    /// </summary>
+    public static bool FollowsTheSky(int ability) => ability == Forecast;
+
+    /// <summary>
+    /// How often this one sheds whatever ails it, at the end of a turn. <b>Modelled.</b>
+    /// <para>
+    /// Nought for every ability but one. A third is the games' figure and is nowhere in the
+    /// data — which makes it the same kind of number as the three in ten for answering a
+    /// touch, and it is named in the same place for the same reason.
+    /// </para>
+    /// </summary>
+    public static int ShedsChance(int ability) => ability == ShedSkin ? 33 : 0;
+
+    /// <summary>Whether this one gets faster at the end of every turn.</summary>
+    public static bool GetsFaster(int ability) => ability == SpeedBoost;
 
     /// <summary>Whether this one cannot simply be ended, however much is left.</summary>
     public static bool CannotBeEndedOutright(int ability) => ability == Sturdy;

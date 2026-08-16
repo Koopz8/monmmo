@@ -367,6 +367,15 @@ public class AbilityTests
             // failed the moment they were added, which is the whole reason it exists: a
             // meta-guard that quietly accepted an ability it had no way of seeing would be
             // no guard at all.
+            // And a tenth way: the ones that change what their owner is, or that happen at
+            // the end of a turn. Both of those needed something the engine did not have
+            // until the moves that move a type and an ability were written.
+            bool changesWhatItIs = Abilities.CopiesTheirAbility(ability)
+                || Abilities.BecomesWhatHitIt(ability)
+                || Abilities.FollowsTheSky(ability)
+                || Abilities.ShedsChance(ability) > 0
+                || Abilities.GetsFaster(ability);
+
             bool refusesWhatIsDone = Abilities.CannotBeEndedOutright(ability)
                 || Abilities.NeverCritical(ability)
                 || Abilities.PaysNoRecoil(ability)
@@ -376,7 +385,7 @@ public class AbilityTests
 
             if (!refuses && !changesDamage && !changesAttack && !readsTheSky && !arrives
                 && !answersATouch && !refusesToBeWorsened && !aboutLeaving
-                && !refusesWhatIsDone)
+                && !refusesWhatIsDone && !changesWhatItIs)
             {
                 inert.Add(ability);
             }

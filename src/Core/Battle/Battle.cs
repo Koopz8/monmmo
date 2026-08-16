@@ -808,6 +808,29 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         if (Abilities.Brings(arriving.Ability) is not Weather.None and var sky && Sky != sky)
             BeginWeather(sky, events);
 
+        // Taking on the ability opposite. Read before anything else this one might do with
+        // an ability, because from here on it IS that ability — and after the weather
+        // above, so a traced DRIZZLE does not also have to bring the rain.
+        if (Abilities.CopiesTheirAbility(arriving.Ability))
+        {
+            Battler opposite = Of(side.Other());
+
+            // Nothing to take from somebody with nothing, and nothing to take from another
+            // one of these — which would otherwise be two creatures each holding a copy of
+            // the other's copy.
+            if (opposite.Ability != Abilities.None && !Abilities.CopiesTheirAbility(opposite.Ability))
+            {
+                arriving.BorrowedAbility = opposite.Ability;
+
+                events.Add(new BattleEvent.AbilityMoved(side, opposite.Ability));
+            }
+        }
+
+        // And the one whose type follows the sky, which has to be settled on arrival as well
+        // as when the sky changes — walking in under rain is not a change of weather and
+        // would otherwise be missed.
+        FollowTheSky(side, arriving, events);
+
         if (Abilities.Cows(arriving.Ability) is not 0 and var stages)
         {
             Side at = side.Other();
@@ -896,6 +919,10 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         SkyTurns = Skies.Turns;
 
         events.Add(new BattleEvent.WeatherBegan(weather));
+
+        // And anybody whose type follows it. Both sides, because a sky belongs to the room.
+        FollowTheSky(Side.Player, Player, events);
+        FollowTheSky(Side.Opponent, Opponent, events);
     }
 
     public Battler Player { get; } = player;
@@ -1232,6 +1259,45 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
 
             if (IsOver) return;
         }
+    }
+
+    /// <summary>
+    /// Settles the type of anybody whose type follows the sky.
+    /// <para>
+    /// Called on arrival and whenever the weather changes, which between them are every
+    /// moment the answer can differ. It writes the same borrowed type the moves that change
+    /// a type write, so everything downstream — the chart, the same-type bonus, what a move
+    /// is resisted by — needs to know nothing about this at all.
+    /// </para>
+    /// <para>
+    /// Under a clear sky it puts the creature back to what it was born as by clearing the
+    /// borrowed type, rather than by writing its birth type in. Those look the same and are
+    /// not: writing it in would make a rain that ended leave a permanent copy of something
+    /// the creature already was, which nothing could later tell from a move having done it.
+    /// </para>
+    /// </summary>
+    private void FollowTheSky(Side side, Battler battler, List<BattleEvent> events)
+    {
+        if (!Abilities.FollowsTheSky(battler.Ability)) return;
+
+        PokemonType becomes = Skies.Lends(Overhead);
+
+        if (Overhead == Weather.None)
+        {
+            if (battler.BorrowedType is null) return;
+
+            battler.BorrowedType = null;
+
+            events.Add(new BattleEvent.ChangedType(side, battler.Type1));
+
+            return;
+        }
+
+        if (battler.BorrowedType == becomes) return;
+
+        battler.BorrowedType = becomes;
+
+        events.Add(new BattleEvent.ChangedType(side, becomes));
     }
 
     /// <summary>Whether this kind does nothing itself and uses another move instead.</summary>
@@ -2061,6 +2127,17 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             // on the creature, which is why this sits below the stand-in rather than above
             // it: energy nobody felt is not energy to give back.
             if (defender.IsGathering) defender.Gathered += dealt;
+
+            // And becoming whatever just hit it, for the one ability whose owner is a
+            // different creature after every exchange. Only when the hit reached the
+            // creature, and only when it is not already that type — becoming what you
+            // already are is a change nobody made.
+            if (Abilities.BecomesWhatHitIt(defender.Ability) && !defender.Is(move.Type))
+            {
+                defender.BorrowedType = move.Type;
+
+                events.Add(new BattleEvent.ChangedType(Other(side), move.Type));
+            }
 
             total += dealt;
             landed++;
@@ -3438,6 +3515,11 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         events.Add(new BattleEvent.WeatherEnded(Sky));
 
         Sky = Weather.None;
+
+        // The sky ending is a change like any other, so anybody following it goes back to
+        // what they were born as.
+        FollowTheSky(Side.Player, Player, events);
+        FollowTheSky(Side.Opponent, Opponent, events);
     }
 
     private void ApplyEndOfTurn(List<BattleEvent> events)
@@ -3534,6 +3616,29 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
 
                     continue;
                 }
+            }
+
+            // Shedding whatever ails it, which is the cheapest possible use of the hook the
+            // berries needed.
+            if (battler.Status != StatusCondition.None && Rolls(Abilities.ShedsChance(battler.Ability)))
+            {
+                battler.Status = StatusCondition.None;
+                battler.SleepTurns = 0;
+
+                events.Add(new BattleEvent.PutRight(side, 0, Ailments.None));
+            }
+
+            // And getting faster, every turn, for as long as it is standing there. A stage
+            // like any other, so the shield against being made worse does not apply — this
+            // is the creature improving itself rather than somebody else doing anything.
+            if (Abilities.GetsFaster(battler.Ability))
+            {
+                int before = battler.StageOf(Stat.Speed);
+
+                battler.ChangeStage(Stat.Speed, 1);
+
+                events.Add(new BattleEvent.StageChanged(
+                    side, Stat.Speed, 1, battler.StageOf(Stat.Speed) != before));
             }
 
             if (battler.TauntTurns > 0) battler.TauntTurns--;
