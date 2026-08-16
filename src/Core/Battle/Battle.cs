@@ -97,6 +97,7 @@ public enum Side
 [JsonDerivedType(typeof(UsedInstead), "usedinstead")]
 [JsonDerivedType(typeof(LearnedMove), "learnedmove")]
 [JsonDerivedType(typeof(AbilityMoved), "abilitymoved")]
+[JsonDerivedType(typeof(LostItsNerve), "lostitsnerve")]
 [JsonDerivedType(typeof(Damped), "damped")]
 [JsonDerivedType(typeof(MustRepeat), "mustrepeat")]
 [JsonDerivedType(typeof(GotAway), "gotaway")]
@@ -371,6 +372,16 @@ public abstract record BattleEvent
 
     /// <summary>An ability moved from one creature to another, or between them.</summary>
     public sealed record AbilityMoved(Side Side, int Ability) : BattleEvent;
+
+    /// <summary>
+    /// Was hit while winding up something that needed quiet, and so did not throw it.
+    /// <para>
+    /// Its own line rather than the general "nothing happened", because this one is the
+    /// whole risk of the move: a player who cannot tell the difference between "I was
+    /// interrupted" and "it did not work" cannot learn to play around it.
+    /// </para>
+    /// </summary>
+    public sealed record LostItsNerve(Side Side) : BattleEvent;
 
     /// <summary>Turned one kind of move down, for the room rather than for anybody.</summary>
     public sealed record Damped(Side Side) : BattleEvent;
@@ -1058,6 +1069,14 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
 
         _clawed = null;
 
+        // What has happened to each of them this turn, which is nothing yet. Cleared here
+        // rather than at the end, so that a fight inspected between turns still shows what
+        // the turn did — and so a move that answers being hit cannot answer last turn's hit.
+        Player.HurtThisTurn = 0;
+        Player.HurtThisTurnBy = null;
+        Opponent.HurtThisTurn = 0;
+        Opponent.HurtThisTurnBy = null;
+
         Side[] order = DecideOrder(playerAction, opponentAction);
 
         if (_clawed is { } hurried) events.Add(new BattleEvent.WentFirst(hurried, Of(hurried).Holding));
@@ -1091,6 +1110,12 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
 
         // And the two that hold for a count rather than for the turn. Ticked in the same
         // place for the same reason: whatever a fight does to a turn, it ends here.
+        // And how long each of them has been standing there, which goes up at the end so
+        // that the turn somebody arrives is nought for the whole of it. Counting at the top
+        // would make the move that only works on arrival never work at all.
+        Player.TurnsOut++;
+        Opponent.TurnsOut++;
+
         if (Player.MistTurns > 0) Player.MistTurns--;
         if (Opponent.MistTurns > 0) Opponent.MistTurns--;
         if (Player.SafeguardTurns > 0) Player.SafeguardTurns--;
@@ -1394,6 +1419,24 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         // implemented without anybody counting.
         if (MoveEffects.IsSilent(move.Effect)) _steppedOver.Add(move.Id);
 
+        // The two that refuse on account of what has already happened this turn. Checked
+        // here, after the move is announced and before anything is rolled, because both of
+        // them are the move failing rather than the move missing — and the difference is
+        // visible: a miss spends a guard's turn and a refusal does not.
+        if (kind.Kind == EffectKind.FirstImpression && attacker.TurnsOut > 0)
+        {
+            events.Add(new BattleEvent.NothingHappened(side));
+
+            return;
+        }
+
+        if (kind.Kind == EffectKind.NeedsQuiet && attacker.HurtThisTurn > 0)
+        {
+            events.Add(new BattleEvent.LostItsNerve(side));
+
+            return;
+        }
+
         // The five that use a move that is not this one. Resolved here rather than with the
         // other effects because they are not effects — nothing about this move happens at
         // all, and everything after this point is about a move that has not been chosen yet.
@@ -1623,6 +1666,13 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
 
             int dealt = defender.TakeDamage(coming);
 
+            // Written down for the six moves that are answers to being hit. The running
+            // total rather than the last hit, because a DOUBLESLAP that lands five times hurt
+            // five times — and the kind of the last thing that did it, which is what the two
+            // that give it back doubled are choosy about.
+            defender.HurtThisTurn += dealt;
+            defender.HurtThisTurnBy = move.Category;
+
             total += dealt;
             landed++;
 
@@ -1804,6 +1854,20 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         EffectKind.LevelDamage => attacker.Level,
         EffectKind.HalfTheirHealth => defender.CurrentHp / 2,
         EffectKind.DownToMine => defender.CurrentHp - attacker.CurrentHp,
+
+        // Twice what was just taken, and only from the kind each one is for. A number worked
+        // out from what happened rather than from the formula, which is why they belong here
+        // with the other moves whose damage is not a calculation.
+        //
+        // Nought when nothing of the right kind landed, and nought is a refusal rather than
+        // a hit for nothing — the caller turns it into "it had no effect", which is exactly
+        // what these do when used on a quiet turn.
+        EffectKind.Counters =>
+            attacker.HurtThisTurnBy == DamageCategory.Physical ? attacker.HurtThisTurn * 2 : 0,
+
+        EffectKind.CountersSpecial =>
+            attacker.HurtThisTurnBy == DamageCategory.Special ? attacker.HurtThisTurn * 2 : 0,
+
         _ => null,
     };
 
@@ -2471,7 +2535,7 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             return;
         }
 
-        if (effect.Kind == EffectKind.Flinch)
+        if (effect.Kind is EffectKind.Flinch or EffectKind.FirstImpression)
         {
             // Set on the target, and it only costs them anything if they have not gone
             // yet. Nothing clears it at the end of a turn because nothing needs to: the

@@ -43,6 +43,11 @@ public static class DamageCalculator
     {
         if (move.AlwaysHits) return true;
 
+        // And the one that never misses without its record saying so. A move that comes last
+        // in exchange for certainty is a trade, and the certainty is the half that is not on
+        // the record.
+        if (MoveEffects.Of(move.Effect).Kind == EffectKind.SlowAndSure) return true;
+
         // The one move the sky overrules. THUNDER cannot miss in rain and is half as
         // likely to land in sun — and it is a group of one in the cartridge's own effect
         // table, so this is a rule about a move rather than about a family.

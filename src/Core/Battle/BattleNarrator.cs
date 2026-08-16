@@ -255,6 +255,8 @@ public static class BattleNarrator
 
         BattleEvent.AbilityMoved e => $"{names.Of(e.Side)} took on a new ability!",
 
+        BattleEvent.LostItsNerve e => $"{names.Of(e.Side)} lost its focus and could not move!",
+
         BattleEvent.Damped e => $"{names.Of(e.Side)} damped one kind of move down!",
 
         BattleEvent.Grazed e => $"{names.Of(e.Side)} is hurt reaching them!",

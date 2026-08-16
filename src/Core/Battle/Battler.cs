@@ -325,6 +325,36 @@ public sealed class Battler
     public MoveData? LastMove { get; set; }
 
     /// <summary>
+    /// How much this one has been hurt by a move so far this turn, and of which kind.
+    /// <para>
+    /// Cleared at the top of every turn. Six moves in this game are answers to being hit
+    /// rather than things done on their own account, and all six need the same two facts:
+    /// whether it happened, and — for the two that give it back doubled — how much and by
+    /// which of the two kinds.
+    /// </para>
+    /// <para>
+    /// It belongs to the creature rather than to the battle because the answer is different
+    /// for each of them, and it is a number rather than a flag because giving back twice
+    /// what you took requires knowing what you took.
+    /// </para>
+    /// </summary>
+    public int HurtThisTurn { get; set; }
+
+    /// <summary>Which kind did it, or nothing when nothing has.</summary>
+    public DamageCategory? HurtThisTurnBy { get; set; }
+
+    /// <summary>
+    /// How many turns this one has been on the field, counted from nought.
+    /// <para>
+    /// One move cares, and it cares a great deal: it only works on the turn its user
+    /// arrives. That is what makes it a move somebody leads with rather than a free flinch
+    /// every turn, and it is the only thing in this engine that has ever needed to know how
+    /// long somebody has been standing there.
+    /// </para>
+    /// </summary>
+    public int TurnsOut { get; set; }
+
+    /// <summary>
     /// Puts a different move in a slot for the rest of this fight.
     /// <para>
     /// Two moves in this game do this and they differ in one thing only: whether it survives
@@ -565,6 +595,12 @@ public sealed class Battler
         LastSlot = null;
         LastMove = null;
         BorrowedAbility = null;
+        HurtThisTurn = 0;
+        HurtThisTurnBy = null;
+
+        // Back to nought, which is the whole of what makes the move that only works on the
+        // turn its user arrives work again when they arrive again.
+        TurnsOut = 0;
         DisabledSlot = null;
         DisabledTurns = 0;
         IsAway = false;

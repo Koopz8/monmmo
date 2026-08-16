@@ -43,6 +43,9 @@ public static class MovePower
     /// <summary>SMELLINGSALT: twice as hard against something that cannot move properly.</summary>
     public const byte Rousing = 0xAB;
 
+    /// <summary>REVENGE: twice as hard when its user has already been hit this turn.</summary>
+    public const byte Answering = 0xB9;
+
     /// <summary>FURY CUTTER: twice as hard for every turn running it has already landed.</summary>
     public const byte Building = 0x77;
 
@@ -101,6 +104,11 @@ public static class MovePower
         Overhead or Whirling or Underfoot when defender is { IsAway: true } => move.Power * 2,
 
         Rousing when defender is { Status: StatusCondition.Paralysis } => move.Power * 2,
+
+        // The one power here that depends on something the attacker had done to it rather
+        // than on anything about either creature. It goes last in a turn, so by the time it
+        // is asked the answer is settled.
+        Answering when attacker.HurtThisTurn > 0 => move.Power * 2,
 
         // The two that climb. What they climb from is the battle's count of how many turns
         // running this same slot has been used — the only power here that depends on a turn

@@ -167,6 +167,24 @@ public enum EffectKind
     /// <summary>Trades abilities with the other one.</summary>
     SwapsAbility,
 
+    /// <summary>Gives back twice what a physical move just took.</summary>
+    Counters,
+
+    /// <summary>The same, for the other kind.</summary>
+    CountersSpecial,
+
+    /// <summary>Twice as hard when its user has already been hit this turn.</summary>
+    Revenges,
+
+    /// <summary>Only on the turn its user arrives, and it makes them flinch.</summary>
+    FirstImpression,
+
+    /// <summary>Comes last, and comes to nothing if its user is hit before it lands.</summary>
+    NeedsQuiet,
+
+    /// <summary>Comes last, and never misses.</summary>
+    SlowAndSure,
+
     /// <summary>Lands several times in one turn.</summary>
     MultiHit,
 
@@ -505,6 +523,20 @@ public static class MoveEffects
         // And the two that move an ability rather than a move.
         0xB2 => new MoveEffect(EffectKind.TakesAbility, OnUser: true),
         0xBF => new MoveEffect(EffectKind.SwapsAbility, OnUser: true),
+
+        // The six that answer what has already happened this turn.
+        //
+        // Every one of them goes early or late, and none of that is written here: the
+        // priority is a signed byte on the move's own record and this engine has ordered by
+        // it since long before any of these had an effect. What is left for these lines is
+        // only the part that is not ordering — which is why a family described as "needs to
+        // act out of turn" turned out to need nothing of the sort.
+        0x59 => new MoveEffect(EffectKind.Counters, OnUser: true),
+        0x90 => new MoveEffect(EffectKind.CountersSpecial, OnUser: true),
+        0xB9 => new MoveEffect(EffectKind.Revenges, OnUser: false),
+        0x9E => new MoveEffect(EffectKind.FirstImpression, OnUser: false),
+        0xAA => new MoveEffect(EffectKind.NeedsQuiet, OnUser: false),
+        0x4E => new MoveEffect(EffectKind.SlowAndSure, OnUser: false),
 
         // Which type each damps is the item-name problem again: MUD SPORT is about Electric
         // because of what it is called, so the pairing is modelled and the grouping is read.
