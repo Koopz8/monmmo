@@ -98,7 +98,11 @@ public static class SongLoader
                 // rather than played, and a song whose every track is dropped comes back as
                 // nothing at all rather than as a song of no tracks.
                 .Where(read => read.EndedProperly)
-                .Select(read => new Track(read.Events)),
+
+                // Whether the track repeats travels with it. Without it a performer can
+                // count the tracks that have stopped but not the ones that were never
+                // supposed to, and those are the same number until they are not.
+                .Select(read => new Track(read.Events, read.Loops)),
         ];
 
         if (tracks.Count == 0)

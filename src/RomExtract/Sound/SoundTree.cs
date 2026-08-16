@@ -93,6 +93,45 @@ public sealed record SongHeaderRecord(
     public static int SizeOf(int trackCount) => 8 + trackCount * 4;
 }
 
+/// <summary>
+/// Why a thing at an offset is not a song header.
+/// <para>
+/// The table names headers this walk did not confirm, and until now that was one word
+/// covering six faults across three layers. Which one it is says whether to look at the
+/// table, the voicegroup walk or the file itself.
+/// </para>
+/// </summary>
+public enum SongRejection
+{
+    /// <summary>It is one. Nothing was rejected.</summary>
+    None,
+
+    /// <summary>The header, or the pointers it claims, run off the end of the file.</summary>
+    PastTheEnd,
+
+    /// <summary>
+    /// The first byte is not a track count anything could have. Nought, or more than the
+    /// hardware mixes — which usually means the offset is not a header at all.
+    /// </summary>
+    TrackCount,
+
+    /// <summary>Where the voicegroup should be is not an address into this cartridge.</summary>
+    VoicegroupNotAPointer,
+
+    /// <summary>
+    /// It names a voicegroup that resolves but that the walk below did not confirm.
+    /// <para>
+    /// The interesting one, and the one that means the fault is a layer down rather than
+    /// here. A song naming a real voicegroup this build could not find is a recording or an
+    /// instrument that was rejected, not a bad header.
+    /// </para>
+    /// </summary>
+    VoicegroupNotConfirmed,
+
+    /// <summary>One of its track pointers is not an address into this cartridge.</summary>
+    TrackNotAPointer,
+}
+
 /// <summary>One entry of the song table: a song, and which group it belongs to.</summary>
 public sealed record SongTableEntry(int Index, int HeaderOffset, byte Group)
 {

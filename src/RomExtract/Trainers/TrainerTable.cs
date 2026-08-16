@@ -25,6 +25,32 @@ public sealed record TrainerRecord(
     bool IsDouble,
     IReadOnlyList<TrainerMon> Party)
 {
+    /// <summary>
+    /// Byte two of the record, which has been read past since trainers were first read.
+    /// <para>
+    /// The class is byte one and the picture is byte three, and the byte between them went
+    /// nowhere — the same shape as <c>MapHeaderRecord.Music</c>, which carried the map's song
+    /// number for a hundred and sixty milestones before anything asked for it.
+    /// </para>
+    /// <para>
+    /// It is <b>read</b> and it is deliberately not named. What can be said from the file is
+    /// that its low seven bits take one of a small handful of values across the whole trainer
+    /// table and its top bit does not — which is the shape of a small index and a flag packed
+    /// into one byte, and is why the two are separated here rather than reported as one
+    /// number. What the index selects is not in any table on the cartridge, so calling it a
+    /// music id here would be importing a fact from somewhere else and printing it as though
+    /// it had been found. The distribution is printed instead; see the trainer section of the
+    /// dump.
+    /// </para>
+    /// </summary>
+    public int PackedByte { get; init; }
+
+    /// <summary>The low seven bits of <see cref="PackedByte"/> — a small index.</summary>
+    public int PackedIndex => PackedByte & 0x7F;
+
+    /// <summary>The top bit of <see cref="PackedByte"/>, which varies independently of it.</summary>
+    public bool PackedFlag => (PackedByte & 0x80) != 0;
+
     public const int RecordSizeBytes = 40;
 
     /// <summary>The most a party can hold. A count past this is not a trainer record.</summary>
@@ -33,6 +59,9 @@ public sealed record TrainerRecord(
     private const int NameOffset = 4;
     private const int NameLength = 12;
     private const int DoubleOffset = 24;
+
+    /// <summary>Between the class and the picture, and read past until now.</summary>
+    private const int PackedByteOffset = 2;
     private const int PartySizeOffset = 32;
     private const int PartyPointerOffset = 36;
 
@@ -90,7 +119,10 @@ public sealed record TrainerRecord(
             rom.ReadU8(offset + 3),
             GameText.Decode(rom.Slice(offset + NameOffset, NameLength)),
             rom.ReadU8(offset + DoubleOffset) == 1,
-            members);
+            members)
+        {
+            PackedByte = rom.ReadU8(offset + PackedByteOffset),
+        };
     }
 
     /// <summary>

@@ -23,6 +23,27 @@ public sealed class Jukebox(Func<int, SongPlayer?> load, Mixer mixer)
     private SongPlayer? _player;
 
     /// <summary>
+    /// The one-off songs, by the group their table entry names.
+    /// <para>
+    /// <b>Why a group and not a list.</b> A sound effect in this engine is a song in the same
+    /// table as the music, and the eight-byte table entry carries a small number written
+    /// twice — <b>read</b>, and the strongest thing in the entry after the pointer itself.
+    /// The driver has several performers rather than one, and that number is understood to
+    /// say which of them a song is for. <b>That reading is modelled</b>: nothing in the data
+    /// says what the number means, only that it is there and that it repeats.
+    /// </para>
+    /// <para>
+    /// What follows from it is the useful part. Two songs naming the same performer cannot
+    /// both be on, so a second one arriving replaces the first — which is why a door opening
+    /// twice in quick succession is one noise rather than two, and why a menu beep does not
+    /// pile up into a drone when somebody holds a direction. How many may overlap is
+    /// therefore not a number invented here; it is however many performers the cartridge
+    /// names, counted from the table.
+    /// </para>
+    /// </summary>
+    private readonly Dictionary<int, SongPlayer> _effects = [];
+
+    /// <summary>
     /// Which song was last asked for, whether or not it turned out to exist.
     /// <para>
     /// Nought is a real song number on this cartridge, so "nothing asked for yet" has to be
@@ -84,10 +105,78 @@ public sealed class Jukebox(Func<int, SongPlayer?> load, Mixer mixer)
     {
         _player = null;
         _asked = Nothing;
+
+        foreach (SongPlayer effect in _effects.Values) effect.Silence();
+
+        _effects.Clear();
     }
 
     /// <summary>
-    /// A one-off noise, over the top of whatever is playing.
+    /// How many one-off songs are being performed over the music.
+    /// <para>
+    /// Nought most of the time, which is what makes it worth reporting: an effect that starts
+    /// and never finishes is a performer that stays here for ever, and this is the number
+    /// that says so.
+    /// </para>
+    /// </summary>
+    public int Effects => _effects.Count;
+
+    /// <summary>
+    /// How many one-off songs have been fetched, which says whether firing one did anything.
+    /// </summary>
+    public int EffectFetches { get; private set; }
+
+    /// <summary>
+    /// A song laid over the music rather than instead of it.
+    /// <para>
+    /// This is the thing the sound work did not have. A faint, a door, a healing machine, a
+    /// menu beep — all of them are song numbers in the same table as the town themes, and
+    /// this jukebox played one song at a time, so there was no way to sound one without
+    /// stopping the music. Cries only worked because they are not songs at all: they go onto
+    /// the mixer as a raw recording and bypass the whole performer.
+    /// </para>
+    /// <para>
+    /// Unlike <see cref="Play"/>, the same song asked for twice starts again. That is not an
+    /// inconsistency — it is the same rule applied to a different thing. Music asked for
+    /// twice carries on because a building's rooms are separate maps naming one theme; an
+    /// effect asked for twice is somebody pressing the button twice, and hearing nothing the
+    /// second time is the bug.
+    /// </para>
+    /// </summary>
+    /// <param name="song">The song number, from the same table the music comes from.</param>
+    /// <param name="group">
+    /// Which performer it is for, off its table entry. Anything already on that performer
+    /// stops. A caller with no group to give may pass the song number itself, which makes
+    /// every effect its own performer and lets them all overlap.
+    /// </param>
+    /// <returns>Whether a song was found and started.</returns>
+    public bool PlayOver(int song, int group)
+    {
+        if (song == Nothing) return false;
+
+        EffectFetches++;
+
+        SongPlayer? started = _load(song);
+
+        // A song this cartridge does not have leaves whatever was on that performer alone.
+        // Silencing it would mean a missing effect could cut short a real one, which is a
+        // worse failure than a missing effect.
+        if (started is null) return false;
+
+        Replace(group, started);
+
+        return true;
+    }
+
+    private void Replace(int group, SongPlayer started)
+    {
+        if (_effects.TryGetValue(group, out SongPlayer? was)) was.Silence();
+
+        _effects[group] = started;
+    }
+
+    /// <summary>
+    /// A one-off recording, over the top of whatever is playing.
     /// <para>
     /// Over the top rather than instead of. A creature's cry is the sound the game makes when
     /// it comes out, and the music does not stop for it — a jukebox that swapped one for the
@@ -99,7 +188,7 @@ public sealed class Jukebox(Func<int, SongPlayer?> load, Mixer mixer)
     /// first caller that wanted it to.
     /// </para>
     /// </summary>
-    public void PlayOver(Voice voice, int rate)
+    public void PlayRecording(Voice voice, int rate)
     {
         if (voice.Audio.Length == 0) return;
 
@@ -127,14 +216,52 @@ public sealed class Jukebox(Func<int, SongPlayer?> load, Mixer mixer)
     {
         int wanted = Math.Max(0, samples);
 
-        short[] played = _player is null ? _mixer.Render(wanted) : _player.Render(wanted);
+        var output = new short[wanted];
 
-        if (played.Length == wanted) return played;
+        for (int i = 0; i < wanted; i++)
+        {
+            _player?.Advance();
 
-        var padded = new short[wanted];
+            // Taken as a list because a finished effect is dropped from the dictionary in
+            // this same pass, and a sample is a bad moment to be enumerating something that
+            // is changing.
+            if (_effects.Count > 0) AdvanceEffects();
 
-        played.CopyTo(padded, 0);
+            // Once, however many performers there are. This is the whole of what the split
+            // between advancing and mixing bought.
+            output[i] = _mixer.Next();
+        }
 
-        return padded;
+        return output;
+    }
+
+    /// <summary>
+    /// Every one-off song forward by one sample, and the ones that have finished let go.
+    /// <para>
+    /// Let go rather than cut off. The performer stops putting notes on the moment its tracks
+    /// run out, but the last note it started is still sounding, and a recording has a tail —
+    /// so releasing it lets it fade at the rate its own instrument says. Removing it without
+    /// releasing would leave a note on the mixer with nothing to stop it, and on a looping
+    /// recording with a sustain that never falls that is a drone nothing can silence.
+    /// </para>
+    /// </summary>
+    private void AdvanceEffects()
+    {
+        List<int>? done = null;
+
+        foreach ((int group, SongPlayer effect) in _effects)
+        {
+            effect.Advance();
+
+            if (!effect.IsFinished) continue;
+
+            effect.Silence();
+
+            (done ??= []).Add(group);
+        }
+
+        if (done is null) return;
+
+        foreach (int group in done) _effects.Remove(group);
     }
 }
