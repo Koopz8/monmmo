@@ -237,22 +237,30 @@ public class TheLargeThreeTests
 
         var battle = new Battle(you, them, 7);
 
-        Turn(battle);
+        // Every hit that lands on the gatherer, over both turns, summed from the events
+        // rather than sampled from the field. Sampling after the first turn and asserting
+        // "at least twice that" is what the first version did, and it passes just as
+        // happily when the move gives back once — because the second turn adds another
+        // hit's worth to the pile. The claim is an equality and it has to be tested as one.
+        List<BattleEvent> first = Turn(battle);
 
         Assert.True(you.IsGathering);
 
-        int took = you.Gathered;
-
-        Assert.True(took > 0, "nothing landed, so there is nothing to give back");
-
-        int before = them.CurrentHp;
-
-        Turn(battle);
+        List<BattleEvent> second = Turn(battle);
 
         Assert.False(you.IsGathering);
 
-        // Everything it took over both turns, doubled.
-        Assert.True(before - them.CurrentHp >= took * 2);
+        int landed = first.Concat(second)
+            .OfType<BattleEvent.DamageDealt>()
+            .Where(e => e.Side == Side.Player)
+            .Sum(e => e.Damage);
+
+        Assert.True(landed > 0, "nothing landed, so there is nothing to give back");
+
+        BattleEvent.GaveItBack gave =
+            second.OfType<BattleEvent.GaveItBack>().Single();
+
+        Assert.Equal(landed * 2, gave.Damage);
     }
 
     /// <summary>And it says both halves out loud.</summary>
