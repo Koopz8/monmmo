@@ -15,6 +15,32 @@ namespace PokeMmo.RomExtract.Sound;
 /// as the song is playing.
 /// </para>
 /// </summary>
+/// <summary>
+/// Why a song did not come back, when one did not.
+/// <para>
+/// "142 of 255 songs do not assemble" is a number nobody can act on. Which of these it is
+/// says whether the trouble is in the table, the voicegroup walk or the track reader — three
+/// entirely different places, and until now they were one word.
+/// </para>
+/// </summary>
+public enum SongTrouble
+{
+    /// <summary>It came back.</summary>
+    None,
+
+    /// <summary>No such song number in the table.</summary>
+    NoSuchSong,
+
+    /// <summary>The table names a header this walk did not confirm.</summary>
+    NoHeader,
+
+    /// <summary>The header names a voicegroup this walk did not confirm.</summary>
+    NoVoicegroup,
+
+    /// <summary>Every one of its tracks ran off somewhere this reader could not follow.</summary>
+    EveryTrackDropped,
+}
+
 public static class SongLoader
 {
     /// <summary>
@@ -25,17 +51,42 @@ public static class SongLoader
     /// finding is not a thing to paper over with a rest.
     /// </para>
     /// </summary>
-    public static SongPlayer? Load(Rom rom, SoundTreeResult tree, int song, Mixer mixer)
+    public static SongPlayer? Load(Rom rom, SoundTreeResult tree, int song, Mixer mixer) =>
+        Load(rom, tree, song, mixer, out _);
+
+    /// <summary>
+    /// The same, and why not when not. Every caller that reports rather than plays wants the
+    /// reason, and a caller that merely plays can go on ignoring it.
+    /// </summary>
+    public static SongPlayer? Load(
+        Rom rom, SoundTreeResult tree, int song, Mixer mixer, out SongTrouble why)
     {
-        if (song < 0 || song >= tree.Table.Count) return null;
+        why = SongTrouble.None;
+
+        if (song < 0 || song >= tree.Table.Count)
+        {
+            why = SongTrouble.NoSuchSong;
+
+            return null;
+        }
 
         int at = tree.Table[song].HeaderOffset;
 
-        if (tree.Songs.FirstOrDefault(s => s.Offset == at) is not { } header) return null;
+        if (tree.Songs.FirstOrDefault(s => s.Offset == at) is not { } header)
+        {
+            why = SongTrouble.NoHeader;
+
+            return null;
+        }
 
         List<Instrument> voicegroup = Voicegroup(rom, tree, header.VoicegroupOffset);
 
-        if (voicegroup.Count == 0) return null;
+        if (voicegroup.Count == 0)
+        {
+            why = SongTrouble.NoVoicegroup;
+
+            return null;
+        }
 
         List<Track> tracks =
         [
@@ -50,7 +101,14 @@ public static class SongLoader
                 .Select(read => new Track(read.Events)),
         ];
 
-        return tracks.Count == 0 ? null : new SongPlayer(tracks, voicegroup, mixer);
+        if (tracks.Count == 0)
+        {
+            why = SongTrouble.EveryTrackDropped;
+
+            return null;
+        }
+
+        return new SongPlayer(tracks, voicegroup, mixer);
     }
 
     /// <summary>

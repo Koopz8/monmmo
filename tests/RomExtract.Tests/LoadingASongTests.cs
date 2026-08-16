@@ -33,7 +33,10 @@ public class LoadingASongTests
         Assert.NotNull(SongLoader.Load(rom, tree, 0, new Mixer(8000)));
     }
 
-    /// <summary>And every song in the table does, not only the first.</summary>
+    /// <summary>
+    /// And every song in the table does, bar the one deliberately broken — which is the
+    /// only one allowed to fail, and has to fail for the stated reason.
+    /// </summary>
     [Fact]
     public void AndEverySongInTheTableDoes()
     {
@@ -41,8 +44,47 @@ public class LoadingASongTests
 
         Assert.NotEmpty(tree.Table);
 
+        int broken = tree.Table.ToList().FindIndex(
+            e => e.HeaderOffset
+                 == SyntheticRom.SongHeadersOffset
+                    + SyntheticRom.SongWhoseEveryTrackIsBroken * SyntheticRom.SongStride);
+
+        Assert.True(broken >= 0, "the broken song is not in the table, so it proves nothing");
+
         for (int song = 0; song < tree.Table.Count; song++)
-            Assert.NotNull(SongLoader.Load(rom, tree, song, new Mixer(8000)));
+        {
+            SongPlayer? player = SongLoader.Load(rom, tree, song, new Mixer(8000), out SongTrouble why);
+
+            if (song == broken)
+            {
+                Assert.Null(player);
+                Assert.Equal(SongTrouble.EveryTrackDropped, why);
+
+                continue;
+            }
+
+            Assert.NotNull(player);
+            Assert.Equal(SongTrouble.None, why);
+        }
+    }
+
+    /// <summary>
+    /// And a song number the table does not have says which of the four troubles it is.
+    /// <para>
+    /// "It did not come back" is one word for the table, the voicegroup walk and the track
+    /// reader, and those are three entirely different places to look.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AndItSaysWhichTroubleItWas()
+    {
+        (Rom rom, SoundTreeResult tree) = Cartridge();
+
+        SongLoader.Load(rom, tree, tree.Table.Count, new Mixer(8000), out SongTrouble past);
+        SongLoader.Load(rom, tree, -1, new Mixer(8000), out SongTrouble before);
+
+        Assert.Equal(SongTrouble.NoSuchSong, past);
+        Assert.Equal(SongTrouble.NoSuchSong, before);
     }
 
     /// <summary>

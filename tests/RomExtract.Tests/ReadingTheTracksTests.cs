@@ -155,9 +155,10 @@ public class ReadingTheTracksTests
 
         Assert.NotEmpty(tracks);
 
-        // All but one. The fixture's last song carries a track that runs off the end of the
-        // file on purpose, so that everything downstream has an unfinished track to refuse.
-        Assert.Equal(tracks.Count - 1, tracks.Count(t => t.EndedProperly));
+        // All but two. One song carries a last track that runs off the end of the file, and
+        // one song's only track does — so everything downstream has both an unfinished track
+        // to drop and a song with nothing left to assemble.
+        Assert.Equal(tracks.Count - 2, tracks.Count(t => t.EndedProperly));
 
         Assert.Contains(said, l => l.Contains("ran to an end"));
         Assert.Contains(said, l => l.Contains("does not account for"));

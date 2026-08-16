@@ -76,6 +76,18 @@ public static class SoundLocator
                 pointers > 0
                     ? $"    the table's own address appears {pointers} time(s) elsewhere in the file"
                     : "    nothing in the file points at this table, which is worth a second look");
+
+            // Where the run began is where the first entry this build could confirm sits,
+            // which is not necessarily where the table begins: an early song whose header
+            // was not confirmed would cut the front off. So the slots just before it are
+            // asked the same question, and one of them being pointed at says the table
+            // starts there and this walk found the middle of it.
+            if (pointers == 0 && EarlierStart(rom, tableOffset) is { } earlier)
+            {
+                log?.Invoke(
+                    $"    but 0x{earlier:X6} is, which is {(tableOffset - earlier) / SongTableEntry.SizeBytes} "
+                    + "entries earlier — the table probably starts there and this found the middle");
+            }
         }
 
         var result = new SoundTreeResult(samples, voicegroups, songs, tableOffset, table, pointers);
@@ -108,7 +120,13 @@ public static class SoundLocator
         // Read off a cartridge rather than off a document. The cry table's 388 entries all
         // carry 0x20 and every one of them points at a confirmed recording, which is as
         // direct a demonstration that it names a recording as this project can get.
-        0x20 or 0x28 => InstrumentKind.Sampled,
+        //
+        // 0x30 earned its place the same way and afterwards: with 0x20 admitted, the walk
+        // reported 379 further entries carrying 0x30 that also name confirmed recordings.
+        // Three hundred and seventy-nine is not a coincidence. The same report also showed
+        // 0x10 twice and 0x70 once, and two of a thing is exactly what a coincidence looks
+        // like — so those are still counted rather than admitted.
+        0x20 or 0x28 or 0x30 or 0x38 => InstrumentKind.Sampled,
         0x01 or 0x02 or 0x09 or 0x0A => InstrumentKind.Square,
         0x03 or 0x0B => InstrumentKind.Wave,
         0x04 or 0x0C => InstrumentKind.Noise,
@@ -357,6 +375,31 @@ public static class SoundLocator
     /// than loaded, which is exactly why this is reported rather than enforced.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// How many entry-slots before a found table are pointed at by something in the file.
+    /// <para>
+    /// The first slot found this way, or nothing. A table whose own start is pointed at
+    /// nowhere and whose sixth-earlier slot is pointed at twice is a table this walk found
+    /// the middle of, and that is a far more useful thing to print than silence.
+    /// </para>
+    /// </summary>
+    private static int? EarlierStart(Rom rom, int tableOffset)
+    {
+        for (int back = 1; back <= MostEntriesToLookBack; back++)
+        {
+            int at = tableOffset - back * SongTableEntry.SizeBytes;
+
+            if (at < 0) break;
+
+            if (PointersTo(rom, at) > 0) return at;
+        }
+
+        return null;
+    }
+
+    /// <summary>How far before a found table to look for its real start. <b>Modelled.</b></summary>
+    private const int MostEntriesToLookBack = 64;
+
     private static int PointersTo(Rom rom, int offset)
     {
         uint address = Rom.BaseAddress + (uint)offset;

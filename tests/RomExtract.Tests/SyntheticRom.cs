@@ -824,7 +824,8 @@ public sealed class SyntheticRom
             {
                 // The last song's last track is the one that never ends, so a loader that
                 // drops what it could not follow has something to drop.
-                bool unfinished = song == SongWithAnUnfinishedTrack && track == tracks - 1;
+                bool unfinished = (song == SongWithAnUnfinishedTrack && track == tracks - 1)
+                                  || song == SongWhoseEveryTrackIsBroken;
 
                 WriteU32(
                     at + 8 + track * 4,
@@ -1526,6 +1527,17 @@ public sealed class SyntheticRom
     /// </para>
     /// </summary>
     public const int SongWithAnUnfinishedTrack = SongCount - 1;
+
+    /// <summary>
+    /// A song every one of whose tracks runs off the end of the file.
+    /// <para>
+    /// It does not come back at all, and the reason it does not is the thing being tested:
+    /// "142 of 255 songs do not assemble" is a number nobody can act on, and which of the
+    /// three places the trouble is in is a number somebody can. Index eight has one track,
+    /// which is what makes every track of it broken and one track broken the same thing.
+    /// </para>
+    /// </summary>
+    public const int SongWhoseEveryTrackIsBroken = 8;
 
     public const int SongStride = 128;
 

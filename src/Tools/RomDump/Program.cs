@@ -5634,29 +5634,46 @@ public static class Program
 
         var loaded = 0;
         var tracks = 0;
-        var missing = new List<int>();
+        var dropped = 0;
+        var trouble = new Dictionary<SongTrouble, int>();
 
         for (int song = 0; song < tree.Table.Count; song++)
         {
-            if (SongLoader.Load(rom, tree, song, mixer) is not { } player)
+            if (SongLoader.Load(rom, tree, song, mixer, out SongTrouble why) is not { } player)
             {
-                missing.Add(song);
+                trouble[why] = trouble.GetValueOrDefault(why) + 1;
 
                 continue;
             }
 
             loaded++;
             tracks += player.TrackCount;
+
+            // A song that comes back with fewer tracks than its header claims is a song
+            // partly read, which is a different and quieter failure than one that does not
+            // come back at all.
+            dropped += tree.Songs.First(s => s.Offset == tree.Table[song].HeaderOffset).TrackCount
+                       - player.TrackCount;
         }
 
         Console.WriteLine($"  {loaded} of {tree.Table.Count} songs assemble, {tracks} tracks between them");
 
-        if (missing.Count > 0)
+        if (dropped > 0)
+            Console.WriteLine($"    and {dropped} more tracks were dropped from songs that did assemble");
+
+        // Which of the three places the trouble is in, rather than one word for all of them.
+        foreach ((SongTrouble why, int count) in trouble.OrderByDescending(p => p.Value))
         {
-            Console.WriteLine(
-                $"    {missing.Count} do not: " +
-                string.Join(", ", missing.Take(20)) + (missing.Count > 20 ? ", ..." : ""));
+            Console.WriteLine($"    {count} did not, because: {Explain(why)}");
         }
+
+        static string Explain(SongTrouble why) => why switch
+        {
+            SongTrouble.NoHeader => "the table names a header this walk did not confirm",
+            SongTrouble.NoVoicegroup => "the header names a voicegroup this walk did not confirm",
+            SongTrouble.EveryTrackDropped => "every track ran somewhere the reader could not follow",
+            _ => why.ToString(),
+        };
     }
 
     private static void WriteSilentPeople(Rom rom)
