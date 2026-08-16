@@ -1893,6 +1893,36 @@ public static class Program
 
         Console.WriteLine($"    {trainers.Count(t => t.IsDouble)} double battles");
 
+        // Byte two, between the class and the picture, read past since trainers were first
+        // read. Printed rather than named: what its low seven bits select is not in any table
+        // on this file, so calling it anything here would be importing a fact from elsewhere
+        // and printing it as though it had been found.
+        //
+        // What the numbers should say if the split is right: a handful of distinct low values
+        // across the whole table, and a top bit that is set on roughly the share of trainers
+        // you would expect to differ in some one way. A low half taking dozens of values, or
+        // a top bit that is never set, would mean the byte is one field rather than two.
+        var lowHalves = trainers.GroupBy(t => t.PackedIndex).OrderByDescending(g => g.Count()).ToList();
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    byte 2 of the record: {lowHalves.Count} distinct value(s) in its low seven bits, "
+            + $"top bit set on {trainers.Count(t => t.PackedFlag)} of {trainers.Count}");
+
+        foreach (IGrouping<int, TrainerRecord> half in lowHalves.Take(10))
+        {
+            Console.WriteLine(
+                $"      {half.Key,3}: {half.Count(),4} trainers — classes "
+                + string.Join(", ", half.Select(t => t.Class).Distinct().OrderBy(c => c).Take(6)));
+        }
+
+        if (lowHalves.Count > 10) Console.WriteLine($"      ... and {lowHalves.Count - 10} more");
+
+        Console.WriteLine(
+            lowHalves.Count <= 16
+                ? "      a few values across the whole table is what a small index looks like"
+                : "      that many values is not a small index, and the byte is probably one field");
+
         // How many have no name at all. A handful at the front of the table is
         // ordinary — placeholders left over from development. Most of them having no
         // name would mean the name is not where this thinks it is, which is a different
