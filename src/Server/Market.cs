@@ -24,7 +24,9 @@ namespace PokeMmo.Server;
 /// store that settles them, which is the only place that argument can be settled correctly.
 /// </para>
 /// </summary>
-public sealed class Market(IMarketStore store, Action<long>? forget = null)
+public sealed class Market(
+    IMarketStore store,
+    Func<long, CancellationToken, ValueTask<IAsyncDisposable>>? hold = null)
 {
     /// <summary>How many listings a browse shows before it stops.</summary>
     private const int APageful = 20;
@@ -35,6 +37,25 @@ public sealed class Market(IMarketStore store, Action<long>? forget = null)
 
     /// <summary>What the last thing anybody did at the market came to, for the log.</summary>
     public string? Last { get; private set; }
+
+    /// <summary>
+    /// One account, out of whoever is saving it for the length of one act at the market.
+    /// <para>
+    /// A market with nobody saving behind it — every test in this project, and any server
+    /// whose store cannot hold a market — gets a handle that does nothing. The alternative
+    /// is a null check at five call sites, four of which would eventually be right.
+    /// </para>
+    /// </summary>
+    private ValueTask<IAsyncDisposable> HeldAsync(long accountId, CancellationToken cancellationToken) =>
+        hold?.Invoke(accountId, cancellationToken) ?? new ValueTask<IAsyncDisposable>(NothingHeld.It);
+
+    /// <summary>A handle over nothing, for when nobody else is writing this account.</summary>
+    private sealed class NothingHeld : IAsyncDisposable
+    {
+        public static readonly NothingHeld It = new();
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
 
     public async Task<List<Outgoing>> RunAsync(
         GameWorld world,
@@ -246,22 +267,24 @@ public sealed class Market(IMarketStore store, Action<long>? forget = null)
         // The snapshot as it will be once this works, taken before anything is committed.
         // The in-memory copy is not touched until the disk has agreed — a creature removed
         // from a box in memory and then refused by the store is a creature nobody has.
+        // This account, out of the scribe's hands until everything below has happened.
+        // Without it a photograph taken a moment ago can be developed after the store
+        // has agreed and land on top of it, putting a listed creature back in its
+        // seller's box while the listing still exists.
+        await using IAsyncDisposable mine = await HeldAsync(accountId, cancellationToken);
+
         if (world.Snapshot(playerId) is not { } before) return [];
 
         SavedCharacter withoutIt = before with { Box = [.. before.Box.Where((_, at) => at != slot)] };
 
         // Anything the scribe is still holding for this account is dropped, because it is
         // older than what is about to be written and would land on top of it.
-        forget?.Invoke(accountId);
-
         long listingId = await store.ListAsync(accountId, withoutIt, offered, price, cancellationToken);
 
         world.Locked(playerId, p =>
         {
             if (slot < p.Box.Count) p.Box.RemoveAt(slot);
         });
-
-        forget?.Invoke(accountId);
 
         Last = $"listed species {offered.Species} at {price} as listing {listingId}";
 
@@ -296,6 +319,12 @@ public sealed class Market(IMarketStore store, Action<long>? forget = null)
         if (held < count)
             return [Said(playerId, $"you have {held} of item {itemId}, not {count}")];
 
+        // This account, out of the scribe's hands until everything below has happened.
+        // Without it a photograph taken a moment ago can be developed after the store
+        // has agreed and land on top of it, putting a listed creature back in its
+        // seller's box while the listing still exists.
+        await using IAsyncDisposable mine = await HeldAsync(accountId, cancellationToken);
+
         if (world.Snapshot(playerId) is not { } before) return [];
 
         // What the bag will hold once these have gone, worked out on a copy so that a
@@ -303,14 +332,10 @@ public sealed class Market(IMarketStore store, Action<long>? forget = null)
         var shorter = new Bag(before.Items);
         shorter.Remove(itemId, count);
 
-        forget?.Invoke(accountId);
-
         long listingId = await store.ListItemsAsync(
             accountId, before with { Items = shorter.Entries }, itemId, count, price, cancellationToken);
 
         world.Locked(playerId, p => p.Bag.Remove(itemId, count));
-
-        forget?.Invoke(accountId);
 
         Last = $"listed {count} of item {itemId} at {price} as listing {listingId}";
 
@@ -334,9 +359,13 @@ public sealed class Market(IMarketStore store, Action<long>? forget = null)
     {
         if (line.Number(0) is not { } listingId) return [Said(playerId, "/cancel <listing id>")];
 
-        if (world.Snapshot(playerId) is not { } before) return [];
+        // This account, out of the scribe's hands until everything below has happened.
+        // Without it a photograph taken a moment ago can be developed after the store
+        // has agreed and land on top of it, putting a listed creature back in its
+        // seller's box while the listing still exists.
+        await using IAsyncDisposable mine = await HeldAsync(accountId, cancellationToken);
 
-        forget?.Invoke(accountId);
+        if (world.Snapshot(playerId) is not { } before) return [];
 
         Parcel? back = await store.CancelAsync(accountId, listingId, before, cancellationToken);
 
@@ -351,8 +380,6 @@ public sealed class Market(IMarketStore store, Action<long>? forget = null)
         {
             world.Locked(playerId, p => p.Bag.Add(coming.Item, coming.Count));
 
-            forget?.Invoke(accountId);
-
             Last = $"took back {coming.Count} of item {coming.Item} from listing {listingId}";
 
             return
@@ -363,8 +390,6 @@ public sealed class Market(IMarketStore store, Action<long>? forget = null)
         }
 
         world.Locked(playerId, p => p.Box.Add(coming.Creature!));
-
-        forget?.Invoke(accountId);
 
         Last = $"took back species {coming.Creature!.Species} from listing {listingId}";
 
@@ -384,9 +409,13 @@ public sealed class Market(IMarketStore store, Action<long>? forget = null)
         if (world.BoxSize > 0 && player.Box.Count >= world.BoxSize)
             return [Said(playerId, "the box is full")];
 
-        if (world.Snapshot(playerId) is not { } before) return [];
+        // This account, out of the scribe's hands until everything below has happened.
+        // Without it a photograph taken a moment ago can be developed after the store
+        // has agreed and land on top of it, putting a listed creature back in its
+        // seller's box while the listing still exists.
+        await using IAsyncDisposable mine = await HeldAsync(accountId, cancellationToken);
 
-        forget?.Invoke(accountId);
+        if (world.Snapshot(playerId) is not { } before) return [];
 
         var bought = await store.BuyAsync(accountId, listingId, before, cancellationToken);
 
@@ -405,8 +434,6 @@ public sealed class Market(IMarketStore store, Action<long>? forget = null)
                 p.Money = Math.Max(0, p.Money - deal.Price);
             });
 
-            forget?.Invoke(accountId);
-
             Last = $"bought listing {listingId}, {deal.Bought.Count} of item {deal.Bought.Item}, for {deal.Price}";
 
             return
@@ -424,8 +451,6 @@ public sealed class Market(IMarketStore store, Action<long>? forget = null)
             p.Money = Math.Max(0, p.Money - deal.Price);
         });
 
-        forget?.Invoke(accountId);
-
         Last = $"bought listing {listingId}, species {creature.Species}, for {deal.Price}";
 
         return [Said(playerId, $"bought species {creature.Species} for {deal.Price} — it is in the box")];
@@ -434,9 +459,13 @@ public sealed class Market(IMarketStore store, Action<long>? forget = null)
     private async Task<List<Outgoing>> CollectAsync(
         GameWorld world, int playerId, long accountId, CancellationToken cancellationToken)
     {
-        if (world.Snapshot(playerId) is not { } before) return [];
+        // This account, out of the scribe's hands until everything below has happened.
+        // Without it a photograph taken a moment ago can be developed after the store
+        // has agreed and land on top of it, putting a listed creature back in its
+        // seller's box while the listing still exists.
+        await using IAsyncDisposable mine = await HeldAsync(accountId, cancellationToken);
 
-        forget?.Invoke(accountId);
+        if (world.Snapshot(playerId) is not { } before) return [];
 
         int paid = await store.CollectAsync(accountId, before, GameWorld.MaxMoney, cancellationToken);
 
@@ -448,8 +477,6 @@ public sealed class Market(IMarketStore store, Action<long>? forget = null)
         }
 
         world.Locked(playerId, p => p.Money = Math.Min(GameWorld.MaxMoney, p.Money + paid));
-
-        forget?.Invoke(accountId);
 
         Last = $"collected {paid}";
 

@@ -832,7 +832,7 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
         // A market only exists when the store behind it can hold one. The in-memory store
         // the tests use cannot, and a server running on it simply has no market rather
         // than a market that loses things.
-        _market = store is IMarketStore selling ? new Market(selling, _scribe.Forget) : null;
+        _market = store is IMarketStore selling ? new Market(selling, _scribe.HoldAsync) : null;
         _friends = store is IFriendStore listing ? new Friends(listing) : null;
 
         _ = TickAsync(cancellationToken);
@@ -1527,24 +1527,35 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
             {
                 if (playerId != 0)
                 {
-                    // Written before the player is removed, because a snapshot needs
-                    // them still in the world. A crash between here and the last save
-                    // costs whatever happened since — which is why catching saves
-                    // immediately rather than waiting for a clean disconnect.
-                    if (world.Snapshot(playerId) is { } state)
+                    // Taken out of the scribe's hands first, and the photograph taken
+                    // second. That order is the whole of it: a snapshot taken before the
+                    // hold could be one from the middle of a market transaction, and
+                    // waiting for the gate and then writing it anyway would be the same
+                    // bug with a narrower window rather than no bug.
+                    //
+                    // Forgetting alone would not do, because forgetting cannot stop a write
+                    // already in progress. Somebody who lists a creature and closes the
+                    // game in the same breath is the case: without this, a snapshot with
+                    // the creature still in the box lands on top of the listing.
+                    await using (_scribe is { } writing
+                        ? await writing.HoldAsync(accountId, CancellationToken.None).ConfigureAwait(false)
+                        : null)
                     {
-                        // By hand, and newer than anything queued — so whatever the
-                        // scribe was still holding for this account is dropped rather
-                        // than written after it.
-                        _scribe?.Forget(accountId);
-
-                        try
+                        // Written before the player is removed, because a snapshot needs
+                        // them still in the world. A crash between here and the last save
+                        // costs whatever happened since — which is why catching saves
+                        // immediately rather than waiting for a clean disconnect.
+                        if (world.Snapshot(playerId) is { } state)
                         {
-                            await store.SaveAsync(accountId, state, CancellationToken.None).ConfigureAwait(false);
-                        }
-                        catch (Exception ex)
-                        {
-                            Console.Error.WriteLine($"! could not save #{playerId}: {ex.Message}");
+                            try
+                            {
+                                await store.SaveAsync(accountId, state, CancellationToken.None)
+                                    .ConfigureAwait(false);
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.Error.WriteLine($"! could not save #{playerId}: {ex.Message}");
+                            }
                         }
                     }
 

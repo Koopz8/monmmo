@@ -31,6 +31,14 @@ namespace PokeMmo.Server;
 /// so the connection's own last save stays where it is, synchronous, and takes precedence
 /// by simply being newer.
 /// </para>
+/// <para>
+/// And what is <em>also</em> not safe — the thing <see cref="HoldAsync"/> exists for — is
+/// anything else writing the same account while a photograph of it is being developed.
+/// <see cref="Forget"/> alone cannot stop that: by the time it is called the pump may
+/// already have taken the state out of the queue and be inside the write. The market is the
+/// one place that writes a character by hand while its owner is still playing, and a stale
+/// photograph landing on top of a listing is a creature in two places at once.
+/// </para>
 /// </summary>
 public sealed class Scribe : IAsyncDisposable
 {
@@ -56,9 +64,27 @@ public sealed class Scribe : IAsyncDisposable
     private readonly CancellationTokenSource _stopping;
     private readonly Task _writing;
 
+    /// <summary>
+    /// One gate per account, held by whoever is writing that account.
+    /// <para>
+    /// Per account rather than one for everybody, because two players saving at once is the
+    /// ordinary case and a single gate would put every save on this server behind the
+    /// slowest one.
+    /// </para>
+    /// <para>
+    /// Never removed. A gate is a few dozen bytes and the set is bounded by how many
+    /// accounts have played since this process started; taking one out is a race against
+    /// whoever is about to ask for it, and losing that race is the bug this whole thing
+    /// exists to prevent.
+    /// </para>
+    /// </summary>
+    private readonly ConcurrentDictionary<long, SemaphoreSlim> _gates = new();
+
     private long _noted;
     private long _written;
     private long _failed;
+    private long _waitedFor;
+    private int _stopped;
 
     public Scribe(IPlayerStore store, CancellationToken cancellationToken)
     {
@@ -84,6 +110,65 @@ public sealed class Scribe : IAsyncDisposable
 
     /// <summary>How many writes threw. Counted rather than swallowed.</summary>
     public long Failed => Interlocked.Read(ref _failed);
+
+    /// <summary>
+    /// How many times this had to wait for somebody else to finish writing an account.
+    /// <para>
+    /// Counted because it is the number that says whether the gate below is doing anything.
+    /// Nought forever would mean the window it closes was never open, and a large number
+    /// would mean the market is busy enough to be worth a different arrangement.
+    /// </para>
+    /// </summary>
+    public long WaitedFor => Interlocked.Read(ref _waitedFor);
+
+    /// <summary>
+    /// Takes one account out of this scribe's hands until the returned handle is disposed.
+    /// <para>
+    /// For whoever is about to write that character by hand. While it is held, the pump
+    /// will not write this account — it waits — so a photograph taken before the hand-written
+    /// change cannot land on top of it afterwards.
+    /// </para>
+    /// <para>
+    /// Anything already queued is dropped on the way in <em>and</em> on the way out. On the
+    /// way in because it is older than what is about to be written; on the way out because
+    /// something may have been noted from memory during the hold, and memory did not know
+    /// about the change until the very end of it.
+    /// </para>
+    /// </summary>
+    public async ValueTask<IAsyncDisposable> HoldAsync(
+        long accountId, CancellationToken cancellationToken = default)
+    {
+        SemaphoreSlim gate = GateFor(accountId);
+
+        if (!await gate.WaitAsync(0, cancellationToken).ConfigureAwait(false))
+        {
+            Interlocked.Increment(ref _waitedFor);
+
+            await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        Forget(accountId);
+
+        return new Hold(this, accountId, gate);
+    }
+
+    private SemaphoreSlim GateFor(long accountId) =>
+        _gates.GetOrAdd(accountId, _ => new SemaphoreSlim(1, 1));
+
+    /// <summary>
+    /// One account, held. Disposing it forgets whatever was noted meanwhile and lets the
+    /// pump have the account back.
+    /// </summary>
+    private sealed class Hold(Scribe scribe, long accountId, SemaphoreSlim gate) : IAsyncDisposable
+    {
+        public ValueTask DisposeAsync()
+        {
+            scribe.Forget(accountId);
+            gate.Release();
+
+            return ValueTask.CompletedTask;
+        }
+    }
 
     /// <summary>
     /// Hands over the newest state of one character. Returns at once, always.
@@ -125,29 +210,44 @@ public sealed class Scribe : IAsyncDisposable
             {
                 while (_queue.Reader.TryRead(out long accountId))
                 {
-                    // Taken out rather than read, so that anything noted while this one
-                    // is being written queues itself again and is not lost.
-                    if (!_latest.TryRemove(accountId, out SavedCharacter? state)) continue;
+                    SemaphoreSlim gate = GateFor(accountId);
+
+                    // The gate before the state, and that order is the whole point. Taking
+                    // the state out first would put it beyond the reach of the Forget that
+                    // whoever holds this account has already done, and it would then be
+                    // written after their change — which is the duplicate this prevents.
+                    await gate.WaitAsync(_stopping.Token).ConfigureAwait(false);
 
                     try
                     {
-                        _onDisk.TryGetValue(accountId, out SavedCharacter? already);
+                        // Taken out rather than read, so that anything noted while this one
+                        // is being written queues itself again and is not lost.
+                        if (!_latest.TryRemove(accountId, out SavedCharacter? state)) continue;
 
-                        await _store
-                            .SaveAsync(accountId, state, _stopping.Token, already)
-                            .ConfigureAwait(false);
+                        try
+                        {
+                            _onDisk.TryGetValue(accountId, out SavedCharacter? already);
 
-                        _onDisk[accountId] = state;
+                            await _store
+                                .SaveAsync(accountId, state, _stopping.Token, already)
+                                .ConfigureAwait(false);
 
-                        Interlocked.Increment(ref _written);
+                            _onDisk[accountId] = state;
+
+                            Interlocked.Increment(ref _written);
+                        }
+                        catch (Exception ex) when (ex is not OperationCanceledException)
+                        {
+                            Interlocked.Increment(ref _failed);
+
+                            // Said out loud, because a save that fails quietly is one that
+                            // looks like it worked until somebody logs in.
+                            Console.Error.WriteLine($"! could not write account {accountId}: {ex.Message}");
+                        }
                     }
-                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    finally
                     {
-                        Interlocked.Increment(ref _failed);
-
-                        // Said out loud, because a save that fails quietly is one that
-                        // looks like it worked until somebody logs in.
-                        Console.Error.WriteLine($"! could not write account {accountId}: {ex.Message}");
+                        gate.Release();
                     }
                 }
             }
@@ -164,9 +264,17 @@ public sealed class Scribe : IAsyncDisposable
     /// A server that is asked to stop must not throw away the last few seconds of
     /// everybody's play, so this is a flush and not a cancel.
     /// </para>
+    /// <para>
+    /// Being asked twice does nothing the second time. Disposing twice is allowed of
+    /// anything disposable and this used to throw on the way out, which turns a tidy-up into
+    /// an error — and a shutdown path that throws is a shutdown path that skips whatever
+    /// came after it.
+    /// </para>
     /// </summary>
     public async ValueTask DisposeAsync()
     {
+        if (Interlocked.Exchange(ref _stopped, 1) == 1) return;
+
         _queue.Writer.TryComplete();
 
         // The pump first, and before anything is cancelled — it is very likely part way
@@ -184,10 +292,17 @@ public sealed class Scribe : IAsyncDisposable
         // to stop, plus everything the pump never reached because it was cancelled.
         foreach ((long accountId, SavedCharacter state) in _latest.ToArray())
         {
-            if (!_latest.TryRemove(accountId, out _)) continue;
+            // The same gate as the pump takes, because a market transaction can still be in
+            // flight while a server is being asked to stop, and "on the way out" is no
+            // reason to write over one.
+            SemaphoreSlim gate = GateFor(accountId);
+
+            await gate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
 
             try
             {
+                if (!_latest.TryRemove(accountId, out _)) continue;
+
                 await _store.SaveAsync(accountId, state, CancellationToken.None).ConfigureAwait(false);
 
                 Interlocked.Increment(ref _written);
@@ -197,6 +312,10 @@ public sealed class Scribe : IAsyncDisposable
                 Interlocked.Increment(ref _failed);
 
                 Console.Error.WriteLine($"! could not write account {accountId} on the way out: {ex.Message}");
+            }
+            finally
+            {
+                gate.Release();
             }
         }
 
