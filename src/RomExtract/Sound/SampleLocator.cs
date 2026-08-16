@@ -12,9 +12,19 @@ public sealed record SampleRecord(
     bool Loops,
     uint Pitch,
     int LoopStart,
-    int Length)
+    int Length,
+    bool Compressed = false)
 {
     public const int HeaderBytes = 16;
+
+    /// <summary>
+    /// How many bytes of the file this recording actually occupies.
+    /// <para>
+    /// The same as its length when it is plain audio, and a good deal less when it is
+    /// packed — which is the whole point of packing it.
+    /// </para>
+    /// </summary>
+    public int DataBytes => Compressed ? CryDecoder.PackedBytesFor(Length) : Length;
 
     /// <summary>Where the audio itself starts.</summary>
     public int DataOffset => Offset + HeaderBytes;
@@ -77,10 +87,25 @@ public static class SampleLocator
         0x01EC_C000, 0x0237_6800, 0x0273_2400, 0x0291_0000,
     ];
 
-    /// <summary>Unlooped, and the only other legal value.</summary>
-    private const byte Straight = 0x00;
+    /// <summary>
+    /// The three legal values of the header's first four bytes, read as one number.
+    /// <para>
+    /// Reading four bytes rather than checking three zeroes and a flag is not tidiness — the
+    /// third value below has its marker in the <em>first</em> byte rather than the fourth,
+    /// and a reader that insisted on three leading zeroes could never see it. That is exactly
+    /// what this one did until the cries were looked at, and it is why every packed recording
+    /// on the cartridge was invisible.
+    /// </para>
+    /// </summary>
+    private const uint Straight = 0x0000_0000;
 
-    private const byte Looped = 0x40;
+    private const uint Looped = 0x4000_0000;
+
+    /// <summary>
+    /// Packed rather than plain: the marker a cry carries. Never looped — nothing in this
+    /// format is both.
+    /// </summary>
+    private const uint Packed = 0x0000_0001;
 
     /// <summary>
     /// The shortest run of audio worth believing in. <b>Modelled.</b>
@@ -116,12 +141,9 @@ public static class SampleLocator
 
         for (int offset = 0; offset + SampleRecord.HeaderBytes <= rom.Length; offset += 4)
         {
-            if (rom.ReadU8(offset) != 0 || rom.ReadU8(offset + 1) != 0 || rom.ReadU8(offset + 2) != 0)
-                continue;
+            uint kind = rom.ReadU32(offset);
 
-            byte looping = rom.ReadU8(offset + 3);
-
-            if (looping is not (Straight or Looped)) continue;
+            if (kind is not (Straight or Looped or Packed)) continue;
 
             uint pitch = rom.ReadU32(offset + 4);
 
@@ -139,17 +161,23 @@ public static class SampleLocator
 
             if (length is < ShortestBelievable or > LongestBelievable) continue;
 
+            bool packed = kind == Packed;
+
             // It has to actually fit. This is the check that does most of the work at the
             // end of the file, where a header can pass every other test and still describe
-            // a sound that runs off the edge.
-            if (offset + SampleRecord.HeaderBytes + length > rom.Length) continue;
+            // a sound that runs off the edge. A packed recording occupies about half what
+            // its length says, which is the whole reason it is packed.
+            long bytes = packed ? CryDecoder.PackedBytesFor((int)length) : length;
+
+            if (offset + SampleRecord.HeaderBytes + bytes > rom.Length) continue;
 
             // And a loop point inside the sound it loops. A looped sample whose loop starts
             // past its own end is not a sample.
-            if (looping == Looped && loopStart >= length) continue;
-            if (looping == Straight && loopStart != 0) continue;
+            if (kind == Looped && loopStart >= length) continue;
+            if (kind != Looped && loopStart != 0) continue;
 
-            found.Add(new SampleRecord(offset, looping == Looped, pitch, (int)loopStart, (int)length));
+            found.Add(new SampleRecord(
+                offset, kind == Looped, pitch, (int)loopStart, (int)length, packed));
         }
 
         log?.Invoke($"  {found.Count} recorded sounds");
@@ -158,7 +186,7 @@ public static class SampleLocator
         {
             log?.Invoke(
                 $"    {found.Count(s => s.Loops)} loop, " +
-                $"{found.Count(s => !s.Loops)} do not; " +
+                $"{found.Count(s => s.Compressed)} are packed; " +
                 $"rates {string.Join(", ", found.Select(s => s.Rate).Distinct().Order())}");
         }
 

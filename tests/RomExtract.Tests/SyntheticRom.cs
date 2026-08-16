@@ -419,6 +419,45 @@ public sealed class SyntheticRom
         WriteSamples();
         WriteSoundTree();
         WriteAnimations();
+        WriteCries();
+    }
+
+    /// <summary>
+    /// Two packed recordings whose contents can be checked without reimplementing the
+    /// difference table — which would make the test a copy of the code rather than a check
+    /// on it.
+    /// <para>
+    /// One is all noughts, so it holds one value flat; one is all ones, so it climbs by one
+    /// a sample. Both are true of the format regardless of what the other fourteen entries
+    /// in the table are.
+    /// </para>
+    /// </summary>
+    private void WriteCries()
+    {
+        Packed(FlatCryOffset, FlatCryValue, nibble: 0x0);
+        Packed(RampCryOffset, RampCryStart, nibble: 0x1);
+
+        void Packed(int at, sbyte first, int nibble)
+        {
+            // The marker is in the first byte rather than the fourth, which is the whole
+            // reason these were invisible to the locator until now.
+            WriteU32(at, 0x0000_0001);
+            WriteU32(at + 4, 0x00D10C00);
+            WriteU32(at + 8, 0);
+            WriteU32(at + 12, CrySamples - 1);
+
+            byte both = (byte)(nibble << 4 | nibble);
+
+            for (int block = 0; block < CrySamples / 64; block++)
+            {
+                int start = at + 16 + block * 33;
+
+                _data[start] = unchecked((byte)first);
+                _data[start + 1] = (byte)nibble;
+
+                for (int i = 2; i < 33; i++) _data[start + i] = both;
+            }
+        }
     }
 
     /// <summary>
@@ -1435,6 +1474,29 @@ public sealed class SyntheticRom
     /// failure the locator leans on to reject things that were never scripts.
     /// </summary>
     public const int AnimWithABadOpcodeOffset = 0x181200;
+
+    // --- packed recordings (cries) -----------------------------------------------------
+
+    /// <summary>
+    /// A packed recording whose every difference is nought, so it decodes to one value held
+    /// flat. Checkable without reimplementing the table, which is what makes it worth having.
+    /// </summary>
+    public const int FlatCryOffset = 0x190000;
+
+    /// <summary>
+    /// And one whose every difference is the second entry — a step of one — so it decodes to
+    /// a ramp. Also checkable without the table, from the other direction.
+    /// </summary>
+    public const int RampCryOffset = 0x190400;
+
+    /// <summary>Samples in each: two whole blocks.</summary>
+    public const int CrySamples = 128;
+
+    /// <summary>The value the flat one holds.</summary>
+    public const sbyte FlatCryValue = -40;
+
+    /// <summary>Where the ramp starts, at the beginning of each of its blocks.</summary>
+    public const sbyte RampCryStart = -100;
 
     public const int ItemTableOffset = 0x110000;
     public const int ItemDescriptionsOffset = 0x114000;
