@@ -146,6 +146,24 @@ public sealed class SongPlayer
     /// <summary>True once every track has run out.</summary>
     public bool IsFinished => _cursors.All(c => c.Finished);
 
+    /// <summary>How many tracks have run out, which is not always all or none.</summary>
+    public int Ran => _cursors.Count(c => c.Finished);
+
+    /// <summary>
+    /// How many ticks have been taken, how many commands run, and how many notes begun.
+    /// <para>
+    /// A song stuck on one note sounds from outside exactly like a song playing quietly,
+    /// and these three numbers say which of the ways it is stuck. No ticks means the clock;
+    /// ticks but no commands means every track is waiting; commands but no notes means the
+    /// track is running settings and nothing else.
+    /// </para>
+    /// </summary>
+    public int Ticks { get; private set; }
+
+    public int Commands { get; private set; }
+
+    public int Notes { get; private set; }
+
     /// <summary>The tempo in force, which a track may change part-way through.</summary>
     public int BeatsPerMinute => _beatsPerMinute;
 
@@ -182,6 +200,8 @@ public sealed class SongPlayer
     /// <summary>One tick of the sequencer: every track that is not waiting takes its turn.</summary>
     private void Tick()
     {
+        Ticks++;
+
         foreach (Cursor cursor in _cursors)
         {
             if (cursor.Finished) continue;
@@ -211,6 +231,8 @@ public sealed class SongPlayer
         }
 
         SequenceEvent next = cursor.Track.Events[cursor.At++];
+
+        Commands++;
 
         switch (next.Command)
         {
@@ -310,6 +332,8 @@ public sealed class SongPlayer
     private void Play(Cursor cursor, SequenceEvent note)
     {
         if (note.Arguments.Count == 0) return;
+
+        Notes++;
 
         // A track sounds one note at a time, so whatever was ringing is let go first. This
         // engine's mixer would happily hold both, and a track that never released would fill
