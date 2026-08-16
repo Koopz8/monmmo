@@ -1,3 +1,4 @@
+using PokeMmo.Core.Sound;
 using PokeMmo.RomExtract.Sound;
 using Xunit;
 
