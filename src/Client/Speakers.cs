@@ -53,12 +53,18 @@ public sealed class Speakers : IDisposable
     /// because nobody plugged in speakers.
     /// </para>
     /// </summary>
-    public Speakers(Rom rom, SoundTreeResult tree, CryTableResult? cries)
+    /// <param name="entryFor">
+    /// Which entry of the cry table each species uses. Not the species number: a cartridge
+    /// names more species than it has cries, because a block in the middle of the numbering
+    /// carries no creature. See <see cref="CryIndex"/>.
+    /// </param>
+    public Speakers(
+        Rom rom, SoundTreeResult tree, CryTableResult? cries, IReadOnlyDictionary<int, int>? entryFor)
     {
         var mixer = new Mixer(Rate);
 
         _box = new Jukebox(song => SongLoader.Load(rom, tree, song, mixer), mixer);
-        _cries = new CryLibrary(rom, tree.Samples, cries);
+        _cries = new CryLibrary(rom, tree.Samples, cries, entryFor);
 
         Raylib.InitAudioDevice();
 

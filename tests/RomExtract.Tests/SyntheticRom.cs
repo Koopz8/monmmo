@@ -2012,7 +2012,26 @@ public sealed class SyntheticRom
     public Rom ToRom() => new(_data);
 
     /// <summary>Names written into the synthetic name table, indexed by species.</summary>
-    public static string NameFor(int index) => index == TestSpecies ? "BULBASAUR" : $"MON{index:D3}";
+    public static string NameFor(int index) =>
+        index == TestSpecies ? "BULBASAUR"
+        : index >= UnusedSpeciesFrom && index < UnusedSpeciesFrom + UnusedSpeciesCount ? UnusedSpeciesName
+        : $"MON{index:D3}";
+
+    /// <summary>
+    /// Where the run of species that are not creatures begins.
+    /// <para>
+    /// A real cartridge has one: a block of slots in the middle of the numbering that carry
+    /// no creature and share one placeholder name. It matters because the cry table skips
+    /// them — it is shorter than the species table by exactly this many — so a species number
+    /// after the gap does not name the entry with the same number.
+    /// </para>
+    /// </summary>
+    public const int UnusedSpeciesFrom = 252;
+
+    public const int UnusedSpeciesCount = 25;
+
+    /// <summary>What they are all called, which is what makes the run findable.</summary>
+    public const string UnusedSpeciesName = "?";
 
     // --- header -------------------------------------------------------------
 
@@ -2072,6 +2091,11 @@ public sealed class SyntheticRom
         >= '0' and <= '9' => (byte)(0xA1 + (c - '0')),
         '.' => 0xAD,
         '-' => 0xAE,
+
+        // What a cartridge's unused species slots are called. Without it they encode to a
+        // zero, which decodes to nothing rather than to a name — and the run of placeholder
+        // slots is found by its repeated name.
+        '?' => 0xAC,
         '’' => 0xB4,
         '♂' => 0xB5,
         '♀' => 0xB6,

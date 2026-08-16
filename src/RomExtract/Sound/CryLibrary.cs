@@ -20,13 +20,25 @@ public sealed class CryLibrary
     private readonly Rom _rom;
     private readonly Dictionary<int, SampleRecord> _samples;
     private readonly CryTableResult? _table;
+    private readonly IReadOnlyDictionary<int, int>? _bySpecies;
     private readonly Dictionary<int, Voice?> _decoded = [];
 
-    public CryLibrary(Rom rom, IReadOnlyList<SampleRecord> samples, CryTableResult? table)
+    /// <param name="bySpecies">
+    /// Which entry each species uses, from <see cref="CryIndex"/>. Nothing means the species
+    /// number is the entry number, which is true of no cartridge yet measured — it is the
+    /// answer for a caller that has no species names to work it out from, and it is wrong
+    /// after the placeholder block rather than everywhere, which is worth knowing.
+    /// </param>
+    public CryLibrary(
+        Rom rom,
+        IReadOnlyList<SampleRecord> samples,
+        CryTableResult? table,
+        IReadOnlyDictionary<int, int>? bySpecies = null)
     {
         _rom = rom;
         _samples = samples.GroupBy(s => s.Offset).ToDictionary(g => g.Key, g => g.First());
         _table = table;
+        _bySpecies = bySpecies;
     }
 
     /// <summary>How many creatures this cartridge's table names.</summary>
@@ -56,7 +68,12 @@ public sealed class CryLibrary
 
     private Voice? Decode(int species)
     {
-        if (_table?.SampleFor(species) is not { } at) return null;
+        // The entry, which is not the species number. A cartridge names more species than it
+        // has cries, because a block in the middle of the numbering carries no creature —
+        // see CryIndex, which is what works out by how much.
+        if (Entry(species) is not { } entry) return null;
+
+        if (_table?.SampleFor(entry) is not { } at) return null;
 
         if (!_samples.TryGetValue(at, out SampleRecord? record)) return null;
 
@@ -67,5 +84,13 @@ public sealed class CryLibrary
         // A cry does not loop. It is a noise with a beginning and an end, and a looping one
         // would ring for as long as the fight lasted.
         return new Voice(audio, record.Rate, false, 0);
+    }
+
+    /// <summary>Which entry of the table this species uses, or nothing when it has none.</summary>
+    private int? Entry(int species)
+    {
+        if (_bySpecies is null) return species;
+
+        return _bySpecies.TryGetValue(species, out int at) ? at : null;
     }
 }

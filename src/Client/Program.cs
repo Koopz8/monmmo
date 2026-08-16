@@ -303,15 +303,17 @@ public static class Program
         // because its entries carry a type byte outside the driver's kind enumeration.
         CryTableResult? cries = CryTableLocator.Locate(data.Rom, sound.Samples, Note);
 
-        using var speakers = new Speakers(data.Rom, sound, cries);
+        // Which entry each species uses, which is not its number — see CryIndex. Worked
+        // out from the species names this same cartridge carries.
+        Dictionary<int, int> cryFor = cries is null
+            ? []
+            : CryIndex.Derive([.. data.Species.Select(s => s.Name)], cries.Count, Note).BySpecies;
+
+        using var speakers = new Speakers(data.Rom, sound, cries, cryFor);
 
         if (!speakers.IsReady) Note("no sound card, so the game is silent");
 
-        if (cries is not null && cries.Count < data.Species.Count)
-        {
-            Note($"the cry table names {cries.Count} creatures and the species table names "
-                 + $"{data.Species.Count}, so {data.Species.Count - cries.Count} will be quiet");
-        }
+
 
         // Located while the window is opening rather than in the moment somebody steps
         // into a trainer's line of sight — locating walks the whole image.

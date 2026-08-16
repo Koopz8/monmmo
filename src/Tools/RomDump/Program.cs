@@ -5580,25 +5580,32 @@ public static class Program
 
         if (cries is not null)
         {
-            int species = RomExtractor.Open(rom).ExtractSpecies().Count;
+            List<SpeciesData> species = RomExtractor.Open(rom).ExtractSpecies();
 
-            Console.WriteLine($"    the species table names {species}");
-
-            if (cries.Count != species)
-            {
-                Console.WriteLine(
-                    $"    which is {Math.Abs(cries.Count - species)} "
-                    + (cries.Count < species ? "fewer cries than creatures" : "more cries than creatures"));
-            }
-
+            Console.WriteLine($"    the species table names {species.Count}");
             Console.WriteLine($"    {cries.Samples.Distinct().Count()} different recordings between them");
 
-            var library = new CryLibrary(rom, tree.Samples, cries);
+            // Which entry each species uses, which is not its number. The two counts cannot
+            // line up, and the difference is a block of slots in the middle of the numbering
+            // that carry no creature — found here by their repeated name.
+            (Dictionary<int, int> entryFor, CryIndexResult index) =
+                CryIndex.Derive([.. species.Select(s => s.Name)], cries.Count, Console.WriteLine);
+
+            if (!index.NoGap)
+            {
+                Console.WriteLine(
+                    $"    which leaves {cries.Count - index.Mapped} entries over — "
+                    + (cries.Count == index.Mapped
+                        ? "none, and the arithmetic closes exactly"
+                        : "worth a look if that is not a small number"));
+            }
+
+            var library = new CryLibrary(rom, tree.Samples, cries, entryFor);
 
             var decoded = 0;
             var samplesLong = 0;
 
-            for (int at = 0; at < cries.Count; at++)
+            foreach (int at in entryFor.Keys)
             {
                 if (library.For(at) is not { } voice) continue;
 
@@ -5609,7 +5616,7 @@ public static class Program
             Console.WriteLine(
                 decoded == 0
                     ? "    none of them unpacked, which is a finding"
-                    : $"    {decoded} unpacked, {samplesLong / Math.Max(1, decoded)} samples long on average");
+                    : $"    {decoded} creatures have a noise, {samplesLong / Math.Max(1, decoded)} samples long on average");
         }
 
         // And whether a song can actually be assembled, which is the question every layer
