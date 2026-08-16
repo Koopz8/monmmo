@@ -460,6 +460,14 @@ public sealed class SyntheticRom
         WriteU32(SampleRunningOffTheEndOffset + 4, 0x00D10C00);
         WriteU32(SampleRunningOffTheEndOffset + 8, 0);
         WriteU32(SampleRunningOffTheEndOffset + 12, (uint)RomSize);
+
+        // And one whose loop flag is neither 0x00 nor 0x40, which is the only thing wrong
+        // with it.
+        WriteU32(SampleWithABadLoopFlagOffset + 0, 0);
+        _data[SampleWithABadLoopFlagOffset + 3] = 0x7F;
+        WriteU32(SampleWithABadLoopFlagOffset + 4, 0x00D10C00);
+        WriteU32(SampleWithABadLoopFlagOffset + 8, 0);
+        WriteU32(SampleWithABadLoopFlagOffset + 12, SampleBytes - 1);
     }
 
     /// <summary>Palette 0 of the synthetic tileset — what a rendered map is checked against.</summary>
@@ -952,6 +960,17 @@ public sealed class SyntheticRom
     /// every other check passes.
     /// </summary>
     public const int SampleRunningOffTheEndOffset = SampleWithOddRateOffset + 0x100;
+
+    /// <summary>
+    /// A header whose loop flag is neither of the two legal values.
+    /// <para>
+    /// Added after the fact, and the reason is worth recording: the loop-flag check was
+    /// deleted on purpose to see which test caught it, and none did. Every other near-miss
+    /// here was written before the code it guards; this one was written because breaking the
+    /// code proved nothing was watching that line.
+    /// </para>
+    /// </summary>
+    public const int SampleWithABadLoopFlagOffset = SampleRunningOffTheEndOffset + 0x100;
 
     public const int ItemTableOffset = 0x110000;
     public const int ItemDescriptionsOffset = 0x114000;

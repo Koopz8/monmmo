@@ -91,6 +91,19 @@ public class FindingTheRecordedSoundsTests
         Assert.Null(At(SyntheticRom.SampleRunningOffTheEndOffset));
 
     /// <summary>
+    /// And neither is one whose loop flag is not one of the two the format allows.
+    /// <para>
+    /// This test exists because deleting the check it guards broke nothing. Everything else
+    /// in this file was written before the code; this one was written after, because the
+    /// break-it pass proved that line had nobody watching it. A guard nothing can fail is a
+    /// comment with a semicolon on the end.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AndNeitherIsOneWhoseLoopFlagIsNeitherOfTheTwo() =>
+        Assert.Null(At(SyntheticRom.SampleWithABadLoopFlagOffset));
+
+    /// <summary>
     /// Nothing is found twice, and nothing is found inside somebody else's audio.
     /// <para>
     /// The failure this guards is specific: audio is bytes, and bytes can look like a
