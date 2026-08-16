@@ -72,6 +72,27 @@ public sealed class SongPlayer
     {
         public Track Track { get; } = track;
 
+        /// <summary>
+        /// Where each command sat on the cartridge, so a jump can be followed.
+        /// <para>
+        /// A jump names a place rather than a step number, and the reader kept the place
+        /// every command came from. Built once per track rather than searched each time,
+        /// because a song jumps back on every repeat and a track can be twenty thousand
+        /// commands long.
+        /// </para>
+        /// </summary>
+        public Dictionary<int, int> ByOffset { get; } = Build(track);
+
+        private static Dictionary<int, int> Build(Track track)
+        {
+            var found = new Dictionary<int, int>();
+
+            for (int i = 0; i < track.Events.Count; i++)
+                found.TryAdd(track.Events[i].Offset, i);
+
+            return found;
+        }
+
         public int At { get; set; }
 
         public int Waiting { get; set; }
@@ -219,12 +240,47 @@ public sealed class SongPlayer
 
                 break;
 
-            // Everything else — the jumps, the calls, the returns — was already followed by
-            // the reader, which flattened the track into the order it actually runs in. There
-            // is nothing left here to follow.
+            case SequenceCommand.Goto:
+                Jump(cursor, next);
+
+                break;
+
+            // The calls and the returns were already followed by the reader, which flattened
+            // the track into the order it actually runs in. There is nothing left here to
+            // follow, and an unknown byte is one this reader did not account for rather than
+            // one it should act on.
             default:
                 break;
         }
+    }
+
+    /// <summary>
+    /// A jump backwards, which is how a piece of music repeats.
+    /// <para>
+    /// This is the one command the reader could not flatten: following it would have meant
+    /// reading the same bytes for ever, so the reader stopped there and left the place it
+    /// was going. The place is a cartridge offset, and every command kept the offset it came
+    /// from, so the two meet here.
+    /// </para>
+    /// <para>
+    /// It matters more than it looks. A song that repeats from its own loop point plays the
+    /// way it was written; one that starts again from the top plays its introduction every
+    /// time round, which is wrong in a way anybody who has heard the tune will notice
+    /// immediately. Read, rather than modelled — the loop point is the cartridge's.
+    /// </para>
+    /// </summary>
+    private static void Jump(Cursor cursor, SequenceEvent jump)
+    {
+        // A jump this reader did not resolve, or one landing where no command was recorded,
+        // ends the track. Guessing at where it meant would be performing an invention.
+        if (jump.Target < 0 || !cursor.ByOffset.TryGetValue(jump.Target, out int index))
+        {
+            cursor.Finished = true;
+
+            return;
+        }
+
+        cursor.At = index;
     }
 
     private void Set(Cursor cursor, SequenceEvent setting)

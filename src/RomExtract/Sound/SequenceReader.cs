@@ -93,6 +93,12 @@ public static class SequenceReader
 
             byte opcode = rom.ReadU8(at);
 
+            // Where this command begins, taken before the opcode byte is stepped over. It
+            // has to be the command's own position rather than its arguments', because a
+            // jump names the place it lands on and the only way to find what is there is to
+            // compare the two — an event recorded one byte along would match nothing.
+            int start = at;
+
             // Below 0x80 is an argument sitting where a command should be, which means the
             // last command again. A track that begins with one has no last command, and that
             // is a track this reader cannot follow rather than one it should guess at.
@@ -107,8 +113,6 @@ public static class SequenceReader
                 at++;
                 running = opcode;
             }
-
-            int start = at;
 
             switch (opcode)
             {

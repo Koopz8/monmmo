@@ -224,6 +224,80 @@ public class PerformingASongTests
         Assert.Equal(whole, gathered.Take(3000));
     }
 
+    // ---- repeating --------------------------------------------------------------------------
+
+    /// <summary>
+    /// A song repeats from where the cartridge says, rather than from the top.
+    /// <para>
+    /// This is the one command the reader could not flatten: following a backward jump would
+    /// have meant reading the same bytes for ever, so it stopped and left behind the place it
+    /// was going. That place is a cartridge offset and every command kept the offset it came
+    /// from, which is what lets the player find it.
+    /// </para>
+    /// <para>
+    /// Starting again from the top would have been much easier and would sound wrong to
+    /// anybody who knows the tune, because the introduction would play every time round. The
+    /// track here sets one tempo in its introduction and another at its loop point, so where
+    /// it goes back to is a number that can be read from outside.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ASongRepeatsFromWhereTheCartridgeSaysRatherThanFromTheTop()
+    {
+        const int LoopPoint = 3;
+
+        SongPlayer player = new(
+            [
+                new Track(
+                [
+                    Event(0xBB, SequenceCommand.Setting, 60) with { Offset = 0 },
+                    Wait(24) with { Offset = 2 },
+                    Event(0xBB, SequenceCommand.Setting, 100) with { Offset = LoopPoint },
+                    Note(60) with { Offset = 5 },
+                    Wait(24) with { Offset = 8 },
+                    new SequenceEvent(9, 0xB2, SequenceCommand.Goto, [], LoopPoint),
+                ]),
+            ],
+            [Tone()],
+            new Mixer(8000));
+
+        var tempos = new List<int>();
+
+        for (int piece = 0; piece < 200; piece++)
+        {
+            player.Render(100);
+            tempos.Add(player.BeatsPerMinute);
+        }
+
+        // It never stops, which is what a piece of map music does.
+        Assert.False(player.IsFinished, "a track that jumps backwards ran out anyway");
+
+        // The introduction happened.
+        Assert.Contains(120, tempos);
+
+        // And then never again, which it would have if the jump went to the top. The record
+        // carries half the tempo, so sixty means a hundred and twenty.
+        Assert.DoesNotContain(120, tempos.Skip(tempos.IndexOf(200)));
+        Assert.Equal(200, tempos[^1]);
+    }
+
+    /// <summary>
+    /// And a jump landing where no command was read ends the track rather than guessing at
+    /// where it meant.
+    /// </summary>
+    [Fact]
+    public void AndAJumpToNowhereEndsTheTrack()
+    {
+        SongPlayer player = new(
+            [new Track([Note(60) with { Offset = 0 }, new SequenceEvent(3, 0xB2, SequenceCommand.Goto, [], 999)])],
+            [Tone()],
+            new Mixer(8000));
+
+        player.Render(2000);
+
+        Assert.True(player.IsFinished);
+    }
+
     // ---- what a note sounds as ------------------------------------------------------------------
 
     /// <summary>

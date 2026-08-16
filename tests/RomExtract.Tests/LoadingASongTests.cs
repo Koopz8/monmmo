@@ -105,6 +105,44 @@ public class LoadingASongTests
     }
 
     /// <summary>
+    /// A track that jumps backwards on the cartridge repeats when it is performed.
+    /// <para>
+    /// The reader and the player have to agree about what an offset means, and nothing made
+    /// them. The reader stops at a backward jump — following it would be reading the same
+    /// bytes for ever — and leaves the place it was going; the player finds that place by
+    /// comparing it against where each command came from. One byte out in either and every
+    /// song in the game would stop at the end of its first time through, silently, on
+    /// somebody else's machine.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ATrackThatJumpsBackwardsRepeats()
+    {
+        (Rom rom, SoundTreeResult _) = Cartridge();
+
+        TrackRead read = SequenceReader.Read(rom, SyntheticRom.LoopingTrackOffset);
+
+        // Two of them, because the reader went round once before it recognised where it had
+        // been. Both name the same place, which is the place the track repeats from.
+        List<SequenceEvent> jumps = [.. read.Events.Where(e => e.Command == SequenceCommand.Goto)];
+
+        Assert.NotEmpty(jumps);
+
+        // The reader resolved where they go, and they go somewhere the reader itself recorded
+        // a command — which is the agreement, stated as a number.
+        Assert.All(jumps, jump => Assert.Contains(read.Events, e => e.Offset == jump.Target));
+
+        var player = new SongPlayer(
+            [new Track(read.Events)],
+            [Instrument.Nothing],
+            new Mixer(8000));
+
+        for (int piece = 0; piece < 200; piece++) player.Render(100);
+
+        Assert.False(player.IsFinished, "a track that jumps back to itself stopped anyway");
+    }
+
+    /// <summary>
     /// The instruments come off the cartridge rather than being invented — the recordings are
     /// the ones the locator found, at the rates their own headers gave.
     /// </summary>
