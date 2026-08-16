@@ -5739,6 +5739,20 @@ public static class Program
         }
     }
 
+    /// <summary>
+    /// Why a door did not open, in the order the answers rule each other out.
+    /// <para>
+    /// An export fault first, because a door square that cannot be stood on is this project's
+    /// mistake rather than the game's and must never be reported as a story gate.
+    /// </para>
+    /// </summary>
+    private static string WhyShut(ShutDoor door) =>
+        door.CouldStandOnIt ? "stood on it and did not go through"
+        : !door.SquareIsWalkable ? "THE DOOR SQUARE IS NOT WALKABLE — an export fault, not a gate"
+        : door.SomebodyIsInTheWay ? "somebody is standing in the way"
+        : door.ArrivedOnAnIsland ? "ARRIVED ON AN ISLAND — it never walked this map at all"
+        : "never reached the door";
+
     private static void WritePlaythrough(
         Rom rom, IReadOnlyDictionary<int, int> answers, string startAt, bool boat = false, int money = 0,
         bool sayYes = false)
@@ -6154,29 +6168,31 @@ public static class Program
                 $"    ({dynamic} of them are 127.127 sentinels, filled in by a script when used — not walls)");
         }
 
-        foreach (ShutDoor door in real
-                     .OrderByDescending(d => d.CouldStandOnIt)
-                     .ThenBy(d => d.ToMapId)
-                     .Take(30))
-        {
-            string why = door.CouldStandOnIt
-                ? "stood on it and did not go through"
-                : !door.SquareIsWalkable
-                    ? "THE DOOR SQUARE IS NOT WALKABLE — an export fault, not a gate"
-                    : door.SomebodyIsInTheWay
-                        ? "somebody is standing in the way"
-                        : door.ArrivedOnAnIsland
-                            ? "ARRIVED ON AN ISLAND — it never walked this map at all"
-                            : "never reached the door";
+        // Grouped by where they lead and why, rather than one line per door.
+        //
+        // Ungrouped this list was useless and had been for a while: seventeen Pokémon Centres
+        // each have a door into the same link room, so thirty-four lines of a thirty-line
+        // budget said one thing that was ruled out milestones ago, and the doors the whole
+        // session was actually about were pushed off the end where nobody could see them.
+        // Thirty *destinations* is a different instrument from thirty doors.
+        var byTarget = real
+            .GroupBy(d => (d.ToMapId, Why: WhyShut(d)))
+            .OrderByDescending(g => g.Any(d => d.CouldStandOnIt))
+            .ThenByDescending(g => g.Count())
+            .ThenBy(g => g.Key.ToMapId)
+            .ToList();
 
+        foreach (IGrouping<(string ToMapId, string Why), ShutDoor> shut in byTarget.Take(30))
+        {
             Console.WriteLine(
-                $"    {door.FromMapId,-8} {door.Square} -> {door.ToMapId,-8} {door.ToName,-16} {why}");
+                $"    -> {shut.Key.ToMapId,-8} {shut.First().ToName,-16} {shut.Key.Why}");
             Console.WriteLine(
-                $"             stood on {door.StoodOnThisMap} of {door.WalkableOnThisMap} walkable "
-                + $"squares of {door.FromMapId}");
+                $"       from {shut.Count()} door(s): "
+                + string.Join(", ", shut.Take(3).Select(d => $"{d.FromMapId} {d.Square}"))
+                + (shut.Count() > 3 ? $", and {shut.Count() - 3} more" : ""));
         }
 
-        if (real.Count > 30) Console.WriteLine($"    ... and {real.Count - 30} more");
+        if (byTarget.Count > 30) Console.WriteLine($"    ... and {byTarget.Count - 30} more destinations");
 
         if (played.ShutDoors.Count > 30)
             Console.WriteLine($"    ... and {played.ShutDoors.Count - 30} more");
