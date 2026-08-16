@@ -117,7 +117,31 @@ public sealed record ShutDoor(
 /// exact person who asked.
 /// </para>
 /// </summary>
-public sealed record Wanted(int ItemId, int Count, string MapId, int Times);
+public sealed record Wanted(int ItemId, int Count, string MapId, int Times)
+{
+    /// <summary>
+    /// Everywhere in the world one of these could be got, and whether the run stood there.
+    /// <para>
+    /// The half that turns a shopping list into a job. "SAFFRON wants a FRESH WATER" is a
+    /// fact about a door; "and the only FRESH WATER in the world is on a shelf on a map it
+    /// reached and never bought from" is the thing to go and build.
+    /// </para>
+    /// <para>
+    /// An empty list is the sharper answer of the two: it means nothing on any map in the
+    /// game hands one over at all, so whatever produces it is behind a routine this project
+    /// cannot run, and no amount of walking will ever find it.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<FoundAt> Sources { get; init; } = [];
+}
+
+/// <summary>Somewhere one item could be got, and how.</summary>
+/// <param name="How">
+/// In the world file's own terms — lying on the floor, handed over by somebody, paid for,
+/// won, or given on arriving. Which one it is decides what has to be built next, and they
+/// are very different jobs.
+/// </param>
+public sealed record FoundAt(string MapId, int LocalId, string How, bool Reached);
 
 /// <summary>Why the playthrough stopped.</summary>
 public enum StoppedBecause
@@ -459,12 +483,69 @@ public static class Autoplayer
             Refused =
             [
                 .. refused
-                    .Select(r => new Wanted(r.Key.ItemId, r.Key.Count, r.Key.MapId, r.Value))
+                    .Select(r => new Wanted(r.Key.ItemId, r.Key.Count, r.Key.MapId, r.Value)
+                    {
+                        Sources = [.. Everywhere(world, r.Key.ItemId, reached)],
+                    })
                     .OrderByDescending(w => w.Times)
                     .ThenBy(w => w.ItemId)
                     .ThenBy(w => w.MapId),
             ],
         };
+    }
+
+    /// <summary>
+    /// Everywhere in the world one item could be got.
+    /// <para>
+    /// Read out of the world file rather than off the cartridge, which is what makes it
+    /// cheap enough to print for every refusal: everything that hands something over was
+    /// already resolved at export, on all five of the ways a thing changes hands.
+    /// </para>
+    /// <para>
+    /// All five are listed separately rather than collapsed into "obtainable", because they
+    /// are entirely different jobs. Something lying on the floor is walked onto and is
+    /// already handled; something sold needs money and a shop; something won needs a fight
+    /// to be winnable. A list saying "yes, obtainable" would hide the only thing worth
+    /// knowing.
+    /// </para>
+    /// </summary>
+    private static IEnumerable<FoundAt> Everywhere(
+        WorldData world, int itemId, HashSet<string> reached)
+    {
+        foreach (MapData map in world.Maps)
+        {
+            bool here = reached.Contains(map.Id);
+
+            foreach (MapObject who in map.Objects)
+            {
+                if (who.GivesItemId == itemId)
+                {
+                    yield return new FoundAt(
+                        map.Id, who.LocalId, who.CanBeTakenAway ? "lying there" : "handed over", here);
+                }
+                else if (who.CanGive.Contains(itemId))
+                {
+                    // On one branch of a question this run cannot answer. Kept apart from
+                    // a plain handover because that is exactly what is standing in the way
+                    // of it — not reaching the person, but replying to them.
+                    yield return new FoundAt(map.Id, who.LocalId, "handed over on a branch", here);
+                }
+                else if (who.WinsItemId == itemId)
+                {
+                    yield return new FoundAt(map.Id, who.LocalId, "for winning a fight", here);
+                }
+                else if (who.Stock.Contains(itemId))
+                {
+                    yield return new FoundAt(map.Id, who.LocalId, "sold", here);
+                }
+            }
+
+            foreach (MapEntryScript arriving in map.OnEntry)
+            {
+                if (arriving.GivesItemId == itemId)
+                    yield return new FoundAt(map.Id, 0, "on arriving", here);
+            }
+        }
     }
 
     /// <summary>

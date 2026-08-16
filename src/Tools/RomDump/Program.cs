@@ -5791,6 +5791,31 @@ public static class Program
                 Console.WriteLine(
                     $"    {want.MapId,-8} wants {want.Count} x {NameOf(want.ItemId)}"
                     + (want.Times > 1 ? $"  (asked {want.Times} times)" : ""));
+
+                // And where one comes from, which is the half that says what to build. An
+                // empty list is the sharper answer: nothing on any map in the game hands
+                // one over, so whatever produces it is behind a routine and no amount of
+                // walking will ever reach it.
+                if (want.Sources.Count == 0)
+                {
+                    Console.WriteLine(
+                        "             NOTHING ON ANY MAP HANDS ONE OVER — it comes from a routine");
+
+                    continue;
+                }
+
+                foreach (IGrouping<string, FoundAt> how in want.Sources.GroupBy(s => s.How))
+                {
+                    // A reached one for the example where there is one, because "it is on
+                    // a map you have been to" and "it is behind everything else that is
+                    // shut" are the two answers and the example has to say which.
+                    FoundAt one = how.FirstOrDefault(s => s.Reached) ?? how.First();
+
+                    Console.WriteLine(
+                        $"             {how.Key} at {how.Count()} place(s), "
+                        + $"{how.Count(s => s.Reached)} of them on ground it reached"
+                        + $" — e.g. {one.MapId} (object {one.LocalId})");
+                }
             }
 
             if (played.Refused.Count > 20)

@@ -721,4 +721,90 @@ public class AskingWhatIsInTheBagTests
         // And the one it was carrying is not on the list, which is the whole distinction.
         Assert.DoesNotContain(played.Refused, w => w.ItemId == Parcel);
     }
+
+    /// <summary>
+    /// And every refusal says where one could be got, in the world file's own terms.
+    /// <para>
+    /// The five ways a thing changes hands are listed apart rather than collapsed into
+    /// "obtainable", because they are five different jobs. Something lying on the floor is
+    /// walked onto and already works; something sold needs money and a shop; something
+    /// behind a question needs an answer. A list that only said "yes, obtainable" would
+    /// hide the one thing worth knowing.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AndEachRefusalSaysWhereOneCouldHaveBeenGot()
+    {
+        MapData start = Room("1.0") with
+        {
+            Objects =
+            [
+                new MapObject(1, 1, 1, 1, Direction.Down, 0, false) { ScriptAddress = 0x1000 },
+
+                // Sold by somebody standing right here.
+                new MapObject(2, 1, 2, 1, Direction.Down, 0, false, Sells: [Tea]),
+            ],
+        };
+
+        // And lying on the floor somewhere it never got to.
+        MapData far = Room("1.1") with
+        {
+            Objects =
+            [
+                new MapObject(3, 1, 1, 1, Direction.Down, 0, false)
+                    with { GivesItemId = Tea, HiddenBy = 0x262 },
+            ],
+        };
+
+        Attempt played = Autoplayer.Play(
+            new WorldData([start, far]),
+            "1.0",
+            TestRules.All,
+            (_, _, _) => Nothing with { Asked = [(Tea, 1, false)] });
+
+        Wanted want = Assert.Single(played.Refused);
+
+        Assert.Equal(2, want.Sources.Count);
+
+        FoundAt sold = Assert.Single(want.Sources, s => s.How == "sold");
+
+        Assert.Equal("1.0", sold.MapId);
+        Assert.True(sold.Reached, "the shelf is on the map it is standing on");
+
+        FoundAt floor = Assert.Single(want.Sources, s => s.How == "lying there");
+
+        Assert.Equal("1.1", floor.MapId);
+        Assert.False(floor.Reached, "there is no way into 1.1 at all");
+    }
+
+    /// <summary>
+    /// And nothing at all is the sharpest answer of the three.
+    /// <para>
+    /// The decoy for the rule above, and it is the case that matters most: an empty list
+    /// means nothing on any map in the game hands one over, so whatever produces it is
+    /// behind a routine this project cannot run and no amount of walking will ever find it.
+    /// A source list that quietly reported something for an item nobody stocks would turn
+    /// that into "go and look harder".
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void SomethingNobodyInTheWorldHandsOverComesBackWithNowhere()
+    {
+        MapData start = Room("1.0") with
+        {
+            Objects =
+            [
+                new MapObject(1, 1, 1, 1, Direction.Down, 0, false) { ScriptAddress = 0x1000 },
+                new MapObject(2, 1, 2, 1, Direction.Down, 0, false, Sells: [Parcel]),
+            ],
+        };
+
+        Attempt played = Autoplayer.Play(
+            new WorldData([start]),
+            "1.0",
+            TestRules.All,
+            (_, _, _) => Nothing with { Asked = [(Tea, 1, false)] });
+
+        Assert.Empty(Assert.Single(played.Refused).Sources);
+    }
 }
