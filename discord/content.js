@@ -22,10 +22,12 @@ the ROM you already own, on your own machine, at runtime**. The client ships non
 of it. The server never sees any of it.
 
 This is a solo engineering project, built in public, one measured milestone at a
-time. **1,938 tests**, none of which need a cartridge. An authoritative server, a
+time. **2,274 tests**, none of which need a cartridge. An authoritative server, a
 Gen III battle engine accurate down to truncation order, and a growing list of
 things two people can do to each other: **see each other, chat, add friends,
 form a guild, trade, duel, climb a ladder, and buy and sell on a player market**.
+**Sound and animations are in** too — songs, cries, and a move's animation read
+as the 48-opcode program it is.
 
 Breeding, IVs, EVs, natures, abilities, weather and held items are all in. The
 tier list is **recomputed from the cartridge's own base stats** rather than
@@ -280,13 +282,23 @@ on one turn and not the next. The slot rather than the resolved ability, because
 the slot is what the dice decided and the ability is a lookup — keeping both
 would be two copies of one fact, and the second copy is the one that goes stale.
 
-**Still silent: ~119 move-effect groups** — and most of them should probably
-stay that way. What is left is largely numbers nobody can derive from the
-cartridge: FLAIL's power table, SONICBOOM's twenty. Inventing them would be
-inventing the game rather than reading it, so the honest remainder is small.
+**The silent half is finished — the lesson is in the message below.**`,
 
-That distinction matters more than the count. "Not modelled" and "cannot be
-derived" are different problems, and only one of them is work.`,
+`**Every effect family is now modelled**, including the ones that needed real
+machinery of their own: SUBSTITUTE, BIDE, FUTURE SIGHT.
+
+The lesson from the last batch is worth more than the count: **fourteen of the
+final twenty-three groups needed no new machinery at all.** They needed a line
+pointing at something the engine already had.
+
+The out-of-turn family — COUNTER, MIRROR COAT, REVENGE, FOCUS PUNCH — sat on the
+roadmap as "needs to act out of turn". The ordering had been there since moves
+were first read: priority is a signed byte on the move's own record. All that was
+missing was two fields of memory.
+
+**A family named for the machinery it appears to need is usually named wrong.**
+The naming comes from how a move *feels* to a player, and how a move feels and
+what it costs to implement are unrelated.`,
   ],
 
   'data-and-extraction': [
@@ -306,6 +318,11 @@ The ability bytes and the move records' contact flag have since been read, which
 is two more off that list. Still unread: \`SafariZoneFleeRate\`, \`EggCycles\`,
 \`BaseFriendship\`, \`BodyColor\`.
 
+**Sound is read the same way as everything else** — a sixteen-byte sample header
+found by shape, then instruments pointing at confirmed samples, voicegroups at
+confirmed instruments, songs at confirmed voicegroups. Each layer proved by the
+one below, so none of it needs to know where anything sits on a given cartridge.
+
 **Two traps worth knowing about if you go looking.** Ability names are found by
 anchoring on \`STENCH\`, the same way the move table anchors on \`POUND\` — one
 English word to find an address, and then none, so what comes out is whatever the
@@ -318,7 +335,14 @@ stored and arriving as nought.
 
 **Rule 1 is enforced by a test now — details in the message below.**`,
 
-`**The repo asks git whether anybody committed a cartridge.**
+`**One line this project won't cross.** The standard way to find the song table
+is to scan for the sound driver's function by its prologue and read the address
+out of the instruction stream. Every existing tool does it, and it works. It is
+also reading compiled code. The corroboration used here is taken from the data
+side and labelled as weaker, rather than pretending a disassembler is a file
+reader.
+
+**The repo asks git whether anybody committed a cartridge.**
 
 Every *tracked* file is checked three ways: the extensions of cartridge images
 and saves, the names of the exporter's own outputs and the account database, and
@@ -646,12 +670,17 @@ posting in #bug-reports.
   reach the server from the client. Still without evidence, and one previous
   sighting was withdrawn after turning out to be two events a second apart read
   as one.
-- **The battle engine's silent half.** ~119 move-effect groups the engine steps
-  over — though most are numbers nobody can derive (FLAIL's power table,
-  SONICBOOM's twenty) and should stay silent rather than be invented.
 - **A thousand players on real hardware.** Every scaling number so far is from
   two cores with the load generator sharing them. Needs a second machine; the
   only open question code cannot answer.
+- **LOW KICK**, which wants species weight — on the dex table rather than the
+  base-stat record, so it needs a locator of its own.
+- **PURSUIT's ordering**, which needs the switch moved inside the turn. Written
+  down as not done rather than quietly assumed.
+- **Ten held-item effects**, every one about something outside a fight, and
+  **thirty-two abilities**, which now have the hooks they were waiting for.
+- **Nineteen warps** leading to maps that are not exported. One measurement,
+  not yet taken.
 - **Four more regions.** The largest item by far and the least like the others:
   extraction work against cartridges this project does not have.
 - **Text rendering.** The cartridge's font has not been located. Four mechanical
@@ -698,6 +727,9 @@ posting in #bug-reports.
   and it was worse than it sounded. It could put a creature in your box **and**
   on the market at once, with both halves internally consistent and nothing
   throwing, until two people owned it.
+- ~~The battle engine's silent half.~~ **Finished.** Every remaining effect
+  family is modelled. Fourteen of the last twenty-three needed no new machinery
+  at all — just a line pointing at something the engine already had.
 
 **Not bugs**
 - The client refusing a ROM whose SHA-1 doesn't match. Working as intended.
