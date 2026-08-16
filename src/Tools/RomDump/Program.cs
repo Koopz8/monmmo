@@ -205,6 +205,7 @@ public static class Program
         if (options.SpecialContracts) WriteSpecialContracts(rom);
         if (options.Closure) WriteClosure(rom, options.RoutineAnswers, options.StartAt);
         if (options.Play) WritePlaythrough(rom, options.RoutineAnswers, options.StartAt);
+        if (options.WhereFrom.Count > 0) WriteWhereFrom(rom, options.WhereFrom);
 
         if (options.SequenceWidths) WriteSequenceWidths(rom);
 
@@ -5665,6 +5666,77 @@ public static class Program
     /// not proof a person would. A fight it <em>wins</em> is proof the fight works.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Every place in the image a script names one of these items.
+    /// <para>
+    /// The world file's answer to "where does a FRESH WATER come from" was one shop counter,
+    /// two hops and a boat from anywhere the story reaches, and that could not be the whole
+    /// truth: the world file records what it can attribute to an object, and a vending
+    /// machine that offers a menu and hands the drink over inside a routine is attributable
+    /// to nobody. So this asks the image instead.
+    /// </para>
+    /// <para>
+    /// <b>Every arm, not the one that runs.</b> This reads rather than runs — a script that
+    /// only hands something over on a branch today's save cannot take still hands it over,
+    /// and that is exactly what is being looked for.
+    /// </para>
+    /// </summary>
+    private static void WriteWhereFrom(Rom rom, IReadOnlyList<int> items)
+    {
+        Console.WriteLine();
+        Console.WriteLine("WHERE THESE COME FROM");
+        Console.WriteLine();
+
+        Dictionary<int, string> names = ItemTable.Locate(rom) is { } itemsAt
+            ? ItemTable.Read(rom, itemsAt).ToDictionary(item => item.Id, item => item.Name)
+            : [];
+
+        string NameOf(int itemId) =>
+            names.GetValueOrDefault(itemId) is { Length: > 0 } name
+                ? $"{name} (0x{itemId:X3})"
+                : $"item 0x{itemId:X3}";
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        List<ItemSite> sites = ItemMentions.Of(rom, library, items);
+
+        Console.WriteLine(
+            $"  {sites.Count} mention(s) of {items.Count} item(s) across every script the maps reach");
+
+        foreach (int itemId in items)
+        {
+            List<ItemSite> mine = [.. sites.Where(s => s.ItemId == itemId)];
+
+            Console.WriteLine();
+            Console.WriteLine($"  {NameOf(itemId)} — {mine.Count} mention(s)");
+
+            if (mine.Count == 0)
+            {
+                Console.WriteLine(
+                    "    NOTHING IN ANY SCRIPT NAMES IT. Whatever produces one is inside a routine,");
+                Console.WriteLine(
+                    "    and no amount of reading scripts will ever find it.");
+
+                continue;
+            }
+
+            foreach (IGrouping<string, ItemSite> how in mine.GroupBy(s => s.How).OrderBy(g => g.Key))
+            {
+                Console.WriteLine($"    {how.Key}: {how.Count()} site(s)");
+
+                foreach (ItemSite site in how.Take(12))
+                {
+                    Console.WriteLine(
+                        $"      {site.MapId,-8} {site.What,-18} script 0x{site.Address:X8}"
+                        + $" at 0x{site.Offset:X6}"
+                        + (site.Count > 1 ? $"  x{site.Count}" : ""));
+                }
+
+                if (how.Count() > 12) Console.WriteLine($"      ... and {how.Count() - 12} more");
+            }
+        }
+    }
+
     private static void WritePlaythrough(Rom rom, IReadOnlyDictionary<int, int> answers, string startAt)
     {
         Console.WriteLine();
@@ -8727,6 +8799,10 @@ public static class Program
                                     walk, talk to everybody reachable, fight whoever picks
                                     a fight, take what is given, walk again. Says where it
                                     stopped and what it never got to. Takes --answer too.
+              --where-from ID[,ID]  every place in the image a script names these items, by
+                                    what it does with them: handed over, asked for, taken
+                                    away, sold, or loaded for a routine. Reads rather than
+                                    runs, so a gift on a branch nobody can take still shows.
               --routines            what every routine this project cannot execute is
                                     asked: how many arguments, what its answer is compared
                                     against, how many sites branch on it.
@@ -8914,6 +8990,9 @@ public static class Program
 
         public bool Play { get; private init; }
 
+        /// <summary>Items to hunt through every script in the image, or nothing.</summary>
+        public IReadOnlyList<int> WhereFrom { get; private init; } = [];
+
         public string StartAt { get; private init; } = Beginning.MapId;
 
         public IReadOnlyDictionary<int, int> RoutineAnswers { get; private init; } = new Dictionary<int, int>();
@@ -9032,6 +9111,7 @@ public static class Program
             bool closure = false;
             bool specialContracts = false;
             bool play = false;
+            var whereFrom = new List<int>();
             string startAt = Beginning.MapId;
             var routineAnswers = new Dictionary<int, int>();
             bool sequenceWidths = false;
@@ -9266,6 +9346,17 @@ public static class Program
                     case "--play":
                         play = true;
                         break;
+                    case "--where-from":
+                    {
+                        // One or more item ids, decimal or hex, so the three drinks can be
+                        // asked about in one pass over four hundred maps rather than three.
+                        foreach (string named in Next(args, ref i, "--where-from").Split(','))
+                        {
+                            if (TryNumber(named, out int itemId)) whereFrom.Add(itemId);
+                        }
+
+                        break;
+                    }
                     case "--from":
                         startAt = Next(args, ref i, "--from");
                         break;
@@ -9467,6 +9558,7 @@ public static class Program
                 Closure = closure,
                 SpecialContracts = specialContracts,
                 Play = play,
+                WhereFrom = whereFrom,
                 StartAt = startAt,
                 Answers = answers,
                 SequenceWidths = sequenceWidths,
