@@ -153,6 +153,9 @@ public sealed record FerryTicket(
     public bool Opens => FlagSet || Carried;
 }
 
+/// <summary>Something the playthrough bought, and what it cost.</summary>
+public sealed record Bought(int ItemId, int Count, int Price, string MapId);
+
 /// <summary>Somewhere one item could be got, and how.</summary>
 /// <param name="How">
 /// In the world file's own terms — lying on the floor, handed over by somebody, paid for,
@@ -258,6 +261,12 @@ public sealed record Attempt(
     /// </summary>
     public IReadOnlyList<Wanted> Refused { get; init; } = [];
 
+    /// <summary>What it bought, and what each one cost.</summary>
+    public IReadOnlyList<Bought> Bought { get; init; } = [];
+
+    /// <summary>What it had left.</summary>
+    public int MoneyLeft { get; init; }
+
     /// <summary>People a script took off a map, which is how a doorway stops being blocked.</summary>
     public IReadOnlyCollection<(string MapId, int LocalId)> Removed { get; init; } = [];
 
@@ -353,6 +362,19 @@ public static class Autoplayer
     /// at one end of a map is in the bag by the time the person at the other end asks.
     /// </para>
     /// </param>
+    /// <param name="money">
+    /// What it has to spend. <b>Modelled, and handed in from outside on purpose.</b>
+    /// <para>
+    /// Nothing in this game gives this run money. Winning a fight pays out in the cartridge
+    /// and the payout is a trainer class's rate times a level, and that table has never been
+    /// located here — so a run that awarded itself money would be quoting a number nobody
+    /// read. Handed in instead, the same way <c>--answer</c> hands in a routine's answer: put
+    /// some in, walk the story again, and see how much of the world opens.
+    /// </para>
+    /// <para>
+    /// The prices themselves are <b>read</b>, off the item table on the cartridge.
+    /// </para>
+    /// </param>
     /// <param name="ridingTheBoat">
     /// Whether the walk may take the ferry. <b>Off by default, and that is not timidity.</b>
     /// <para>
@@ -372,7 +394,8 @@ public static class Autoplayer
         GameRules rules,
         Func<uint, IReadOnlyCollection<int>, Bag, PlayedScript> runScript,
         Action<string>? log = null,
-        bool ridingTheBoat = false)
+        bool ridingTheBoat = false,
+        int money = 0)
     {
         var battles = new BattleFactory(rules);
         var progress = new Progression(rules);
@@ -403,6 +426,9 @@ public static class Autoplayer
 
         // Everything asked for and not carried, by item and by where it was asked.
         var refused = new Dictionary<(int ItemId, int Count, string MapId), int>();
+
+        var purse = money;
+        var bought = new List<Bought>();
 
         var won = 0;
         var lost = 0;
@@ -536,6 +562,36 @@ public static class Autoplayer
                 }
             }
 
+            // And then the shopping, once everybody has been talked to and the list of things
+            // it was refused is as long as this pass is going to make it.
+            //
+            // <b>It buys only what it has been refused.</b> Not a shopping policy — a policy
+            // is a second thing to keep correct and this is measuring whether the story can be
+            // finished, not whether a shopper is sensible. Something asked for by name at a
+            // door, sold on a shelf it can stand in front of, and affordable, is bought.
+            foreach (MapData map in world.Maps.Where(m => reach.Maps.Contains(m.Id)))
+            {
+                foreach (MapObject counter in map.Objects.Where(o => o.IsShopkeeper))
+                {
+                    if (!counter.IsHereFor(flags.Contains)) continue;
+                    if (!Beside(map.Id, counter.Square).Any(stood.Contains)) continue;
+
+                    foreach (int itemId in counter.Stock)
+                    {
+                        // Only what somebody asked for and it did not have, and only what the
+                        // cartridge says is for sale at all: a price of nothing, or a key
+                        // item on a shelf, is a listing rather than a purchase.
+                        if (!refused.Keys.Any(r => r.ItemId == itemId)) continue;
+                        if (rules.ItemAt(itemId) is not { CanBeBought: true } sold) continue;
+                        if (bag.Has(itemId) || purse < sold.Price) continue;
+                        if (bag.Add(itemId, 1, Most(rules, itemId)) <= 0) continue;
+
+                        purse -= sold.Price;
+                        bought.Add(new Bought(itemId, 1, sold.Price, map.Id));
+                    }
+                }
+            }
+
             log?.Invoke(
                 $"  pass {pass,2}: {reach.Maps.Count,3} maps, {flags.Count,4} flags, "
                 + $"{party.Count} in the party (highest level {(party.Count == 0 ? 0 : party.Max(m => m.Level))}), "
@@ -613,6 +669,8 @@ public static class Autoplayer
             Carried = bag.Entries,
             Removed = gone,
             RodeTheBoat = ridingTheBoat,
+            Bought = bought,
+            MoneyLeft = purse,
             Tickets =
             [
                 .. world.FerryPasses.Select(p => new FerryTicket(
@@ -635,7 +693,11 @@ public static class Autoplayer
             ],
             Refused =
             [
+                // Only what it never got hold of. Being refused on pass one and buying one on
+                // pass two is the story working, and leaving that on the list would make a
+                // shopping list that never shortens however much of it is bought.
                 .. refused
+                    .Where(r => !bag.Has(r.Key.ItemId, r.Key.Count))
                     .Select(r => new Wanted(r.Key.ItemId, r.Key.Count, r.Key.MapId, r.Value)
                     {
                         Sources = [.. Everywhere(world, r.Key.ItemId, reached)],
