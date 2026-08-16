@@ -26,10 +26,17 @@ namespace PokeMmo.RomExtract;
 /// it.
 /// </para>
 /// <para>
-/// <b>How many boxes there are is not said anywhere</b>, in text or in data, so there is
-/// one. That is stated rather than guessed at: fourteen is a number this project would
-/// be remembering rather than reading, and the standing rule against exactly that is the
-/// reason half the things in here are right.
+/// <b>How many boxes there are is not said anywhere</b>, in text or in data. That used to
+/// be an assumption in this comment and is now a measurement: <see cref="BoxNames"/> looks
+/// for a run of default box names, finds the word BOX forty-six times in this image and
+/// never once numbered, and prints the occurrences so anybody can check. They are built at
+/// run time out of a word and a counter, so there is nothing here to read.
+/// </para>
+/// <para>
+/// So the count is modelled, which is the one honest option left, and it is marked as such
+/// where it lives rather than smuggled in here. Fourteen would still be a number this
+/// project was remembering rather than reading, and the standing rule against exactly that
+/// is the reason half the things in here are right.
 /// </para>
 /// </summary>
 public static class BoxCapacity

@@ -144,6 +144,43 @@ public sealed class GameRules
     public int BoxSize { get; init; }
 
     /// <summary>
+    /// How many boxes there are.
+    /// <para>
+    /// <b>Modelled</b>, and one of very few numbers in this project that had to be. It was
+    /// looked for properly first — <see cref="PokeMmo.RomExtract.BoxNames"/> hunts a run of
+    /// default names, finds the word BOX forty-six times in this image and never once
+    /// numbered, and prints the occurrences so the negative can be checked. The names are
+    /// built at run time out of a word and a counter, so there is nothing to read.
+    /// </para>
+    /// <para>
+    /// So the number is chosen rather than derived, and <see cref="Default"/> says what was
+    /// chosen and why in one place instead of being spread across whatever asks.
+    /// </para>
+    /// </summary>
+    public int Boxes { get; init; } = Default;
+
+    /// <summary>
+    /// Eight, and it is this project's number rather than any cartridge's.
+    /// <para>
+    /// Chosen on its own terms because there is nothing to derive it from: enough that
+    /// filling it is a project rather than an afternoon, and few enough that a full one is
+    /// still a list somebody can scroll. It is settable, so an operator who disagrees does
+    /// not have to argue with a constant.
+    /// </para>
+    /// </summary>
+    public const int Default = 8;
+
+    /// <summary>
+    /// How many a player may store altogether, which is the only number anything outside
+    /// this class needs.
+    /// <para>
+    /// The product, computed rather than stored, because two numbers and their product is
+    /// three facts where two would do and the third is the one that goes stale.
+    /// </para>
+    /// </summary>
+    public int Storage => BoxSize * Math.Max(1, Boxes);
+
+    /// <summary>
     /// What using this item on this species would turn it into, if anything.
     /// <para>
     /// Asked by the server when somebody uses something out of the bag, and answered
@@ -469,6 +506,7 @@ public sealed class GameRules
 
         // And out of a sentence, which is stranger and the same principle.
         writer.Write(BoxSize);
+        writer.Write(Boxes);
 
         writer.Write(EvolveByLevel);
         writer.Write(EvolveByItem);
@@ -639,6 +677,7 @@ public sealed class GameRules
         int surf = reader.ReadInt32();
         int struggle = reader.ReadInt32();
         int boxSize = reader.ReadInt32();
+        int boxes = reader.ReadInt32();
         int byLevel = reader.ReadInt32();
         int byItem = reader.ReadInt32();
 
@@ -662,6 +701,7 @@ public sealed class GameRules
             SurfMove = surf,
             StruggleMove = struggle,
             BoxSize = boxSize,
+            Boxes = boxes,
             EvolveByLevel = byLevel,
             EvolveByItem = byItem,
         };

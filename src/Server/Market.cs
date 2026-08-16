@@ -406,8 +406,8 @@ public sealed class Market(
         // Somewhere to put it, asked here because how big a box is comes off the cartridge
         // and the store has never seen one. Only a creature needs this: how much room a bag
         // has is a rule the bag itself holds, so the store can and does ask it directly.
-        if (world.BoxSize > 0 && player.Box.Count >= world.BoxSize)
-            return [Said(playerId, "the box is full")];
+        if (world.Storage > 0 && player.Box.Count >= world.Storage)
+            return [Said(playerId, "your boxes are full")];
 
         // This account, out of the scribe's hands until everything below has happened.
         // Without it a photograph taken a moment ago can be developed after the store

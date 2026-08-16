@@ -1240,21 +1240,21 @@ public class TheDaycareTests
         world.LeaveAtDaycare(player.Id, 2);
         world.LeaveAtDaycare(player.Id, 1);
 
-        player.Box = [.. Enumerable.Range(10, world.BoxSize).Select(s => Mon(s, Gender.Male))];
+        player.Box = [.. Enumerable.Range(10, world.Storage).Select(s => Mon(s, Gender.Male))];
 
         int due = player.EggAt;
 
         player.Steps = due - 1;
         world.Move(player.Id, Direction.Left, 10);
 
-        Assert.Equal(world.BoxSize, player.Box.Count);
+        Assert.Equal(world.Storage, player.Box.Count);
         Assert.Equal(due, player.EggAt);
 
         // Room, and then the very next step.
         player.Box.RemoveAt(0);
         world.Move(player.Id, Direction.Left, 20);
 
-        Assert.Equal(world.BoxSize, player.Box.Count);
+        Assert.Equal(world.Storage, player.Box.Count);
         Assert.True(player.EggAt > due);
     }
 

@@ -79,6 +79,11 @@ public static class RulesExporter
         // How many a box holds, out of the sentence the man in the Pokémon Center says.
         int boxSize = BoxCapacity.Locate(rom, log) ?? 0;
 
+        // And how many boxes there are, which BoxCapacity says in its own comment is not
+        // written anywhere. It is: not as a number, but as a run of names, and counting
+        // them counts the boxes.
+        int boxes = BoxNames.Locate(rom, log)?.Count ?? 1;
+
         var rules = new GameRules(
             anonymousSpecies, anonymousMoves, learnsets.Values, trainers, items, evolutions?.Evolutions,
             machineSets?.Masks)
@@ -86,6 +91,7 @@ public static class RulesExporter
             SurfMove = surf,
             StruggleMove = struggle,
             BoxSize = boxSize,
+            Boxes = boxes,
             EvolveByLevel = evolutions?.ByLevel ?? 0,
             EvolveByItem = evolutions?.ByItem ?? 0,
         };

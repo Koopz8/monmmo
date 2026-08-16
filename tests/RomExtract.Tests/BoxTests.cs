@@ -207,9 +207,9 @@ public class BoxTests
     [Fact]
     public void NothingGoesIntoAFullBox()
     {
-        (GameWorld world, ServerPlayer player) = Standing(party: 2, stored: TestRules.BoxSize);
+        (GameWorld world, ServerPlayer player) = Standing(party: 2, stored: TestRules.All.Storage);
 
-        Assert.Equal("The box is full.", Said(world.Deposit(player.Id, 1))?.Message);
+        Assert.Equal("The boxes are full.", Said(world.Deposit(player.Id, 1))?.Message);
         Assert.Equal(2, player.Party.Count);
     }
 
@@ -250,12 +250,12 @@ public class BoxTests
     [Fact]
     public void BothFullIsAnAnswerRatherThanSilence()
     {
-        (GameWorld world, ServerPlayer player) = Standing(party: 6, stored: TestRules.BoxSize);
+        (GameWorld world, ServerPlayer player) = Standing(party: 6, stored: TestRules.All.Storage);
 
         Assert.Equal(GameWorld.Kept.Nowhere, world.Catch(player.Id, Member(200)));
 
         Assert.Equal(6, player.Party.Count);
-        Assert.Equal(TestRules.BoxSize, player.Box.Count);
+        Assert.Equal(TestRules.All.Storage, player.Box.Count);
     }
 
     // ---- and it is still there tomorrow ----------------------------------------------

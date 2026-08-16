@@ -2445,7 +2445,7 @@ public sealed class GameWorld
             return Kept.InTheParty;
         }
 
-        if (BoxSize > 0 && player.Box.Count < BoxSize)
+        if (Storage > 0 && player.Box.Count < Storage)
         {
             player.Box.Add(caught);
             return Kept.InTheBox;
@@ -2459,6 +2459,16 @@ public sealed class GameWorld
     /// which is what a rules file written before this existed carries.
     /// </summary>
     public int BoxSize => _rules?.BoxSize ?? 0;
+
+    /// <summary>
+    /// How many a player may store altogether, which is what every check about room asks.
+    /// <para>
+    /// One box's worth was never a decision — it was what happened when the only number
+    /// anybody had read was the size of a box. A market makes the difference matter: a
+    /// player who buys is a player who needs somewhere to put it.
+    /// </para>
+    /// </summary>
+    public int Storage => _rules?.Storage ?? 0;
 
     /// <summary>
     /// Moves somebody out of the party and into the box.
@@ -2481,8 +2491,8 @@ public sealed class GameWorld
             if (slot < 0 || slot >= player.Party.Count) return [];
 
             if (!AtAComputer(player)) return [Boxed(player, "There is no machine here.")];
-            if (BoxSize <= 0) return [Boxed(player, "There is nowhere to put it.")];
-            if (player.Box.Count >= BoxSize) return [Boxed(player, "The box is full.")];
+            if (Storage <= 0) return [Boxed(player, "There is nowhere to put it.")];
+            if (player.Box.Count >= Storage) return [Boxed(player, "The boxes are full.")];
 
             if (_battles is { } battles
                 && battles.CanFight(player.Party[slot])
@@ -2745,7 +2755,7 @@ public sealed class GameWorld
             return;
         }
 
-        if (BoxSize <= 0 || player.Box.Count >= BoxSize) return;
+        if (Storage <= 0 || player.Box.Count >= Storage) return;
 
         SavedMon one = player.Daycare[0];
         SavedMon two = player.Daycare[1];
