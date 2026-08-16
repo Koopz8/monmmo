@@ -380,6 +380,7 @@ public sealed class GameWorld
         _startingSquare = startingSquare;
 
         _world = world;
+        _flagGates = new FlagGates(world);
         _rng = new BattleRng(encounterSeed);
         _rules = rules;
         _battles = rules is null ? null : new BattleFactory(rules);
@@ -2184,8 +2185,82 @@ public sealed class GameWorld
             foreach (int flag in ran.Cleared) player.Script.Clear(flag);
             foreach (SavedVariable variable in ran.Written) player.Script.Write(variable.Id, variable.Value);
 
-            return [.. Reconcile(player), .. HandOverMonster(player)];
+            // And to whoever was standing there. This is the one place in co-op that writes
+            // to somebody else's save, and it is deliberately the only one.
+            List<Outgoing> shared = Share(player, ran);
+
+            return [.. Reconcile(player), .. HandOverMonster(player), .. shared];
         }
+    }
+
+    /// <summary>
+    /// What a story event does to the people standing next to whoever caused it.
+    /// <para>
+    /// <b>Only the flags that are facts about the world.</b> A door unlocked, a guard moved,
+    /// a boat that will now sail — those are what "playing together" means, and a friend who
+    /// had to re-open every one of them separately is not playing with you. A badge is not
+    /// one of those, and neither is which starter somebody took.
+    /// </para>
+    /// <para>
+    /// The split is <b>derived rather than listed</b>: see <see cref="FlagGates"/>. It is
+    /// computed from the world file, so it cannot drift from the world it describes the way
+    /// a hand-written list of flag numbers would — and where it is wrong it is wrong towards
+    /// a door not opening, which somebody notices, rather than towards a badge appearing,
+    /// which nobody notices until much later.
+    /// </para>
+    /// <para>
+    /// <b>Cleared flags travel too.</b> A story that turns something off is as much a fact
+    /// about the world as one that turns it on — the whole middle of this game is flags being
+    /// cleared — and propagating only the setting half would leave a friend looking at a
+    /// person the story has removed.
+    /// </para>
+    /// <para>
+    /// <b>Variables do not travel.</b> A variable holds which starter was taken, which trainer
+    /// the rival fielded, how many steps an egg has left. Every one of those is an answer to
+    /// "what did *you* do", and copying them across is how one person's rival becomes
+    /// somebody else's.
+    /// </para>
+    /// </summary>
+    private List<Outgoing> Share(ServerPlayer who, ScriptRan ran)
+    {
+        if (_companies.For(who.Id) is not { } company) return [];
+
+        var send = new List<Outgoing>();
+
+        foreach (int id in company.Besides(who.Id))
+        {
+            // Standing there, rather than merely in the company. Somebody who wandered two
+            // maps away did not see this happen, and a story that reaches across the world
+            // because two people are nominally travelling together is a story nobody can
+            // follow.
+            if (!_players.TryGetValue(id, out ServerPlayer? other) || other.Where != who.Where)
+                continue;
+
+            var moved = false;
+
+            foreach (int flag in ran.Set.Where(f => _flagGates.IsAboutTheWorld(f)))
+            {
+                if (other.Script.Has(flag)) continue;
+
+                other.Script.Set(flag);
+                moved = true;
+            }
+
+            foreach (int flag in ran.Cleared.Where(f => _flagGates.IsAboutTheWorld(f)))
+            {
+                if (!other.Script.Has(flag)) continue;
+
+                other.Script.Clear(flag);
+                moved = true;
+            }
+
+            // Only when something actually moved. Reconcile walks everybody on a map and is
+            // called on every script anybody runs; doing it for a script that changed nothing
+            // for this person is work for nobody.
+            if (moved) send.AddRange(Reconcile(other));
+        }
+
+        return send;
     }
 
     /// <summary>What the last attempt to hand over a monster came to.</summary>
@@ -4461,6 +4536,18 @@ public sealed class GameWorld
     private readonly Duels _duels = new();
 
     private readonly Companies _companies = new();
+
+    /// <summary>
+    /// Which flags are facts about the world rather than marks on a character.
+    /// <para>
+    /// Built once from the world file, because it is a property of that file and does not
+    /// change while a server is running.
+    /// </para>
+    /// </summary>
+    private readonly FlagGates _flagGates;
+
+    /// <summary>What each flag gates, for the report and for anybody who wants to look.</summary>
+    public FlagGates FlagGates => _flagGates;
 
     /// <summary>What the last attempt to travel with somebody came to.</summary>
     public string? LastCompany { get; private set; }

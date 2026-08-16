@@ -199,6 +199,7 @@ public static class Program
         if (options.Silent) WriteSilentPeople(rom);
 
         if (options.Sound) WriteSound(rom);
+        if (options.FlagGates) WriteFlagGates(rom);
 
         if (options.SequenceWidths) WriteSequenceWidths(rom);
 
@@ -5582,6 +5583,124 @@ public static class Program
     /// back, including the numbers that would say something went wrong.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// What every flag actually gates, which is the question co-op could not answer.
+    /// <para>
+    /// Two people playing together want a door one of them opened to be open for both, and
+    /// do not want a badge one of them earned to appear on the other. The cartridge does not
+    /// distinguish them — there is no bit anywhere saying "this flag is about the world" — so
+    /// the classification cannot be read. It is derived instead, from what the world file
+    /// itself uses each flag for, and this prints the derivation so it can be looked at
+    /// rather than trusted.
+    /// </para>
+    /// <para>
+    /// The number to read first is the split. A clean one means the rule writes itself; a
+    /// mess is the finding.
+    /// </para>
+    /// </summary>
+    private static void WriteFlagGates(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("WHAT EACH FLAG GATES");
+        Console.WriteLine();
+
+        MapLibrary library = MapLibrary.Open(rom);
+        WorldData world = WorldExporter.Export(rom);
+
+        var gates = new FlagGates(world);
+
+        var hiding = new Dictionary<int, List<string>>();
+
+        foreach (MapData map in world.Maps)
+        {
+            foreach (MapObject person in map.Objects.Where(o => o.HiddenBy != 0))
+            {
+                if (!hiding.TryGetValue(person.HiddenBy, out List<string>? where))
+                    hiding[person.HiddenBy] = where = [];
+
+                where.Add($"{map.Id} person {person.LocalId}");
+            }
+        }
+
+        Console.WriteLine($"  {gates.Count} flags gate something in this world file");
+
+        foreach ((FlagGate kind, int count) in gates.Counted.OrderByDescending(p => p.Value))
+            Console.WriteLine($"    {count,4} gate {Describe(kind)}");
+
+        Console.WriteLine();
+        Console.WriteLine("  every one of them, and what it moves");
+
+        foreach ((int flag, FlagGate kind) in gates.All)
+        {
+            string what = hiding.TryGetValue(flag, out List<string>? where)
+                ? $"{where.Count} person(s) — {string.Join(", ", where.Take(3))}"
+                    + (where.Count > 3 ? $", +{where.Count - 3} more" : "")
+                : Describe(kind);
+
+            Console.WriteLine($"    0x{flag:X4}  {what}");
+        }
+
+        // And the other half, which is the half that decides the rule: how many flags the
+        // scripts touch that gate nothing here. Those are the marks on a character — a badge,
+        // which starter was taken — and they are the ones that must NOT travel.
+        var touched = new HashSet<int>();
+
+        foreach (LoadedMap map in library.All())
+        {
+            foreach ((string _, string _, uint address) in ScriptsOf(map))
+            {
+                foreach (ScriptCommand command in ScriptReader.ReadAll(rom, address))
+                {
+                    if (command.Code is not (SetFlagCode or ClearFlagCode)) continue;
+                    if (command.Arguments.Length < 2) continue;
+
+                    touched.Add(command.Word());
+                }
+            }
+        }
+
+        int marks = touched.Count(f => !gates.IsAboutTheWorld(f));
+
+        Console.WriteLine();
+        Console.WriteLine($"  {touched.Count} flags are set or cleared by a script somewhere");
+        Console.WriteLine($"    {touched.Count - marks} of those gate something — they travel between people playing together");
+        Console.WriteLine($"    {marks} gate nothing this build can see — they stay with whoever earned them");
+        Console.WriteLine();
+        Console.WriteLine(
+            "    a flag gating something this project has not extracted yet reads as gating");
+        Console.WriteLine(
+            "    nothing, so it stays personal — a door that fails to open for a friend, which");
+        Console.WriteLine(
+            "    somebody notices. The opposite error hands over a badge, which nobody notices.");
+
+        static string Describe(FlagGate kind) => kind switch
+        {
+            FlagGate.APerson => "somebody standing there",
+            FlagGate.TheBoat => "the boat",
+            _ => "nothing this build can see",
+        };
+    }
+
+    /// <summary>setflag and clearflag, both two bytes wide and both long since derived.</summary>
+    private const byte SetFlagCode = 0x29;
+
+    private const byte ClearFlagCode = 0x2A;
+
+    /// <summary>Every script on one map, with where it came from.</summary>
+    private static IEnumerable<(string MapId, string What, uint Address)> ScriptsOf(LoadedMap map)
+    {
+        string mapId = WorldExporter.MapId(map.Bank, map.Number);
+
+        foreach (MapObject person in map.Objects.Where(o => o.HasScript))
+            yield return (mapId, $"person {person.LocalId}", person.ScriptAddress);
+
+        foreach (MapTrigger trigger in map.Triggers.Where(t => t.HasScript))
+            yield return (mapId, $"trigger ({trigger.X},{trigger.Y})", trigger.ScriptAddress);
+
+        foreach (MapSign sign in map.Signs.Where(s => s.HasScript))
+            yield return (mapId, $"sign ({sign.X},{sign.Y})", sign.ScriptAddress);
+    }
+
     private static void WriteSound(Rom rom)
     {
         Console.WriteLine();
@@ -8009,6 +8128,9 @@ public static class Program
                                      arguments take, by trying every width against
                                      this cartridge and counting how many tracks
                                      reach an end
+              --flags               classify every flag by what turning it on changes:
+                                    somebody appearing, the boat, or nothing at all. The
+                                    split co-op's propagation rule is derived from.
               --sound                report the whole sound walk: recordings,
                                      instruments, songs, the song table, the cry
                                      table, and how many songs assemble. Prints
@@ -8176,6 +8298,8 @@ public static class Program
         /// <summary>Everything the sound walk finds, so it can be checked against a real file.</summary>
         public bool Sound { get; private init; }
 
+        public bool FlagGates { get; private init; }
+
         /// <summary>Measure how many bytes each sequence command's arguments take.</summary>
         public bool SequenceWidths { get; private init; }
 
@@ -8286,6 +8410,7 @@ public static class Program
             bool shared = false;
             bool silent = false;
             bool sound = false;
+            bool flagGates = false;
             bool sequenceWidths = false;
             int? oneSong = null;
             bool derive = false;
@@ -8506,6 +8631,9 @@ public static class Program
                     case "--sound":
                         sound = true;
                         break;
+                    case "--flags":
+                        flagGates = true;
+                        break;
                     case "--sequence-widths":
                         sequenceWidths = true;
                         break;
@@ -8686,6 +8814,7 @@ public static class Program
                 Shared = shared,
                 Silent = silent,
                 Sound = sound,
+                FlagGates = flagGates,
                 SequenceWidths = sequenceWidths,
                 OneSong = oneSong,
                 Derive = derive,
