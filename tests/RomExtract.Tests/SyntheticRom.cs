@@ -799,6 +799,7 @@ public sealed class SyntheticRom
         // And one that jumps backwards for ever, which is what a looping piece of music is.
         WriteLoopingTrack();
         WriteSettingWithAnAddress();
+        WriteRunningNoteAcrossAWait();
 
         // And one that stops because the file does, which is the failure the reader has to
         // report rather than throw on.
@@ -951,6 +952,30 @@ public sealed class SyntheticRom
         at += 4;
 
         _data[at] = 0xB1;   // end
+    }
+
+    /// <summary>
+    /// A note, a wait, and then a bare key byte — the bar of music that used to be an
+    /// infinite loop.
+    /// <para>
+    /// Copied in shape from a real cartridge, where it is what every failing song was doing.
+    /// A wait takes nothing after it, so a reader that let a wait become the running command
+    /// consumed no bytes when the bare byte repeated it and sat on one offset for twenty
+    /// thousand commands. Read correctly the bare byte is another note, because the running
+    /// command is still the note before the wait.
+    /// </para>
+    /// </summary>
+    private void WriteRunningNoteAcrossAWait()
+    {
+        int at = BareByteAfterAWaitOffset;
+
+        _data[at++] = 0xD3;   // a note
+        _data[at++] = 0x3C;   // key
+        _data[at++] = 0x70;   // volume
+        _data[at++] = 0x84;   // a wait, which takes nothing
+        _data[at++] = 0x30;   // a bare key: another note, not a repeated wait
+        _data[at++] = 0x82;   // another wait
+        _data[at] = 0xB1;     // end
     }
 
     private void WriteLoopingTrack()
@@ -1660,6 +1685,15 @@ public sealed class SyntheticRom
 
     /// <summary>The command that carries it. One of the settings, and its width is the question.</summary>
     public const byte SettingWithAnAddressOpcode = 0xB5;
+
+    /// <summary>
+    /// A note, a wait, and a bare key byte, then an end.
+    /// <para>
+    /// Three notes' worth of bytes and seven of them in all. A reader that lets a wait become
+    /// the running command never gets past the fifth.
+    /// </para>
+    /// </summary>
+    public const int BareByteAfterAWaitOffset = 0x1A9000;
 
     // --- move animations --------------------------------------------------------------
 

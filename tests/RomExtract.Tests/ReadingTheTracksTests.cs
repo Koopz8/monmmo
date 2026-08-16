@@ -224,6 +224,62 @@ public class ReadingTheTracksTests
     }
 
     /// <summary>
+    /// A bare byte after a wait is another note, not a repeated wait.
+    /// <para>
+    /// The one rule that had every failing song on a real cartridge failing. A wait takes
+    /// nothing after it, so repeating a wait consumes no bytes — a reader that let a wait
+    /// become the running command sat on one offset for twenty thousand commands and then
+    /// gave up. Only a command with something after it can be the running one.
+    /// </para>
+    /// <para>
+    /// Read correctly the same bytes are music: a note, a wait, another note at a different
+    /// key, a wait, an end.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ABareByteAfterAWaitIsAnotherNote()
+    {
+        TrackRead track = Read(SyntheticRom.BareByteAfterAWaitOffset);
+
+        Assert.True(track.EndedProperly, "the track did not reach its end");
+
+        List<SequenceEvent> notes = [.. track.Events.Where(e => e.Command == SequenceCommand.NoteOn)];
+
+        // Two of them, and the second is the byte that used to be a repeated wait.
+        Assert.Equal(2, notes.Count);
+        Assert.Equal(0x3C, notes[0].Arguments[0]);
+        Assert.Equal(0x30, notes[1].Arguments[0]);
+
+        // And the waits really are there, so this is not passing by ignoring them.
+        Assert.Equal(2, track.Events.Count(e => e.Command == SequenceCommand.Wait));
+    }
+
+    /// <summary>
+    /// And no command may leave the read where it found it.
+    /// <para>
+    /// The guard on the class of bug above rather than on that one instance. A reader that
+    /// can spin is a client that hangs, and this one could for as long as its budget allowed
+    /// while reporting nothing useful at the end of it.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AndNoCommandLeavesTheReadWhereItFoundIt()
+    {
+        var rom = new SyntheticRom().ToRom();
+
+        // Every track the walk finds, read to its end or to its failure — and none of them
+        // spending the whole budget standing still.
+        SoundTreeResult tree = SoundLocator.Walk(rom);
+
+        foreach (TrackRead read in SequenceReader.AllTracks(rom, tree))
+        {
+            Assert.True(
+                read.Events.Count < SequenceReader.MostCommands,
+                $"the track at {read.Offset:X} used the whole budget, which is what spinning looks like");
+        }
+    }
+
+    /// <summary>
     /// Every track of every song the walk found reads to an end, and the report says how
     /// many did — including when that number is smaller than the total.
     /// </summary>
