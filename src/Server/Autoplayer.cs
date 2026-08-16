@@ -624,8 +624,11 @@ public static class Autoplayer
                             continue;
                         }
 
+                        // No reason is recorded here, and there is nothing to clear either:
+                        // a reason is written on the branch that failed and this one did not.
+                        // The first version cleared a stale entry on the way past, which no
+                        // test could ever fail — nothing writes one for a purchase that works.
                         purse -= sold.Price;
-                        refusedAtTheCounter.Remove((itemId, map.Id));
                         bought.Add(new Bought(itemId, 1, sold.Price, map.Id));
                     }
                 }
