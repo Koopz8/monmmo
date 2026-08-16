@@ -9,6 +9,7 @@ using PokeMmo.Core.Scripts;
 using PokeMmo.Core.World;
 using PokeMmo.RomExtract.Items;
 using PokeMmo.RomExtract.Scripts;
+using PokeMmo.RomExtract.Sound;
 using PokeMmo.RomExtract.Trainers;
 
 namespace PokeMmo.Tools.RomDump;
@@ -195,6 +196,8 @@ public static class Program
         if (options.Shared) WriteSharedScripts(rom);
 
         if (options.Silent) WriteSilentPeople(rom);
+
+        if (options.Sound) WriteSound(rom);
 
         if (options.Derive) WriteDerivedLengths(rom);
 
@@ -5530,6 +5533,125 @@ public static class Program
             "have something to say once it is over");
     }
 
+
+    /// <summary>
+    /// Everything the sound walk finds, printed.
+    /// <para>
+    /// The whole of the sound work — the recordings, the instruments, the songs, the table
+    /// that names them and the table that says whose cry is whose — has never been run
+    /// against a real cartridge. It was built against a fixture this machine wrote, which can
+    /// only ever prove that the code agrees with the file it was written from.
+    /// </para>
+    /// <para>
+    /// This is what makes it checkable. Nothing here decides anything; it prints what came
+    /// back, including the numbers that would say something went wrong.
+    /// </para>
+    /// </summary>
+    private static void WriteSound(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("SOUND");
+        Console.WriteLine();
+
+        SoundTreeResult tree = SoundLocator.Walk(rom, Console.WriteLine);
+
+        Console.WriteLine();
+        Console.WriteLine($"  {tree.Samples.Count} recordings");
+
+        if (tree.Samples.Count > 0)
+        {
+            List<SampleRecord> packed = [.. tree.Samples.Where(s => s.Compressed)];
+
+            Console.WriteLine($"    {packed.Count} of them packed, {tree.Samples.Count - packed.Count} plain");
+            Console.WriteLine($"    {tree.Samples.Count(s => s.Loops)} loop");
+
+            List<int> rates = [.. tree.Samples.Select(s => s.Rate).Order()];
+
+            Console.WriteLine(
+                $"    rates from {rates[0]} to {rates[^1]}, middle one {rates[rates.Count / 2]}");
+        }
+
+        // The cry table, which the walk above cannot see: its entries carry a type byte
+        // outside the driver's kind enumeration, so every one of them is rejected as an
+        // instrument.
+        Console.WriteLine();
+
+        CryTableResult? cries = CryTableLocator.Locate(rom, tree.Samples, Console.WriteLine);
+
+        if (cries is not null)
+        {
+            int species = RomExtractor.Open(rom).ExtractSpecies().Count;
+
+            Console.WriteLine($"    the species table names {species}");
+
+            if (cries.Count != species)
+            {
+                Console.WriteLine(
+                    $"    which is {Math.Abs(cries.Count - species)} "
+                    + (cries.Count < species ? "fewer cries than creatures" : "more cries than creatures"));
+            }
+
+            Console.WriteLine($"    {cries.Samples.Distinct().Count()} different recordings between them");
+
+            var library = new CryLibrary(rom, tree.Samples, cries);
+
+            var decoded = 0;
+            var samplesLong = 0;
+
+            for (int at = 0; at < cries.Count; at++)
+            {
+                if (library.For(at) is not { } voice) continue;
+
+                decoded++;
+                samplesLong += voice.Audio.Length;
+            }
+
+            Console.WriteLine(
+                decoded == 0
+                    ? "    none of them unpacked, which is a finding"
+                    : $"    {decoded} unpacked, {samplesLong / Math.Max(1, decoded)} samples long on average");
+        }
+
+        // And whether a song can actually be assembled, which is the question every layer
+        // above was built to answer.
+        Console.WriteLine();
+
+        if (!tree.FoundATable)
+        {
+            Console.WriteLine("  no song table, so nothing can be assembled");
+
+            return;
+        }
+
+        var mixer = new PokeMmo.Core.Sound.Mixer(32768);
+
+        var loaded = 0;
+        var tracks = 0;
+        var missing = new List<int>();
+
+        for (int song = 0; song < tree.Table.Count; song++)
+        {
+            if (SongLoader.Load(rom, tree, song, mixer) is not { } player)
+            {
+                missing.Add(song);
+
+                continue;
+            }
+
+            loaded++;
+            tracks += player.TrackCount;
+        }
+
+        Console.WriteLine($"  {loaded} of {tree.Table.Count} songs assemble, {tracks} tracks between them");
+
+        if (missing.Count > 0)
+        {
+            Console.WriteLine(
+                $"    {missing.Count} do not: " +
+                string.Join(", ", missing.Take(20)) + (missing.Count > 20 ? ", ..." : ""));
+        }
+    }
+
     private static void WriteSilentPeople(Rom rom)
     {
         Console.WriteLine();
@@ -7274,6 +7396,10 @@ public static class Program
                                      output directory and nowhere else.
               --overworld            report the overworld sprite tables and write a
                                      few of the walking figures as PNGs
+              --sound                report the whole sound walk: recordings,
+                                     instruments, songs, the song table, the cry
+                                     table, and how many songs assemble. Prints
+                                     what was found, including what was not.
               --trainers             report the trainer table: where it starts, what
                                      was rejected just before it, and a few parties
               --items                report the item table, its pockets and prices
@@ -7434,6 +7560,9 @@ public static class Program
         /// <summary>Split the people whose script finishes and says nothing by cause.</summary>
         public bool Silent { get; private init; }
 
+        /// <summary>Everything the sound walk finds, so it can be checked against a real file.</summary>
+        public bool Sound { get; private init; }
+
         /// <summary>Score every argument width for the commands that stop a run.</summary>
         public bool Derive { get; private init; }
 
@@ -7537,6 +7666,7 @@ public static class Program
             string specialsOn = "";
             bool shared = false;
             bool silent = false;
+            bool sound = false;
             bool derive = false;
             bool opcodes = false;
             bool audit = false;
@@ -7752,6 +7882,9 @@ public static class Program
                     case "--silent":
                         silent = true;
                         break;
+                    case "--sound":
+                        sound = true;
+                        break;
                     case "--derive":
                         derive = true;
                         break;
@@ -7925,6 +8058,7 @@ public static class Program
                 SpecialsOn = specialsOn,
                 Shared = shared,
                 Silent = silent,
+                Sound = sound,
                 Derive = derive,
                 Opcodes = opcodes,
                 Audit = audit,
