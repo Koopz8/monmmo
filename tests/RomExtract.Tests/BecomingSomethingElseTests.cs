@@ -308,10 +308,16 @@ public class BecomingSomethingElseTests
 
         MoveData ball = you.MoveAt(0)!;
 
-        int clear = DamageCalculator.Calculate(you, them, ball, false, 100).Damage;
-        int rain = DamageCalculator.Calculate(you, them, ball, false, 100, Weather.Rain).Damage;
+        DamageResult clear = DamageCalculator.Calculate(you, them, ball, false, 100);
+        DamageResult rain = DamageCalculator.Calculate(you, them, ball, false, 100, Weather.Rain);
 
-        Assert.True(clear > 0 && rain > 0);
-        Assert.NotEqual(clear, rain);
+        // The effectiveness rather than the damage, and that is the point of this test
+        // rather than a detail of it. Comparing the two damage numbers passes whether or not
+        // the type reaches the sum, because the power doubles under rain either way — which
+        // is exactly how the first version of this agreed with the code being broken.
+        Assert.Equal(TypeChart.Neutral, clear.EffectivenessHundredths);
+        Assert.True(rain.NotVeryEffective, "the ball did not come out as Water against a Water defender");
+
+        Assert.True(clear.Damage > 0 && rain.Damage > 0);
     }
 }
