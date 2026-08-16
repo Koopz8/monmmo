@@ -133,7 +133,7 @@ public static class DamageCalculator
         // What this move actually hits for, when its record's number is a placeholder. Asked
         // before the "no power" refusal below, because FLAIL's record says one and one is a
         // record saying the number is somewhere else.
-        int power = MovePower.Of(move, attacker) ?? move.Power;
+        int power = MovePower.Of(move, attacker, defender) ?? move.Power;
 
         if (move.Category == DamageCategory.Status || power == 0 || effectiveness == 0)
             return new DamageResult(0, false, effectiveness, false);

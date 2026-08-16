@@ -32,6 +32,17 @@ public static class MovePower
     /// <summary>HIDDEN POWER: a type and a power out of the six a creature was born with.</summary>
     public const byte Hidden = 0x87;
 
+    /// <summary>GUST and TWISTER: twice as hard against something that is not on the ground.</summary>
+    public const byte Overhead = 0x95;
+
+    public const byte Whirling = 0x92;
+
+    /// <summary>EARTHQUAKE: twice as hard against something that has gone under it.</summary>
+    public const byte Underfoot = 0x93;
+
+    /// <summary>SMELLINGSALT: twice as hard against something that cannot move properly.</summary>
+    public const byte Rousing = 0xAB;
+
     /// <summary>
     /// The five steps FLAIL and REVERSAL climb, as forty-eighths of full health and the
     /// power at each. <b>Modelled.</b>
@@ -63,8 +74,16 @@ public static class MovePower
     /// move would be one nobody could tell had done anything.
     /// </para>
     /// </summary>
-    public static int? Of(MoveData move, Battler attacker) => move.Effect switch
+    public static int? Of(MoveData move, Battler attacker, Battler? defender = null) => move.Effect switch
     {
+        // The three that answer somebody who is not standing where they were. This engine has
+        // one "away" state rather than one per move — a creature halfway through FLY and one
+        // halfway through DIG are both simply not there — so all three read the same flag,
+        // and that is a simplification worth naming rather than hiding.
+        Overhead or Whirling or Underfoot when defender is { IsAway: true } => move.Power * 2,
+
+        Rousing when defender is { Status: StatusCondition.Paralysis } => move.Power * 2,
+
         Cornered => Climbing(attacker),
         Spending => Math.Max(1, Full * attacker.CurrentHp / Math.Max(1, attacker.MaxHp)),
         Regardless when attacker.Status != StatusCondition.None => move.Power * 2,

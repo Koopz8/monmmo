@@ -1683,6 +1683,63 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             return;
         }
 
+        if (effect.Kind == EffectKind.HealByWeather)
+        {
+            // How much depends on what the sky is doing: more in sun, less in anything else
+            // that is happening, half otherwise. Modelled — a move's record says nothing
+            // about weather — but which weather is up is read, so only the shares are ours.
+            // Quarters of its own maximum: half in a clear sky, three quarters in sun, and
+            // one quarter in anything else that is happening. Modelled — a move's record says
+            // nothing about weather — but which weather is up is read, so only the shares
+            // are this project's.
+            int share = Overhead switch
+            {
+                Weather.None => 2,
+                Weather.Sun => 3,
+                _ => 1,
+            };
+
+            int given = target.Heal(Math.Max(1, target.MaxHp * share / 4));
+
+            if (given > 0) events.Add(new BattleEvent.Recovered(at, given));
+            else events.Add(new BattleEvent.NothingHappened(at));
+
+            return;
+        }
+
+        if (effect.Kind == EffectKind.Spite)
+        {
+            // Whatever they last did, and nothing if they have not done anything. Four uses
+            // is modelled; that there is a slot to take them from at all is the engine having
+            // spent PP since moves could run out.
+            if (target.LastSlot is not { } slot || target.PpLeft(slot) <= 0)
+            {
+                events.Add(new BattleEvent.NothingHappened(at));
+
+                return;
+            }
+
+            for (int taken = 0; taken < 4 && target.PpLeft(slot) > 0; taken++) target.Spend(slot);
+
+            events.Add(new BattleEvent.CannotUse(at, target.MoveAt(slot)?.Id ?? 0));
+
+            return;
+        }
+
+        if (effect.Kind == EffectKind.Rouse)
+        {
+            // The damage has already been doubled where damage is worked out. This is the
+            // other half: it wakes them up out of what it hit them for, which makes it the
+            // only move in this game that is worth less the second time you use it.
+            if (target.Status != StatusCondition.Paralysis) return;
+
+            target.Status = StatusCondition.None;
+
+            events.Add(new BattleEvent.PutRight(at, 0, Ailments.Paralysis));
+
+            return;
+        }
+
         if (effect.Kind == EffectKind.BreaksWalls)
         {
             // The damage has already landed by the time this runs, which is the right order:

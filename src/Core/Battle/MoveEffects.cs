@@ -92,6 +92,15 @@ public enum EffectKind
     /// <summary>Makes the other side findable, whatever it is and however well it is hiding.</summary>
     Identifies,
 
+    /// <summary>Puts health back, by an amount the sky decides.</summary>
+    HealByWeather,
+
+    /// <summary>Takes uses off whatever the other side last did.</summary>
+    Spite,
+
+    /// <summary>Shakes somebody out of being unable to move properly.</summary>
+    Rouse,
+
     /// <summary>Lands several times in one turn.</summary>
     MultiHit,
 
@@ -396,6 +405,15 @@ public static class MoveEffects
         // TELEPORT, which is running away by another name and reaches the same code.
         0x99 => new MoveEffect(EffectKind.Leave, OnUser: true),
 
+        // The three that heal by however much the sky allows. One group by behaviour, three
+        // effect bytes, and the only reason they are three is that the cartridge gives each
+        // its own — which is read, so they are written as read rather than folded.
+        0x84 or 0x85 or 0x86 => new MoveEffect(EffectKind.HealByWeather, OnUser: true),
+
+        // SPITE, which needed nothing except PP, and PP has been spent here since moves ran
+        // out.
+        0x64 => new MoveEffect(EffectKind.Spite, OnUser: false),
+
         // Four that answer other moves, and every one of them was impossible until the thing
         // it answers existed. Three of the four became writable in the last three milestones.
         0xBA => new MoveEffect(EffectKind.BreaksWalls, OnUser: false),
@@ -406,8 +424,13 @@ public static class MoveEffects
         // The four whose power is not the number on their record. Everything they do happens
         // where the damage is worked out, so there is nothing for the effect handler to do —
         // but they are named here so they are finished rather than silent.
-        MovePower.Cornered or MovePower.Spending or MovePower.Regardless or MovePower.Hidden =>
+        MovePower.Cornered or MovePower.Spending or MovePower.Regardless or MovePower.Hidden
+            or MovePower.Overhead or MovePower.Whirling or MovePower.Underfoot =>
             new MoveEffect(EffectKind.Nothing, OnUser: true),
+
+        // SMELLINGSALT hits harder for the same reason and then puts right what it hit them
+        // for, which is the one of these five with a second half.
+        MovePower.Rousing => new MoveEffect(EffectKind.Rouse, OnUser: false),
 
         0x2B => new MoveEffect(EffectKind.HighCritical, OnUser: false),
         0x1F or 0x96 => new MoveEffect(EffectKind.Flinch, OnUser: false),
