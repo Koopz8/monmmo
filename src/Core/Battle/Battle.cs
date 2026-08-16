@@ -1265,7 +1265,8 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         // They add rather than replace, which is the games' rule and the reason a FARFETCH'D
         // holding a STICK and using SLASH crits about half the time.
         int criticalStage = (carried.Kind == EffectKind.HighCritical ? 1 : 0)
-            + HeldItems.Sharpens(attacker.Carried, attacker.Species.Index);
+            + HeldItems.Sharpens(attacker.Carried, attacker.Species.Index)
+            + (attacker.IsFocused ? 1 : 0);
 
         int total = 0;
         int landed = 0;
@@ -1286,6 +1287,12 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             // DOUBLESLAP has to get through it five times.
             int coming = result.Damage;
             bool held = false;
+
+            // FALSE SWIPE, applied here because here is where a number becomes a knockout.
+            // One point left rather than none, and no message: the whole point of the move
+            // is that nothing happens.
+            if (MoveEffects.Of(move.Effect).Kind == EffectKind.LeavesOne && coming >= defender.CurrentHp)
+                coming = Math.Max(0, defender.CurrentHp - 1);
 
             if (coming >= defender.CurrentHp
                 && defender.CurrentHp > 1
@@ -1857,7 +1864,7 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         // some of them.
         if (effect.Kind == EffectKind.AllStages)
         {
-            foreach (Stat stat in MoveEffects.Five)
+            foreach (Stat stat in effect.Many ?? MoveEffects.Five)
             {
                 int had = target.StageOf(stat);
 
@@ -1869,6 +1876,47 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
 
             return;
         }
+
+        // The user's own condition, gone. Nothing else clears one without an item, which is
+        // why this is its own kind rather than a status of None — applying "none" through the
+        // status path would have to mean something everywhere else that path is used.
+        if (effect.Kind == EffectKind.Refresh)
+        {
+            if (target.Status == StatusCondition.None)
+            {
+                events.Add(new BattleEvent.NothingHappened(at));
+            }
+            else
+            {
+                target.Status = StatusCondition.None;
+
+                events.Add(new BattleEvent.PutRight(at, 0, Ailments.Everything));
+            }
+
+            return;
+        }
+
+        // Sharper until it leaves the field, which is what makes it a flag on the battler
+        // rather than a stage: HAZE does not clear it and nothing lowers it.
+        if (effect.Kind == EffectKind.Focus)
+        {
+            if (target.IsFocused)
+            {
+                events.Add(new BattleEvent.NothingHappened(at));
+            }
+            else
+            {
+                target.IsFocused = true;
+
+                events.Add(new BattleEvent.TookAim(at));
+            }
+
+            return;
+        }
+
+        // FALSE SWIPE, whose whole rule is applied where the damage is and has nothing to do
+        // here. Named so it is not silent rather than left out so it looks unwritten.
+        if (effect.Kind == EffectKind.LeavesOne) return;
 
         int before = target.StageOf(effect.Stat);
 

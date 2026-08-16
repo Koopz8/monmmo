@@ -62,6 +62,15 @@ public enum EffectKind
     /// </summary>
     AllStages,
 
+    /// <summary>The user's own condition, cleared.</summary>
+    Refresh,
+
+    /// <summary>Sharper until it leaves the field.</summary>
+    Focus,
+
+    /// <summary>Never takes the last point.</summary>
+    LeavesOne,
+
     /// <summary>Lands several times in one turn.</summary>
     MultiHit,
 
@@ -139,6 +148,16 @@ public readonly record struct MoveEffect(
     bool OnUser,
     StatusCondition Status = StatusCondition.None,
     Stat Stat = Stat.Hp,
+
+    /// <summary>
+    /// More than one stat, when a move moves several at once.
+    /// <para>
+    /// Beside <see cref="Stat"/> rather than replacing it, because the overwhelming majority
+    /// of these groups move exactly one and a list of one everywhere would be ceremony. Null
+    /// means "the single one"; <see cref="EffectKind.AllStages"/> with no list means all five.
+    /// </para>
+    /// </summary>
+    IReadOnlyList<Stat>? Many = null,
     int Stages = 0);
 
 /// <summary>
@@ -302,6 +321,47 @@ public static class MoveEffects
         // side, which is why both shields ask "was this somebody else" — and there was a
         // test asserting no such move existed, because until this line none did.
         0xCC => new MoveEffect(EffectKind.Stage, OnUser: true, Stat: Stat.SpAttack, Stages: -2),
+
+        // The four that raise two of the user's own stats at once. Which two is in the
+        // game's code and is modelled; that they are one act rather than two is the shape of
+        // the group, and it is why they go through the same one-roll path all five do.
+        0xCE => Several(EffectKind.AllStages, +1, Stat.Defense, Stat.SpDefense),
+        0xD0 => Several(EffectKind.AllStages, +1, Stat.Attack, Stat.Defense),
+        0xD3 => Several(EffectKind.AllStages, +1, Stat.SpAttack, Stat.SpDefense),
+        0xD4 => Several(EffectKind.AllStages, +1, Stat.Attack, Stat.Speed),
+
+        // And one that takes two off somebody else.
+        0xCD => new MoveEffect(EffectKind.AllStages, OnUser: false, Stages: -1, Many: [Stat.Attack, Stat.Defense]),
+
+        // SUPERPOWER: it lands, and then costs its user the two stats it just used.
+        0xB6 => Several(EffectKind.AllStages, -1, Stat.Attack, Stat.Defense),
+
+        // Two that move one of the user's own, and one chance on a damaging move.
+        0x6C => new MoveEffect(EffectKind.Stage, OnUser: true, Stat: Stat.Evasion, Stages: 1),
+        0x9C => new MoveEffect(EffectKind.Stage, OnUser: true, Stat: Stat.Defense, Stages: 1),
+        0x8A => new MoveEffect(EffectKind.Stage, OnUser: true, Stat: Stat.Defense, Stages: 1),
+
+        // The four that take a turn to wind up. The winding is machinery this engine has had
+        // since FLY, and these four were never pointed at it.
+        0x27 or 0x4B or 0x91 or 0x97 => new MoveEffect(EffectKind.TwoTurn, OnUser: true),
+
+        // SPLASH, which is the one move in this game whose whole joke is that it does
+        // nothing. It is not silent — it is finished.
+        0x55 => new MoveEffect(EffectKind.Nothing, OnUser: true),
+
+        // Two more ways to inflict what this engine already inflicts. Neither does damage,
+        // which is the only thing that made them look different from the groups above them.
+        0xA7 => new MoveEffect(EffectKind.Status, OnUser: false, Status: StatusCondition.Burn),
+        0xC7 => new MoveEffect(EffectKind.Confuse, OnUser: false),
+
+        // REFRESH: the user's own condition, gone.
+        0xC1 => new MoveEffect(EffectKind.Refresh, OnUser: true),
+
+        // FOCUS ENERGY: sharper until it leaves.
+        0x2F => new MoveEffect(EffectKind.Focus, OnUser: true),
+
+        // FALSE SWIPE: always leaves one.
+        0x65 => new MoveEffect(EffectKind.LeavesOne, OnUser: false),
 
         0x2B => new MoveEffect(EffectKind.HighCritical, OnUser: false),
         0x1F or 0x96 => new MoveEffect(EffectKind.Flinch, OnUser: false),
@@ -489,6 +549,9 @@ public static class MoveEffects
 
     private static MoveEffect Stage(int index, int stages, bool onUser) =>
         new(EffectKind.Stage, onUser, Stat: Order[index], Stages: stages);
+
+    private static MoveEffect Several(EffectKind kind, int stages, params Stat[] stats) =>
+        new(kind, OnUser: true, Stages: stages, Many: stats);
 
     /// <summary>
     /// How many of a set of moves this table understands.

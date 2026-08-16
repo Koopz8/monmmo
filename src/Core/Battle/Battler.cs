@@ -358,6 +358,17 @@ public sealed class Battler
     public bool HasAimed { get; set; }
 
     /// <summary>
+    /// Sharper, until it leaves the field.
+    /// <para>
+    /// A flag rather than a stage, and that is the rule rather than an implementation
+    /// choice: HAZE clears every stage on the field and does not clear this, and nothing
+    /// lowers it. It goes when its owner does, which is what
+    /// <see cref="ForgetWhatWasStarted"/> is for.
+    /// </para>
+    /// </summary>
+    public bool IsFocused { get; set; }
+
+    /// <summary>
     /// True while something has made sure this one is not going anywhere.
     /// <para>
     /// MEAN LOOK, and it lasts as long as the creature is standing there rather than for
@@ -390,6 +401,7 @@ public sealed class Battler
         ForcedSlot = null;
         ForcedTurns = 0;
         ChoiceSlot = null;
+        IsFocused = false;
         LastSlot = null;
         DisabledSlot = null;
         DisabledTurns = 0;

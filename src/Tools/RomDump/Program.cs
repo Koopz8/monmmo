@@ -1543,7 +1543,7 @@ public static class Program
         foreach (var group in byEffect
                      .Where(g => g.Key != 0 && Core.Battle.MoveEffects.Of(g.Key).Kind == Core.Battle.EffectKind.None)
                      .OrderByDescending(g => g.Count())
-                     .Take(16))
+                     .Take(200))
         {
             string mark = inTheRecord.Contains(group.Key)
                 ? group.All(m => m.Accuracy == 0) ? "  <- never misses, off the record" : "  <- moves out of turn, off the record"
