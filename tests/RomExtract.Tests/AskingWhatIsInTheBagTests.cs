@@ -856,6 +856,53 @@ public class AskingWhatIsInTheBagTests
     }
 
     /// <summary>
+    /// And the edge of a map is a way in, the same as a door is.
+    /// <para>
+    /// The decoy for the chain, and it was needed: half of this game's map graph is not
+    /// doors at all, it is walking off the side of a route. Counting only warps left every
+    /// outdoor map in the world looking like somewhere nothing leads to — and the run's
+    /// three drinks are sold in a city, which is reached exactly that way.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TheEdgeOfAMapIsAWayInTheSameAsADoorIs()
+    {
+        // Blocked out of 1.1 by somebody rooted on the door, exactly as before — so
+        // everything past it is unreached and the chain is the only thing under test.
+        MapData start = Room("1.0") with
+        {
+            Warps = [new Warp(3, 1, 0, "1.1")],
+            Objects =
+            [
+                new MapObject(1, 1, 1, 1, Direction.Down, 0, false) { ScriptAddress = 0x1000 },
+                new MapObject(2, 1, 3, 1, Direction.Down, 0, false),
+            ],
+        };
+
+        // And the last step is an edge rather than a door. No warp joins these two at all.
+        MapData middle = Room("1.1") with
+        {
+            Warps = [new Warp(1, 1, 0, "1.0")],
+            Connections = [new MapConnection(ConnectionSide.Right, 0, "1.2")],
+        };
+
+        MapData shop = Room("1.2") with
+        {
+            Objects = [new MapObject(1, 1, 2, 1, Direction.Down, 0, false, Sells: [Tea])],
+        };
+
+        Attempt played = Autoplayer.Play(
+            new WorldData([start, middle, shop]),
+            "1.0",
+            TestRules.All,
+            (_, _, _) => Nothing with { Asked = [(Tea, 1, false)] });
+
+        FoundAt sold = Assert.Single(Assert.Single(played.Refused).Sources);
+
+        Assert.Equal(["1.0", "1.1", "1.2"], sold.WayIn);
+    }
+
+    /// <summary>
     /// And a map nothing leads to says so, rather than saying nothing.
     /// <para>
     /// The decoy, and the two answers could not be further apart: one shut door is an
