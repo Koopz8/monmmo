@@ -97,8 +97,12 @@ public class FiveThatWereWaitingTests
         battle.Arrival(Side.Player);
         battle.Arrival(Side.Opponent);
 
-        Assert.Equal(Abilities.Trace, you.Ability);
-        Assert.Equal(Abilities.Trace, them.Ability);
+        // Asked of what was borrowed rather than of what the ability comes to. Both of them
+        // answer TRACE either way — copying a copier gives you a copier — so comparing the
+        // abilities passes whether or not the rule is there, which is how the first version
+        // of this agreed with the rule being deleted.
+        Assert.Null(you.BorrowedAbility);
+        Assert.Null(them.BorrowedAbility);
     }
 
     // ---- becoming what hit it -----------------------------------------------------------
@@ -178,23 +182,26 @@ public class FiveThatWereWaitingTests
     [Fact]
     public void AndWalkingInUnderASkySettlesItToo()
     {
+        // The rain is already falling, and then somebody arrives into it. Arriving is not a
+        // change of weather, so nothing that only listens for changes will hear this — which
+        // is the whole of what this test is for, and the first version of it started a fresh
+        // battle and so measured the change instead.
         Battler you = Make(Species(speed: 200), Move(Bringing(Weather.Rain)));
-        Battler them = Make(Species(), Move(0x00, 0));
+        Battler them = Make(Species(Abilities.Forecast), Move(0x00, 0));
 
         var battle = new Battle(you, them, 7);
 
         Turn(battle);
 
-        Battler arriving = Make(Species(Abilities.Forecast), Move(0x00, 0));
+        Assert.Equal(Weather.Rain, battle.Sky);
 
-        // The same battle, with somebody new on that side — which is what an arrival is.
-        Battler swapped = arriving;
+        // Put back to what it was born as, as though somebody else were standing there, and
+        // then arrived into the rain that is already falling.
+        them.BorrowedType = null;
 
-        var second = new Battle(you, swapped, 7);
+        battle.Arrival(Side.Opponent);
 
-        second.ResolveTurn(new BattleAction.UseMove(0), new BattleAction.UseMove(0));
-
-        Assert.Equal(PokemonType.Water, swapped.Type1);
+        Assert.Equal(PokemonType.Water, them.Type1);
     }
 
     /// <summary>
