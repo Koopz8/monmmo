@@ -156,6 +156,17 @@ public sealed record FerryTicket(
 /// <summary>Something the playthrough bought, and what it cost.</summary>
 public sealed record Bought(int ItemId, int Count, int Price, string MapId);
 
+/// <summary>
+/// Something it was refused, could see on a shelf, and still did not buy — and why.
+/// <para>
+/// Because "it bought nothing" has four causes and they are not remotely alike: nobody
+/// sells one, the counter is somewhere it cannot stand, it cannot afford one, or the bag
+/// has no room. The last of those is what actually happened the first time this ran, and
+/// without this line it read as the third.
+/// </para>
+/// </summary>
+public sealed record NotBought(int ItemId, string MapId, string Why);
+
 /// <summary>Somewhere one item could be got, and how.</summary>
 /// <param name="How">
 /// In the world file's own terms — lying on the floor, handed over by somebody, paid for,
@@ -266,6 +277,9 @@ public sealed record Attempt(
 
     /// <summary>What it had left.</summary>
     public int MoneyLeft { get; init; }
+
+    /// <summary>What it stood in front of and did not buy, and why not.</summary>
+    public IReadOnlyList<NotBought> CouldNotBuy { get; init; } = [];
 
     /// <summary>People a script took off a map, which is how a doorway stops being blocked.</summary>
     public IReadOnlyCollection<(string MapId, int LocalId)> Removed { get; init; } = [];
@@ -429,6 +443,7 @@ public static class Autoplayer
 
         var purse = money;
         var bought = new List<Bought>();
+        var refusedAtTheCounter = new Dictionary<(int ItemId, string MapId), string>();
 
         var won = 0;
         var lost = 0;
@@ -493,7 +508,7 @@ public static class Autoplayer
 
                     if (did.Gets is { } got)
                     {
-                        bag.Add(got.ItemId, got.Count, Most(rules, got.ItemId));
+                        bag.Add(got.ItemId, got.Count, Most(rules, got.ItemId), Alongside(rules, got.ItemId));
 
                         // And a thing that is picked up is gone from the floor. The
                         // cartridge sets that flag inside the standard routine that does
@@ -582,10 +597,37 @@ public static class Autoplayer
                         // cartridge says is for sale at all: a price of nothing, or a key
                         // item on a shelf, is a listing rather than a purchase.
                         if (!refused.Keys.Any(r => r.ItemId == itemId)) continue;
-                        if (rules.ItemAt(itemId) is not { CanBeBought: true } sold) continue;
-                        if (bag.Has(itemId) || purse < sold.Price) continue;
-                        if (bag.Add(itemId, 1, Most(rules, itemId)) <= 0) continue;
+                        if (bag.Has(itemId)) continue;
 
+                        if (rules.ItemAt(itemId) is not { CanBeBought: true } sold)
+                        {
+                            refusedAtTheCounter[(itemId, map.Id)] = "the cartridge does not sell it";
+
+                            continue;
+                        }
+
+                        if (purse < sold.Price)
+                        {
+                            refusedAtTheCounter[(itemId, map.Id)] =
+                                $"cannot afford it — {sold.Price} against {purse} left";
+
+                            continue;
+                        }
+
+                        // The pocket, not the bag. A cap named for one and counted across the
+                        // other is why the first run of this stood in the shop with money in
+                        // hand and bought nothing at all.
+                        if (bag.Add(itemId, 1, Most(rules, itemId), Alongside(rules, itemId)) <= 0)
+                        {
+                            refusedAtTheCounter[(itemId, map.Id)] = "the bag had no room for it";
+
+                            continue;
+                        }
+
+                        // No reason is recorded here, and there is nothing to clear either:
+                        // a reason is written on the branch that failed and this one did not.
+                        // The first version cleared a stale entry on the way past, which no
+                        // test could ever fail — nothing writes one for a purchase that works.
                         purse -= sold.Price;
                         bought.Add(new Bought(itemId, 1, sold.Price, map.Id));
                     }
@@ -671,6 +713,7 @@ public static class Autoplayer
             RodeTheBoat = ridingTheBoat,
             Bought = bought,
             MoneyLeft = purse,
+            CouldNotBuy = [.. refusedAtTheCounter.Select(r => new NotBought(r.Key.ItemId, r.Key.MapId, r.Value))],
             Tickets =
             [
                 .. world.FerryPasses.Select(p => new FerryTicket(
@@ -912,6 +955,21 @@ public static class Autoplayer
     /// the world is a bag nobody should trust about anything else either.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Which of the things already carried share a pocket with this one, so that the bag's
+    /// capacity means what its name says.
+    /// <para>
+    /// An item whose record the rules have never heard of shares a pocket with nothing, which
+    /// keeps an unknown id from filling a pocket it does not belong to.
+    /// </para>
+    /// </summary>
+    private static Func<int, bool> Alongside(GameRules rules, int itemId)
+    {
+        Pocket mine = rules.ItemAt(itemId)?.Pocket ?? Pocket.None;
+
+        return other => mine != Pocket.None && rules.ItemAt(other)?.Pocket == mine;
+    }
+
     private static int Most(GameRules rules, int itemId) =>
         rules.ItemAt(itemId)?.IsKeyItem == true ? 1 : Bag.MaxStack;
 

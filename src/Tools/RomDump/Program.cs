@@ -5855,12 +5855,17 @@ public static class Program
             foreach (Bought buy in played.Bought)
                 Console.WriteLine($"    bought {NameOf(buy.ItemId)} for {buy.Price} at {buy.MapId}");
 
-            if (played.Bought.Count == 0)
+            // Why not, when it did not. "It bought nothing" has four causes and they are not
+            // remotely alike; the first run of this hit the one nobody would have guessed.
+            foreach (NotBought missed in played.CouldNotBuy)
+                Console.WriteLine($"    did NOT buy {NameOf(missed.ItemId)} at {missed.MapId}: {missed.Why}");
+
+            if (played.Bought.Count == 0 && played.CouldNotBuy.Count == 0)
             {
                 Console.WriteLine(
-                    "    and bought nothing: either nothing it was refused is on a shelf it can");
+                    "    and bought nothing, having stood in front of no counter selling anything");
                 Console.WriteLine(
-                    "    stand in front of, or it could not afford what is");
+                    "    it had been refused");
             }
         }
 
