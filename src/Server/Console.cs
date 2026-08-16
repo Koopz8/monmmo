@@ -52,6 +52,8 @@ public static class ConsoleHelp
     [
         "/where                     what map and square you are on",
         "/tier                      which strength band your party is in, and why",
+        "/ladder [band]             the top of a band, yours by default",
+        "/rating [band]             your own, and what it is made of",
         "/tp <map> <x> <y>          go somewhere, e.g. /tp 3.1 25 20",
         "/give <species> <level>    one more in the party",
         "/item <id> [count]         something for the bag",

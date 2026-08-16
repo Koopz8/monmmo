@@ -792,6 +792,9 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
 
     /// <summary>Guilds, when the store behind this server can keep them.</summary>
     private Guilds? _guilds;
+
+    /// <summary>The ladder, when the store behind this server can keep ratings.</summary>
+    private Ladder? _ladder;
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private readonly TaskCompletionSource<int> _listening =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -838,6 +841,7 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
         _market = store is IMarketStore selling ? new Market(selling, _scribe.HoldAsync) : null;
         _friends = store is IFriendStore listing ? new Friends(listing) : null;
         _guilds = store is IGuildStore grouping ? new Guilds(grouping) : null;
+        _ladder = store is IRatingStore rating ? new Ladder(rating) : null;
 
         _ = TickAsync(cancellationToken);
 
@@ -1347,6 +1351,21 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                             if (_market.Last is { } shopped) Console.WriteLine($"~ #{playerId} {shopped}");
                             break;
 
+                        case ConsoleCommand rung
+                            when playerId != 0
+                                && _ladder is not null
+                                && Ladder.Handles(ConsoleLine.Of(rung.Text).Verb):
+
+                            await DispatchAsync(
+                                    await _ladder
+                                        .RunAsync(world, playerId, accountId, ConsoleLine.Of(rung.Text), cancellationToken)
+                                        .ConfigureAwait(false),
+                                    playerId,
+                                    cancellationToken)
+                                .ConfigureAwait(false);
+
+                            break;
+
                         // Guilds, which anybody may use. Not behind /op for the reason the
                         // market screen is not: a guild is a thing players have, and a
                         // console verb being the only way in is an accident of there being
@@ -1511,6 +1530,24 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                     // Written down here as well as after a battle, because everything
                     // else that lasts happens somewhere in that switch: an item handed
                     // over, a flag a script set, a move taught, money spent. The S.S.
+                    // A duel that just ended, written down outside the world's lock. Asked
+                    // after every message rather than at the one place a duel can finish,
+                    // because a duel finishes on an ordinary battle turn and hanging it
+                    // there would be a hook that quietly stops firing the day somebody adds
+                    // a second way for one to end.
+                    //
+                    // Taken rather than read, so a result is paid exactly once.
+                    if (_ladder is { } board && world.TakeDuelResult() is { } settledDuel)
+                    {
+                        await DispatchAsync(
+                                await board.RecordAsync(world, settledDuel, cancellationToken).ConfigureAwait(false),
+                                playerId,
+                                cancellationToken)
+                            .ConfigureAwait(false);
+
+                        if (board.Last is { } rated) Console.WriteLine($"^ ladder {rated}");
+                    }
+
                     // TICKET is the case that made this obvious — it is given by a
                     // conversation, and a server that stopped before the next battle
                     // handed it over for nothing.

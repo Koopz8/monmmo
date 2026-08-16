@@ -251,3 +251,13 @@ public sealed class Duels
 
     public int Count => _live.Count;
 }
+
+/// <summary>
+/// One finished duel, as something outside the world needs it.
+/// <para>
+/// Account ids rather than player ids, because a rating belongs to an account and a player
+/// id is only the name of a connection. The band comes with it because it was decided by
+/// what was standing on the field, which nothing outside the world can see afterwards.
+/// </para>
+/// </summary>
+public sealed record DuelResult(long Winner, long Loser, int Band);

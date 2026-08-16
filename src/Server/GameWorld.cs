@@ -4436,6 +4436,31 @@ public sealed class GameWorld
     private readonly Duels _duels = new();
 
     /// <summary>
+    /// Who beat whom, in which band, waiting for somebody outside the lock to write it down.
+    /// <para>
+    /// Reported rather than written, for the reason the market lives outside this class: a
+    /// rating is a database transaction and this runs inside the lock every player on the
+    /// server is waiting on. The world knows what happened; something else records it.
+    /// </para>
+    /// <para>
+    /// Taken rather than read, so a result is written once. A property that could be read
+    /// twice is a ladder that pays twice on a slow tick.
+    /// </para>
+    /// </summary>
+    private DuelResult? _result;
+
+    public DuelResult? TakeDuelResult()
+    {
+        lock (_gate)
+        {
+            DuelResult? result = _result;
+            _result = null;
+
+            return result;
+        }
+    }
+
+    /// <summary>
     /// Where the strength bands fall on this server's own rules file.
     /// <para>
     /// Computed once and kept, because it is a sort of four hundred numbers and the answer
@@ -4447,6 +4472,14 @@ public sealed class GameWorld
 
     public IReadOnlyList<int> Boundaries =>
         _boundaries ??= _rules is null ? [] : Tiers.Boundaries(_rules.AllSpecies);
+
+    /// <summary>Which band a player's party sits in, which is where its strongest member is.</summary>
+    public int BandOf(ServerPlayer player) =>
+        _rules is null
+            ? 0
+            : Tiers.OfParty(
+                player.Party.Select(m => _rules.SpeciesAt(m.Species)?.BaseStatTotal ?? 0),
+                Boundaries);
 
     /// <summary>What the last thing anybody did about a duel came to.</summary>
     public string? LastDuel { get; private set; }
@@ -4714,6 +4747,22 @@ public sealed class GameWorld
             DuelLog = beaten is { } lost
                 ? $"#{duel.Other(lost)} beat #{lost}"
                 : $"#{duel.One} and #{duel.Two}: over";
+
+            // A result worth writing down needs a loser — a duel that ended because
+            // somebody walked away is not a game either of them played.
+            if (beaten is { } fell
+                && _players.TryGetValue(fell, out ServerPlayer? down)
+                && _players.TryGetValue(duel.Other(fell), out ServerPlayer? up))
+            {
+                // The band the fight actually happened in, which is the higher of the two
+                // parties. A strong party that agrees to fight a weak one has not made
+                // itself weak, and rating that as a win at the bottom of the ladder is
+                // exactly the farming this is banded to prevent.
+                _result = new DuelResult(
+                    up.AccountId,
+                    down.AccountId,
+                    Math.Max(BandOf(up), BandOf(down)));
+            }
 
             LastDuel = DuelLog;
 

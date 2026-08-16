@@ -14,7 +14,8 @@ namespace PokeMmo.Server.Storage;
 /// readers out during every save, and saves happen while people are playing.
 /// </para>
 /// </summary>
-public sealed class SqlitePlayerStore : IPlayerStore, IMarketStore, IFriendStore, IGuildStore, IDisposable
+public sealed class SqlitePlayerStore
+    : IPlayerStore, IMarketStore, IFriendStore, IGuildStore, IRatingStore, IDisposable
 {
     /// <summary>Where the database lives unless told otherwise.</summary>
     public const string DefaultFileName = "players.db";
@@ -177,6 +178,23 @@ public sealed class SqlitePlayerStore : IPlayerStore, IMarketStore, IFriendStore
                 -- than by a check that has to be remembered at every call site.
                 PRIMARY KEY (account_id, friend_id)
             );
+
+            CREATE TABLE IF NOT EXISTS ratings (
+                account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+
+                -- Which strength band the fight counted in. Part of the key, because a
+                -- player has one rating per band and a single overall number would be the
+                -- average of abilities that never meet.
+                band       INTEGER NOT NULL,
+                rating     INTEGER NOT NULL,
+                won        INTEGER NOT NULL DEFAULT 0,
+                lost       INTEGER NOT NULL DEFAULT 0,
+                played_at  TEXT NOT NULL,
+
+                PRIMARY KEY (account_id, band)
+            );
+
+            CREATE INDEX IF NOT EXISTS ladder ON ratings (band, rating DESC);
 
             CREATE TABLE IF NOT EXISTS guilds (
                 id      INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1838,6 +1856,149 @@ public sealed class SqlitePlayerStore : IPlayerStore, IMarketStore, IFriendStore
         }
 
         return listings;
+    }
+
+    // ---- ratings ---------------------------------------------------------------------
+
+    public async Task<(int Winner, int Loser)> RecordAsync(
+        long winnerId, long loserId, int band, CancellationToken cancellationToken = default)
+    {
+        await using SqliteConnection connection = Open();
+
+        await using SqliteTransaction transaction =
+            (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+
+        int winner = await RatingAsync(connection, transaction, winnerId, band, cancellationToken);
+        int loser = await RatingAsync(connection, transaction, loserId, band, cancellationToken);
+
+        // Both worked out from the pair as it stood before either moved, which is the whole
+        // of why this is one transaction. Updating one and then reading the other would
+        // compute the second result against a rating that has already been paid.
+        int after = Elo.After(winner, loser, won: true);
+        int afterLoser = Elo.After(loser, winner, won: false);
+
+        await WriteRatingAsync(connection, transaction, winnerId, band, after, won: true, cancellationToken);
+        await WriteRatingAsync(connection, transaction, loserId, band, afterLoser, won: false, cancellationToken);
+
+        await transaction.CommitAsync(cancellationToken);
+
+        return (after, afterLoser);
+    }
+
+    private static async Task<int> RatingAsync(
+        SqliteConnection connection,
+        SqliteTransaction? transaction,
+        long accountId,
+        int band,
+        CancellationToken cancellationToken)
+    {
+        await using SqliteCommand find = connection.CreateCommand();
+        find.Transaction = transaction;
+
+        find.CommandText = "SELECT rating FROM ratings WHERE account_id = $me AND band = $band;";
+        find.Parameters.AddWithValue("$me", accountId);
+        find.Parameters.AddWithValue("$band", band);
+
+        // Nobody's first fight is against a row that does not exist. Somebody who has never
+        // played is on the starting figure, which is what makes the first result mean the
+        // same thing as every later one.
+        return await find.ExecuteScalarAsync(cancellationToken) is long rating ? (int)rating : Elo.Starting;
+    }
+
+    private static async Task WriteRatingAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        long accountId,
+        int band,
+        int rating,
+        bool won,
+        CancellationToken cancellationToken)
+    {
+        await using SqliteCommand write = connection.CreateCommand();
+        write.Transaction = transaction;
+
+        // Inserted or updated in one statement, so a first result and a hundredth take the
+        // same path — a separate "have they played before" would be a second answer to a
+        // question the table can answer itself.
+        write.CommandText =
+            $"""
+            INSERT INTO ratings (account_id, band, rating, won, lost, played_at)
+            VALUES ($me, $band, $rating, {(won ? 1 : 0)}, {(won ? 0 : 1)}, $now)
+            ON CONFLICT (account_id, band) DO UPDATE SET
+                rating = $rating,
+                won = won + {(won ? 1 : 0)},
+                lost = lost + {(won ? 0 : 1)},
+                played_at = $now;
+            """;
+
+        write.Parameters.AddWithValue("$me", accountId);
+        write.Parameters.AddWithValue("$band", band);
+        write.Parameters.AddWithValue("$rating", rating);
+        write.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
+
+        await write.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<Rung> StandingAsync(
+        long accountId, int band, CancellationToken cancellationToken = default)
+    {
+        await using SqliteConnection connection = Open();
+
+        await using SqliteCommand find = connection.CreateCommand();
+
+        find.CommandText =
+            """
+            SELECT a.username, r.rating, r.won, r.lost
+            FROM accounts a
+            LEFT JOIN ratings r ON r.account_id = a.id AND r.band = $band
+            WHERE a.id = $me;
+            """;
+
+        find.Parameters.AddWithValue("$me", accountId);
+        find.Parameters.AddWithValue("$band", band);
+
+        await using SqliteDataReader reading = await find.ExecuteReaderAsync(cancellationToken);
+
+        if (!await reading.ReadAsync(cancellationToken)) return new Rung("", band, Elo.Starting, 0, 0);
+
+        return new Rung(
+            reading.GetString(0),
+            band,
+            reading.IsDBNull(1) ? Elo.Starting : reading.GetInt32(1),
+            reading.IsDBNull(2) ? 0 : reading.GetInt32(2),
+            reading.IsDBNull(3) ? 0 : reading.GetInt32(3));
+    }
+
+    public async Task<IReadOnlyList<Rung>> TopAsync(
+        int band, int most = 20, CancellationToken cancellationToken = default)
+    {
+        await using SqliteConnection connection = Open();
+
+        await using SqliteCommand command = connection.CreateCommand();
+
+        command.CommandText =
+            $"""
+            SELECT a.username, r.rating, r.won, r.lost
+            FROM ratings r
+            JOIN accounts a ON a.id = r.account_id
+            WHERE r.band = $band
+            ORDER BY r.rating DESC, a.username ASC
+            LIMIT {Math.Clamp(most, 1, 200)};
+            """;
+
+        command.Parameters.AddWithValue("$band", band);
+
+        var standings = new List<Rung>();
+
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            standings.Add(new Rung(
+                reader.GetString(0), band, reader.GetInt32(1), reader.GetInt32(2), reader.GetInt32(3)));
+        }
+
+        return standings;
     }
 
     // ---- guilds ----------------------------------------------------------------------
