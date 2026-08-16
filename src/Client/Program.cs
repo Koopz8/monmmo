@@ -56,6 +56,13 @@ public static class Program
 
     public static int Main(string[] args)
     {
+        // The engine's own commentary, quietened — and quietened here rather than beside the
+        // window it is about. Every path that opens a window has to have said this first,
+        // and one of them is the "could not reach the server" message, which opens a window
+        // of its own and used to print two hundred lines about textures on the way to
+        // saying one sentence.
+        Raylib.SetTraceLogLevel(TraceLogLevel.Warning);
+
         // The working directory, not the build output, so the file sits alongside the
         // repository where .gitignore already covers it.
         string directory = Directory.GetCurrentDirectory();
@@ -131,11 +138,6 @@ public static class Program
                 return 1;
             }
         }
-
-        // The engine's own commentary, quietened. It prints a line for every texture it
-        // uploads, which on a map with fifty people is fifty lines nobody reads and which
-        // buries the lines this client prints on purpose.
-        Raylib.SetTraceLogLevel(TraceLogLevel.Warning);
 
         Raylib.InitWindow(WindowWidth, WindowHeight, $"MonMMO — {map.Name}");
         Raylib.SetTargetFPS(60);
