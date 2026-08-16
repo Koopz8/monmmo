@@ -154,7 +154,10 @@ public class ReadingTheTracksTests
         IReadOnlyList<TrackRead> tracks = SequenceReader.AllTracks(rom, tree, said.Add);
 
         Assert.NotEmpty(tracks);
-        Assert.All(tracks, t => Assert.True(t.EndedProperly));
+
+        // All but one. The fixture's last song carries a track that runs off the end of the
+        // file on purpose, so that everything downstream has an unfinished track to refuse.
+        Assert.Equal(tracks.Count - 1, tracks.Count(t => t.EndedProperly));
 
         Assert.Contains(said, l => l.Contains("ran to an end"));
         Assert.Contains(said, l => l.Contains("does not account for"));

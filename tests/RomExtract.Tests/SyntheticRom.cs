@@ -720,9 +720,15 @@ public sealed class SyntheticRom
 
             for (int track = 0; track < tracks; track++)
             {
+                // The last song's last track is the one that never ends, so a loader that
+                // drops what it could not follow has something to drop.
+                bool unfinished = song == SongWithAnUnfinishedTrack && track == tracks - 1;
+
                 WriteU32(
                     at + 8 + track * 4,
-                    Rom.BaseAddress + (uint)(SequencesOffset + (song * 4 + track) * SequenceStride));
+                    Rom.BaseAddress + (uint)(unfinished
+                        ? UnendedTrackOffset
+                        : SequencesOffset + (song * 4 + track) * SequenceStride));
             }
         }
 
@@ -1364,7 +1370,23 @@ public sealed class SyntheticRom
     /// <summary>Where the synthetic song headers start.</summary>
     public const int SongHeadersOffset = 0x140000;
 
+    /// <summary>
+    /// How many songs the table names. One of them is deliberately broken — see
+    /// <see cref="SongWithAnUnfinishedTrack"/> — because a loader that drops a track it
+    /// could not follow needs a track it cannot follow.
+    /// </summary>
     public const int SongCount = 12;
+
+    /// <summary>
+    /// The song whose last track runs off the end of the file rather than ending.
+    /// <para>
+    /// It has to be a song with more than one track, or dropping that track would drop the
+    /// whole song and the loader would come back with nothing — which is a different rule,
+    /// and would prove that one instead of this one. <see cref="TracksInSong"/> gives index
+    /// eleven four tracks, so three survive and the drop is a number somebody can see.
+    /// </para>
+    /// </summary>
+    public const int SongWithAnUnfinishedTrack = SongCount - 1;
 
     public const int SongStride = 128;
 

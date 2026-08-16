@@ -46,6 +46,31 @@ public class LoadingASongTests
     }
 
     /// <summary>
+    /// A track this reader could not follow to an end is dropped rather than performed.
+    /// <para>
+    /// Performing it would be performing a guess. The fixture's last song carries one that
+    /// runs off the end of the file, and the song still loads — with one fewer track than
+    /// its own header claims, which is the number that says the drop happened.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ATrackThatCouldNotBeFollowedIsDropped()
+    {
+        (Rom rom, SoundTreeResult tree) = Cartridge();
+
+        int at = SyntheticRom.SongHeadersOffset + SyntheticRom.SongWithAnUnfinishedTrack * SyntheticRom.SongStride;
+
+        SongHeaderRecord header = tree.Songs.Single(s => s.Offset == at);
+
+        int index = tree.Table.ToList().FindIndex(e => e.HeaderOffset == at);
+
+        SongPlayer player = SongLoader.Load(rom, tree, index, new Mixer(8000))!;
+
+        Assert.Equal(header.TrackCount - 1, player.TrackCount);
+        Assert.True(header.TrackCount > 1, "the broken song has one track, so dropping it proves nothing");
+    }
+
+    /// <summary>
     /// A song this cartridge does not have comes back as nothing, rather than as silence.
     /// <para>
     /// A caller handed an empty song would play nothing and believe it played something. A
@@ -120,7 +145,11 @@ public class LoadingASongTests
         int index = tree.Table.ToList().FindIndex(e => e.HeaderOffset == song.Offset);
 
         Assert.True(index >= 0);
-        Assert.NotNull(SongLoader.Load(rom, tree, index, new Mixer(8000)));
+
+        SongPlayer player = SongLoader.Load(rom, tree, index, new Mixer(8000))!;
+
+        // Every slot, shapes included. A hole would shift every instrument number after it.
+        Assert.Equal(group.Count, player.InstrumentCount);
     }
 
     /// <summary>

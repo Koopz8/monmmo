@@ -106,6 +106,22 @@ public sealed class SongPlayer
     private int SamplesPerTick =>
         Math.Max(1, _mixer.Rate * 60 / Math.Max(1, _beatsPerMinute * TicksPerBeat));
 
+    /// <summary>
+    /// How many tracks are being performed, which is not always how many the song has.
+    /// <para>
+    /// A track this reader could not follow to an end is dropped rather than performed, so
+    /// this number is the answer to "how much of the song survived" — and a caller that
+    /// wants to know had no way to ask.
+    /// </para>
+    /// </summary>
+    public int TrackCount => _cursors.Count;
+
+    /// <summary>
+    /// How many instruments this song can name. Every slot counts, including the silent
+    /// ones — a track asks by position, so a hole would shift every number after it.
+    /// </summary>
+    public int InstrumentCount => _voicegroup.Count;
+
     /// <summary>True once every track has run out.</summary>
     public bool IsFinished => _cursors.All(c => c.Finished);
 
