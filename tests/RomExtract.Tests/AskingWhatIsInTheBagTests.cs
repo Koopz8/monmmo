@@ -948,6 +948,91 @@ public class AskingWhatIsInTheBagTests
         // out of the whole world says whether this is an export hole or a doorway the
         // cartridge makes some way nothing here has read.
         Assert.Equal("1.9", Assert.Single(played.NoWayIn));
+
+        // The map itself is the dead end, which is what makes it adrift rather than shut.
+        Assert.Equal("1.9", Assert.Single(sold.Behind));
+    }
+
+    /// <summary>
+    /// And "nothing leads here" is not the same finding as "everything that leads here is
+    /// itself unreached".
+    /// <para>
+    /// The correction this instrument needed most, and the cartridge made it: it reported
+    /// NO WAY IN AT ALL for the one map in FireRed that sells a drink, while that same map
+    /// was absent from its own list of maps nothing leads into — two lines of one output
+    /// contradicting each other. The roof is fine. It is the floors below it that nothing
+    /// leads into, and those are somewhere else on the list and are the thing to go and fix.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AMapBehindADeadEndSaysWhereTheDeadEndIs()
+    {
+        MapData start = Room("1.0") with
+        {
+            Objects = [new MapObject(1, 1, 1, 1, Direction.Down, 0, false) { ScriptAddress = 0x1000 }],
+        };
+
+        // Nothing anywhere points at 1.1 — this is the hole.
+        MapData floors = Room("1.1") with { Warps = [new Warp(1, 1, 0, "1.2")] };
+
+        // And 1.2 is perfectly well connected: it has a door pointing at it, from 1.1.
+        MapData roof = Room("1.2") with
+        {
+            Objects = [new MapObject(1, 1, 2, 1, Direction.Down, 0, false, Sells: [Tea])],
+        };
+
+        Attempt played = Autoplayer.Play(
+            new WorldData([start, floors, roof]),
+            "1.0",
+            TestRules.All,
+            (_, _, _) => Nothing with { Asked = [(Tea, 1, false)] });
+
+        FoundAt sold = Assert.Single(Assert.Single(played.Refused).Sources);
+
+        Assert.Empty(sold.WayIn);
+
+        // The roof is not adrift and must not be reported as though it were. The floors are.
+        Assert.Equal("1.1", Assert.Single(sold.Behind));
+        Assert.Equal("1.1", Assert.Single(played.NoWayIn));
+        Assert.DoesNotContain("1.2", played.NoWayIn);
+    }
+
+    /// <summary>
+    /// And the boat is a way in, which is neither a square nor a script.
+    /// <para>
+    /// Every dock joins every other dock, which is an upper bound and is meant to be: which
+    /// places a given ticket is worth is inside the routine that draws the menu. That is the
+    /// right bound for "is there any way in at all", and it is why the label says boat —
+    /// four of the eleven maps this reported as adrift were islands.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TheBoatIsAWayInToo()
+    {
+        MapData home = Room("1.0") with
+        {
+            Ferry = new FerryDock(1, 1, 0, 0),
+            Objects = [new MapObject(1, 1, 1, 1, Direction.Down, 0, false) { ScriptAddress = 0x1000 }],
+        };
+
+        // An island: no door, no edge, no scripted door. Only a dock.
+        MapData island = Room("1.1") with
+        {
+            Ferry = new FerryDock(2, 1, 0, 0),
+            Objects = [new MapObject(1, 1, 2, 1, Direction.Down, 0, false, Sells: [Tea])],
+        };
+
+        Attempt played = Autoplayer.Play(
+            new WorldData([home, island]),
+            "1.0",
+            TestRules.All,
+            (_, _, _) => Nothing with { Asked = [(Tea, 1, false)] });
+
+        FoundAt sold = Assert.Single(Assert.Single(played.Refused).Sources);
+
+        Assert.Equal(["1.0", "1.1"], sold.WayIn.Select(h => h.MapId));
+        Assert.Equal("the boat", sold.WayIn[^1].How);
+        Assert.Empty(played.NoWayIn);
     }
 
     /// <summary>

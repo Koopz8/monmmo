@@ -158,6 +158,23 @@ public sealed record FoundAt(string MapId, int LocalId, string How, bool Reached
     /// </para>
     /// </summary>
     public IReadOnlyList<Hop> WayIn { get; init; } = [];
+
+    /// <summary>
+    /// When there is no way in: the maps upstream of this one that nothing anywhere leads
+    /// into. The bottom of the hole rather than the top of it.
+    /// <para>
+    /// These are two very different findings and the first version of this printed the
+    /// wrong one. A map with no door pointing at it is adrift; a map whose every door comes
+    /// from maps that are themselves unreached is <em>fine</em>, and the thing to go and
+    /// look at is wherever that chain bottoms out — which is somewhere else entirely, and
+    /// is what this holds.
+    /// </para>
+    /// <para>
+    /// Empty with an empty <see cref="WayIn"/> means the ways in lead only to each other:
+    /// a closed ring of maps, all unreached, none of them adrift. A third answer again.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<string> Behind { get; init; } = [];
 }
 
 /// <summary>
@@ -578,10 +595,10 @@ public static class Autoplayer
     {
         // Worked out once per map rather than once per source, because a map with a shop on
         // it usually has several things on the list and they all came the same way.
-        var routes = new Dictionary<string, IReadOnlyList<Hop>>();
+        var routes = new Dictionary<string, (IReadOnlyList<Hop> Chain, IReadOnlyList<string> Behind)>();
 
-        IReadOnlyList<Hop> Through(string mapId) =>
-            routes.TryGetValue(mapId, out IReadOnlyList<Hop>? known)
+        (IReadOnlyList<Hop> Chain, IReadOnlyList<string> Behind) Through(string mapId) =>
+            routes.TryGetValue(mapId, out (IReadOnlyList<Hop>, IReadOnlyList<string>) known)
                 ? known
                 : routes[mapId] = WayIn(world, mapId, reached);
 
@@ -606,7 +623,8 @@ public static class Autoplayer
 
                 yield return new FoundAt(map.Id, who.LocalId, how, here)
                 {
-                    WayIn = here ? [] : Through(map.Id),
+                    WayIn = here ? [] : Through(map.Id).Chain,
+                    Behind = here ? [] : Through(map.Id).Behind,
                 };
             }
 
@@ -616,7 +634,8 @@ public static class Autoplayer
 
                 yield return new FoundAt(map.Id, 0, "on arriving", here)
                 {
-                    WayIn = here ? [] : Through(map.Id),
+                    WayIn = here ? [] : Through(map.Id).Chain,
+                    Behind = here ? [] : Through(map.Id).Behind,
                 };
             }
         }
@@ -676,10 +695,22 @@ public static class Autoplayer
                 Joins(map.Id, made.TargetMapId, $"a door a script makes ({made.What})");
         }
 
+        // And the boat, which is neither a square nor a script. Every dock joins every other
+        // dock, which is an upper bound and is said out loud rather than hidden: which places
+        // a given ticket is worth is inside the routine that draws the menu and cannot be
+        // read from here. That is the right bound for the question being asked — "is there
+        // any way in at all" — and it is why the label says boat.
+        List<string> docks = [.. world.Maps.Where(m => m.Ferry is not null).Select(m => m.Id)];
+
+        foreach (string dock in docks)
+        {
+            foreach (string other in docks.Where(d => d != dock)) Joins(dock, other, "the boat");
+        }
+
         return into;
     }
 
-    private static IReadOnlyList<Hop> WayIn(
+    private static (IReadOnlyList<Hop> Chain, IReadOnlyList<string> Behind) WayIn(
         WorldData world, string target, HashSet<string> reached)
     {
         // Every way into every map, by where it leads. All three kinds, because this game
@@ -693,6 +724,7 @@ public static class Autoplayer
         Dictionary<string, List<Hop>> into = WaysIn(world);
 
         var back = new Dictionary<string, Hop>();
+        var seen = new HashSet<string>();
         var queue = new Queue<string>([target]);
 
         while (queue.Count > 0)
@@ -719,8 +751,10 @@ public static class Autoplayer
                     at = next.MapId;
                 }
 
-                return chain;
+                return (chain, []);
             }
+
+            seen.Add(here);
 
             foreach (Hop way in into.GetValueOrDefault(here, []))
             {
@@ -728,7 +762,10 @@ public static class Autoplayer
             }
         }
 
-        return [];
+        // Nowhere reached upstream of it. Which is not the same as "nothing leads here", and
+        // saying so was this instrument's own worst line: the department store's floors are
+        // what nothing leads into, and the roof above them reads as adrift because of it.
+        return ([], [.. seen.Where(m => !into.ContainsKey(m)).Order()]);
     }
 
     /// <summary>

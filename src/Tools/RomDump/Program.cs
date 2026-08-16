@@ -5820,13 +5820,37 @@ public static class Program
 
                     // And the way in, which is the door to go and open. The first hop is
                     // the only one that matters — everything after it is behind that.
-                    Console.WriteLine(one.WayIn.Count < 2
-                        ? $"               NO WAY IN TO {one.MapId} AT ALL — no door, edge or scripted"
-                          + " door anywhere leads there"
-                        : $"               the way in: "
-                          + string.Join(
-                              " -> ", one.WayIn.Select(h => h.How == Hop.Start ? h.MapId : $"{h.MapId} by {h.How}"))
-                          + $"   (the shut step is {one.WayIn[0].MapId} -> {one.WayIn[1].MapId})");
+                    if (one.WayIn.Count >= 2)
+                    {
+                        Console.WriteLine(
+                            "               the way in: "
+                            + string.Join(
+                                " -> ",
+                                one.WayIn.Select(h => h.How == Hop.Start ? h.MapId : $"{h.MapId} by {h.How}"))
+                            + $"   (the shut step is {one.WayIn[0].MapId} -> {one.WayIn[1].MapId})");
+
+                        continue;
+                    }
+
+                    // Three answers, and the first version of this printed the wrong one of
+                    // them for the map that matters. "Nothing leads here" and "everything
+                    // that leads here is itself unreached" are not the same finding, and the
+                    // second one is a signpost to somewhere else entirely.
+                    Console.WriteLine(one.Behind switch
+                    {
+                        [] =>
+                            $"               every way in to {one.MapId} is unreached, and they lead"
+                            + " only to each other — a closed ring",
+
+                        [string only] when only == one.MapId =>
+                            $"               NOTHING ANYWHERE LEADS TO {one.MapId} — no door, no map"
+                            + " edge, no scripted door, no boat",
+
+                        var ends =>
+                            $"               every way in to {one.MapId} is itself unreached; it"
+                            + $" bottoms out at {string.Join(", ", ends)},"
+                            + " which nothing anywhere leads into",
+                    });
                 }
             }
 
