@@ -141,6 +141,49 @@ public sealed class Battler
     public void RefillPp() => _spent.Clear();
 
     /// <summary>
+    /// Puts some uses back into one slot, and says how many actually went in.
+    /// <para>
+    /// Says how many rather than whether, for the reason a bag says how many items went in:
+    /// something that puts ten back into a move missing three has put three back, and
+    /// whoever asked needs to know that before deciding it was worth using up.
+    /// </para>
+    /// </summary>
+    public int Refill(int slot, int uses)
+    {
+        if (uses <= 0 || MoveAt(slot) is not { } move) return 0;
+
+        int missing = _spent.GetValueOrDefault(slot);
+        int back = Math.Min(uses, missing);
+
+        if (back <= 0) return 0;
+
+        _spent[slot] = missing - back;
+
+        return back;
+    }
+
+    /// <summary>The first slot with nothing left in it, or nothing.</summary>
+    public int? FirstSpentSlot()
+    {
+        for (int slot = 0; slot < Moves.Count; slot++)
+        {
+            if (PpLeft(slot) <= 0) return slot;
+        }
+
+        return null;
+    }
+
+    /// <summary>Every stat this one has been made worse at, back where it started.</summary>
+    public int RaiseWhatWasLowered()
+    {
+        var lowered = _stages.Where(s => s.Value < 0).Select(s => s.Key).ToList();
+
+        foreach (Stat stat in lowered) _stages.Remove(stat);
+
+        return lowered.Count;
+    }
+
+    /// <summary>
     /// Sets what is left of each slot from a save, ignoring anything the moves do not
     /// reach and treating a missing entry as full.
     /// </summary>

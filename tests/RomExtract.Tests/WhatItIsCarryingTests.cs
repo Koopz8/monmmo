@@ -441,7 +441,16 @@ public class WhatItIsCarryingTests
                 || HeldItems.Endures(item) > 0
                 || HeldItems.Drains(item) is not null
                 || HeldItems.Feeds(item)
-                || HeldItems.Locks(item);
+                || HeldItems.Locks(item)
+
+                // And the half that is used up. Asked the same way and in the same list,
+                // because "modelled" has to mean one thing.
+                || HeldItems.Restoring(item) is not null
+                || HeldItems.Feeding(item) is not null
+                || HeldItems.Clearing(item) != Ailments.None
+                || HeldItems.Refilling(item) is not null
+                || HeldItems.Restoring(item, stages: true)
+                || HeldItems.PinchedAt(item) is not null;
 
             if (!does) silent.Add(effect);
         }
@@ -461,12 +470,291 @@ public class WhatItIsCarryingTests
     [Fact]
     public void AnythingNotModelledIsCarriedAndDoesNothing()
     {
-        // Effect two is CHERI BERRY, which is on the other side of the line this milestone
-        // drew: it is used up when it works, and nothing here has ever used anything up.
-        Assert.False(HeldItems.DoesSomething(2));
-        Assert.False(HeldItems.DoesSomething(23));
+        // Twenty-eight is MENTAL HERB, which cures an attraction this engine has no way to
+        // inflict, and forty-four is DRAGON SCALE, which looks exactly like a type booster
+        // and does nothing in a fight this generation. Both are carried, both are counted,
+        // and neither pretends.
+        Assert.False(HeldItems.DoesSomething(28));
         Assert.False(HeldItems.DoesSomething(44));
 
         Assert.True(HeldItems.DoesSomething(HeldItems.Scraps));
+        Assert.True(HeldItems.DoesSomething(HeldItems.Herb));
+    }
+
+    // ---- the half that is used up ------------------------------------------------------
+
+    /// <summary>
+    /// Everything that is eaten is listed as eaten, and nothing that is not is.
+    /// <para>
+    /// The line this pair of milestones drew, asserted rather than described. A LEFTOVERS
+    /// that turned up in the eaten list would be a LEFTOVERS that vanished after one turn.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TheLineBetweenWhatIsUsedUpAndWhatIsNot()
+    {
+        Assert.Equal(22, HeldItems.Eaten.Count);
+
+        foreach (int effect in HeldItems.Eaten) Assert.True(HeldItems.DoesSomething(effect));
+
+        Assert.True(HeldItems.IsEaten(Carrying(2)));
+        Assert.True(HeldItems.IsEaten(Carrying(HeldItems.Herb)));
+
+        Assert.False(HeldItems.IsEaten(Carrying(HeldItems.Scraps)));
+        Assert.False(HeldItems.IsEaten(Carrying(HeldItems.Choice)));
+        Assert.False(HeldItems.IsEaten(null));
+    }
+
+    /// <summary>
+    /// The three that restore a flat amount carry three different amounts under one effect
+    /// number, exactly like the two incenses.
+    /// </summary>
+    [Fact]
+    public void TheThreeThatRestoreCarryTheirOwnAmounts()
+    {
+        Assert.Equal(10, HeldItems.Restoring(Carrying(HeldItems.Restores, 10)));
+        Assert.Equal(20, HeldItems.Restoring(Carrying(HeldItems.Restores, 20)));
+        Assert.Equal(30, HeldItems.Restoring(Carrying(HeldItems.Restores, 30)));
+
+        Assert.Null(HeldItems.Restoring(Carrying(HeldItems.Scraps, 10)));
+    }
+
+    /// <summary>
+    /// The quarter the seven go off at is on their own records, and the half the others go
+    /// off at is not. Said out loud because it is the one threshold that did not have to be
+    /// invented.
+    /// </summary>
+    [Fact]
+    public void OneThresholdIsReadAndTheOtherIsNot()
+    {
+        Assert.Equal(4, HeldItems.PinchedAt(Carrying(15, 4)));
+        Assert.Equal(4, HeldItems.PinchedAt(Carrying(21, 4)));
+        Assert.Null(HeldItems.PinchedAt(Carrying(HeldItems.Restores, 10)));
+
+        Assert.Equal(2, HeldItems.HurtShare);
+    }
+
+    [Fact]
+    public void EachCuringBerryClearsOneThingAndOneClearsThemAll()
+    {
+        Assert.Equal(Ailments.Paralysis, HeldItems.Clearing(Carrying(2)));
+        Assert.Equal(Ailments.Sleep, HeldItems.Clearing(Carrying(3)));
+        Assert.Equal(Ailments.Poison, HeldItems.Clearing(Carrying(4)));
+        Assert.Equal(Ailments.Burn, HeldItems.Clearing(Carrying(5)));
+        Assert.Equal(Ailments.Freeze, HeldItems.Clearing(Carrying(6)));
+        Assert.Equal(Ailments.Confusion, HeldItems.Clearing(Carrying(8)));
+        Assert.Equal(Ailments.Everything, HeldItems.Clearing(Carrying(9)));
+
+        Assert.Equal(Ailments.None, HeldItems.Clearing(Carrying(HeldItems.Scraps)));
+    }
+
+    /// <summary>
+    /// Something hurt eats what it is carrying, and afterwards is not carrying it.
+    /// <para>
+    /// The second half is what the whole milestone is for. An item that healed and stayed
+    /// would be an item that healed every turn forever.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void SomethingHurtEatsWhatItIsCarryingAndThenHasNone()
+    {
+        Battler you = Make(level: 50);
+        Battler them = Make(2, level: 50);
+
+        them.Moves.Clear();
+        them.Moves.Add(Move(PokemonType.Normal, 0));
+
+        you.Carried = Carrying(HeldItems.Restores, 30);
+        you.Holding = 139;
+
+        you.TakeDamage(you.MaxHp * 3 / 4);
+
+        int before = you.CurrentHp;
+
+        var battle = new Battle(you, them, 7);
+
+        List<BattleEvent> events = battle.ResolveTurn(
+            new BattleAction.UseMove(0), new BattleAction.UseMove(0));
+
+        Assert.Contains(events, e => e is BattleEvent.HealthRestored { Side: Side.Player });
+        Assert.Contains(events, e => e is BattleEvent.AteIt { Side: Side.Player, ItemId: 139 });
+
+        Assert.Equal(before + 30, you.CurrentHp);
+        Assert.Equal(0, you.Holding);
+        Assert.Null(you.Carried);
+    }
+
+    /// <summary>And something that is not hurt keeps it.</summary>
+    [Fact]
+    public void AndSomethingUnhurtKeepsIt()
+    {
+        Battler you = Make(level: 100);
+        Battler them = Make(2, level: 5);
+
+        them.Moves.Clear();
+        them.Moves.Add(Move(PokemonType.Normal, 0));
+
+        you.Carried = Carrying(HeldItems.Restores, 30);
+        you.Holding = 139;
+
+        var battle = new Battle(you, them, 7);
+
+        List<BattleEvent> events = battle.ResolveTurn(
+            new BattleAction.UseMove(0), new BattleAction.UseMove(0));
+
+        Assert.DoesNotContain(events, e => e is BattleEvent.AteIt);
+        Assert.Equal(139, you.Holding);
+    }
+
+    /// <summary>
+    /// And something only lightly hurt keeps it, which is the threshold rather than the
+    /// absence of one.
+    /// <para>
+    /// Its own test because the full-health one cannot see it: a creature at full health is
+    /// refused by "is any of it missing" before the half is ever asked about, so removing
+    /// the half entirely leaves that test passing.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AndSomethingOnlyLightlyHurtKeepsIt()
+    {
+        Battler you = Make(level: 50);
+        Battler them = Make(2, level: 50);
+
+        them.Moves.Clear();
+        them.Moves.Add(Move(PokemonType.Normal, 0));
+
+        you.Carried = Carrying(HeldItems.Restores, 30);
+        you.Holding = 139;
+
+        // A quarter off, which is hurt and is not nearly finished.
+        you.TakeDamage(you.MaxHp / 4);
+
+        var battle = new Battle(you, them, 7);
+
+        List<BattleEvent> events = battle.ResolveTurn(
+            new BattleAction.UseMove(0), new BattleAction.UseMove(0));
+
+        Assert.DoesNotContain(events, e => e is BattleEvent.AteIt);
+        Assert.Equal(139, you.Holding);
+    }
+
+    /// <summary>
+    /// A berry that clears a condition clears the one it is for and nothing else.
+    /// </summary>
+    [Fact]
+    public void ABerryClearsTheOneConditionItIsFor()
+    {
+        Battler you = Make(level: 50);
+        Battler them = Make(2, level: 50);
+
+        them.Moves.Clear();
+        them.Moves.Add(Move(PokemonType.Normal, 0));
+
+        you.Status = StatusCondition.Paralysis;
+        you.Carried = Carrying(2);
+        you.Holding = 133;
+
+        var battle = new Battle(you, them, 7);
+
+        List<BattleEvent> events = battle.ResolveTurn(
+            new BattleAction.UseMove(0), new BattleAction.UseMove(0));
+
+        Assert.Contains(events, e => e is BattleEvent.PutRight { Side: Side.Player });
+        Assert.Equal(StatusCondition.None, you.Status);
+        Assert.Equal(0, you.Holding);
+    }
+
+    /// <summary>And leaves alone a condition it is not for.</summary>
+    [Fact]
+    public void AndLeavesAloneOneItIsNotFor()
+    {
+        Battler you = Make(level: 50);
+        Battler them = Make(2, level: 50);
+
+        them.Moves.Clear();
+        them.Moves.Add(Move(PokemonType.Normal, 0));
+
+        you.Status = StatusCondition.Burn;
+        you.Carried = Carrying(2);
+        you.Holding = 133;
+
+        var battle = new Battle(you, them, 7);
+
+        battle.ResolveTurn(new BattleAction.UseMove(0), new BattleAction.UseMove(0));
+
+        Assert.Equal(StatusCondition.Burn, you.Status);
+        Assert.Equal(133, you.Holding);
+    }
+
+    /// <summary>
+    /// Something nearly finished eats what raises a stat, at the quarter its own record
+    /// names.
+    /// </summary>
+    [Fact]
+    public void SomethingNearlyFinishedRaisesAStat()
+    {
+        Battler you = Make(level: 50);
+        Battler them = Make(2, level: 50);
+
+        them.Moves.Clear();
+        them.Moves.Add(Move(PokemonType.Normal, 0));
+
+        you.Carried = Carrying(17, 4);
+        you.Holding = 170;
+
+        you.TakeDamage(you.MaxHp * 4 / 5);
+
+        var battle = new Battle(you, them, 7);
+
+        List<BattleEvent> events = battle.ResolveTurn(
+            new BattleAction.UseMove(0), new BattleAction.UseMove(0));
+
+        Assert.Contains(events, e => e is BattleEvent.StageChanged { Side: Side.Player, Stat: Stat.Speed });
+        Assert.Equal(1, you.StageOf(Stat.Speed));
+        Assert.Equal(0, you.Holding);
+    }
+
+    /// <summary>
+    /// The herb that puts back what was lowered puts back only what was lowered.
+    /// </summary>
+    [Fact]
+    public void AHerbPutsBackOnlyWhatWasLowered()
+    {
+        Battler you = Make();
+
+        you.ChangeStage(Stat.Attack, -2);
+        you.ChangeStage(Stat.Speed, 1);
+
+        Assert.Equal(1, you.RaiseWhatWasLowered());
+
+        Assert.Equal(0, you.StageOf(Stat.Attack));
+        Assert.Equal(1, you.StageOf(Stat.Speed));
+
+        // And a second go finds nothing left to put back, which is what stops it being
+        // eaten for nothing.
+        Assert.Equal(0, you.RaiseWhatWasLowered());
+    }
+
+    /// <summary>
+    /// Uses go back into the first move that has run out, and only as many as were missing.
+    /// </summary>
+    [Fact]
+    public void UsesGoBackIntoTheFirstMoveThatRanOut()
+    {
+        Battler you = Make();
+        you.Moves.Add(Move(PokemonType.Normal, 20));
+
+        Assert.Null(you.FirstSpentSlot());
+
+        while (you.Spend(1))
+        {
+        }
+
+        Assert.Equal(1, you.FirstSpentSlot());
+
+        // Ten back into a move missing all twenty is ten, and the answer says so.
+        Assert.Equal(10, you.Refill(1, 10));
+        Assert.Equal(10, you.PpLeft(1));
     }
 }

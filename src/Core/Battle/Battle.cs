@@ -74,6 +74,7 @@ public enum Side
 [JsonDerivedType(typeof(ItemHealed), "itemhealed")]
 [JsonDerivedType(typeof(HeldOn), "heldon")]
 [JsonDerivedType(typeof(WentFirst), "wentfirst")]
+[JsonDerivedType(typeof(AteIt), "ateit")]
 [JsonDerivedType(typeof(MustRepeat), "mustrepeat")]
 [JsonDerivedType(typeof(GotAway), "gotaway")]
 [JsonDerivedType(typeof(CouldNotGetAway), "couldnotgetaway")]
@@ -272,6 +273,16 @@ public abstract record BattleEvent
     /// <summary>Something being carried took the turn out of order.</summary>
     public sealed record WentFirst(Side Side, int ItemId) : BattleEvent;
 
+    /// <summary>
+    /// Something being carried was used up, and is gone.
+    /// <para>
+    /// Its own message rather than folded into whatever it did, because the two facts have
+    /// different lifetimes: the healing is over when the turn is, and the item not being
+    /// there any more outlives the battle.
+    /// </para>
+    /// </summary>
+    public sealed record AteIt(Side Side, int ItemId) : BattleEvent;
+
     /// <summary>Made to do the same thing again.</summary>
     public sealed record MustRepeat(Side Side, int MoveId) : BattleEvent;
 
@@ -440,6 +451,148 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
     /// </para>
     /// </summary>
     private bool Rolls(int chance) => chance > 0 && _rng.Next(100) < chance;
+
+    /// <summary>
+    /// What somebody carrying something eats it for, if anything.
+    /// <para>
+    /// One place for all twenty-one, asked after every turn and again at the end of one,
+    /// because a berry answers two different things: a condition that has just been
+    /// inflicted, and health that has just fallen. Both happen inside a turn and both can
+    /// also arrive at the end of one — poison at the end of a turn is the case that needs
+    /// the second call.
+    /// </para>
+    /// <para>
+    /// At most one thing per item, because an item is used up by the first thing it does.
+    /// The order between them is arbitrary where two could apply at once and is fixed here
+    /// so that it is at least the same every time: health, then being nearly finished, then
+    /// conditions, then uses, then stats.
+    /// </para>
+    /// </summary>
+    private void Nibble(Side side, Battler battler, List<BattleEvent> events)
+    {
+        if (battler.HasFainted || battler.Carried is not { } carried) return;
+        if (!HeldItems.IsEaten(carried)) return;
+
+        int item = battler.Holding;
+        bool hurt = battler.CurrentHp * HeldItems.HurtShare <= battler.MaxHp;
+        bool missing = battler.CurrentHp < battler.MaxHp;
+
+        // Flat health, whose amount is on the record: ten, twenty or thirty depending on
+        // which of the three this is.
+        if (hurt && missing && HeldItems.Restoring(carried) is { } flat)
+        {
+            Ate(side, battler, item, events, new BattleEvent.HealthRestored(side, item, battler.Heal(flat)));
+
+            return;
+        }
+
+        // A share of its own maximum, and a mouthful of something its nature dislikes.
+        if (hurt && missing && HeldItems.Feeding(carried) is { } feeding)
+        {
+            int put = battler.Heal(Math.Max(1, battler.MaxHp / feeding.Share));
+
+            Ate(side, battler, item, events, new BattleEvent.HealthRestored(side, item, put));
+
+            // Which natures dislike what is entirely read — the raised and lowered stat of
+            // every nature comes off the same table stats are computed from. A neutral one
+            // dislikes nothing, which is why it is asked rather than compared.
+            if (!Stats.IsNeutral(battler.Nature)
+                && Stats.EffectOf(battler.Nature).Lowered == feeding.Disliked
+                && battler.ConfusedTurns == 0
+                && !Abilities.RefusesConfusion(battler.Ability))
+            {
+                battler.ConfusedTurns = _rng.Next(4) + 2;
+
+                events.Add(new BattleEvent.Confused(side));
+            }
+
+            return;
+        }
+
+        // Nearly finished, at the quarter its own record names.
+        if (HeldItems.PinchedAt(carried) is { } share && battler.CurrentHp * share <= battler.MaxHp)
+        {
+            Pinched(side, battler, carried, item, events);
+
+            return;
+        }
+
+        // A condition, cleared.
+        if (HeldItems.Clearing(carried) is var clearing && clearing != Ailments.None)
+        {
+            Ailments has = battler.Status.AsAilment()
+                | (battler.ConfusedTurns > 0 ? Ailments.Confusion : Ailments.None);
+
+            Ailments cleared = clearing & has;
+
+            if (cleared != Ailments.None)
+            {
+                if ((cleared & Ailments.Confusion) != 0) battler.ConfusedTurns = 0;
+                if (cleared != Ailments.Confusion) battler.Status = StatusCondition.None;
+
+                Ate(side, battler, item, events, new BattleEvent.PutRight(side, item, cleared));
+            }
+
+            return;
+        }
+
+        // Uses, put back into the first move that has run out.
+        if (HeldItems.Refilling(carried) is { } uses && battler.FirstSpentSlot() is { } empty)
+        {
+            if (battler.Refill(empty, uses) > 0)
+                Ate(side, battler, item, events, new BattleEvent.CanUseAgain(side));
+
+            return;
+        }
+
+        // And everything that was lowered, back where it started.
+        if (HeldItems.Restoring(carried, stages: true) && battler.RaiseWhatWasLowered() > 0)
+            Ate(side, battler, item, events, new BattleEvent.StagesCleared(side));
+    }
+
+    /// <summary>What one of the seven does when its carrier is nearly finished.</summary>
+    private void Pinched(Side side, Battler battler, ItemData carried, int item, List<BattleEvent> events)
+    {
+        // Five raise one stat. The sixth sharpens instead, and the seventh picks one of the
+        // five at random and raises it by two — which is the only place in this file that
+        // needs a die, and it is only rolled once the berry has already decided to go off.
+        if (HeldItems.Raises(carried) is { } stat)
+        {
+            int moved = battler.ChangeStage(stat, 1);
+
+            if (moved != 0) Ate(side, battler, item, events, new BattleEvent.StageChanged(side, stat, 1, true));
+
+            return;
+        }
+
+        if (carried.HoldEffect == HeldItems.Sharpening)
+        {
+            battler.HasAimed = true;
+
+            Ate(side, battler, item, events, new BattleEvent.TookAim(side));
+
+            return;
+        }
+
+        if (carried.HoldEffect != HeldItems.Wild) return;
+
+        Stat[] any = [Stat.Attack, Stat.Defense, Stat.Speed, Stat.SpAttack, Stat.SpDefense];
+        Stat picked = any[_rng.Next(any.Length)];
+
+        if (battler.ChangeStage(picked, 2) != 0)
+            Ate(side, battler, item, events, new BattleEvent.StageChanged(side, picked, 2, true));
+    }
+
+    /// <summary>Says what it did, and that it is gone.</summary>
+    private static void Ate(
+        Side side, Battler battler, int item, List<BattleEvent> events, BattleEvent what)
+    {
+        events.Add(what);
+        events.Add(new BattleEvent.AteIt(side, item));
+
+        battler.Holding = 0;
+        battler.Carried = null;
+    }
 
     private int SpeedOf(Battler battler) =>
         battler.EffectiveStat(Stat.Speed)
@@ -723,6 +876,14 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             if (IsOver) break;
 
             TakeTurn(side, side == Side.Player ? playerAction : opponentAction, events);
+
+            // Both sides, after every turn: one of them may have just been poisoned and the
+            // other may have just been brought low, and a berry answers either.
+            if (!IsOver)
+            {
+                Nibble(Side.Player, Player, events);
+                Nibble(Side.Opponent, Opponent, events);
+            }
         }
 
         if (!IsOver) ApplyEndOfTurn(events);
@@ -1879,6 +2040,11 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
                 if (fed > 0)
                     events.Add(new BattleEvent.ItemHealed(side, battler.Holding, fed, battler.CurrentHp));
             }
+
+            // And again at the end, because poison and a sandstorm both land here and a
+            // berry that only ever answered a move would sit uneaten while its carrier
+            // fainted to the weather.
+            Nibble(side, battler, events);
 
             // A block runs out. Counted down here with everything else that lasts turns,
             // and cleared rather than left at nought so the slot is free again.

@@ -206,6 +206,8 @@ public static class BattleNarrator
 
         BattleEvent.WentFirst e => $"{names.Of(e.Side)}'s {names.ItemNamed(e.ItemId)} let it move first!",
 
+        BattleEvent.AteIt e => $"{names.Of(e.Side)} used up its {names.ItemNamed(e.ItemId)}.",
+
         BattleEvent.Grazed e => $"{names.Of(e.Side)} is hurt reaching them!",
 
         BattleEvent.BrokeFree e => $"{names.Of(e.Side)} got free of {names.MoveNamed(e.MoveId)}!",

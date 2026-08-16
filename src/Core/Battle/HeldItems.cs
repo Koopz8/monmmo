@@ -26,10 +26,16 @@ namespace PokeMmo.Core.Battle;
 /// this project's, and where one is not, it says so.
 /// </para>
 /// <para>
-/// <b>Nothing here is used up.</b> That is the line this milestone draws and the cartridge
-/// drew it first: every berry, the WHITE HERB and the MENTAL HERB are items that are consumed
-/// when they work, and nothing in this engine has ever consumed a held item. Twenty-one
-/// effect numbers are on the other side of that line, are counted, and do nothing.
+/// The file is in two halves and the cartridge drew the line between them. The first half is
+/// carried and stays carried. The second is <b>used up when it works</b> — every berry and
+/// the WHITE HERB, twenty-two effect numbers — and needed the one thing this engine had
+/// never had: a held item that could be lost.
+/// </para>
+/// <para>
+/// Ten effect numbers are on neither side and do nothing. Every one of them is about
+/// something outside a fight — money, friendship, experience, wild encounters, evolution —
+/// or, in the MENTAL HERB's case, about a condition nothing here can inflict. They are
+/// carried, counted, and silent.
 /// </para>
 /// </summary>
 public static class HeldItems
@@ -144,12 +150,25 @@ public static class HeldItems
     /// is printed rather than rounded up to "held items: yes".
     /// </para>
     /// </summary>
-    public static readonly IReadOnlyList<int> Modelled =
-    [
-        Slippery, Heavy, Quick, Choice, Startling, Dew, SeaTooth, SeaScale, Enduring,
-        Lens, Scraps, Ball, Bell, Punch, Powder, Club, Stick,
-        .. Boosts.Keys,
-    ];
+    /// <para>
+    /// Filled in a static constructor rather than where it is declared, and that is not
+    /// style. A field initialiser runs in the order the fields are written, so a list built
+    /// out of tables declared below it is a list built out of nulls — and the failure is a
+    /// type that will not load at all rather than anything a reader would trace back to
+    /// here. A static constructor runs after every initialiser, whatever the order.
+    /// </para>
+    public static readonly IReadOnlyList<int> Modelled;
+
+    static HeldItems() =>
+        Modelled =
+        [
+            Slippery, Heavy, Quick, Choice, Startling, Dew, SeaTooth, SeaScale, Enduring,
+            Lens, Scraps, Ball, Bell, Punch, Powder, Club, Stick,
+            .. Boosts.Keys,
+
+            // And the half that is used up, which needed a held item that could be lost.
+            .. Eaten,
+        ];
 
     /// <summary>True when carrying this changes anything at all.</summary>
     public static bool DoesSomething(int effect) => Modelled.Contains(effect);
@@ -291,4 +310,157 @@ public static class HeldItems
 
     /// <summary>True when carrying this means only ever using the first move chosen.</summary>
     public static bool Locks(ItemData? carried) => carried?.HoldEffect == Choice;
+
+    // ---- the half that is used up ------------------------------------------------------
+
+    /// <summary>
+    /// BERRY JUICE, ORAN and SITRUS. The parameter is how much health, flat.
+    /// <para>
+    /// Three items, three different parameters — twenty, ten and thirty — under one effect
+    /// number, which is the same shape as the two incenses and the same reason the amount
+    /// cannot be written here.
+    /// </para>
+    /// </summary>
+    public const int Restores = 1;
+
+    /// <summary>LEPPA. The parameter is how many uses come back.</summary>
+    public const int RestoresPp = 7;
+
+    /// <summary>WHITE HERB. Everything that was lowered, back where it was.</summary>
+    public const int Herb = 23;
+
+    /// <summary>
+    /// The six that clear one thing each, and the one that clears everything.
+    /// <para>
+    /// Read straight across: six consecutive effect numbers on six consecutive berries, each
+    /// with a parameter of nought because there is nothing to say about how much of a
+    /// paralysis to clear. Which one clears which is the item's name again, so the pairing is
+    /// modelled and the numbering is read.
+    /// </para>
+    /// </summary>
+    private static readonly Dictionary<int, Ailments> Cures = new()
+    {
+        [2] = Ailments.Paralysis,
+        [3] = Ailments.Sleep,
+        [4] = Ailments.Poison,
+        [5] = Ailments.Burn,
+        [6] = Ailments.Freeze,
+        [8] = Ailments.Confusion,
+        [9] = Ailments.Everything,
+    };
+
+    /// <summary>
+    /// The five that put health back and may confuse, and which stat's dislike does it.
+    /// <para>
+    /// A nature that lowers a stat dislikes the flavour that stat belongs to, and eating
+    /// something you dislike in a hurry is what confuses you. The stat pairing is modelled —
+    /// FIGY is spicy because of what it is called — but which natures dislike what is
+    /// entirely read: <see cref="Stats.EffectOf"/> gives the raised and lowered stat of every
+    /// nature straight off the table the cartridge computes stats from.
+    /// </para>
+    /// </summary>
+    private static readonly Dictionary<int, Stat> Flavours = new()
+    {
+        [10] = Stat.Attack,
+        [11] = Stat.SpAttack,
+        [12] = Stat.Speed,
+        [13] = Stat.SpDefense,
+        [14] = Stat.Defense,
+    };
+
+    /// <summary>
+    /// The seven that answer being nearly finished, and what each is worth.
+    /// <para>
+    /// Five raise a stat. LANSAT sharpens instead, and STARF raises one at random by two —
+    /// both are here as nulls because "which stat" is the wrong question for them, and the
+    /// caller asks the two hooks below instead.
+    /// </para>
+    /// </summary>
+    private static readonly Dictionary<int, Stat?> Pinches = new()
+    {
+        [15] = Stat.Attack,
+        [16] = Stat.Defense,
+        [17] = Stat.Speed,
+        [18] = Stat.SpAttack,
+        [19] = Stat.SpDefense,
+        [20] = null,
+        [21] = null,
+    };
+
+    /// <summary>LANSAT, which sharpens rather than strengthens.</summary>
+    public const int Sharpening = 20;
+
+    /// <summary>STARF, which raises one at random by two.</summary>
+    public const int Wild = 21;
+
+    /// <summary>
+    /// The share of its health below which a berry that answers being hurt wakes up.
+    /// <b>Modelled.</b>
+    /// <para>
+    /// Half, and it is not on any record: the parameter on ORAN is the ten it restores and
+    /// the parameter on FIGY is the eighth it restores, so neither of them is a threshold.
+    /// The <em>pinch</em> berries are different and say so on their own records — every one
+    /// of the seven carries four, and a quarter is exactly when they go off — so that one is
+    /// read and this one is not.
+    /// </para>
+    /// </summary>
+    public const int HurtShare = 2;
+
+    /// <summary>Every effect number that is used up when it works.</summary>
+    public static readonly IReadOnlyList<int> Eaten =
+    [
+        Restores, RestoresPp, Herb,
+        .. Cures.Keys,
+        .. Flavours.Keys,
+        .. Pinches.Keys,
+    ];
+
+    /// <summary>True when using this uses it up.</summary>
+    public static bool IsEaten(ItemData? carried) =>
+        carried is not null && Eaten.Contains(carried.HoldEffect);
+
+    /// <summary>How much health this puts back flat, or nothing.</summary>
+    public static int? Restoring(ItemData? carried) =>
+        carried?.HoldEffect == Restores && carried.HoldEffectParam > 0 ? carried.HoldEffectParam : null;
+
+    /// <summary>
+    /// What share of its maximum this puts back, as a denominator, or nothing — and which
+    /// stat's dislike confuses whoever ate it.
+    /// </summary>
+    public static (int Share, Stat Disliked)? Feeding(ItemData? carried) =>
+        carried is not null
+        && Flavours.TryGetValue(carried.HoldEffect, out Stat disliked)
+        && carried.HoldEffectParam > 0
+            ? (carried.HoldEffectParam, disliked)
+            : null;
+
+    /// <summary>What this clears, or nothing.</summary>
+    public static Ailments Clearing(ItemData? carried) =>
+        carried is not null && Cures.TryGetValue(carried.HoldEffect, out Ailments cleared)
+            ? cleared
+            : Ailments.None;
+
+    /// <summary>How many uses of a spent move this puts back, or nothing.</summary>
+    public static int? Refilling(ItemData? carried) =>
+        carried?.HoldEffect == RestoresPp && carried.HoldEffectParam > 0 ? carried.HoldEffectParam : null;
+
+    /// <summary>True when this puts back everything that was lowered.</summary>
+    public static bool Restoring(ItemData? carried, bool stages) =>
+        stages && carried?.HoldEffect == Herb;
+
+    /// <summary>
+    /// The share of its maximum below which this answers, as a denominator, or nothing.
+    /// <para>
+    /// Read: every one of the seven carries four, and a quarter is when they go off. The one
+    /// threshold on this cartridge that did not have to be invented.
+    /// </para>
+    /// </summary>
+    public static int? PinchedAt(ItemData? carried) =>
+        carried is not null && Pinches.ContainsKey(carried.HoldEffect) && carried.HoldEffectParam > 0
+            ? carried.HoldEffectParam
+            : null;
+
+    /// <summary>Which stat this raises when it goes off, or nothing for the odd two.</summary>
+    public static Stat? Raises(ItemData? carried) =>
+        carried is not null && Pinches.TryGetValue(carried.HoldEffect, out Stat? stat) ? stat : null;
 }
