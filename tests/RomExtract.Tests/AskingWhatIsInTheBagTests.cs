@@ -452,6 +452,56 @@ public class AskingWhatIsInTheBagTests
     }
 
     /// <summary>
+    /// And nobody talks to him afterwards. Being hidden by a flag and being removed by a
+    /// command are the same thing to a player and two different things in the file — only
+    /// the first was ever asked about, so a person taken off the map went on holding a
+    /// conversation from wherever he had gone.
+    /// </summary>
+    [Fact]
+    public void SomebodyAScriptRemovesIsNotTalkedToAgain()
+    {
+        MapData start = Room("1.0") with
+        {
+            // The one who gets removed comes first, so he is talked to once before the
+            // person beside him takes him off the map. Reading the other order proves
+            // nothing: he would be skipped on the pass he was removed on and the test
+            // would pass whether or not later passes remembered.
+            Objects =
+            [
+                new MapObject(2, 1, 2, 1, Direction.Down, 0, false) { ScriptAddress = 0x2000 },
+                new MapObject(1, 1, 1, 1, Direction.Down, 0, false) { ScriptAddress = 0x1000 },
+            ],
+        };
+
+        var spokenTo = 0;
+        var passes = 0;
+
+        Autoplayer.Play(
+            new WorldData([start]),
+            "1.0",
+            TestRules.All,
+            (address, _, _) =>
+            {
+                if (address == 0x2000)
+                {
+                    spokenTo++;
+
+                    return Nothing;
+                }
+
+                // Takes the other one off the map, and opens something new every pass so
+                // the loop keeps running and would reach him again.
+                return new PlayedScript([0x400 + passes++], [], [], [], null, null)
+                {
+                    Hides = [2],
+                };
+            });
+
+        Assert.True(passes > 1, "there has to be a second pass for this to mean anything");
+        Assert.Equal(1, spokenTo);
+    }
+
+    /// <summary>
     /// And the loop does not stop on the pass that only picked something up.
     /// <para>
     /// The settle test is "did this pass open anything", and picking something up opens

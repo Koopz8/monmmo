@@ -142,7 +142,7 @@ public sealed class ScriptState
     /// whole game took before anybody was carrying anything.
     /// </para>
     /// </summary>
-    public int Carried(int itemId) => itemId <= 0 ? 0 : CountOfItem?.Invoke(itemId) ?? 0;
+    public int Carried(int itemId) => CountOfItem?.Invoke(itemId) ?? 0;
 
     private readonly HashSet<int> _flags;
     private readonly Dictionary<int, int> _variables;
