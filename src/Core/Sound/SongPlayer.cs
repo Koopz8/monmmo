@@ -7,8 +7,16 @@ namespace PokeMmo.Core.Sound;
 /// </param>
 public sealed record Instrument(Voice Voice, int Key, byte Attack, byte Decay, byte Sustain, byte Release)
 {
-    /// <summary>A silent instrument, for a slot that names nothing playable.</summary>
-    public static readonly Instrument Nothing = new(Voice.Silence(), 60, 255, 255, 255, 255);
+    /// <summary>
+    /// A silent instrument, for a slot that names nothing playable.
+    /// <para>
+    /// Genuinely empty rather than sixty-four zeroes. A recording of silence is still a
+    /// recording: it takes one of the mixer's twelve voices, it reports itself as something
+    /// that could be heard, and it made a voicegroup of twenty-two unplayable slots look
+    /// like a voicegroup of twenty-two instruments at eight thousand hertz.
+    /// </para>
+    /// </summary>
+    public static readonly Instrument Nothing = new(new Voice([], 8000, false, 0), 60, 255, 255, 255, 255);
 }
 
 /// <summary>One track's worth of commands, in the order they were read.</summary>
