@@ -533,11 +533,40 @@ public sealed class SyntheticRom
         for (int i = 0; i < SongCount * 4; i++)
         {
             int at = SequencesOffset + i * SequenceStride;
+            int wrote = 0;
 
-            _data[at] = 0xBB;         // tempo
-            _data[at + 1] = 75;
-            _data[at + 2] = 0xB1;     // end of track
+            void Put(params byte[] bytes)
+            {
+                foreach (byte b in bytes) _data[at + wrote++] = b;
+            }
+
+            Put(0xBB, 75);                    // tempo
+            Put(0xBD, (byte)(i % 8));         // instrument
+            Put(0xBE, 100);                   // volume
+            Put(0xBF, 64);                    // panning
+
+            // Notes, with two arguments each and a wait between them — the ordinary shape a
+            // track is mostly made of.
+            for (int note = 0; note < NotesPerTrack; note++)
+            {
+                Put(0x90);                                        // wait
+                Put((byte)(0xD4 + note % 4), (byte)(48 + note), 100);
+            }
+
+            Put(0xCE);                        // note off
+            Put(0xB1);                        // end of track
         }
+
+        // One track that calls a subsection and comes back, so the two commands that are not
+        // straight lines have something to be read on.
+        WriteCallingTrack();
+
+        // And one that jumps backwards for ever, which is what a looping piece of music is.
+        WriteLoopingTrack();
+
+        // And one that stops because the file does, which is the failure the reader has to
+        // report rather than throw on.
+        WriteUnendedTrack();
 
         // Songs.
         for (int song = 0; song < SongCount; song++)
@@ -631,6 +660,53 @@ public sealed class SyntheticRom
     }
 
     private const int SongTableEntryBytes = 8;
+
+    /// <summary>A track that goes somewhere else and comes back, then ends.</summary>
+    private void WriteCallingTrack()
+    {
+        int at = CallingTrackOffset;
+
+        _data[at++] = 0xBB;
+        _data[at++] = 80;
+        _data[at++] = 0xB3;                                       // call
+
+        WriteU32(at, Rom.BaseAddress + (uint)CalledSubsectionOffset);
+        at += 4;
+
+        _data[at++] = 0x90;                                       // a wait after coming back
+        _data[at] = 0xB1;                                         // end
+
+        int sub = CalledSubsectionOffset;
+
+        _data[sub++] = 0xD4;
+        _data[sub++] = 60;
+        _data[sub++] = 100;
+        _data[sub] = 0xB4;                                        // return
+    }
+
+    /// <summary>A track that jumps back to its own beginning and therefore never ends.</summary>
+    private void WriteLoopingTrack()
+    {
+        int at = LoopingTrackOffset;
+
+        _data[at++] = 0xD4;
+        _data[at++] = 60;
+        _data[at++] = 100;
+        _data[at++] = 0xB2;                                       // goto
+
+        WriteU32(at, Rom.BaseAddress + (uint)LoopingTrackOffset);
+    }
+
+    /// <summary>A track with nothing but notes, running into the end of the file.</summary>
+    private void WriteUnendedTrack()
+    {
+        for (int i = UnendedTrackOffset; i < RomSize; i += 3)
+        {
+            _data[i] = 0xD4;
+            if (i + 1 < RomSize) _data[i + 1] = 60;
+            if (i + 2 < RomSize) _data[i + 2] = 100;
+        }
+    }
 
     /// <summary>Palette 0 of the synthetic tileset — what a rendered map is checked against.</summary>
     public Rgba32[] ExpectedTilesetPalette { get; } = BuildTilesetPalette();
@@ -1213,6 +1289,24 @@ public sealed class SyntheticRom
     /// changed nothing.
     /// </summary>
     public const int SongWithNoVoicegroupOffset = 0x166000;
+
+    /// <summary>Notes written into each ordinary synthetic track.</summary>
+    public const int NotesPerTrack = 6;
+
+    /// <summary>A track that calls a subsection and comes back from it.</summary>
+    public const int CallingTrackOffset = 0x168000;
+
+    /// <summary>The subsection it calls.</summary>
+    public const int CalledSubsectionOffset = 0x168100;
+
+    /// <summary>A track that jumps back to its own beginning — a piece of music that loops.</summary>
+    public const int LoopingTrackOffset = 0x168200;
+
+    /// <summary>
+    /// A track with no end command, placed so that following it walks off the end of the
+    /// file. The reader has to report this rather than throw.
+    /// </summary>
+    public const int UnendedTrackOffset = RomSize - 12;
 
     public const int ItemTableOffset = 0x110000;
     public const int ItemDescriptionsOffset = 0x114000;
