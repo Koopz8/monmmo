@@ -204,7 +204,7 @@ public static class Program
         if (options.FlagGates) WriteFlagGates(rom);
         if (options.SpecialContracts) WriteSpecialContracts(rom);
         if (options.Closure) WriteClosure(rom, options.RoutineAnswers, options.StartAt);
-        if (options.Play) WritePlaythrough(rom, options.RoutineAnswers, options.StartAt);
+        if (options.Play) WritePlaythrough(rom, options.RoutineAnswers, options.StartAt, options.Boat);
         if (options.WhereFrom.Count > 0) WriteWhereFrom(rom, options.WhereFrom);
 
         if (options.SequenceWidths) WriteSequenceWidths(rom);
@@ -5737,7 +5737,8 @@ public static class Program
         }
     }
 
-    private static void WritePlaythrough(Rom rom, IReadOnlyDictionary<int, int> answers, string startAt)
+    private static void WritePlaythrough(
+        Rom rom, IReadOnlyDictionary<int, int> answers, string startAt, bool boat = false)
     {
         Console.WriteLine();
         Console.WriteLine("A PLAYTHROUGH");
@@ -5794,7 +5795,7 @@ public static class Program
             };
         }
 
-        Attempt played = Autoplayer.Play(world, first.Id, rules, Run, Console.WriteLine);
+        Attempt played = Autoplayer.Play(world, first.Id, rules, Run, Console.WriteLine, boat);
 
         Console.WriteLine();
         Console.WriteLine(
@@ -5928,6 +5929,27 @@ public static class Program
 
             if (played.Refused.Count > 20)
                 Console.WriteLine($"    ... and {played.Refused.Count - 20} more");
+        }
+
+        // The boat, said out loud either way. "It never got to the islands" and "it was
+        // holding a ticket the whole time and nobody asked" are the same output otherwise.
+        Console.WriteLine();
+
+        Console.WriteLine(world.FerryPasses.Count == 0
+            ? "  the ferry asks for nothing in this world file, which is itself a finding"
+            : played.RodeTheBoat
+                ? $"  the boat: RIDDEN — {(played.HeldATicket ? "it was holding a ticket" : "it never held a ticket, so it never sailed")}"
+                : $"  the boat: not taken (this run is a floor)."
+                  + (played.HeldATicket
+                      ? " IT WAS HOLDING A TICKET — try --boat and see what opens"
+                      : " It never held a ticket either, so --boat would change nothing"));
+
+        if (played.RodeTheBoat && played.HeldATicket)
+        {
+            Console.WriteLine(
+                "    where the boat goes is MODELLED as every dock — which places a ticket is worth");
+            Console.WriteLine(
+                "    is inside the routine that draws the menu. This reach is a ceiling, not a floor.");
         }
 
         if (played.Removed.Count > 0)
@@ -8799,6 +8821,10 @@ public static class Program
                                     walk, talk to everybody reachable, fight whoever picks
                                     a fight, take what is given, walk again. Says where it
                                     stopped and what it never got to. Takes --answer too.
+              --boat                let the playthrough take the ferry. Whether the boat will
+                                    carry it is READ off the scripts — a flag or an item; where
+                                    the boat goes is MODELLED as every dock, so this makes the
+                                    reach a ceiling rather than the floor --play alone reports.
               --where-from ID[,ID]  every place in the image a script names these items, by
                                     what it does with them: handed over, asked for, taken
                                     away, sold, or loaded for a routine. Reads rather than
@@ -8993,6 +9019,9 @@ public static class Program
         /// <summary>Items to hunt through every script in the image, or nothing.</summary>
         public IReadOnlyList<int> WhereFrom { get; private init; } = [];
 
+        /// <summary>Whether the playthrough may take the ferry, which makes its reach a ceiling.</summary>
+        public bool Boat { get; private init; }
+
         public string StartAt { get; private init; } = Beginning.MapId;
 
         public IReadOnlyDictionary<int, int> RoutineAnswers { get; private init; } = new Dictionary<int, int>();
@@ -9112,6 +9141,7 @@ public static class Program
             bool specialContracts = false;
             bool play = false;
             var whereFrom = new List<int>();
+            bool boat = false;
             string startAt = Beginning.MapId;
             var routineAnswers = new Dictionary<int, int>();
             bool sequenceWidths = false;
@@ -9346,6 +9376,9 @@ public static class Program
                     case "--play":
                         play = true;
                         break;
+                    case "--boat":
+                        boat = true;
+                        break;
                     case "--where-from":
                     {
                         // One or more item ids, decimal or hex, so the three drinks can be
@@ -9559,6 +9592,7 @@ public static class Program
                 SpecialContracts = specialContracts,
                 Play = play,
                 WhereFrom = whereFrom,
+                Boat = boat,
                 StartAt = startAt,
                 Answers = answers,
                 SequenceWidths = sequenceWidths,
