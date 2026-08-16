@@ -359,24 +359,47 @@ public class SteppingAsideTests
     /// <summary>
     /// Somebody walked twice ends up where both walks put them, rather than where the second
     /// one alone would. A scene is a sequence and the file's record is only where it started.
+    /// <para>
+    /// Two doors, one behind the other, so the difference is visible: compounding leaves him
+    /// clear of both, and starting from his original square each time parks him on the second.
+    /// The first version of this test walked him twice in the same direction past a single
+    /// door, which opens whether the walks compound or not and proved nothing.
+    /// </para>
     /// </summary>
     [Fact]
     public void TwoWalksCompound()
     {
+        var world = new WorldData(
+        [
+            Room("1.0") with
+            {
+                Warps = [new Warp(3, 1, 0, "1.1"), new Warp(3, 2, 0, "1.2")],
+                Objects =
+                [
+                    new MapObject(1, 1, 1, 1, Direction.Down, 0, false) { ScriptAddress = 0x1000 },
+                    new MapObject(2, 1, 3, 1, Direction.Down, 0, false),
+                ],
+            },
+            Room("1.1") with { Warps = [new Warp(1, 1, 0, "1.0")] },
+            Room("1.2") with { Warps = [new Warp(1, 1, 0, "1.0")] },
+        ]);
+
         var steps = 0;
 
         Attempt played = Autoplayer.Play(
-            Gate(),
+            world,
             "1.0",
             TestRules.All,
             (address, _, _) => address == 0x1000 && steps++ < 2
                 ? Nothing with { Walked = [(2, 0, 1)] }
                 : Nothing);
 
-        // Down twice from (3,1) is (3,3), not (3,2).
-        Assert.Contains(("1.0", 2), played.Moved);
-        Assert.Contains("1.1", played.Reached);
         Assert.True(steps >= 2, "the second walk has to happen for this to mean anything");
+
+        // Down twice from (3,1) is (3,3). Down once from (3,1), twice over, is (3,2) — which
+        // is the second door.
+        Assert.Contains("1.1", played.Reached);
+        Assert.Contains("1.2", played.Reached);
     }
 
     /// <summary>
