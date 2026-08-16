@@ -139,6 +139,44 @@ public class BuyingWhatItWasRefusedTests
     }
 
     /// <summary>
+    /// And a counter walled off on a map it <em>is</em> standing on is not a shop either.
+    /// <para>
+    /// The decoy for the rule above, and it was needed: the map in that test is never reached
+    /// at all, so the reach filter catches it before the standing check is ever consulted.
+    /// Nothing could fail the rule that actually matters. A shop across a wall on a map you
+    /// are standing on is the case the cartridge is full of — every counter in this game is
+    /// behind something — and it is the one the rule is for.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AndACounterWalledOffOnAMapItIsStandingOnIsNotOneEither()
+    {
+        // A solid column down x = 2, so the right-hand side of the room cannot be walked to.
+        var collision = new byte[16];
+
+        for (var y = 0; y < 4; y++) collision[y * 4 + 2] = 1;
+
+        var world = new WorldData(
+        [
+            new MapData("1.0", "1.0", 4, 4, collision)
+            {
+                Objects =
+                [
+                    new MapObject(1, 1, 1, 1, Direction.Down, 0, false) { ScriptAddress = 0x1000 },
+
+                    // On the far side of the wall, on a map the walk is standing on.
+                    new MapObject(2, 1, 3, 1, Direction.Down, 0, false, Sells: [TestRules.PotionItem]),
+                ],
+            },
+        ]);
+
+        Attempt played = Run(world, 9999, TestRules.PotionItem);
+
+        Assert.Contains("1.0", played.Reached);
+        Assert.Empty(played.Bought);
+    }
+
+    /// <summary>
     /// And it cannot spend what it has not got. The price is read off the cartridge's own item
     /// record; the purse is the one modelled number in the whole arrangement.
     /// </summary>
