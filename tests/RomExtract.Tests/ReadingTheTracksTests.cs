@@ -179,6 +179,51 @@ public class ReadingTheTracksTests
     }
 
     /// <summary>
+    /// A command with a stated width takes exactly that, whatever the bytes look like.
+    /// <para>
+    /// This is the whole point of stating one. The greedy rule stops at anything that is
+    /// itself a command, which is right for ordinary arguments and wrong for an address —
+    /// four bytes of an address have values above 0x80 in them, so a greedy read walks into
+    /// the middle of one and, because almost no byte in this encoding is invalid, never
+    /// fails. It runs until the budget stops it.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AStatedWidthIsTakenWhateverTheBytesLookLike()
+    {
+        var rom = new SyntheticRom().ToRom();
+
+        int at = SyntheticRom.SettingWithAnAddressOffset;
+
+        // Greedily, the four bytes of the address are not arguments: the read takes the one
+        // below 0x80 and then tries to run the rest as commands.
+        TrackRead greedy = SequenceReader.Read(rom, at);
+
+        SequenceEvent guessed = greedy.Events.First(e => e.Command == SequenceCommand.Setting);
+
+        Assert.True(guessed.Arguments.Count < 4, "the greedy rule already took the whole address");
+
+        // Told how wide it is, it takes all four and the track reads to its end.
+        TrackRead stated = SequenceReader.Read(
+            rom, at, new Dictionary<byte, int> { [SyntheticRom.SettingWithAnAddressOpcode] = 4 });
+
+        Assert.True(stated.EndedProperly, "stating the width did not let the track reach its end");
+        Assert.Equal(4, stated.Events.First(e => e.Command == SequenceCommand.Setting).Arguments.Count);
+    }
+
+    /// <summary>And a read may be given a smaller budget, which is what makes a sweep possible.</summary>
+    [Fact]
+    public void AndAReadMayBeGivenASmallerBudget()
+    {
+        var rom = new SyntheticRom().ToRom();
+
+        TrackRead brief = SequenceReader.Read(rom, SyntheticRom.UnendedTrackOffset, null, budget: 4);
+
+        Assert.False(brief.EndedProperly);
+        Assert.True(brief.Events.Count <= 4);
+    }
+
+    /// <summary>
     /// Every track of every song the walk found reads to an end, and the report says how
     /// many did — including when that number is smaller than the total.
     /// </summary>

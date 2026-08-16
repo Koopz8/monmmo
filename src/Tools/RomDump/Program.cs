@@ -199,6 +199,8 @@ public static class Program
 
         if (options.Sound) WriteSound(rom);
 
+        if (options.SequenceWidths) WriteSequenceWidths(rom);
+
         if (options.Derive) WriteDerivedLengths(rom);
 
         if (options.Opcodes) WriteOpcodeCounts(rom);
@@ -5723,6 +5725,90 @@ public static class Program
         };
     }
 
+    /// <summary>
+    /// Which commands take arguments a byte at a time and which take a fixed run of them,
+    /// measured against this cartridge rather than decided in advance.
+    /// <para>
+    /// The greedy rule this reader uses is self-correcting for a command taking several
+    /// ordinary arguments — the leftovers come back round as a repeat of the running command
+    /// and are consumed. It is <b>not</b> self-correcting for a command whose argument can
+    /// look like a command: a four-byte address has bytes above 0x80 in it, so the read walks
+    /// into the middle of one and never recovers. And because almost no byte in this encoding
+    /// is invalid, it does not fail either — it runs until the budget stops it.
+    /// </para>
+    /// <para>
+    /// So the question is asked of the file. For each command, each width is tried and the
+    /// tracks that reach an end are counted. A width that reads more tracks to an end than
+    /// the others is not a proof, and it is a great deal better than a table copied out of
+    /// somebody's notes — the number is printed either way.
+    /// </para>
+    /// </summary>
+    private static void WriteSequenceWidths(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("SEQUENCE ARGUMENT WIDTHS");
+        Console.WriteLine();
+
+        SoundTreeResult tree = SoundLocator.Walk(rom);
+
+        // A sample rather than all of them, and a small budget rather than the real one. The
+        // sweep is a hundred and fifty reads of every track, and the question it asks — does
+        // this track reach an end — is answered early or not at all.
+        List<int> tracks =
+        [
+            .. tree.Songs.SelectMany(s => s.TrackOffsets).Take(SweepTracks),
+        ];
+
+        Console.WriteLine($"  {tracks.Count} tracks sampled, {SweepBudget} commands each");
+
+        int Ends(IReadOnlyDictionary<byte, int>? widths) =>
+            tracks.Count(t => SequenceReader.Read(rom, t, widths, SweepBudget).EndedProperly);
+
+        int plain = Ends(null);
+
+        Console.WriteLine($"  {plain} of them reach an end as things stand");
+        Console.WriteLine();
+
+        var better = new Dictionary<byte, int>();
+
+        for (byte opcode = 0xB5; opcode <= 0xCD; opcode++)
+        {
+            var scores = new List<(int Width, int Ends)>();
+
+            for (int width = 0; width <= 5; width++)
+                scores.Add((width, Ends(new Dictionary<byte, int> { [opcode] = width })));
+
+            (int Width, int Ends) best = scores.OrderByDescending(s => s.Ends).First();
+
+            // Only worth printing when a width does better than leaving it alone, which for
+            // most of these it will not.
+            if (best.Ends <= plain) continue;
+
+            better[opcode] = best.Width;
+
+            Console.WriteLine(
+                $"  0x{opcode:X2}  {best.Width} bytes -> {best.Ends} ends (was {plain})   "
+                + string.Join(" ", scores.Select(x => $"{x.Width}:{x.Ends}")));
+        }
+
+        if (better.Count == 0)
+        {
+            Console.WriteLine("  no single width beats the greedy rule, so the trouble is elsewhere");
+
+            return;
+        }
+
+        // And all of them together, which is not the same as each of them separately: two
+        // commands can each derail the same tracks, so fixing one alone shows nothing.
+        Console.WriteLine();
+        Console.WriteLine($"  all of those together: {Ends(better)} of {tracks.Count} reach an end");
+    }
+
+    /// <summary>How many tracks the width sweep looks at. <b>Modelled</b>, for speed only.</summary>
+    private const int SweepTracks = 300;
+
+    private const int SweepBudget = 3000;
+
     private static void WriteSilentPeople(Rom rom)
     {
         Console.WriteLine();
@@ -7467,6 +7553,10 @@ public static class Program
                                      output directory and nowhere else.
               --overworld            report the overworld sprite tables and write a
                                      few of the walking figures as PNGs
+              --sequence-widths      measure how many bytes each sequence command's
+                                     arguments take, by trying every width against
+                                     this cartridge and counting how many tracks
+                                     reach an end
               --sound                report the whole sound walk: recordings,
                                      instruments, songs, the song table, the cry
                                      table, and how many songs assemble. Prints
@@ -7634,6 +7724,9 @@ public static class Program
         /// <summary>Everything the sound walk finds, so it can be checked against a real file.</summary>
         public bool Sound { get; private init; }
 
+        /// <summary>Measure how many bytes each sequence command's arguments take.</summary>
+        public bool SequenceWidths { get; private init; }
+
         /// <summary>Score every argument width for the commands that stop a run.</summary>
         public bool Derive { get; private init; }
 
@@ -7738,6 +7831,7 @@ public static class Program
             bool shared = false;
             bool silent = false;
             bool sound = false;
+            bool sequenceWidths = false;
             bool derive = false;
             bool opcodes = false;
             bool audit = false;
@@ -7956,6 +8050,9 @@ public static class Program
                     case "--sound":
                         sound = true;
                         break;
+                    case "--sequence-widths":
+                        sequenceWidths = true;
+                        break;
                     case "--derive":
                         derive = true;
                         break;
@@ -8130,6 +8227,7 @@ public static class Program
                 Shared = shared,
                 Silent = silent,
                 Sound = sound,
+                SequenceWidths = sequenceWidths,
                 Derive = derive,
                 Opcodes = opcodes,
                 Audit = audit,

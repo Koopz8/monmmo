@@ -798,6 +798,7 @@ public sealed class SyntheticRom
 
         // And one that jumps backwards for ever, which is what a looping piece of music is.
         WriteLoopingTrack();
+        WriteSettingWithAnAddress();
 
         // And one that stops because the file does, which is the failure the reader has to
         // report rather than throw on.
@@ -929,6 +930,29 @@ public sealed class SyntheticRom
     }
 
     /// <summary>A track that jumps back to its own beginning and therefore never ends.</summary>
+    /// <summary>
+    /// A track whose one setting carries a four-byte address rather than a small number.
+    /// <para>
+    /// The case the greedy argument rule cannot handle: bytes of an address are above 0x80,
+    /// so a reader taking arguments only while they are not commands takes one of the four
+    /// and then runs the other three as commands. Nothing about that fails — almost no byte
+    /// in this encoding is invalid — so the read wanders on instead of stopping.
+    /// </para>
+    /// </summary>
+    private void WriteSettingWithAnAddress()
+    {
+        int at = SettingWithAnAddressOffset;
+
+        _data[at++] = SettingWithAnAddressOpcode;
+
+        // An address with high bytes in it, which is what a real one has.
+        WriteU32(at, Rom.BaseAddress + 0x00C0_9080);
+
+        at += 4;
+
+        _data[at] = 0xB1;   // end
+    }
+
     private void WriteLoopingTrack()
     {
         int at = LoopingTrackOffset;
@@ -1624,6 +1648,18 @@ public sealed class SyntheticRom
     /// file. The reader has to report this rather than throw.
     /// </summary>
     public const int UnendedTrackOffset = RomSize - 12;
+
+    /// <summary>
+    /// A track of one setting carrying a four-byte address, then an end.
+    /// <para>
+    /// It reads to its end only if the setting's width is stated. Greedily it takes one byte
+    /// of the address and runs the rest as commands, which does not fail — it wanders.
+    /// </para>
+    /// </summary>
+    public const int SettingWithAnAddressOffset = 0x1A8000;
+
+    /// <summary>The command that carries it. One of the settings, and its width is the question.</summary>
+    public const byte SettingWithAnAddressOpcode = 0xB5;
 
     // --- move animations --------------------------------------------------------------
 

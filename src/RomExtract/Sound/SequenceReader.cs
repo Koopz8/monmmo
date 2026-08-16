@@ -108,7 +108,29 @@ public static class SequenceReader
         new(offset, events, false, unknown) { StoppedOn = on, StoppedAt = at, After = after };
 
     /// <summary>Reads one track from where its song header said it begins.</summary>
-    public static TrackRead Read(Rom rom, int offset)
+    /// <param name="widths">
+    /// How many bytes named commands take, where that is known. A command not in here takes
+    /// arguments greedily — up to one byte, stopping at anything that is itself a command.
+    /// <para>
+    /// This exists because the greedy rule is self-correcting for a command that takes more
+    /// than one argument and <b>is not</b> for one whose arguments can look like commands. A
+    /// four-byte address has bytes above 0x80 in it, so a command taking one that this reader
+    /// reads as taking one byte walks into the middle of the address and never recovers —
+    /// and because almost no byte in this encoding is invalid, it does not fail either. It
+    /// runs until the budget stops it, which is what 649 tracks on a real cartridge do.
+    /// </para>
+    /// <para>
+    /// Which commands those are is not guessed at here. It is measured: see the sweep in
+    /// romdump, which tries each width against a whole cartridge and counts how many tracks
+    /// reach an end.
+    /// </para>
+    /// </param>
+    /// <param name="budget">How many commands to follow before giving up.</param>
+    public static TrackRead Read(
+        Rom rom,
+        int offset,
+        IReadOnlyDictionary<byte, int>? widths = null,
+        int budget = MostCommands)
     {
         var events = new List<SequenceEvent>();
         var returns = new Stack<int>();
@@ -122,7 +144,7 @@ public static class SequenceReader
         // followed, and stopping there is not a failure.
         var seen = new HashSet<int>();
 
-        while (events.Count < MostCommands)
+        while (events.Count < Math.Max(1, budget))
         {
             if (at < 0 || at >= rom.Length)
                 return Stopped(offset, events, unknown, 0, at, running);
@@ -225,8 +247,14 @@ public static class SequenceReader
                 default:
                     if (IsSetting(opcode))
                     {
-                        events.Add(new SequenceEvent(
-                            start, opcode, SequenceCommand.Setting, Take(rom, ref at, 1)));
+                        // A stated width is taken whatever the bytes look like; without one,
+                        // greedily and never past something that is itself a command.
+                        IReadOnlyList<byte> arguments =
+                            widths is not null && widths.TryGetValue(opcode, out int wide)
+                                ? Exactly(rom, ref at, wide)
+                                : Take(rom, ref at, 1);
+
+                        events.Add(new SequenceEvent(start, opcode, SequenceCommand.Setting, arguments));
 
                         break;
                     }
@@ -243,6 +271,23 @@ public static class SequenceReader
         // did not — and distinguishable from every other failure by the offset, which is the
         // one place the read stopped somewhere it was still making sense.
         return new TrackRead(offset, events, false, unknown) { StoppedAt = -1 };
+    }
+
+    /// <summary>
+    /// Exactly this many argument bytes, whatever they look like.
+    /// <para>
+    /// The counterpart of <see cref="Take"/>, and the whole point of it: a command carrying a
+    /// four-byte address has bytes above 0x80 in it, and stopping at those is what derails
+    /// the read.
+    /// </para>
+    /// </summary>
+    private static IReadOnlyList<byte> Exactly(Rom rom, ref int at, int count)
+    {
+        var taken = new List<byte>(Math.Max(0, count));
+
+        for (int i = 0; i < count && at < rom.Length; i++) taken.Add(rom.ReadU8(at++));
+
+        return taken;
     }
 
     /// <summary>
