@@ -5706,7 +5706,7 @@ public static class Program
                 run.FlagsCleared,
                 run.GivesItem is { } item && teaches.TryGetValue(item, out int move) ? [move] : [],
                 run.SpecialsCalled,
-                run.GivesMon?.Species,
+                run.GivesMon,
                 run.TrainerId);
         }
 
@@ -5721,7 +5721,8 @@ public static class Program
             + $"{played.Party.Count} in the party, highest level {played.HighestLevel}");
         Console.WriteLine(
             $"    {played.FightsWon} fights won, {played.FightsLost} lost, "
-            + $"{played.FightsSkipped} never fought at all");
+            + $"{played.FightsSkipped} never fought at all"
+            + $" (healed {played.PartiesHealed} times)");
 
         if (played.FightsSkipped > 0)
         {

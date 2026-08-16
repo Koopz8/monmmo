@@ -450,7 +450,7 @@ public class PlayingItThroughTests
 
                 given = true;
 
-                return new PlayedScript([], [], [], [], 1, null);
+                return new PlayedScript([], [], [], [], (1, 5), null);
             });
 
         Assert.Single(played.Party);
@@ -539,5 +539,134 @@ public class PlayingItThroughTests
             (_, _) => new PlayedScript([], [], [], [0x1B5], null, null));
 
         Assert.True(played.Specials[0x1B5] >= 1);
+    }
+}
+
+/// <summary>
+/// The four things the first real run against a cartridge found.
+/// <para>
+/// It printed <c>0 fights won, 157 lost</c> and <c>highest level 5</c> for twenty-four
+/// identical passes. None of that was difficulty; all four were faults in the player.
+/// </para>
+/// </summary>
+public class WhatTheFirstRealRunFoundTests
+{
+    private static MapData Room(string id) => new(id, id, 4, 4, new byte[16]);
+
+    private static MapObject Person(uint at) =>
+        new(1, 1, 1, 1, Direction.Down, 0, false) { ScriptAddress = at };
+
+    /// <summary>
+    /// A creature comes in at the level its script names, not at five.
+    /// <para>
+    /// The first version took only the species, so every gift in the game — the fossils, the
+    /// snorlax, the lapras — arrived as a starter, and the party could never be a match for
+    /// anything it met.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ACreatureComesInAtTheLevelItsScriptNames()
+    {
+        MapData start = Room("1.0") with { Objects = [Person(0x1000)] };
+
+        var given = false;
+
+        Attempt played = Autoplayer.Play(
+            new WorldData([start]),
+            "1.0",
+            TestRules.All,
+            (_, _) =>
+            {
+                if (given) return new PlayedScript([], [], [], [], null, null);
+
+                given = true;
+
+                return new PlayedScript([], [], [], [], (1, 34), null);
+            });
+
+        Assert.Single(played.Party);
+        Assert.Equal(34, played.Party[0].Level);
+    }
+
+    /// <summary>
+    /// A pass that changes nothing ends the run, even when scripts keep reporting flags.
+    /// <para>
+    /// The loop used to end on "did any script report a flag that was not set a moment ago",
+    /// and one script clearing what another sets answers yes for ever. The first real run sat
+    /// at 179 maps and 62 flags from pass four to pass twenty-four and then reported the
+    /// backstop. Ending on what is <em>known</em> rather than on what was <em>reported</em>
+    /// makes it converge.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void APassThatChangesNothingEndsTheRun()
+    {
+        MapData start = Room("1.0") with { Objects = [Person(0x2000), Person(0x2001)] };
+
+        var turn = 0;
+
+        Attempt played = Autoplayer.Play(
+            new WorldData([start]),
+            "1.0",
+            TestRules.All,
+
+            // One sets it, the next clears it, for ever. Nothing is ever actually learned.
+            (_, _) => ++turn % 2 == 1
+                ? new PlayedScript([0x0100], [], [], [], null, null)
+                : new PlayedScript([], [0x0100], [], [], null, null));
+
+        Assert.Equal(StoppedBecause.NothingMoreOpened, played.Stopped);
+        Assert.True(
+            played.Passes < Autoplayer.MostPasses,
+            $"it ran to the backstop in {played.Passes} passes instead of settling");
+    }
+
+    /// <summary>
+    /// A world with somewhere to heal heals between fights.
+    /// <para>
+    /// The worst decision in the first version, and its output said so in one number: the
+    /// first loss left the whole party down and every one of the 156 fights after it was lost
+    /// before it began. A run that measures "did the first fight go badly" and reports it 157
+    /// times is not measuring the game.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AWorldWithSomewhereToHealHealsBetweenFights()
+    {
+        var nurse = new MapObject(2, 1, 2, 2, Direction.Down, 0, false) { Heals = true };
+
+        MapData start = Room("1.0") with { Objects = [Person(0x3000), nurse] };
+
+        var handed = false;
+
+        Attempt played = Autoplayer.Play(
+            new WorldData([start]),
+            "1.0",
+            TestRules.All,
+            (_, _) =>
+            {
+                if (handed) return new PlayedScript([], [], [], [], null, 1);
+
+                handed = true;
+
+                return new PlayedScript([], [], [], [], (1, 20), null);
+            });
+
+        Assert.True(played.PartiesHealed > 0, "nothing was healed, so one loss ends every run");
+    }
+
+    /// <summary>And a world with nowhere to heal does not, which is what makes that a finding.</summary>
+    [Fact]
+    public void AndAWorldWithNowhereToHealDoesNot()
+    {
+        MapData start = Room("1.0") with { Objects = [Person(0x4000)] };
+
+        Attempt played = Autoplayer.Play(
+            new WorldData([start]),
+            "1.0",
+            TestRules.All,
+            (_, _) => new PlayedScript([], [], [], [], null, 1));
+
+        Assert.Equal(0, played.PartiesHealed);
     }
 }
