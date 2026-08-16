@@ -12,6 +12,7 @@ using PokeMmo.RomExtract.Scripts;
 using PokeMmo.RomExtract.Sound;
 using PokeMmo.Core.Sound;
 using PokeMmo.RomExtract.Trainers;
+using PokeMmo.Server;
 
 namespace PokeMmo.Tools.RomDump;
 
@@ -200,6 +201,7 @@ public static class Program
 
         if (options.Sound) WriteSound(rom);
         if (options.FlagGates) WriteFlagGates(rom);
+        if (options.Closure) WriteClosure(rom);
 
         if (options.SequenceWidths) WriteSequenceWidths(rom);
 
@@ -5598,6 +5600,152 @@ public static class Program
     /// mess is the finding.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// How far a player can actually get by playing, walked the whole way.
+    /// <para>
+    /// Every other reach figure this project has printed is one photograph: given these
+    /// flags and these moves, where can somebody stand. Playing is not one photograph — you
+    /// walk as far as you can, talk to whoever is there, and what they do opens more world.
+    /// This is that loop run until it stops opening anything.
+    /// </para>
+    /// <para>
+    /// <b>It is a floor, not a ceiling.</b> A <c>special</c> is a call into the cartridge's
+    /// own code, the runner steps over it, and the answer variable keeps its zero — so a
+    /// script that asks a question and branches on the answer takes the zero arm. Every badge
+    /// check in this game is one of those. Where this walk says a door is shut, the door may
+    /// simply have asked something nobody could answer, and the count of those is printed
+    /// beside the result rather than left out of it.
+    /// </para>
+    /// </summary>
+    private static void WriteClosure(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("CAN IT BE FINISHED");
+        Console.WriteLine();
+
+        WorldData world = WorldExporter.Export(rom);
+
+        MapData first = world.Maps.First();
+
+        Console.WriteLine($"  {world.Maps.Count} maps exported; walking from {first.Id}");
+        Console.WriteLine();
+
+        // Which item teaches which move, so that a script handing over HM01 counts as a
+        // script that opened thirty-eight maps. Empty when the tables were not found, and
+        // said out loud rather than silently costing the walk every field move in the game.
+        var teaches = new Dictionary<int, int>();
+
+        List<ItemData> allItems = ItemTable.Locate(rom) is { } itemsAt
+            ? [.. ItemTable.Read(rom, itemsAt).Select(i => i.ToData())]
+            : [];
+
+        List<int> machineItems =
+            [.. allItems.Where(i => i.Pocket == Pocket.Machines).OrderBy(i => i.Id).Select(i => i.Id)];
+
+        List<MoveData> allMoves = MoveExtractor.Extract(rom);
+
+        if (machineItems.Count == MachineMoves.Count
+            && MachineMoves.Locate(rom, allMoves.Count, ObstacleMoves.Find(rom)) is { } machinesAt)
+        {
+            List<int> taughtBy = MachineMoves.Read(rom, machinesAt);
+
+            for (int i = 0; i < Math.Min(machineItems.Count, taughtBy.Count); i++)
+                teaches[machineItems[i]] = taughtBy[i];
+        }
+
+        Console.WriteLine(
+            teaches.Count > 0
+                ? $"  {teaches.Count} teaching machines, so a script handing one over counts as a move"
+                : "  no machine table found, so no script can teach anything — every field move"
+                  + " will read as unobtainable and the answer below is far too small");
+
+        // The cartridge half, handed in. Running a script needs the image; the walk does not
+        // and has never had one.
+        ScriptOutcome Run(uint address, IReadOnlyCollection<int> flags)
+        {
+            var state = new ScriptState();
+
+            foreach (int flag in flags) state.Set(flag);
+
+            ScriptRun run = ScriptRunner.Run(rom, address, state);
+
+            return new ScriptOutcome(
+                run.FlagsSet,
+                run.FlagsCleared,
+
+                // What a script hands over, translated to a move when the thing it hands
+                // over is a teaching machine. This is how CUT opens thirty-eight maps, and it
+                // is the one part of the loop that needs a table rather than a script: an
+                // item's own record does not say what it teaches.
+                run.GivesItem is { } item && teaches.TryGetValue(item, out int move) ? [move] : [],
+                run.SpecialsCalled);
+        }
+
+        Closure closed = StoryClosure.Walk(world, first.Id, Run, Console.WriteLine);
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  a player can reach {closed.Reached.Count} of {world.Maps.Count} maps by playing");
+        Console.WriteLine(
+            $"    {closed.Flags.Count} flags set, {closed.Moves.Count} field moves obtained "
+            + $"({string.Join(", ", closed.Moves.Order())})");
+        Console.WriteLine($"    it stopped opening after {closed.Rounds.Count} pass(es)");
+
+        if (closed.Rounds.Count >= StoryClosure.MostRounds)
+        {
+            Console.WriteLine(
+                "    which is the backstop rather than a fixpoint — something is alternating");
+        }
+
+        // The maps nobody can get to, which is the answer to the question.
+        Console.WriteLine();
+        Console.WriteLine($"  {closed.Unreached.Count} maps nobody can get to");
+
+        foreach (string mapId in closed.Unreached.Take(40))
+        {
+            string name = world.Find(mapId)?.Name ?? "";
+
+            Console.WriteLine($"    {mapId,-8} {name}");
+        }
+
+        if (closed.Unreached.Count > 40)
+            Console.WriteLine($"    ... and {closed.Unreached.Count - 40} more");
+
+        // What is standing in the way at the edge, which is where to look first.
+        if (closed.Blocked.Count > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine("  the frontier: squares wanting a move nobody has");
+
+            foreach (IGrouping<int, Frontier> wanting in closed.Blocked
+                         .GroupBy(b => b.ShiftedBy)
+                         .OrderByDescending(g => g.Count()))
+            {
+                Console.WriteLine(
+                    $"    move {wanting.Key,3}: {wanting.Count(),4} squares — "
+                    + string.Join(", ", wanting.Take(3).Select(b => $"{b.MapId} {b.Square}")));
+            }
+        }
+
+        // And the error bar, which is the number that decides how much of the above to
+        // believe.
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  {closed.Specials.Values.Sum()} calls to {closed.Specials.Count} routines this "
+            + "walk could not answer");
+
+        foreach ((int routine, int times) in closed.Specials.OrderByDescending(p => p.Value).Take(10))
+            Console.WriteLine($"    routine 0x{routine:X3} asked {times} time(s)");
+
+        Console.WriteLine();
+        Console.WriteLine(
+            "    every one of those took the zero arm. A door this walk calls shut may have");
+        Console.WriteLine(
+            "    asked a question nobody could answer — so this figure is a floor, and the");
+        Console.WriteLine(
+            "    real world is never smaller than it.");
+    }
+
     private static void WriteFlagGates(Rom rom)
     {
         Console.WriteLine();
@@ -8128,6 +8276,10 @@ public static class Program
                                      arguments take, by trying every width against
                                      this cartridge and counting how many tracks
                                      reach an end
+              --can-it-be-finished  walk the story to a fixpoint from a fresh save: walk,
+                                    run every script a player can stand in front of, take
+                                    what it opens, walk again. Says how far a player can
+                                    actually get and what stops them.
               --flags               classify every flag by what turning it on changes:
                                     somebody appearing, the boat, or nothing at all. The
                                     split co-op's propagation rule is derived from.
@@ -8300,6 +8452,8 @@ public static class Program
 
         public bool FlagGates { get; private init; }
 
+        public bool Closure { get; private init; }
+
         /// <summary>Measure how many bytes each sequence command's arguments take.</summary>
         public bool SequenceWidths { get; private init; }
 
@@ -8411,6 +8565,7 @@ public static class Program
             bool silent = false;
             bool sound = false;
             bool flagGates = false;
+            bool closure = false;
             bool sequenceWidths = false;
             int? oneSong = null;
             bool derive = false;
@@ -8634,6 +8789,9 @@ public static class Program
                     case "--flags":
                         flagGates = true;
                         break;
+                    case "--can-it-be-finished":
+                        closure = true;
+                        break;
                     case "--sequence-widths":
                         sequenceWidths = true;
                         break;
@@ -8815,6 +8973,7 @@ public static class Program
                 Silent = silent,
                 Sound = sound,
                 FlagGates = flagGates,
+                Closure = closure,
                 SequenceWidths = sequenceWidths,
                 OneSong = oneSong,
                 Derive = derive,

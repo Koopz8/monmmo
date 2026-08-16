@@ -3,6 +3,12 @@
   <ItemGroup>
     <ProjectReference Include="..\..\RomExtract\RomExtract.csproj" />
     <ProjectReference Include="..\..\Core\Core.csproj" />
+    <!--
+      The tool links the server so it can use the world walker, which is where the reach
+      machinery lives. This is the safe direction: the guardrail is that the SERVER must never
+      link the extractor, and that still holds.
+    -->
+    <ProjectReference Include="..\..\Server\Server.csproj" />
   </ItemGroup>
 
   <PropertyGroup>
