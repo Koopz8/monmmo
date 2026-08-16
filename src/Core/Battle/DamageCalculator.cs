@@ -101,7 +101,12 @@ public static class DamageCalculator
         // end with the other multipliers on the finished number rather than to the defence
         // stat — a screen is a wall in front of somebody rather than somebody being tougher,
         // and a critical hit goes through it for exactly that reason.
-        int effectiveness = TypeChart.Effectiveness(move.Type, defender.Type1, defender.Type2);
+        // And what type it is, when the record does not say that either. HIDDEN POWER is the
+        // only move in this game whose type depends on the creature using it, and the six
+        // numbers it depends on are read off a save rather than guessed at.
+        PokemonType type = MovePower.TypeOf(move, attacker) ?? move.Type;
+
+        int effectiveness = TypeChart.Effectiveness(type, defender.Type1, defender.Type2);
 
         // What the defender's ability says about being hit by this at all. Asked before
         // anything is worked out, because the four immunities and WONDER GUARD are answers
@@ -113,7 +118,12 @@ public static class DamageCalculator
         if (Abilities.Against(defender.Ability, move, effectiveness) is { } refused)
             effectiveness = refused;
 
-        if (move.Category == DamageCategory.Status || move.Power == 0 || effectiveness == 0)
+        // What this move actually hits for, when its record's number is a placeholder. Asked
+        // before the "no power" refusal below, because FLAIL's record says one and one is a
+        // record saying the number is somewhere else.
+        int power = MovePower.Of(move, attacker) ?? move.Power;
+
+        if (move.Category == DamageCategory.Status || power == 0 || effectiveness == 0)
             return new DamageResult(0, false, effectiveness, false);
 
         bool physical = move.Category == DamageCategory.Physical;
@@ -151,7 +161,7 @@ public static class DamageCalculator
             attack /= 2;
 
         int damage = 2 * attacker.Level / 5 + 2;
-        damage = damage * move.Power;
+        damage = damage * power;
         damage = damage * attack;
         damage = damage / Math.Max(1, defence);
         damage = damage / 50;
@@ -162,10 +172,10 @@ public static class DamageCalculator
 
         damage = damage * Math.Clamp(randomPercent, 85, 100) / 100;
 
-        bool stab = move.Type == attacker.Type1 || move.Type == attacker.Type2;
+        bool stab = type == attacker.Type1 || type == attacker.Type2;
         if (stab) damage = damage * 15 / 10;
 
-        damage = TypeChart.Apply(damage, move.Type, defender.Type1, defender.Type2);
+        damage = TypeChart.Apply(damage, type, defender.Type1, defender.Type2);
 
         // And what the defender's ability takes off the end. Last, because it is a
         // reduction of the finished number rather than of any part of the sum.
@@ -173,7 +183,7 @@ public static class DamageCalculator
 
         // And what the sky is doing to it. Last, with the other multiplier on the finished
         // number — rain makes water and unmakes fire, and sun does the reverse.
-        damage = damage * Skies.Damage(weather, move.Type) / 100;
+        damage = damage * Skies.Damage(weather, type) / 100;
 
         // And the wall, which a critical hit ignores. That is the games' rule and it is also
         // the only reading that makes a screen a wall rather than a stat: something that got
@@ -182,7 +192,7 @@ public static class DamageCalculator
 
         // And the seventeen items that are worth a percentage on one type of move, whose
         // percentage is the number on their own record rather than one written here.
-        damage = damage * HeldItems.Boosting(attacker.Carried, move.Type) / 100;
+        damage = damage * HeldItems.Boosting(attacker.Carried, type) / 100;
 
         // A hit that connects always does something, unless the type chart said the
         // move does not affect the target at all.

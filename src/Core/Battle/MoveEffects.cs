@@ -384,6 +384,12 @@ public static class MoveEffects
         // TELEPORT, which is running away by another name and reaches the same code.
         0x99 => new MoveEffect(EffectKind.Leave, OnUser: true),
 
+        // The four whose power is not the number on their record. Everything they do happens
+        // where the damage is worked out, so there is nothing for the effect handler to do —
+        // but they are named here so they are finished rather than silent.
+        MovePower.Cornered or MovePower.Spending or MovePower.Regardless or MovePower.Hidden =>
+            new MoveEffect(EffectKind.Nothing, OnUser: true),
+
         0x2B => new MoveEffect(EffectKind.HighCritical, OnUser: false),
         0x1F or 0x96 => new MoveEffect(EffectKind.Flinch, OnUser: false),
         0x03 => new MoveEffect(EffectKind.Drain, OnUser: true),
