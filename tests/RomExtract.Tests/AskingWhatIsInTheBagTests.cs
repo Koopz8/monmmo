@@ -807,4 +807,89 @@ public class AskingWhatIsInTheBagTests
 
         Assert.Empty(Assert.Single(played.Refused).Sources);
     }
+
+    /// <summary>
+    /// And a source it never reached says how to get there, walked backwards.
+    /// <para>
+    /// Forwards from the player, everything past the first shut door is one undifferentiated
+    /// cloud of two hundred-odd maps. Backwards from the thing you actually want, the first
+    /// map in the chain that <em>was</em> reached is the door to go and open, and there is
+    /// exactly one of it.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ASourceItNeverReachedSaysHowToGetThere()
+    {
+        // Standing on 1.0, blocked out of 1.1 by somebody rooted on the door, and the shop
+        // is one room further on again.
+        MapData start = Room("1.0") with
+        {
+            Warps = [new Warp(3, 1, 0, "1.1")],
+            Objects =
+            [
+                new MapObject(1, 1, 1, 1, Direction.Down, 0, false) { ScriptAddress = 0x1000 },
+                new MapObject(2, 1, 3, 1, Direction.Down, 0, false),
+            ],
+        };
+
+        MapData middle = Room("1.1") with
+        {
+            Warps = [new Warp(1, 1, 0, "1.0"), new Warp(2, 2, 0, "1.2")],
+        };
+
+        MapData shop = Room("1.2") with
+        {
+            Warps = [new Warp(1, 1, 1, "1.1")],
+            Objects = [new MapObject(1, 1, 2, 1, Direction.Down, 0, false, Sells: [Tea])],
+        };
+
+        Attempt played = Autoplayer.Play(
+            new WorldData([start, middle, shop]),
+            "1.0",
+            TestRules.All,
+            (_, _, _) => Nothing with { Asked = [(Tea, 1, false)] });
+
+        FoundAt sold = Assert.Single(Assert.Single(played.Refused).Sources);
+
+        Assert.False(sold.Reached);
+        Assert.Equal(["1.0", "1.1", "1.2"], sold.WayIn);
+    }
+
+    /// <summary>
+    /// And a map nothing leads to says so, rather than saying nothing.
+    /// <para>
+    /// The decoy, and the two answers could not be further apart: one shut door is an
+    /// afternoon, and a map no door on any map in the game leads to is either a hole in the
+    /// export or a room the cartridge reaches by some means this project has never read.
+    /// Both come back as an empty chain, so <c>Reached</c> is what tells them apart — which
+    /// is why the way in is not a nullable.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AndAMapNothingLeadsToSaysThatInstead()
+    {
+        MapData start = Room("1.0") with
+        {
+            Objects = [new MapObject(1, 1, 1, 1, Direction.Down, 0, false) { ScriptAddress = 0x1000 }],
+        };
+
+        // No door anywhere points at it, and it has one pointing back — which is exactly
+        // the shape that would read as "there is a way in" to anything walking forwards.
+        MapData adrift = Room("1.9") with
+        {
+            Warps = [new Warp(1, 1, 0, "1.0")],
+            Objects = [new MapObject(1, 1, 2, 1, Direction.Down, 0, false, Sells: [Tea])],
+        };
+
+        Attempt played = Autoplayer.Play(
+            new WorldData([start, adrift]),
+            "1.0",
+            TestRules.All,
+            (_, _, _) => Nothing with { Asked = [(Tea, 1, false)] });
+
+        FoundAt sold = Assert.Single(Assert.Single(played.Refused).Sources);
+
+        Assert.False(sold.Reached);
+        Assert.Empty(sold.WayIn);
+    }
 }

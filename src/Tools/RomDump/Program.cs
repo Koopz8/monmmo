@@ -5815,6 +5815,15 @@ public static class Program
                         $"             {how.Key} at {how.Count()} place(s), "
                         + $"{how.Count(s => s.Reached)} of them on ground it reached"
                         + $" — e.g. {one.MapId} (object {one.LocalId})");
+
+                    if (one.Reached) continue;
+
+                    // And the way in, which is the door to go and open. The first hop is
+                    // the only one that matters — everything after it is behind that.
+                    Console.WriteLine(one.WayIn.Count < 2
+                        ? $"               NO WAY IN TO {one.MapId} AT ALL — no door on any map leads there"
+                        : $"               the way in: {string.Join(" -> ", one.WayIn)}"
+                          + $"   (the shut step is {one.WayIn[0]} -> {one.WayIn[1]})");
                 }
             }
 

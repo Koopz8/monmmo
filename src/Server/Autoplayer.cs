@@ -141,7 +141,24 @@ public sealed record Wanted(int ItemId, int Count, string MapId, int Times)
 /// won, or given on arriving. Which one it is decides what has to be built next, and they
 /// are very different jobs.
 /// </param>
-public sealed record FoundAt(string MapId, int LocalId, string How, bool Reached);
+public sealed record FoundAt(string MapId, int LocalId, string How, bool Reached)
+{
+    /// <summary>
+    /// The shortest way in, from ground the run stood on to the map this is sitting in.
+    /// <para>
+    /// Empty when it was reached, and the interesting field when it was not. "The only
+    /// FRESH WATER in the world is on a map it never got to" is a dead end to look at; the
+    /// same sentence with <c>3.12 -> 0.0 -> 3.13</c> after it names the one door to go and
+    /// open, and the first hop of it is that door.
+    /// </para>
+    /// <para>
+    /// Empty <em>also</em> means no way in exists at all, which is a different finding and
+    /// a much larger one — a map nothing on any other map leads to. The two are told apart
+    /// by <see cref="Reached"/>, which is why this is not a nullable.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<string> WayIn { get; init; } = [];
+}
 
 /// <summary>Why the playthrough stopped.</summary>
 public enum StoppedBecause
@@ -512,40 +529,112 @@ public static class Autoplayer
     private static IEnumerable<FoundAt> Everywhere(
         WorldData world, int itemId, HashSet<string> reached)
     {
+        // Worked out once per map rather than once per source, because a map with a shop on
+        // it usually has several things on the list and they all came the same way.
+        var routes = new Dictionary<string, IReadOnlyList<string>>();
+
+        IReadOnlyList<string> Through(string mapId) =>
+            routes.TryGetValue(mapId, out IReadOnlyList<string>? known)
+                ? known
+                : routes[mapId] = WayIn(world, mapId, reached);
+
         foreach (MapData map in world.Maps)
         {
             bool here = reached.Contains(map.Id);
 
             foreach (MapObject who in map.Objects)
             {
-                if (who.GivesItemId == itemId)
+                string? how =
+                    who.GivesItemId == itemId ? who.CanBeTakenAway ? "lying there" : "handed over"
+
+                    // On one branch of a question this run cannot answer. Kept apart from a
+                    // plain handover because that is exactly what stands in the way of it —
+                    // not reaching the person, but replying to them.
+                    : who.CanGive.Contains(itemId) ? "handed over on a branch"
+                    : who.WinsItemId == itemId ? "for winning a fight"
+                    : who.Stock.Contains(itemId) ? "sold"
+                    : null;
+
+                if (how is null) continue;
+
+                yield return new FoundAt(map.Id, who.LocalId, how, here)
                 {
-                    yield return new FoundAt(
-                        map.Id, who.LocalId, who.CanBeTakenAway ? "lying there" : "handed over", here);
-                }
-                else if (who.CanGive.Contains(itemId))
-                {
-                    // On one branch of a question this run cannot answer. Kept apart from
-                    // a plain handover because that is exactly what is standing in the way
-                    // of it — not reaching the person, but replying to them.
-                    yield return new FoundAt(map.Id, who.LocalId, "handed over on a branch", here);
-                }
-                else if (who.WinsItemId == itemId)
-                {
-                    yield return new FoundAt(map.Id, who.LocalId, "for winning a fight", here);
-                }
-                else if (who.Stock.Contains(itemId))
-                {
-                    yield return new FoundAt(map.Id, who.LocalId, "sold", here);
-                }
+                    WayIn = here ? [] : Through(map.Id),
+                };
             }
 
             foreach (MapEntryScript arriving in map.OnEntry)
             {
-                if (arriving.GivesItemId == itemId)
-                    yield return new FoundAt(map.Id, 0, "on arriving", here);
+                if (arriving.GivesItemId != itemId) continue;
+
+                yield return new FoundAt(map.Id, 0, "on arriving", here)
+                {
+                    WayIn = here ? [] : Through(map.Id),
+                };
             }
         }
+    }
+
+    /// <summary>
+    /// The shortest way from ground the run stood on to a map it never got to.
+    /// <para>
+    /// Walked <em>backwards</em>, over the doors that lead <em>into</em> each map, and that is
+    /// the whole trick. Forwards from where the player is, everything past the first shut door
+    /// is one undifferentiated cloud of 246 maps; backwards from the thing you actually want,
+    /// the first map in the chain that was reached is the door to go and open, and there is
+    /// exactly one of it.
+    /// </para>
+    /// <para>
+    /// Nothing at all comes back for a map with no way in — which is a much bigger finding
+    /// than a shut door and must not read as one.
+    /// </para>
+    /// </summary>
+    /// <returns>
+    /// Map ids from the reached one to the target, inclusive of both, or nothing when no
+    /// chain of doors joins them at all.
+    /// </returns>
+    private static IReadOnlyList<string> WayIn(
+        WorldData world, string target, HashSet<string> reached)
+    {
+        // Every door and every edge, by where it leads. Both, because half this game's map
+        // graph is warps and the other half is walking off the side of a route.
+        var into = new Dictionary<string, List<string>>();
+
+        foreach (MapData map in world.Maps)
+        {
+            foreach (string leadsTo in map.Warps.Where(w => !w.IsDynamic).Select(w => w.TargetMapId)
+                         .Concat(map.Connections.Select(c => c.MapId)))
+            {
+                if (!into.TryGetValue(leadsTo, out List<string>? from)) into[leadsTo] = from = [];
+
+                if (!from.Contains(map.Id)) from.Add(map.Id);
+            }
+        }
+
+        var back = new Dictionary<string, string> { [target] = target };
+        var queue = new Queue<string>([target]);
+
+        while (queue.Count > 0)
+        {
+            string here = queue.Dequeue();
+
+            if (reached.Contains(here))
+            {
+                // Unwound forwards, so it reads the way somebody would walk it.
+                var chain = new List<string> { here };
+
+                while (back[here] != here) chain.Add(here = back[here]);
+
+                return chain;
+            }
+
+            foreach (string from in into.GetValueOrDefault(here, []))
+            {
+                if (back.TryAdd(from, here)) queue.Enqueue(from);
+            }
+        }
+
+        return [];
     }
 
     /// <summary>
