@@ -45,6 +45,28 @@ public sealed record PlayedScript(
     public IReadOnlyList<(int ItemId, int Count, bool Carried)> Asked { get; init; } = [];
 
     /// <summary>
+    /// People this script walked, and where they ended up.
+    /// <para>
+    /// The other way somebody stops being in a doorway, and the one nothing here has ever
+    /// modelled. A guard given his drink is not removed — he takes a step to one side, and to
+    /// a walker that has only ever asked "is anybody on this square" he is in the doorway
+    /// forever however the conversation went.
+    /// </para>
+    /// <para>
+    /// Where they end up is <b>read</b>: the step bytes are the cartridge's own and what they
+    /// mean was derived by walking every list across every map and counting who ended up
+    /// inside a wall. A step this project does not model is stood still through, which is the
+    /// same honest reading <c>DirectionOf</c> takes — being wrong visibly beats guessing.
+    /// </para>
+    /// </summary>
+    /// <remarks>
+    /// A displacement rather than a square. The script says who and how far; where they were
+    /// standing to begin with is the map's record, or wherever an earlier scene left them, and
+    /// only this side of the split knows that.
+    /// </remarks>
+    public IReadOnlyList<(int PersonId, int Dx, int Dy)> Walked { get; init; } = [];
+
+    /// <summary>
     /// True when the script stopped at a yes-or-no and nobody answered it.
     /// <para>
     /// A run cannot answer one — everything else can be decided from a save and this needs a
@@ -305,6 +327,9 @@ public sealed record Attempt(
     /// <summary>People a script took off a map, which is how a doorway stops being blocked.</summary>
     public IReadOnlyCollection<(string MapId, int LocalId)> Removed { get; init; } = [];
 
+    /// <summary>People a script walked out of where they were standing, which is the other way.</summary>
+    public IReadOnlyCollection<(string MapId, int LocalId)> Moved { get; init; } = [];
+
     /// <summary>
     /// Whether this run held any of the passes the scripts ask about.
     /// <para>
@@ -459,6 +484,10 @@ public static class Autoplayer
         // this — `asIfGone` is its own parameter — and nothing has ever told it.
         var gone = new HashSet<(string MapId, int LocalId)>();
 
+        // And people a script has walked somewhere else, which is the other half of the same
+        // idea and had no parameter at all until now.
+        var moved = new Dictionary<(string MapId, int LocalId), GridPosition>();
+
         // Everything asked for and not carried, by item and by where it was asked.
         var refused = new Dictionary<(int ItemId, int Count, string MapId), int>();
 
@@ -480,7 +509,7 @@ public static class Autoplayer
 
             Reach reach = WorldWalker.Walk(
                 world, startMapId, moves, flagsSet: flags, asIfGone: gone,
-                ridingTheBoat: ridingTheBoat);
+                ridingTheBoat: ridingTheBoat, movedTo: moved);
 
             var stood = reach.Stood.ToHashSet();
 
@@ -493,6 +522,7 @@ public static class Autoplayer
             int partyWas = party.Count;
             int carriedWas = bag.DistinctItems;
             int goneWere = gone.Count;
+            int movedWere = moved.Count;
 
             foreach (MapData map in world.Maps.Where(m => reach.Maps.Contains(m.Id)))
             {
@@ -514,6 +544,17 @@ public static class Autoplayer
                     // told: the same person stood in the same door on every pass, however
                     // the conversation had gone.
                     foreach (int who in did.Hides) gone.Add((map.Id, who));
+
+                    // And whoever it walked. The script says who and how far; where they
+                    // started is the map's own record, or wherever a previous scene left them.
+                    foreach ((int who, int dx, int dy) in did.Walked)
+                    {
+                        if (map.Objects.FirstOrDefault(o => o.LocalId == who) is not { } walker) continue;
+
+                        GridPosition from = moved.GetValueOrDefault((map.Id, who), walker.Square);
+
+                        moved[(map.Id, who)] = new GridPosition(from.X + dx, from.Y + dy);
+                    }
 
                     if (did.StoppedAtAQuestion) questions[map.Id] = questions.GetValueOrDefault(map.Id) + 1;
 
@@ -668,7 +709,8 @@ public static class Autoplayer
             // the next pass, not this one. Left out of this test, the loop stops one pass
             // before the bag is ever used and the whole of the above buys nothing.
             if (flags.Count == flagsWere && moves.Count == movesWere && party.Count == partyWas
-                && bag.DistinctItems == carriedWas && gone.Count == goneWere)
+                && bag.DistinctItems == carriedWas && gone.Count == goneWere
+                && moved.Count == movedWere)
             {
                 stopped = StoppedBecause.NothingMoreOpened;
 
@@ -678,7 +720,7 @@ public static class Autoplayer
 
         Reach last = WorldWalker.Walk(
             world, startMapId, moves, flagsSet: flags, asIfGone: gone,
-            ridingTheBoat: ridingTheBoat);
+            ridingTheBoat: ridingTheBoat, movedTo: moved);
 
         // Built once. Inside the query below it would be rebuilt for every map in the world,
         // which is the same mistake the walker's own comment records making with its grids.
@@ -734,6 +776,7 @@ public static class Autoplayer
         {
             Carried = bag.Entries,
             Removed = gone,
+            Moved = [.. moved.Keys],
             RodeTheBoat = ridingTheBoat,
             Bought = bought,
             MoneyLeft = purse,

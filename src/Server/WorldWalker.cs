@@ -91,7 +91,8 @@ public static class WorldWalker
         IReadOnlyCollection<int>? flagsSet = null,
         GridPosition? startSquare = null,
         bool throughScriptedDoors = false,
-        bool ridingTheBoat = false)
+        bool ridingTheBoat = false,
+        IReadOnlyDictionary<(string MapId, int LocalId), GridPosition>? movedTo = null)
     {
         IReadOnlyCollection<int> known = moves ?? [];
 
@@ -133,8 +134,24 @@ public static class WorldWalker
                 // Only the ones who are there. Somebody hidden by a flag this character
                 // holds is not a wall, and counting them as one is how the tower and the
                 // house in LAVENDER both looked like doorways nobody was standing in.
+                // Where they are, which is not always where the file put them: a script can
+                // walk somebody, and a guard given his drink steps aside rather than
+                // vanishing. Indexed by where they ended up, so the square they left is open
+                // and the one they moved onto is not.
+                // TryGetValue rather than GetValueOrDefault, and the difference is the whole
+                // map: a square is a struct, so the "or default" is (0,0) and never null —
+                // which quietly moved every person in the world to the top-left corner and
+                // opened three doors that are shut. The existing tests caught it, which is the
+                // first time in this milestone something was caught by a test written earlier.
                 foreach (MapObject entry in map.Objects.Where(o => o.IsHereFor(flags.Contains)))
-                    on.TryAdd(entry.Square, entry);
+                {
+                    GridPosition where = movedTo is not null
+                        && movedTo.TryGetValue((map.Id, entry.LocalId), out GridPosition stepped)
+                            ? stepped
+                            : entry.Square;
+
+                    on.TryAdd(where, entry);
+                }
             }
 
             return on.GetValueOrDefault(square);

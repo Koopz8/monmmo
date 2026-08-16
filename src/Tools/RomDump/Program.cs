@@ -5801,6 +5801,40 @@ public static class Program
             var flagsCleared = new List<int>(run.FlagsCleared);
             var specials = new List<int>(run.SpecialsCalled);
             var hides = new List<int>(run.Hides);
+            var walked = new List<(int PersonId, int Dx, int Dy)>();
+
+            // How far a scene walks somebody, as a displacement. The steps are the cartridge's
+            // own bytes and what they mean was derived by walking every list across every map
+            // and counting who ended up inside a wall; a step this project does not model is
+            // stood still through, which is DirectionOf's honest reading rather than a guess.
+            //
+            // The player is skipped. Where somebody is standing when they talk to you is not a
+            // fact about an image, and the player was never in anybody's way.
+            void Follow(ScriptRun one)
+            {
+                foreach (SceneBeat.Walk step in one.Beats.OfType<SceneBeat.Walk>())
+                {
+                    if (step.IsPlayer) continue;
+
+                    var dx = 0;
+                    var dy = 0;
+
+                    foreach (byte b in step.Steps)
+                    {
+                        switch (MovementLists.DirectionOf(b))
+                        {
+                            case Direction.Left: dx--; break;
+                            case Direction.Right: dx++; break;
+                            case Direction.Up: dy--; break;
+                            case Direction.Down: dy++; break;
+                        }
+                    }
+
+                    if (dx != 0 || dy != 0) walked.Add((step.PersonId, dx, dy));
+                }
+            }
+
+            Follow(run);
             var asked = new List<(int, int, bool)>([.. run.ItemsAsked.Select(a => (a.ItemId, a.Count, a.Carried))]);
 
             int? gives = run.GivesItem;
@@ -5836,6 +5870,7 @@ public static class Program
                 specials.AddRange(run.SpecialsCalled);
                 hides.AddRange(run.Hides);
                 asked.AddRange(run.ItemsAsked.Select(a => (a.ItemId, a.Count, a.Carried)));
+                Follow(run);
 
                 gives ??= run.GivesItem;
                 if (run.GivesItem is not null) givesCount = run.GivesCount;
@@ -5858,6 +5893,7 @@ public static class Program
                 Gets = gives is { } got ? (got, Math.Max(1, givesCount)) : null,
                 Takes = takes is { } gave ? (gave, Math.Max(1, takesCount)) : null,
                 Hides = hides,
+                Walked = walked,
                 Asked = asked,
                 StoppedAtAQuestion = run.Question is not null,
             };
@@ -6123,6 +6159,13 @@ public static class Program
             Console.WriteLine(
                 $"  {played.Removed.Count} people were taken off a map by a script it ran — a person "
                 + "removed is a person not in a doorway");
+        }
+
+        if (played.Moved.Count > 0)
+        {
+            Console.WriteLine(
+                $"  {played.Moved.Count} people were walked out of where they stood by a script it ran"
+                + " — the other way a doorway opens");
         }
 
         // A fact about the world file rather than about the run, printed here because this is

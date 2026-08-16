@@ -263,3 +263,134 @@ public class TakingTheBoatTests
         Assert.DoesNotContain("2.0", Sail(world, boat: true).Reached);
     }
 }
+
+/// <summary>
+/// The other way a doorway opens: somebody steps aside rather than vanishing.
+/// <para>
+/// The eighth wall in the drinks chain, and the last one. With the drinks bought, the boat
+/// ridden and every yes-or-no answered, SAFFRON's three doors still read "somebody is standing
+/// in the way" — because the guard given his drink is not removed. He takes a step to one
+/// side, and a walker that has only ever asked "is anybody on this square" sees him in the
+/// doorway forever however the conversation went.
+/// </para>
+/// <para>
+/// Where he ends up is <b>read</b>. <c>applymovement</c>'s steps are the cartridge's own bytes
+/// and what they mean was derived by walking every list across every map and counting who
+/// ended up inside a wall. A step this project does not model is stood still through.
+/// </para>
+/// </summary>
+public class SteppingAsideTests
+{
+    private static MapData Room(string id) => new(id, id, 4, 4, new byte[16]);
+
+    private static PlayedScript Nothing => new([], [], [], [], null, null);
+
+    /// <summary>A guard on the door, and somebody beside him to talk to.</summary>
+    private static WorldData Gate() =>
+        new(
+        [
+            Room("1.0") with
+            {
+                Warps = [new Warp(3, 1, 0, "1.1")],
+                Objects =
+                [
+                    new MapObject(1, 1, 1, 1, Direction.Down, 0, false) { ScriptAddress = 0x1000 },
+                    new MapObject(2, 1, 3, 1, Direction.Down, 0, false),
+                ],
+            },
+            Room("1.1") with { Warps = [new Warp(1, 1, 0, "1.0")] },
+        ]);
+
+    private static Attempt Play(Func<uint, PlayedScript> script) =>
+        Autoplayer.Play(Gate(), "1.0", TestRules.All, (address, _, _) => script(address));
+
+    /// <summary>
+    /// One step to the left and the door is open. The same world, the same guard, and the
+    /// difference is a movement list nothing used to read.
+    /// </summary>
+    [Fact]
+    public void SomebodyWhoStepsAsideIsNoLongerInTheDoorway()
+    {
+        Assert.DoesNotContain("1.1", Play(_ => Nothing).Reached);
+
+        Attempt aside = Play(address => address == 0x1000
+            ? Nothing with { Walked = [(2, -1, 0)] }
+            : Nothing);
+
+        Assert.Contains("1.1", aside.Reached);
+        Assert.Contains(("1.0", 2), aside.Moved);
+    }
+
+    /// <summary>
+    /// And the square he steps onto is his now. A walker that opened the old square without
+    /// shutting the new one would let two people through one gap.
+    /// </summary>
+    [Fact]
+    public void AndTheSquareHeStepsOntoIsBlockedInstead()
+    {
+        // Sideways onto (2,1), which is between the door and everything else in this room.
+        var world = new WorldData(
+        [
+            new MapData("1.0", "1.0", 4, 1, new byte[4])
+            {
+                Warps = [new Warp(3, 0, 0, "1.1")],
+                Objects =
+                [
+                    new MapObject(1, 1, 0, 0, Direction.Down, 0, false) { ScriptAddress = 0x1000 },
+                    new MapObject(2, 1, 3, 0, Direction.Down, 0, false),
+                ],
+            },
+            new MapData("1.1", "1.1", 4, 1, new byte[4]) { Warps = [new Warp(1, 0, 0, "1.0")] },
+        ]);
+
+        // He steps off the door and onto the only square leading to it, which is no help.
+        Attempt played = Autoplayer.Play(
+            world,
+            "1.0",
+            TestRules.All,
+            (address, _, _) => address == 0x1000
+                ? Nothing with { Walked = [(2, -1, 0)] }
+                : Nothing);
+
+        Assert.Contains(("1.0", 2), played.Moved);
+        Assert.DoesNotContain("1.1", played.Reached);
+    }
+
+    /// <summary>
+    /// Somebody walked twice ends up where both walks put them, rather than where the second
+    /// one alone would. A scene is a sequence and the file's record is only where it started.
+    /// </summary>
+    [Fact]
+    public void TwoWalksCompound()
+    {
+        var steps = 0;
+
+        Attempt played = Autoplayer.Play(
+            Gate(),
+            "1.0",
+            TestRules.All,
+            (address, _, _) => address == 0x1000 && steps++ < 2
+                ? Nothing with { Walked = [(2, 0, 1)] }
+                : Nothing);
+
+        // Down twice from (3,1) is (3,3), not (3,2).
+        Assert.Contains(("1.0", 2), played.Moved);
+        Assert.Contains("1.1", played.Reached);
+        Assert.True(steps >= 2, "the second walk has to happen for this to mean anything");
+    }
+
+    /// <summary>
+    /// And a walk applied to somebody who is not on this map moves nobody. A person id is a
+    /// number on one map's own list, so the same id means a different person elsewhere.
+    /// </summary>
+    [Fact]
+    public void AWalkForSomebodyNotOnThisMapMovesNobody()
+    {
+        Attempt played = Play(address => address == 0x1000
+            ? Nothing with { Walked = [(99, -1, 0)] }
+            : Nothing);
+
+        Assert.Empty(played.Moved);
+        Assert.DoesNotContain("1.1", played.Reached);
+    }
+}
