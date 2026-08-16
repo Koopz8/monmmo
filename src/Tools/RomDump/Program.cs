@@ -5888,7 +5888,25 @@ public static class Program
 
         SoundTreeResult tree = SoundLocator.Walk(rom);
 
-        if (song < 0 || song >= tree.Table.Count)
+        // A negative number means "find me one that fails", which saves guessing at numbers
+        // until one of them is broken. The first song all of whose tracks the reader cannot
+        // follow — the failure that accounts for every one of the 649.
+        if (song < 0)
+        {
+            song = FirstBadSong(rom, tree);
+
+            if (song < 0)
+            {
+                Console.WriteLine("  every song the table names reads to an end, so there is nothing to look at");
+
+                return;
+            }
+
+            Console.WriteLine($"  the first song whose tracks do not read is {song}");
+            Console.WriteLine();
+        }
+
+        if (song >= tree.Table.Count)
         {
             Console.WriteLine($"  the table has {tree.Table.Count} songs, so there is no song {song}");
 
@@ -5944,6 +5962,20 @@ public static class Program
             if (read.Events.Count > CommandsToShow)
                 Console.WriteLine($"      ... and {read.Events.Count - CommandsToShow} more");
         }
+    }
+
+    /// <summary>The first song the table names whose tracks this reader cannot follow.</summary>
+    private static int FirstBadSong(Rom rom, SoundTreeResult tree)
+    {
+        for (int song = 0; song < tree.Table.Count; song++)
+        {
+            if (tree.Songs.FirstOrDefault(s => s.Offset == tree.Table[song].HeaderOffset)
+                is not { } header) continue;
+
+            if (header.TrackOffsets.All(t => !SequenceReader.Read(rom, t).EndedProperly)) return song;
+        }
+
+        return -1;
     }
 
     private const int BytesToShow = 96;
@@ -7696,7 +7728,8 @@ public static class Program
                                      few of the walking figures as PNGs
               --song <n>             print one song's tracks byte by byte, with what
                                      this reader made of each — the raw bytes and the
-                                     reading side by side
+                                     reading side by side. A negative number finds the
+                                     first song whose tracks do not read.
               --sequence-widths      measure how many bytes each sequence command's
                                      arguments take, by trying every width against
                                      this cartridge and counting how many tracks
