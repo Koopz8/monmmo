@@ -43,6 +43,18 @@ public sealed record PlayedScript(
 
     /// <summary>What it asked the bag for, and what it was told.</summary>
     public IReadOnlyList<(int ItemId, int Count, bool Carried)> Asked { get; init; } = [];
+
+    /// <summary>
+    /// True when the script stopped at a yes-or-no and nobody answered it.
+    /// <para>
+    /// A run cannot answer one — everything else can be decided from a save and this needs a
+    /// person — so the runner stops and hands back where to carry on from. Nothing has ever
+    /// carried on. Neither this loop nor the closure walk has so much as looked at the field,
+    /// so every offer in the game has been left hanging mid-sentence: not declined, which
+    /// would at least be a branch, but simply not reached.
+    /// </para>
+    /// </summary>
+    public bool StoppedAtAQuestion { get; init; }
 }
 
 /// <summary>
@@ -281,6 +293,15 @@ public sealed record Attempt(
     /// <summary>What it stood in front of and did not buy, and why not.</summary>
     public IReadOnlyList<NotBought> CouldNotBuy { get; init; } = [];
 
+    /// <summary>
+    /// Scripts it reached that stopped at a yes-or-no, by map.
+    /// <para>
+    /// The size of a boundary nobody had measured. Everything past one of these is unreached
+    /// in a way that looks exactly like a person having nothing more to say.
+    /// </para>
+    /// </summary>
+    public IReadOnlyDictionary<string, int> Questions { get; init; } = new Dictionary<string, int>();
+
     /// <summary>People a script took off a map, which is how a doorway stops being blocked.</summary>
     public IReadOnlyCollection<(string MapId, int LocalId)> Removed { get; init; } = [];
 
@@ -444,6 +465,7 @@ public static class Autoplayer
         var purse = money;
         var bought = new List<Bought>();
         var refusedAtTheCounter = new Dictionary<(int ItemId, string MapId), string>();
+        var questions = new Dictionary<string, int>();
 
         var won = 0;
         var lost = 0;
@@ -492,6 +514,8 @@ public static class Autoplayer
                     // told: the same person stood in the same door on every pass, however
                     // the conversation had gone.
                     foreach (int who in did.Hides) gone.Add((map.Id, who));
+
+                    if (did.StoppedAtAQuestion) questions[map.Id] = questions.GetValueOrDefault(map.Id) + 1;
 
                     // What it handed over, and what it asked for and did not get. The
                     // refusals are the shopping list — the one thing that says what the
@@ -713,6 +737,7 @@ public static class Autoplayer
             RodeTheBoat = ridingTheBoat,
             Bought = bought,
             MoneyLeft = purse,
+            Questions = questions,
             CouldNotBuy = [.. refusedAtTheCounter.Select(r => new NotBought(r.Key.ItemId, r.Key.MapId, r.Value))],
             Tickets =
             [
