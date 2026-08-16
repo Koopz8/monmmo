@@ -78,6 +78,10 @@ public enum Side
 [JsonDerivedType(typeof(ScreenRose), "screenrose")]
 [JsonDerivedType(typeof(Seeded), "seeded")]
 [JsonDerivedType(typeof(Sapped), "sapped")]
+[JsonDerivedType(typeof(WallsBroke), "wallsbroke")]
+[JsonDerivedType(typeof(KnockedOff), "knockedoff")]
+[JsonDerivedType(typeof(ShookFree), "shookfree")]
+[JsonDerivedType(typeof(Identified), "identified")]
 [JsonDerivedType(typeof(MustRepeat), "mustrepeat")]
 [JsonDerivedType(typeof(GotAway), "gotaway")]
 [JsonDerivedType(typeof(CouldNotGetAway), "couldnotgetaway")]
@@ -294,6 +298,18 @@ public abstract record BattleEvent
 
     /// <summary>And it took some. The side named is the one that lost it.</summary>
     public sealed record Sapped(Side Side, int Amount, int RemainingHp) : BattleEvent;
+
+    /// <summary>Whatever this side was hiding behind is gone.</summary>
+    public sealed record WallsBroke(Side Side) : BattleEvent;
+
+    /// <summary>What this side was carrying has been taken off it, and is gone.</summary>
+    public sealed record KnockedOff(Side Side, int ItemId) : BattleEvent;
+
+    /// <summary>This side shook off whatever was holding or draining it.</summary>
+    public sealed record ShookFree(Side Side) : BattleEvent;
+
+    /// <summary>This side can be found now, whatever it is and however well it was hiding.</summary>
+    public sealed record Identified(Side Side) : BattleEvent;
 
     /// <summary>Made to do the same thing again.</summary>
     public sealed record MustRepeat(Side Side, int MoveId) : BattleEvent;
@@ -1663,6 +1679,65 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             Opponent.ResetStages();
 
             events.Add(new BattleEvent.StagesCleared(side));
+
+            return;
+        }
+
+        if (effect.Kind == EffectKind.BreaksWalls)
+        {
+            // The damage has already landed by the time this runs, which is the right order:
+            // a wall the move went through is a wall that was still up when it did.
+            if (target.ReflectTurns + target.ScreenTurns == 0) return;
+
+            target.ReflectTurns = 0;
+            target.ScreenTurns = 0;
+
+            events.Add(new BattleEvent.WallsBroke(at));
+
+            return;
+        }
+
+        if (effect.Kind == EffectKind.KnocksOff)
+        {
+            if (target.Holding == 0) return;
+
+            events.Add(new BattleEvent.KnockedOff(at, target.Holding));
+
+            // Gone rather than taken. THIEF is the move that takes one, and an item that
+            // ended up in the user's hands here would be THIEF by another name.
+            target.Holding = 0;
+            target.Carried = null;
+
+            return;
+        }
+
+        if (effect.Kind == EffectKind.Spins)
+        {
+            // Everything at once, because it is one act. A move that shook off a wrap and
+            // left a seed would be two moves sharing a name.
+            bool anything = target.IsSeeded || target.TrappedTurns > 0;
+
+            target.IsSeeded = false;
+            target.TrappedTurns = 0;
+            target.TrappedBy = 0;
+
+            if (anything) events.Add(new BattleEvent.ShookFree(at));
+
+            return;
+        }
+
+        if (effect.Kind == EffectKind.Identifies)
+        {
+            if (target.IsIdentified)
+            {
+                events.Add(new BattleEvent.NothingHappened(at));
+
+                return;
+            }
+
+            target.IsIdentified = true;
+
+            events.Add(new BattleEvent.Identified(at));
 
             return;
         }

@@ -215,6 +215,14 @@ public static class BattleNarrator
 
         BattleEvent.Sapped e => $"{names.Of(e.Side)}'s health was sapped!",
 
+        BattleEvent.WallsBroke e => $"{names.Of(e.Side)}'s shield was shattered!",
+
+        BattleEvent.KnockedOff e => $"{names.Of(e.Side)}'s {names.ItemNamed(e.ItemId)} was knocked off!",
+
+        BattleEvent.ShookFree e => $"{names.Of(e.Side)} shook itself free!",
+
+        BattleEvent.Identified e => $"{names.Of(e.Side)} was identified!",
+
         BattleEvent.Grazed e => $"{names.Of(e.Side)} is hurt reaching them!",
 
         BattleEvent.BrokeFree e => $"{names.Of(e.Side)} got free of {names.MoveNamed(e.MoveId)}!",

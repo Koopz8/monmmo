@@ -359,6 +359,16 @@ public sealed class Battler
     /// </summary>
     public bool IsSeeded { get; set; }
 
+    /// <summary>
+    /// True once somebody has made this one findable.
+    /// <para>
+    /// Two rules in one flag, because the cartridge groups them: its evasion stops counting,
+    /// and a type chart immunity it was relying on stops applying. Both last until it leaves
+    /// the field, which is why this is a flag and not a count.
+    /// </para>
+    /// </summary>
+    public bool IsIdentified { get; set; }
+
     /// <summary>True while nothing may lower this one's stats from outside.</summary>
     public bool IsMisted => MistTurns > 0;
 
@@ -427,6 +437,7 @@ public sealed class Battler
         ChoiceSlot = null;
         IsFocused = false;
         IsSeeded = false;
+        IsIdentified = false;
         ReflectTurns = 0;
         ScreenTurns = 0;
         LastSlot = null;

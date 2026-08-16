@@ -80,6 +80,18 @@ public enum EffectKind
     /// <summary>Leaves the fight, whatever the speeds say.</summary>
     Leave,
 
+    /// <summary>Takes down whatever the other side is hiding behind.</summary>
+    BreaksWalls,
+
+    /// <summary>Takes away what the other side is carrying.</summary>
+    KnocksOff,
+
+    /// <summary>Shakes off everything that is holding or draining its user.</summary>
+    Spins,
+
+    /// <summary>Makes the other side findable, whatever it is and however well it is hiding.</summary>
+    Identifies,
+
     /// <summary>Lands several times in one turn.</summary>
     MultiHit,
 
@@ -383,6 +395,13 @@ public static class MoveEffects
 
         // TELEPORT, which is running away by another name and reaches the same code.
         0x99 => new MoveEffect(EffectKind.Leave, OnUser: true),
+
+        // Four that answer other moves, and every one of them was impossible until the thing
+        // it answers existed. Three of the four became writable in the last three milestones.
+        0xBA => new MoveEffect(EffectKind.BreaksWalls, OnUser: false),
+        0xBC => new MoveEffect(EffectKind.KnocksOff, OnUser: false),
+        0x81 => new MoveEffect(EffectKind.Spins, OnUser: true),
+        0x71 => new MoveEffect(EffectKind.Identifies, OnUser: false),
 
         // The four whose power is not the number on their record. Everything they do happens
         // where the damage is worked out, so there is nothing for the effect handler to do —

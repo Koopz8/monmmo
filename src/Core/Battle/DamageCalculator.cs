@@ -49,8 +49,13 @@ public static class DamageCalculator
         if (Skies.Accuracy(weather, move.Effect) is { } instead)
             return rng.Next(100) < Math.Clamp(instead, 1, 100);
 
+        // Somebody who has been made findable is not hiding any more, so their evasion stops
+        // counting. Their accuracy stages are untouched — this is about being found, not
+        // about being worse at things.
+        int hiding = defender.IsIdentified ? 0 : defender.StageOf(Stat.Evasion);
+
         int combinedStage = Math.Clamp(
-            attacker.StageOf(Stat.Accuracy) - defender.StageOf(Stat.Evasion),
+            attacker.StageOf(Stat.Accuracy) - hiding,
             -Stats.MaxStage,
             Stats.MaxStage);
 
@@ -107,6 +112,13 @@ public static class DamageCalculator
         PokemonType type = MovePower.TypeOf(move, attacker) ?? move.Type;
 
         int effectiveness = TypeChart.Effectiveness(type, defender.Type1, defender.Type2);
+
+        // And a type chart immunity it was relying on stops applying, which is the other half
+        // of being found. Only an immunity: being resistant is not hiding, and a move that
+        // turned resistance into neutral would be a different move.
+        bool foundOut = effectiveness == 0 && defender.IsIdentified;
+
+        if (foundOut) effectiveness = TypeChart.Neutral;
 
         // What the defender's ability says about being hit by this at all. Asked before
         // anything is worked out, because the four immunities and WONDER GUARD are answers
@@ -175,7 +187,11 @@ public static class DamageCalculator
         bool stab = type == attacker.Type1 || type == attacker.Type2;
         if (stab) damage = damage * 15 / 10;
 
-        damage = TypeChart.Apply(damage, type, defender.Type1, defender.Type2);
+        // The type multiplier — skipped entirely for a defender whose immunity has just been
+        // taken away, because asking the chart again would put it straight back. Without this
+        // the whole thing still "worked": the chart returned nothing, the damage floor made it
+        // one point, and one point looks like a hit until somebody counts.
+        if (!foundOut) damage = TypeChart.Apply(damage, type, defender.Type1, defender.Type2);
 
         // And what the defender's ability takes off the end. Last, because it is a
         // reduction of the finished number rather than of any part of the sum.
