@@ -437,7 +437,11 @@ public sealed class SyntheticRom
         Packed(FlatCryOffset, FlatCryValue, nibble: 0x0);
         Packed(RampCryOffset, RampCryStart, nibble: 0x1);
 
-        void Packed(int at, sbyte first, int nibble)
+        // High nibble is the smallest step up, low nibble the smallest step down — so which
+        // half of a byte is read first is visible in the answer.
+        Packed(ZigZagCryOffset, ZigZagCryStart, nibble: 0x0, pairs: 0x1F);
+
+        void Packed(int at, sbyte first, int nibble, int? pairs = null)
         {
             // The marker is in the first byte rather than the fourth, which is the whole
             // reason these were invisible to the locator until now.
@@ -446,7 +450,7 @@ public sealed class SyntheticRom
             WriteU32(at + 8, 0);
             WriteU32(at + 12, CrySamples - 1);
 
-            byte both = (byte)(nibble << 4 | nibble);
+            byte both = (byte)(pairs ?? (nibble << 4 | nibble));
 
             for (int block = 0; block < CrySamples / 64; block++)
             {
@@ -1497,6 +1501,20 @@ public sealed class SyntheticRom
 
     /// <summary>Where the ramp starts, at the beginning of each of its blocks.</summary>
     public const sbyte RampCryStart = -100;
+
+    /// <summary>
+    /// A packed recording whose two nibbles in a byte are different — up then down.
+    /// <para>
+    /// It exists because swapping the order the two halves of a byte are read in broke
+    /// nothing: the other two fixtures use the same value in both halves, so which one comes
+    /// first is invisible in them. A guard nothing can fail is a comment with a semicolon on
+    /// the end, and this is the third time that has been true in this stretch of work.
+    /// </para>
+    /// </summary>
+    public const int ZigZagCryOffset = 0x190800;
+
+    /// <summary>Where the zigzag sits.</summary>
+    public const sbyte ZigZagCryStart = 0;
 
     public const int ItemTableOffset = 0x110000;
     public const int ItemDescriptionsOffset = 0x114000;

@@ -125,6 +125,33 @@ public class TheOnesStoredAsDifferencesTests
     }
 
     /// <summary>
+    /// The two halves of a byte are read high first, then low.
+    /// <para>
+    /// This exists because swapping them broke nothing. The other two fixtures put the same
+    /// value in both halves of every byte, so which one comes first is invisible in them —
+    /// the guard was watching a case neither test could reach. This one steps up on the high
+    /// nibble and back down on the low, so the order shows.
+    /// </para>
+    /// <para>
+    /// Asserted as a shape rather than against particular numbers: after the padded nibble,
+    /// the samples at even positions sit above the ones at odd positions. Read the other way
+    /// round they would sit below, which is the whole difference.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TheHighHalfOfAByteIsReadBeforeTheLow()
+    {
+        sbyte[] audio = CryDecoder.Decode(Synthetic.ToRom(), Packed(SyntheticRom.ZigZagCryOffset));
+
+        for (int pair = 1; pair < 32; pair++)
+        {
+            Assert.True(
+                audio[pair * 2] > audio[pair * 2 + 1],
+                $"at {pair * 2} the sample went down first, so the halves are the wrong way round");
+        }
+    }
+
+    /// <summary>
     /// The table's steps are the squares of nought to seven going up, and their negatives
     /// coming down.
     /// <para>
