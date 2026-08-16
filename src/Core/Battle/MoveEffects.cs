@@ -146,6 +146,27 @@ public enum EffectKind
     /// <summary>Damps one type down for everybody, while it holds.</summary>
     Damps,
 
+    /// <summary>Uses whatever the other one just used.</summary>
+    Mirrors,
+
+    /// <summary>Uses any move in the game, chosen by the dice.</summary>
+    AtRandom,
+
+    /// <summary>Uses one of its own, and only while asleep.</summary>
+    Sleeping,
+
+    /// <summary>Takes the other one's last move into this slot, for the fight.</summary>
+    Takes,
+
+    /// <summary>Takes it for good, in place of the move that took it.</summary>
+    Learns,
+
+    /// <summary>Takes on the other one's ability.</summary>
+    TakesAbility,
+
+    /// <summary>Trades abilities with the other one.</summary>
+    SwapsAbility,
+
     /// <summary>Lands several times in one turn.</summary>
     MultiHit,
 
@@ -470,6 +491,20 @@ public static class MoveEffects
         0x75 => new MoveEffect(EffectKind.BuildsUpLocked, OnUser: true),
         0x68 => new MoveEffect(EffectKind.ThreeGoes, OnUser: true),
         0x8F => new MoveEffect(EffectKind.CopiesStages, OnUser: true),
+
+        // The five that use a move that is not the one chosen. They differ in where the move
+        // comes from and in whether it is kept, and in nothing else — which is why they are
+        // five kinds rather than one with a field: a kind that had to be read alongside a
+        // second field to know what it did would be a kind that means nothing on its own.
+        0x09 => new MoveEffect(EffectKind.Mirrors, OnUser: true),
+        0x53 => new MoveEffect(EffectKind.AtRandom, OnUser: true),
+        0x61 => new MoveEffect(EffectKind.Sleeping, OnUser: true),
+        0x52 => new MoveEffect(EffectKind.Takes, OnUser: true),
+        0x5F => new MoveEffect(EffectKind.Learns, OnUser: true),
+
+        // And the two that move an ability rather than a move.
+        0xB2 => new MoveEffect(EffectKind.TakesAbility, OnUser: true),
+        0xBF => new MoveEffect(EffectKind.SwapsAbility, OnUser: true),
 
         // Which type each damps is the item-name problem again: MUD SPORT is about Electric
         // because of what it is called, so the pairing is modelled and the grouping is read.

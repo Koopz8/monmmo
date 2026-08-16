@@ -94,6 +94,9 @@ public enum Side
 [JsonDerivedType(typeof(TookThemWith), "tookthemwith")]
 [JsonDerivedType(typeof(HealthShared), "healthshared")]
 [JsonDerivedType(typeof(CopiedStages), "copiedstages")]
+[JsonDerivedType(typeof(UsedInstead), "usedinstead")]
+[JsonDerivedType(typeof(LearnedMove), "learnedmove")]
+[JsonDerivedType(typeof(AbilityMoved), "abilitymoved")]
 [JsonDerivedType(typeof(Damped), "damped")]
 [JsonDerivedType(typeof(MustRepeat), "mustrepeat")]
 [JsonDerivedType(typeof(GotAway), "gotaway")]
@@ -359,6 +362,15 @@ public abstract record BattleEvent
 
     /// <summary>Took the other one's stat changes for its own — all of them.</summary>
     public sealed record CopiedStages(Side Side) : BattleEvent;
+
+    /// <summary>Used a move that was not the one chosen, and which one it turned out to be.</summary>
+    public sealed record UsedInstead(Side Side, int MoveId) : BattleEvent;
+
+    /// <summary>Took a move into a slot, for this fight or for good.</summary>
+    public sealed record LearnedMove(Side Side, int MoveId, bool ForGood) : BattleEvent;
+
+    /// <summary>An ability moved from one creature to another, or between them.</summary>
+    public sealed record AbilityMoved(Side Side, int Ability) : BattleEvent;
 
     /// <summary>Turned one kind of move down, for the room rather than for anybody.</summary>
     public sealed record Damped(Side Side) : BattleEvent;
@@ -902,6 +914,16 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
     /// </summary>
     public MoveData? Struggle { get; init; }
 
+    /// <summary>
+    /// Every move in the game, for the one move that picks any of them.
+    /// <para>
+    /// Supplied from outside exactly as <see cref="Struggle"/> is, and for the same reason:
+    /// this engine works in move records and has never held the table they came out of. A
+    /// battle given none simply finds nothing to pick, and says so.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<MoveData> EveryMove { get; init; } = [];
+
     public bool IsOver => OpponentCaught || Escaped || Player.HasFainted || Opponent.HasFainted;
 
     public Side? Winner => OpponentCaught
@@ -928,6 +950,66 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
     public Battler Of(Side side) => side == Side.Player ? Player : Opponent;
 
     private static Side Other(Side side) => side == Side.Player ? Side.Opponent : Side.Player;
+
+    /// <summary>Whether this kind does nothing itself and uses another move instead.</summary>
+    private static bool Borrows(EffectKind kind) =>
+        kind is EffectKind.Mirrors or EffectKind.AtRandom or EffectKind.Sleeping;
+
+    /// <summary>
+    /// Which move one of the borrowers turns out to make, or nothing when there is none.
+    /// <para>
+    /// Nothing is a real answer for all three and it is the common answer for two of them: a
+    /// creature that is awake cannot talk in its sleep, and there is nothing to mirror until
+    /// the other one has moved. Returning nothing rather than a substitute is what lets the
+    /// turn say so out loud instead of quietly doing something.
+    /// </para>
+    /// </summary>
+    private MoveData? Borrowed(Side side, Battler attacker, Battler defender, EffectKind kind)
+    {
+        switch (kind)
+        {
+            case EffectKind.Mirrors:
+                // Whatever they last did — and only a move that can be mirrored, which for
+                // this engine means one that is not itself a borrower. Without that, two
+                // creatures each holding MIRROR MOVE reflect each other.
+                return defender.LastMove is { } theirs && !Borrows(MoveEffects.Of(theirs.Effect).Kind)
+                    ? theirs
+                    : null;
+
+            case EffectKind.AtRandom:
+            {
+                // Anything at all, which is the only place in this engine that reaches for
+                // the whole table. A borrower cannot come out of it, for the same reason.
+                List<MoveData> anything =
+                    [.. EveryMove.Where(m => !Borrows(MoveEffects.Of(m.Effect).Kind))];
+
+                return anything.Count == 0 ? null : anything[_rng.Next(anything.Count)];
+            }
+
+            case EffectKind.Sleeping:
+            {
+                // Only while asleep, which is the whole of the move: it is not a way of
+                // choosing at random, it is a way of doing anything at all while you cannot.
+                if (attacker.Status != StatusCondition.Sleep) return null;
+
+                List<MoveData> own =
+                [
+                    .. attacker.Moves.Where(m =>
+                        !Borrows(MoveEffects.Of(m.Effect).Kind)
+
+                        // And not one that takes a turn to wind up. A creature asleep cannot
+                        // be halfway through FLY, and letting it start one would leave a
+                        // forced slot nobody can ever discharge.
+                        && MoveEffects.Of(m.Effect).Kind != EffectKind.TwoTurn),
+                ];
+
+                return own.Count == 0 ? null : own[_rng.Next(own.Count)];
+            }
+
+            default:
+                return null;
+        }
+    }
 
     /// <summary>
     /// Who is flinching, which lasts exactly one turn and belongs to the battle rather
@@ -1082,7 +1164,29 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
     private static int PriorityOf(Battler battler, BattleAction action) =>
         action is BattleAction.UseMove use && battler.MoveAt(use.Slot) is { } move ? move.Priority : 0;
 
-    private void TakeTurn(Side side, BattleAction action, List<BattleEvent> events)
+    /// <summary>
+    /// One side's go.
+    /// <para>
+    /// <paramref name="instead"/> is the move to make in place of the one the slot holds,
+    /// and it is null for every turn a player ever takes. Five moves in this game do not do
+    /// anything themselves — they use another move — and this is how: the copy is resolved
+    /// first, and then this method calls itself once with the move it chose.
+    /// </para>
+    /// <para>
+    /// Once, and only once. A copied move that is itself a copy finds this already set and
+    /// does nothing, which is a rule rather than a shortcut: without it METRONOME picking
+    /// METRONOME is a stack that does not come back, and with it the answer is the one the
+    /// games give.
+    /// </para>
+    /// <para>
+    /// Everything that belongs to <em>choosing</em> a move rather than to making one is
+    /// skipped on the second pass — the cost, the blocks, the running count, what this one
+    /// last did. A borrowed move is not in a slot, so it cannot be the blocked slot, cannot
+    /// be spent, and cannot be the thing you did twice running.
+    /// </para>
+    /// </summary>
+    private void TakeTurn(
+        Side side, BattleAction action, List<BattleEvent> events, MoveData? instead = null)
     {
         Battler attacker = Of(side);
         Battler defender = Of(Other(side));
@@ -1139,9 +1243,13 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         }
 
         // And here is where it matters, which is everything else: a move.
-        if (!CanAct(side, attacker, events)) return;
+        // What was chosen, before the question of whether this one can move at all — because
+        // for exactly one move in the game the answer depends on which move it is.
+        MoveData? chose = action is BattleAction.UseMove picked ? attacker.MoveAt(picked.Slot) : null;
 
-        MoveData? move = action is BattleAction.UseMove use ? attacker.MoveAt(use.Slot) : null;
+        if (!CanAct(side, attacker, events, chose)) return;
+
+        MoveData? move = instead ?? (action is BattleAction.UseMove use ? attacker.MoveAt(use.Slot) : null);
 
         // Nothing left to swing with. The move a creature is left with is a move in the
         // cartridge's own table — its power, its type and its recoil are all read — so
@@ -1150,12 +1258,12 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         //
         // Checked before the slot is spent and before anything is announced, because a
         // creature that has run dry never used the move it chose.
-        if (move is not null && attacker.IsSpent && Struggle is { } struggling)
+        if (instead is null && move is not null && attacker.IsSpent && Struggle is { } struggling)
         {
             move = struggling;
             action = new BattleAction.Struggle();
         }
-        else if (move is not null && !attacker.ForcedSlot.HasValue)
+        else if (instead is null && move is not null && !attacker.ForcedSlot.HasValue)
         {
             // And the ordinary case: one use, spent as the move is made rather than as it
             // lands. A miss costs the same as a hit, which is the games' own rule and the
@@ -1197,7 +1305,7 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         // A blocked slot cannot be swung. Checked after the substitution above, so a
         // creature whose only move is blocked and whose others are spent still struggles
         // rather than standing there.
-        if (action is BattleAction.UseMove blocked && attacker.IsDisabled(blocked.Slot))
+        if (instead is null && action is BattleAction.UseMove blocked && attacker.IsDisabled(blocked.Slot))
         {
             events.Add(new BattleEvent.CannotUse(side, move.Id));
 
@@ -1207,7 +1315,7 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         // Nothing but attacking, while that lasts. Checked here with the other refusals
         // rather than where a move is chosen, because a client chooses and a server decides
         // — and everything a server decides about a move belongs in one place.
-        if (attacker.TauntTurns > 0 && move.Category == DamageCategory.Status)
+        if (instead is null && attacker.TauntTurns > 0 && move.Category == DamageCategory.Status)
         {
             events.Add(new BattleEvent.CannotUse(side, move.Id));
 
@@ -1215,7 +1323,7 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         }
 
         // And not the same thing twice running.
-        if (attacker.IsTormented && action is BattleAction.UseMove again && attacker.LastSlot == again.Slot)
+        if (instead is null && attacker.IsTormented && action is BattleAction.UseMove again && attacker.LastSlot == again.Slot)
         {
             events.Add(new BattleEvent.CannotUse(side, move.Id));
 
@@ -1224,9 +1332,14 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
 
         // What this one just did, for the two moves that care. Written when the move is
         // made rather than when it lands, because a miss is still what you did.
-        if (action is BattleAction.UseMove made)
+        if (instead is null && action is BattleAction.UseMove made)
         {
             attacker.LastSlot = made.Slot;
+
+            // And the move itself, which is what the other side's copies want. The slot is
+            // no use to them: it indexes this creature's four, and a creature that switches
+            // out takes its slots with it.
+            attacker.LastMove = move;
 
             // And what it has now committed to, if it is carrying the thing that commits.
             // Set after the move rather than before it, so the move that decided is itself
@@ -1280,6 +1393,28 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         // but a fight that never mentions it anywhere is how 138 moves came to be half
         // implemented without anybody counting.
         if (MoveEffects.IsSilent(move.Effect)) _steppedOver.Add(move.Id);
+
+        // The five that use a move that is not this one. Resolved here rather than with the
+        // other effects because they are not effects — nothing about this move happens at
+        // all, and everything after this point is about a move that has not been chosen yet.
+        //
+        // Only on the first pass. A borrowed move that borrows finds nothing to borrow with,
+        // which is what stops METRONOME picking METRONOME for ever.
+        if (instead is null && Borrows(kind.Kind))
+        {
+            if (Borrowed(side, attacker, defender, kind.Kind) is not { } borrowed)
+            {
+                events.Add(new BattleEvent.NothingHappened(side));
+
+                return;
+            }
+
+            events.Add(new BattleEvent.UsedInstead(side, borrowed.Id));
+
+            TakeTurn(side, action, events, borrowed);
+
+            return;
+        }
 
         // Behind a guard, and nothing else happens. Before accuracy, because PROTECT is
         // not evasion — the move is not missing, it is being stopped.
@@ -1917,6 +2052,55 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             return;
         }
 
+        if (effect.Kind is EffectKind.Takes or EffectKind.Learns)
+        {
+            // Both take the other one's last move; they differ only in whether it survives
+            // the fight. Neither writes to a save from in here — what is permanent about the
+            // permanent one is decided by whoever owns the creature, outside this class.
+            if (defender.LastMove is not { } copying || attacker.LastSlot is not { } into)
+            {
+                events.Add(new BattleEvent.NothingHappened(at));
+
+                return;
+            }
+
+            // It goes in the slot the move that took it came from, which is the games' own
+            // rule and the only one that is not arbitrary: something has to be given up, and
+            // the thing given up is the taking.
+            attacker.PutInSlot(into, copying);
+
+            events.Add(new BattleEvent.LearnedMove(at, copying.Id, effect.Kind == EffectKind.Learns));
+
+            return;
+        }
+
+        if (effect.Kind is EffectKind.TakesAbility or EffectKind.SwapsAbility)
+        {
+            // The first thing in this engine that changes an ability. Until now an ability
+            // was a lookup on the species and the slot a creature was born with, with
+            // nowhere for an answer of its own to live.
+            int mine = attacker.Ability;
+            int theirs = defender.Ability;
+
+            if (mine == theirs)
+            {
+                events.Add(new BattleEvent.NothingHappened(at));
+
+                return;
+            }
+
+            attacker.BorrowedAbility = theirs;
+
+            // And the other half, for the one that trades rather than takes. Written as the
+            // borrowed value on both sides rather than by swapping the slots they were born
+            // with, because being born with something is not a thing a fight may change.
+            if (effect.Kind == EffectKind.SwapsAbility) defender.BorrowedAbility = mine;
+
+            events.Add(new BattleEvent.AbilityMoved(at, theirs));
+
+            return;
+        }
+
         if (effect.Kind == EffectKind.CopiesStages)
         {
             // Every stage, and the user's own are replaced rather than added to. Both halves
@@ -2504,7 +2688,13 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
     /// Sleep, freeze and paralysis are checked before a move is announced, so a
     /// battler that cannot act never appears to try.
     /// </summary>
-    private bool CanAct(Side side, Battler battler, List<BattleEvent> events)
+    /// <param name="chose">
+    /// The move this one is about to make, when there is one. Needed for the single move in
+    /// this game whose whole point is that it works while its user cannot act — a creature
+    /// that can only talk in its sleep has to get past the check that stops it moving, and
+    /// that check has to know what it was going to do to let it through.
+    /// </param>
+    private bool CanAct(Side side, Battler battler, List<BattleEvent> events, MoveData? chose = null)
     {
         // Before everything, because it is not a condition and not a flinch — it is a
         // debt. Paralysis does not get a chance to also take a turn that is already gone.
@@ -2544,6 +2734,13 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
                     events.Add(new BattleEvent.WokeUp(side));
                     return false;
                 }
+
+                // Except the one move that is for this. It does not wake anybody and it does
+                // not shorten the sleep — the count above has already come down, exactly as
+                // it would have if nothing were carried, so a creature holding it sleeps for
+                // precisely as long as one that is not.
+                if (chose is not null && MoveEffects.Of(chose.Effect).Kind == EffectKind.Sleeping)
+                    return true;
 
                 events.Add(new BattleEvent.Immobilised(side, StatusCondition.Sleep));
                 return false;

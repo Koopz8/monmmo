@@ -247,6 +247,14 @@ public static class BattleNarrator
 
         BattleEvent.CopiedStages e => $"{names.Of(e.Side)} copied its foe's changes!",
 
+        BattleEvent.UsedInstead e => $"{names.Of(e.Side)} used {names.MoveNamed(e.MoveId)} instead!",
+
+        BattleEvent.LearnedMove e => e.ForGood
+            ? $"{names.Of(e.Side)} learned {names.MoveNamed(e.MoveId)}!"
+            : $"{names.Of(e.Side)} copied {names.MoveNamed(e.MoveId)}!",
+
+        BattleEvent.AbilityMoved e => $"{names.Of(e.Side)} took on a new ability!",
+
         BattleEvent.Damped e => $"{names.Of(e.Side)} damped one kind of move down!",
 
         BattleEvent.Grazed e => $"{names.Of(e.Side)} is hurt reaching them!",

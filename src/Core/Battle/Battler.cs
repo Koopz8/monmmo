@@ -77,7 +77,23 @@ public sealed class Battler
     public int AbilitySlot { get; init; }
 
     /// <summary>What that comes to, which is the number every rule in the fight asks for.</summary>
-    public int Ability => Abilities.Of(Species, AbilitySlot);
+    /// <summary>
+    /// An ability put on this one by a move, for the length of the fight.
+    /// <para>
+    /// Null almost always, and when it is not it wins. Two moves in this game move an ability
+    /// from one creature to another, and until they were written an ability was the one thing
+    /// about a creature a fight could not change — it was a lookup on the species and the
+    /// slot it was born with, with nowhere for an answer of its own to live.
+    /// </para>
+    /// <para>
+    /// It goes when its owner does, like every other thing a fight starts. An ability that
+    /// followed somebody out of the door would be a change to the creature rather than to the
+    /// fight, and this project does not write to saves from inside a battle.
+    /// </para>
+    /// </summary>
+    public int? BorrowedAbility { get; set; }
+
+    public int Ability => BorrowedAbility ?? Abilities.Of(Species, AbilitySlot);
 
     public SpeciesData Species { get; }
 
@@ -291,6 +307,37 @@ public sealed class Battler
     /// </para>
     /// </summary>
     public int? LastSlot { get; set; }
+
+    /// <summary>
+    /// The last move this one actually used, as the move itself.
+    /// <para>
+    /// The slot beside it is not enough for the moves that copy. A slot is an index into
+    /// <em>this</em> creature's four, and the thing MIRROR MOVE wants is the move the
+    /// <em>other</em> one used — which is an index into a list this side has no business
+    /// reading, and which may not be four long, and which stops being true the moment
+    /// somebody switches out.
+    /// </para>
+    /// <para>
+    /// So the move travels rather than the number. It is the same record every other part of
+    /// this engine works in, and it is read off the cartridge like all of them.
+    /// </para>
+    /// </summary>
+    public MoveData? LastMove { get; set; }
+
+    /// <summary>
+    /// Puts a different move in a slot for the rest of this fight.
+    /// <para>
+    /// Two moves in this game do this and they differ in one thing only: whether it survives
+    /// the fight. Neither writes to a save from in here — what is permanent about the
+    /// permanent one is decided outside, by whoever owns the creature.
+    /// </para>
+    /// </summary>
+    public void PutInSlot(int slot, MoveData move)
+    {
+        if (slot < 0 || slot >= Moves.Count) return;
+
+        Moves[slot] = move;
+    }
 
     /// <summary>The slot this one may not use, and for how much longer.</summary>
     public int? DisabledSlot { get; set; }
@@ -516,6 +563,8 @@ public sealed class Battler
         ReflectTurns = 0;
         ScreenTurns = 0;
         LastSlot = null;
+        LastMove = null;
+        BorrowedAbility = null;
         DisabledSlot = null;
         DisabledTurns = 0;
         IsAway = false;
