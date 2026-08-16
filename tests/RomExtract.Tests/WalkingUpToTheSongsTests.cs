@@ -325,4 +325,79 @@ public class WalkingUpToTheSongsTests
             tree.Voicegroups.Single(v =>
                 v.Offset == SyntheticRom.VoicegroupsOffset + group * SyntheticRom.VoicegroupStride)),
     ];
+
+    // ---- why a header was not confirmed ------------------------------------------------
+
+    /// <summary>
+    /// A header the walk confirmed is rejected by nothing.
+    /// <para>
+    /// The other half of every rejection test, and the one that says the reasons are being
+    /// asked of the same rules the walk itself used rather than of a second, looser copy.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AConfirmedHeaderIsRejectedByNothing()
+    {
+        Rom rom = Synthetic.ToRom();
+        SoundTreeResult tree = SoundLocator.Walk(rom);
+
+        Assert.NotEmpty(tree.Songs);
+
+        Assert.Equal(SongRejection.None, SoundLocator.WhyNot(rom, tree, tree.Songs[0].Offset));
+    }
+
+    /// <summary>
+    /// And one that is not says which rule turned it down.
+    /// <para>
+    /// Thirty-one songs the table names come back unconfirmed on a real cartridge, and one of
+    /// them is the professor's laboratory. "Not confirmed" was one word covering six faults
+    /// across three layers — the table, the voicegroup walk and the recordings under it — and
+    /// which one it is decides where to look.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AndOneThatIsNotSaysWhichRuleTurnedItDown()
+    {
+        Rom rom = Synthetic.ToRom();
+        SoundTreeResult tree = SoundLocator.Walk(rom);
+
+        // A song header whose voicegroup pointer leads nowhere this walk confirmed. The
+        // fixture has one on purpose; it is the reason the walk's own count is short.
+        SongRejection why = SoundLocator.WhyNot(rom, tree, SyntheticRom.SongWithNoVoicegroupOffset);
+
+        Assert.NotEqual(SongRejection.None, why);
+    }
+
+    /// <summary>
+    /// And a place with no header at all is turned down by the track count rather than by
+    /// something further in.
+    /// <para>
+    /// A rejection that names the wrong rule is worse than one that names none: it sends
+    /// somebody to the voicegroup walk when the offset was never a header to begin with.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AndSomewhereWithNoHeaderIsTurnedDownByTheTrackCount()
+    {
+        Rom rom = Synthetic.ToRom();
+        SoundTreeResult tree = SoundLocator.Walk(rom);
+
+        // Nought is not a track count anything could have, and the fixture leaves the front
+        // of the file empty.
+        Assert.Equal(SongRejection.TrackCount, SoundLocator.WhyNot(rom, tree, 0x200));
+    }
+
+    /// <summary>And the bytes behind a rejection can be looked at rather than believed.</summary>
+    [Fact]
+    public void AndTheBytesBehindItCanBeLookedAt()
+    {
+        Rom rom = Synthetic.ToRom();
+
+        string bytes = SoundLocator.BytesAt(rom, SyntheticRom.SongHeadersOffset);
+
+        Assert.Equal(8, bytes.Split(' ').Length);
+
+        // Past the end of the file says so rather than throwing or coming back empty.
+        Assert.Contains("past the end", SoundLocator.BytesAt(rom, rom.Length + 16));
+    }
 }

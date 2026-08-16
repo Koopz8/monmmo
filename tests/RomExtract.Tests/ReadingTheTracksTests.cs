@@ -108,6 +108,102 @@ public class ReadingTheTracksTests
         Assert.True(track.Events.Count < SequenceReader.MostCommands, "it ran to the budget instead of noticing the loop");
 
         Assert.Contains(track.Events, e => e.Command == SequenceCommand.Goto);
+
+        // And it says so, which "ended properly" cannot: a track that repeats and a track
+        // that finishes are both reads this reader followed to somewhere it understands, and
+        // they are not the same thing to be.
+        Assert.True(track.Loops);
+    }
+
+    /// <summary>
+    /// And it is read once rather than twice.
+    /// <para>
+    /// The set that noticed the loop held jump targets only, and a track's own beginning is
+    /// not a jump target — so the first jump back was followed, the whole track was read a
+    /// second time, and only then did the check catch it. Every looping track on a cartridge
+    /// came back with twice the notes it has and spent twice the budget it needed.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AndItIsReadOnceRatherThanTwice()
+    {
+        TrackRead track = Read(SyntheticRom.LoopingTrackOffset);
+
+        Assert.Equal(SyntheticRom.NotesInLoopingTrack, track.Notes);
+
+        // One note, one jump. Anything more is the body read again.
+        Assert.Single(track.Events.Where(e => e.Command == SequenceCommand.Goto));
+    }
+
+    /// <summary>
+    /// A phrase called twice is played twice.
+    /// <para>
+    /// This is the one that was wrong, and it was wrong because a call and a jump backwards
+    /// shared one set of places-already-been. A call comes back and a jump does not, so a
+    /// subsection called a second time looked exactly like a loop: the read stopped dead
+    /// there and reported that it had ended properly, with a call as its last command.
+    /// </para>
+    /// <para>
+    /// The performer then walked off the end of that list and reported the track as having
+    /// run out — which is a track ending where the music repeats, on every song written the
+    /// way most music is written.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void APhraseCalledTwiceIsPlayedTwice()
+    {
+        TrackRead track = Read(SyntheticRom.RepeatedCallTrackOffset);
+
+        Assert.True(track.EndedProperly);
+
+        // Two calls to one place, both followed.
+        Assert.Equal(2, track.Calls);
+        Assert.Equal(2, track.Events.Count(e => e.Command == SequenceCommand.Call));
+
+        // The subsection's notes, twice. A read that stopped at the second call finds half.
+        Assert.Equal(
+            SyntheticRom.NotesPerRepeatedSubsection * 2,
+            track.Notes);
+
+        // And it got past both of them to the jump that makes the track repeat, which is the
+        // command the truncated read never reached.
+        Assert.True(track.Loops);
+        Assert.Equal(SequenceCommand.Goto, track.Events[^1].Command);
+    }
+
+    /// <summary>
+    /// A subsection that calls itself is the thing that genuinely has no bottom, and it is
+    /// reported rather than followed — and reported as a read that did not end, because it
+    /// did not.
+    /// </summary>
+    [Fact]
+    public void ASubsectionThatCallsItselfIsStopped()
+    {
+        TrackRead track = Read(SyntheticRom.SelfCallingTrackOffset);
+
+        Assert.False(track.EndedProperly);
+        Assert.False(track.Loops);
+        Assert.True(track.Events.Count < SequenceReader.MostCommands, "it ran to the budget instead of noticing the recursion");
+    }
+
+    /// <summary>
+    /// A return with nothing to return to is a read that has lost its place, not a track
+    /// that has finished.
+    /// <para>
+    /// It used to count as ending properly, which handed the performer a track whose last
+    /// command does nothing — so it ran off the end of the event list and called itself a
+    /// track that had run out. The same wrong answer as the repeated call, from the other
+    /// side.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AReturnWithNothingToReturnToIsNotAnEnding()
+    {
+        // The subsection on its own, entered without the call that leads to it.
+        TrackRead track = Read(SyntheticRom.CalledSubsectionOffset);
+
+        Assert.False(track.EndedProperly);
+        Assert.Equal(SequenceCommand.Return, track.Events[^1].Command);
     }
 
     /// <summary>

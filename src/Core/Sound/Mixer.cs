@@ -169,6 +169,44 @@ public sealed class Mixer
     }
 
     /// <summary>
+    /// One sample, and the whole of the mixing in one place.
+    /// <para>
+    /// This is the unit rather than the buffer, because the mixer has to be turned exactly
+    /// once per sample no matter how many things are being performed onto it. A performer
+    /// that asked for its own buffer would advance the envelopes once per performer, so a
+    /// sound effect over the music would make the music's notes decay at twice the rate for
+    /// as long as the effect lasted — audible, and only in the one place it happens.
+    /// </para>
+    /// </summary>
+    public short Next()
+    {
+        if (--_untilNextStep <= 0)
+        {
+            _untilNextStep = _rate / StepsPerSecond;
+
+            foreach (PlayingNote note in _notes) note.Envelope.Step();
+        }
+
+        int total = 0;
+
+        for (int n = 0; n < _notes.Count; n++)
+        {
+            PlayingNote note = _notes[n];
+
+            // An eight-bit sample, times a loudness out of 255, times a volume out of
+            // 255. The two multiplications and the one shift are the whole of it.
+            total += note.Next() * note.Envelope.Level * note.Volume >> 12;
+        }
+
+        _notes.RemoveAll(note => note.IsFinished || note.Envelope.IsFinished);
+
+        // Clipped rather than scaled. Scaling the sum by the number of voices would make
+        // a chord quieter than a single note, which is not what the hardware does and is
+        // not what these games sound like.
+        return (short)Math.Clamp(total, short.MinValue, short.MaxValue);
+    }
+
+    /// <summary>
     /// Fills a buffer, and returns it. Values are signed sixteen-bit, which is what every
     /// audio device this client will meet expects.
     /// </summary>
@@ -176,33 +214,7 @@ public sealed class Mixer
     {
         var output = new short[Math.Max(0, samples)];
 
-        for (int i = 0; i < output.Length; i++)
-        {
-            if (--_untilNextStep <= 0)
-            {
-                _untilNextStep = _rate / StepsPerSecond;
-
-                foreach (PlayingNote note in _notes) note.Envelope.Step();
-            }
-
-            int total = 0;
-
-            for (int n = 0; n < _notes.Count; n++)
-            {
-                PlayingNote note = _notes[n];
-
-                // An eight-bit sample, times a loudness out of 255, times a volume out of
-                // 255. The two multiplications and the one shift are the whole of it.
-                total += note.Next() * note.Envelope.Level * note.Volume >> 12;
-            }
-
-            // Clipped rather than scaled. Scaling the sum by the number of voices would make
-            // a chord quieter than a single note, which is not what the hardware does and is
-            // not what these games sound like.
-            output[i] = (short)Math.Clamp(total, short.MinValue, short.MaxValue);
-
-            _notes.RemoveAll(note => note.IsFinished || note.Envelope.IsFinished);
-        }
+        for (int i = 0; i < output.Length; i++) output[i] = Next();
 
         return output;
     }

@@ -245,4 +245,53 @@ public class LoadingASongTests
 
         Assert.Null(SongLoader.Load(empty, tree, 0, new Mixer(8000)));
     }
+
+    /// <summary>
+    /// Whether a track repeats survives the trip from the reader into the performer.
+    /// <para>
+    /// The number that says a song is being cut short. A track that has run out and a track
+    /// that was written to repeat were one answer, so a song whose tracks stop where the
+    /// music loops looked exactly like a song that had finished — and the count of tracks
+    /// that had run out was the only thing anybody was watching.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void WhetherATrackRepeatsReachesThePerformer()
+    {
+        (Rom rom, SoundTreeResult tree) = Cartridge();
+
+        int song = tree.Table.ToList().FindIndex(
+            e => e.HeaderOffset
+                 == SyntheticRom.SongHeadersOffset
+                    + SyntheticRom.SongWithALoopingTrack * SyntheticRom.SongStride);
+
+        Assert.True(song >= 0, "the song with a looping track is not in the table, so it proves nothing");
+
+        SongPlayer player = Assert.IsType<SongPlayer>(SongLoader.Load(rom, tree, song, new Mixer(8000)));
+
+        Assert.Equal(1, player.Looping);
+
+        // And nothing has stopped that was written to repeat, which is the only right answer
+        // before a single sample has been asked for.
+        Assert.Equal(0, player.LoopedAndStopped);
+    }
+
+    /// <summary>
+    /// And a song of tracks that all run to an end reports none of them as repeating, which
+    /// is what makes the number above mean anything.
+    /// </summary>
+    [Fact]
+    public void AndASongThatStopsReportsNoneRepeating()
+    {
+        (Rom rom, SoundTreeResult tree) = Cartridge();
+
+        int song = tree.Table.ToList().FindIndex(
+            e => e.HeaderOffset == SyntheticRom.SongHeadersOffset);
+
+        Assert.True(song >= 0);
+
+        SongPlayer player = Assert.IsType<SongPlayer>(SongLoader.Load(rom, tree, song, new Mixer(8000)));
+
+        Assert.Equal(0, player.Looping);
+    }
 }

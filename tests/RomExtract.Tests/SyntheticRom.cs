@@ -798,6 +798,15 @@ public sealed class SyntheticRom
 
         // And one that jumps backwards for ever, which is what a looping piece of music is.
         WriteLoopingTrack();
+
+        // And one that plays the same phrase twice and then loops — the case that made a
+        // repeated call indistinguishable from a jump backwards, and the reason a fixture
+        // containing exactly one call could not fail the rule that told them apart.
+        WriteRepeatedCallTrack();
+
+        // And a subsection that calls itself, which is the thing that genuinely has no
+        // bottom and the only thing the call guard should be stopping.
+        WriteSelfCallingTrack();
         WriteSettingWithAnAddress();
         WriteRunningNoteAcrossAWait();
 
@@ -829,11 +838,19 @@ public sealed class SyntheticRom
                 bool unfinished = (song == SongWithAnUnfinishedTrack && track == tracks - 1)
                                   || song == SongWhoseEveryTrackIsBroken;
 
+                // And one song's first track repeats rather than stopping, so that a loader
+                // dropping whether a track loops has something to drop. Every song's tracks
+                // used to run to an end command, which is a fixture in which "written to
+                // repeat" and "written to stop" are the same thing.
+                bool repeats = song == SongWithALoopingTrack && track == 0;
+
                 WriteU32(
                     at + 8 + track * 4,
                     Rom.BaseAddress + (uint)(unfinished
                         ? UnendedTrackOffset
-                        : SequencesOffset + (song * 4 + track) * SequenceStride));
+                        : repeats
+                            ? RepeatedCallTrackOffset
+                            : SequencesOffset + (song * 4 + track) * SequenceStride));
             }
         }
 
@@ -976,6 +993,53 @@ public sealed class SyntheticRom
         _data[at++] = 0x30;   // a bare key: another note, not a repeated wait
         _data[at++] = 0x82;   // another wait
         _data[at] = 0xB1;     // end
+    }
+
+    /// <summary>
+    /// A phrase called twice, and then a jump back to the beginning.
+    /// <para>
+    ///   call SUB / call SUB / goto self
+    /// </para>
+    /// <para>
+    /// Written so that every number about it is one somebody knew beforehand: the subsection
+    /// holds two notes, it is called twice, so a reader that followed both calls finds four
+    /// and one that stopped at the second finds two.
+    /// </para>
+    /// </summary>
+    private void WriteRepeatedCallTrack()
+    {
+        int at = RepeatedCallTrackOffset;
+
+        _data[at++] = 0xB3;                                       // call
+        WriteU32(at, Rom.BaseAddress + (uint)RepeatedSubsectionOffset);
+        at += 4;
+
+        _data[at++] = 0xB3;                                       // call, the same place again
+        WriteU32(at, Rom.BaseAddress + (uint)RepeatedSubsectionOffset);
+        at += 4;
+
+        _data[at++] = 0xB2;                                       // goto its own beginning
+        WriteU32(at, Rom.BaseAddress + (uint)RepeatedCallTrackOffset);
+
+        int sub = RepeatedSubsectionOffset;
+
+        for (int note = 0; note < NotesPerRepeatedSubsection; note++)
+        {
+            _data[sub++] = 0xD4;
+            _data[sub++] = (byte)(60 + note);
+            _data[sub++] = 100;
+        }
+
+        _data[sub] = 0xB4;                                        // return
+    }
+
+    /// <summary>A subsection that calls itself, and therefore has no bottom.</summary>
+    private void WriteSelfCallingTrack()
+    {
+        int at = SelfCallingTrackOffset;
+
+        _data[at++] = 0xB3;
+        WriteU32(at, Rom.BaseAddress + (uint)SelfCallingTrackOffset);
     }
 
     private void WriteLoopingTrack()
@@ -1605,6 +1669,17 @@ public sealed class SyntheticRom
     /// </summary>
     public const int SongNamingAMergedVoicegroup = 5;
 
+    /// <summary>
+    /// A song whose first track repeats rather than stopping.
+    /// <para>
+    /// Six, which is none of the other special ones. Its first track is the phrase-called-
+    /// twice track, so this one fixture carries both halves: the track has to be read past
+    /// its second call, and the fact that it repeats has to survive the trip through the
+    /// loader into the performer.
+    /// </para>
+    /// </summary>
+    public const int SongWithALoopingTrack = 6;
+
     /// <summary>Where each song's track sequences live.</summary>
     public const int SequencesOffset = 0x150000;
 
@@ -1667,6 +1742,29 @@ public sealed class SyntheticRom
 
     /// <summary>A track that jumps back to its own beginning — a piece of music that loops.</summary>
     public const int LoopingTrackOffset = 0x168200;
+
+    /// <summary>
+    /// A track that calls one subsection twice and then jumps back to its own beginning.
+    /// <para>
+    /// This is how the format writes a phrase played twice, which is how most music is
+    /// written — and it is the case the fixture did not contain. With one call in the whole
+    /// synthetic cartridge, a reader that treated the second call to a place as a loop was
+    /// indistinguishable from one that did not, and 2425 tests said so.
+    /// </para>
+    /// </summary>
+    public const int RepeatedCallTrackOffset = 0x168300;
+
+    /// <summary>The subsection it calls twice.</summary>
+    public const int RepeatedSubsectionOffset = 0x168400;
+
+    /// <summary>How many notes are in that subsection, so playing it twice is countable.</summary>
+    public const int NotesPerRepeatedSubsection = 2;
+
+    /// <summary>A subsection whose only command is a call to itself.</summary>
+    public const int SelfCallingTrackOffset = 0x168500;
+
+    /// <summary>How many notes the looping track is written with, before it jumps back.</summary>
+    public const int NotesInLoopingTrack = 1;
 
     /// <summary>
     /// A track with no end command, placed so that following it walks off the end of the

@@ -39,6 +39,30 @@ public sealed record TrackRead(
 
     /// <summary>The last command it read before it stopped, which is often the culprit.</summary>
     public byte After { get; init; }
+
+    /// <summary>
+    /// True when this read stopped at a jump backwards into music it had already followed,
+    /// which is a track that repeats rather than a track that finishes.
+    /// <para>
+    /// <see cref="EndedProperly"/> cannot tell those apart and should not try: both are reads
+    /// this reader followed to somewhere it understands, and both are safe to perform. But
+    /// they are different things to <em>be</em>, and only one of them is a track that stops.
+    /// A song whose tracks neither run to an end command nor loop is a song being cut short
+    /// somewhere, and until now there was no number that said so.
+    /// </para>
+    /// </summary>
+    public bool Loops { get; init; }
+
+    /// <summary>
+    /// How many subsections were expanded into this track.
+    /// <para>
+    /// A phrase played four times is one subsection called four times, and this reader
+    /// flattens each call where it is made. So this is the difference between how long a
+    /// track is written and how long it is to perform, and it is the number that says whether
+    /// the budget is being spent on repeats.
+    /// </para>
+    /// </summary>
+    public int Calls { get; init; }
 }
 
 /// <summary>
@@ -154,21 +178,45 @@ public static class SequenceReader
         int budget = MostCommands)
     {
         var events = new List<SequenceEvent>();
-        var returns = new Stack<int>();
+
+        // Where to carry on after a call, and which subsection that call went into. The
+        // second half is what the recursion guard below pops.
+        var returns = new Stack<(int At, int Target)>();
 
         int unknown = 0;
+        int calls = 0;
         int at = offset;
         byte running = 0;
 
-        // Where this read has already been. A track that jumps back to a place it has
-        // already been is looping, which is what music does — so it is stopped rather than
-        // followed, and stopping there is not a failure.
-        var seen = new HashSet<int>();
+        // Every place this read has already read a command. A jump *backwards* into music
+        // already followed is the loop point, and following it would mean reading the same
+        // bytes for ever.
+        //
+        // This used to be a set of jump targets, and the track's own beginning was never in
+        // it — so a goto back to the top was followed once and the entire track was read a
+        // second time before the check caught it. Four notes came back as eight, and the
+        // budget for a long track was spent twice as fast as it should be.
+        var read = new HashSet<int>();
+
+        // Which subsections are currently being expanded — the call chain, not the places
+        // that have ever been called.
+        //
+        // These two sets were one set, and that is the bug this whole comment exists for. A
+        // call comes back and a goto does not, so a subsection called twice — which is how
+        // this format writes a repeated bar, and therefore how most music on the cartridge is
+        // written — looked exactly like a loop. The read stopped dead at the second call and
+        // reported that it had ended properly, with a call as its last command. Everything
+        // after it, including the goto that would have made the track repeat, was never read,
+        // and the performer walked off the end of the list and called the track finished.
+        //
+        // What genuinely cannot be followed is a subsection that calls itself, directly or
+        // round a chain, and that is what this set is for.
+        var inside = new HashSet<int>();
 
         while (events.Count < Math.Max(1, budget))
         {
             if (at < 0 || at >= rom.Length)
-                return Stopped(offset, events, unknown, 0, at, running);
+                return Stopped(offset, events, unknown, 0, at, running) with { Calls = calls };
 
             byte opcode = rom.ReadU8(at);
 
@@ -178,12 +226,15 @@ public static class SequenceReader
             // compare the two — an event recorded one byte along would match nothing.
             int start = at;
 
+            read.Add(start);
+
             // Below 0x80 is an argument sitting where a command should be, which means the
             // last command again. A track that begins with one has no last command, and that
             // is a track this reader cannot follow rather than one it should guess at.
             if (opcode < FirstCommand)
             {
-                if (running == 0) return Stopped(offset, events, unknown, opcode, start, running);
+                if (running == 0)
+                    return Stopped(offset, events, unknown, opcode, start, running) with { Calls = calls };
 
                 opcode = running;
             }
@@ -213,12 +264,12 @@ public static class SequenceReader
                 case EndOfTrack:
                     events.Add(new SequenceEvent(start, opcode, SequenceCommand.End, []));
 
-                    return new TrackRead(offset, events, true, unknown);
+                    return new TrackRead(offset, events, true, unknown) { Calls = calls };
 
                 case GotoOpcode or CallOpcode:
                 {
                     if (at + 4 > rom.Length)
-                        return Stopped(offset, events, unknown, opcode, start, running);
+                        return Stopped(offset, events, unknown, opcode, start, running) with { Calls = calls };
 
                     uint address = rom.ReadU32(at);
 
@@ -240,14 +291,40 @@ public static class SequenceReader
                         [],
                         target));
 
-                    if (opcode == CallOpcode) returns.Push(at);
+                    if (opcode == GotoOpcode)
+                    {
+                        // Backwards into music already followed: the loop point, and the end
+                        // of what there is to read. The jump itself is kept, and the
+                        // performer resolves it against the offsets every command carries —
+                        // which is what makes a song repeat from where it was written to
+                        // repeat rather than from its own first bar.
+                        if (read.Contains(target))
+                            return new TrackRead(offset, events, true, unknown)
+                            {
+                                Loops = true, Calls = calls,
+                            };
 
-                    if (!seen.Add(target)) return new TrackRead(offset, events, true, unknown);
+                        at = target;
+
+                        // A jump lands on a command, never on an argument, so the running
+                        // command does not survive it.
+                        running = 0;
+
+                        break;
+                    }
+
+                    // A subsection already being expanded further up this same chain. That
+                    // is recursion rather than repetition, it has no bottom, and it is a read
+                    // this reader cannot follow rather than one it should guess at.
+                    if (!inside.Add(target))
+                        return Stopped(offset, events, unknown, opcode, start, running)
+                            with { Calls = calls };
+
+                    calls++;
+
+                    returns.Push((at, target));
 
                     at = target;
-
-                    // A jump lands on a command, never on an argument, so the running
-                    // command does not survive it.
                     running = 0;
 
                     break;
@@ -256,9 +333,19 @@ public static class SequenceReader
                 case ReturnOpcode:
                     events.Add(new SequenceEvent(start, opcode, SequenceCommand.Return, []));
 
-                    if (returns.Count == 0) return new TrackRead(offset, events, true, unknown);
+                    // A return with nothing to return to. This used to count as ending
+                    // properly, which put a track in front of the performer whose last
+                    // command does nothing — so it ran off the end of the list and reported
+                    // itself as a track that had run out. The same wrong answer as the
+                    // repeated call, arrived at from the other side.
+                    if (returns.Count == 0)
+                        return Stopped(offset, events, unknown, opcode, start, running)
+                            with { Calls = calls };
 
-                    at = returns.Pop();
+                    (at, int came) = returns.Pop();
+
+                    inside.Remove(came);
+
                     running = 0;
 
                     break;
@@ -306,7 +393,7 @@ public static class SequenceReader
         // Out of budget rather than out of track. Reported as not having ended, because it
         // did not — and distinguishable from every other failure by the offset, which is the
         // one place the read stopped somewhere it was still making sense.
-        return new TrackRead(offset, events, false, unknown) { StoppedAt = -1 };
+        return new TrackRead(offset, events, false, unknown) { StoppedAt = -1, Calls = calls };
     }
 
     /// <summary>

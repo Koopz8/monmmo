@@ -1893,6 +1893,36 @@ public static class Program
 
         Console.WriteLine($"    {trainers.Count(t => t.IsDouble)} double battles");
 
+        // Byte two, between the class and the picture, read past since trainers were first
+        // read. Printed rather than named: what its low seven bits select is not in any table
+        // on this file, so calling it anything here would be importing a fact from elsewhere
+        // and printing it as though it had been found.
+        //
+        // What the numbers should say if the split is right: a handful of distinct low values
+        // across the whole table, and a top bit that is set on roughly the share of trainers
+        // you would expect to differ in some one way. A low half taking dozens of values, or
+        // a top bit that is never set, would mean the byte is one field rather than two.
+        var lowHalves = trainers.GroupBy(t => t.PackedIndex).OrderByDescending(g => g.Count()).ToList();
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    byte 2 of the record: {lowHalves.Count} distinct value(s) in its low seven bits, "
+            + $"top bit set on {trainers.Count(t => t.PackedFlag)} of {trainers.Count}");
+
+        foreach (IGrouping<int, TrainerRecord> half in lowHalves.Take(10))
+        {
+            Console.WriteLine(
+                $"      {half.Key,3}: {half.Count(),4} trainers — classes "
+                + string.Join(", ", half.Select(t => t.Class).Distinct().OrderBy(c => c).Take(6)));
+        }
+
+        if (lowHalves.Count > 10) Console.WriteLine($"      ... and {lowHalves.Count - 10} more");
+
+        Console.WriteLine(
+            lowHalves.Count <= 16
+                ? "      a few values across the whole table is what a small index looks like"
+                : "      that many values is not a small index, and the byte is probably one field");
+
         // How many have no name at all. A handful at the front of the table is
         // ordinary — placeholders left over from development. Most of them having no
         // name would mean the name is not where this thinks it is, which is a different
@@ -5728,6 +5758,251 @@ public static class Program
             SongTrouble.EveryTrackDropped => "every track ran somewhere the reader could not follow",
             _ => why.ToString(),
         };
+
+        WriteRejectedHeaders(rom, tree);
+        WriteTrackEndings(rom, tree);
+        WritePerformers(tree);
+        WriteScriptedSongs(rom);
+    }
+
+    /// <summary>
+    /// Every song the table names whose header this walk did not confirm, with the rule that
+    /// turned it down and the bytes that caused it.
+    /// <para>
+    /// Thirty-one of these on a real cartridge, and one of them is the professor's laboratory
+    /// — so they are not obscure songs in a corner of the file. "Not confirmed" was one word
+    /// covering six faults sitting in three different layers, and which one it is says
+    /// whether to look at the table, at the voicegroup walk, or at the recordings under it.
+    /// </para>
+    /// </summary>
+    private static void WriteRejectedHeaders(Rom rom, SoundTreeResult tree)
+    {
+        var confirmed = tree.Songs.Select(s => s.Offset).ToHashSet();
+
+        List<SongTableEntry> rejected = [.. tree.Table.Where(e => !confirmed.Contains(e.HeaderOffset))];
+
+        if (rejected.Count == 0) return;
+
+        Console.WriteLine();
+        Console.WriteLine($"  the {rejected.Count} headers the table names and this walk did not confirm");
+
+        var byReason = new Dictionary<SongRejection, List<SongTableEntry>>();
+
+        foreach (SongTableEntry entry in rejected)
+        {
+            SongRejection why = SoundLocator.WhyNot(rom, tree, entry.HeaderOffset);
+
+            if (!byReason.TryGetValue(why, out List<SongTableEntry>? had)) byReason[why] = had = [];
+
+            had.Add(entry);
+        }
+
+        foreach ((SongRejection why, List<SongTableEntry> entries) in byReason.OrderByDescending(p => p.Value.Count))
+        {
+            Console.WriteLine();
+            Console.WriteLine($"    {entries.Count}: {Because(why)}");
+
+            // The songs themselves, so a number somebody recognises can be looked up. Ten
+            // rather than all of them, and it says when it has stopped.
+            foreach (SongTableEntry entry in entries.Take(10))
+            {
+                Console.WriteLine(
+                    $"      song {entry.Index,3}  header 0x{entry.HeaderOffset:X6}  "
+                    + $"group {entry.Group,3}  bytes {SoundLocator.BytesAt(rom, entry.HeaderOffset)}");
+            }
+
+            if (entries.Count > 10) Console.WriteLine($"      ... and {entries.Count - 10} more");
+        }
+
+        static string Because(SongRejection why) => why switch
+        {
+            SongRejection.PastTheEnd => "the header or its pointers run off the end of the file",
+            SongRejection.TrackCount => "the first byte is not a track count anything could have",
+            SongRejection.VoicegroupNotAPointer => "where the voicegroup should be is not an address",
+            SongRejection.VoicegroupNotConfirmed =>
+                "it names a voicegroup that resolves but the walk below did not confirm — "
+                + "so the fault is in the recordings or the instruments, not here",
+            SongRejection.TrackNotAPointer => "one of its track pointers is not an address",
+            SongRejection.None =>
+                "nothing rejects it, which means it was confirmed and something else is wrong",
+            _ => why.ToString(),
+        };
+    }
+
+    /// <summary>
+    /// How each track of each song in the table stops: at an end command, at a jump backwards,
+    /// or not at all.
+    /// <para>
+    /// The number that was missing. A track that has run out and a track that was written to
+    /// repeat were the same answer, so a song whose tracks stop where the music loops looked
+    /// exactly like a song that had finished — which is what <c>song 291</c> is.
+    /// </para>
+    /// </summary>
+    private static void WriteTrackEndings(Rom rom, SoundTreeResult tree)
+    {
+        var tableNames = tree.Table.Select(e => e.HeaderOffset).ToHashSet();
+
+        var ends = 0;
+        var loops = 0;
+        var neither = 0;
+        var calls = 0;
+
+        var songsAllLooping = 0;
+        var songsMixed = 0;
+
+        foreach (SongHeaderRecord header in tree.Songs.Where(s => tableNames.Contains(s.Offset)))
+        {
+            var songLoops = 0;
+            var songEnds = 0;
+
+            foreach (int track in header.TrackOffsets)
+            {
+                TrackRead read = SequenceReader.Read(rom, track);
+
+                calls += read.Calls;
+
+                if (!read.EndedProperly) { neither++; continue; }
+
+                if (read.Loops) { loops++; songLoops++; }
+                else { ends++; songEnds++; }
+            }
+
+            if (songLoops > 0 && songEnds == 0) songsAllLooping++;
+            else if (songLoops > 0) songsMixed++;
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("  how the tracks of the songs in the table stop");
+        Console.WriteLine($"    {loops} jump backwards, which is a track written to repeat");
+        Console.WriteLine($"    {ends} run to an end command, which is a track written to stop");
+        Console.WriteLine($"    {neither} do neither, and are dropped");
+        Console.WriteLine($"    {calls} subsections were expanded, which is what a repeated phrase is");
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    {songsAllLooping} songs have every track repeating; {songsMixed} have some of each");
+        Console.WriteLine(
+            "    a song of mostly-repeating tracks with a few that stop is the shape to look at: "
+            + "before this build, a phrase called twice cut the track off at the second call");
+    }
+
+    /// <summary>
+    /// The group number each table entry writes twice, counted.
+    /// <para>
+    /// This is the field that decides which one-off songs can overlap. The reading of it —
+    /// that it names one of the driver's several performers — is <b>modelled</b>, and this is
+    /// what would say so: a handful of distinct values, one of them holding most of the table,
+    /// is a performer index. A different number for nearly every song is not, and would mean
+    /// the whole overlapping arrangement is built on a misreading.
+    /// </para>
+    /// </summary>
+    private static void WritePerformers(SoundTreeResult tree)
+    {
+        if (tree.Table.Count == 0) return;
+
+        var byGroup = tree.Table
+            .GroupBy(e => e.Group)
+            .OrderByDescending(g => g.Count())
+            .ToList();
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  the group number, written twice in every entry: {byGroup.Count} distinct value(s) "
+            + $"across {tree.Table.Count} songs");
+
+        foreach (IGrouping<byte, SongTableEntry> group in byGroup.Take(12))
+        {
+            Console.WriteLine(
+                $"    group {group.Key,3}: {group.Count(),4} songs — "
+                + string.Join(", ", group.Take(8).Select(e => e.Index)));
+        }
+
+        if (byGroup.Count > 12) Console.WriteLine($"    ... and {byGroup.Count - 12} more");
+
+        Console.WriteLine();
+        Console.WriteLine(
+            byGroup.Count < tree.Table.Count / 4
+                ? "    a few values covering many songs is what a performer index looks like"
+                : "    nearly one value per song is NOT a performer index, and the reading is wrong");
+    }
+
+    /// <summary>
+    /// Which song numbers the scripts actually fire, and how the family of commands that name
+    /// them holds up against the whole cartridge.
+    /// </summary>
+    private static void WriteScriptedSongs(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("  which songs the scripts name");
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        Dictionary<byte, int> sites = SoundCues.Sites(rom, library);
+
+        if (sites.Count == 0)
+        {
+            Console.WriteLine("    none, which would mean the command family is read wrong");
+
+            return;
+        }
+
+        foreach ((byte code, int count) in sites.OrderByDescending(p => p.Value))
+            Console.WriteLine($"    0x{code:X2}: {count} sites");
+
+        // The corroboration. A command that names something and a command that waits for that
+        // same something should sit next to each other nearly every time.
+        foreach ((byte play, byte wait) in new[]
+                 {
+                     (SoundCues.PlayEffect, SoundCues.WaitEffect),
+                     (SoundCues.PlayOver, SoundCues.WaitFor),
+                 })
+        {
+            (int plays, int paired) = SoundCues.Pairing(rom, library, play, wait);
+
+            if (plays == 0) continue;
+
+            Console.WriteLine(
+                $"    0x{play:X2} is followed immediately by 0x{wait:X2} at {paired} of {plays} sites");
+        }
+
+        List<SoundCue> cues = SoundCues.All(rom, library);
+
+        Console.WriteLine();
+        Console.WriteLine($"    {cues.Count} song numbers named, {cues.Select(c => c.Song).Distinct().Count()} of them different");
+
+        foreach (IGrouping<byte, SoundCue> family in cues.GroupBy(c => c.Code).OrderBy(g => g.Key))
+        {
+            Console.WriteLine();
+            Console.WriteLine($"    0x{family.Key:X2} names:");
+
+            foreach (IGrouping<int, SoundCue> song in family.GroupBy(c => c.Song).OrderByDescending(g => g.Count()))
+            {
+                SoundCue first = song.First();
+
+                Console.WriteLine(
+                    $"      song {song.Key,4}  x{song.Count(),-4} first at {first.MapId} "
+                    + $"{first.What} 0x{first.Offset:X6}");
+            }
+        }
+
+        // And the only battle music on this cartridge that is read rather than decided.
+        Console.WriteLine();
+        Console.WriteLine("  battle music");
+
+        BattleMusic music = BattleMusicLocator.Themes(rom, library, Console.WriteLine);
+
+        foreach (BattleTheme theme in music.All)
+        {
+            Console.WriteLine(
+                $"    {theme.Kind}: song {theme.Song} — {(theme.Read ? "read" : "modelled")}, {theme.Where}");
+        }
+
+        Console.WriteLine(
+            $"    {music.Silent.Count} kinds of fight have no song and keep the map's music: "
+            + string.Join(", ", music.Silent));
+
+        Console.WriteLine(
+            "    an ordinary wild encounter and an ordinary trainer have no script, so there is "
+            + "nothing on the file to read for them — that gap is counted rather than filled in");
     }
 
     /// <summary>

@@ -254,31 +254,114 @@ public static class SoundLocator
 
     // ---- song headers --------------------------------------------------------------------
 
-    private static SongHeaderRecord? Song(Rom rom, int offset, HashSet<int> voicegroupAt)
+    private static SongHeaderRecord? Song(Rom rom, int offset, HashSet<int> voicegroupAt) =>
+        Song(rom, offset, voicegroupAt, out _);
+
+    /// <summary>
+    /// The same, and which rule turned it down when one did.
+    /// <para>
+    /// Every rejection above is a <c>return null</c>, which is the right shape for a walk of
+    /// a whole cartridge and the wrong shape for the one question anybody asks afterwards.
+    /// The table names songs this walk cannot confirm — thirty-one of them on a real
+    /// cartridge, one of which is the professor's laboratory, so they are not obscure — and
+    /// "not confirmed" is one word for six entirely different faults sitting in three
+    /// different layers.
+    /// </para>
+    /// <para>
+    /// Nothing here decides anything and nothing here is relaxed. The rules are the same
+    /// rules; this only carries out which one fired.
+    /// </para>
+    /// </summary>
+    private static SongHeaderRecord? Song(
+        Rom rom, int offset, HashSet<int> voicegroupAt, out SongRejection why)
     {
-        if (offset + 8 > rom.Length) return null;
+        why = SongRejection.None;
+
+        if (offset + 8 > rom.Length)
+        {
+            why = SongRejection.PastTheEnd;
+
+            return null;
+        }
 
         int tracks = rom.ReadU8(offset);
 
-        if (tracks is < 1 or > MostTracks) return null;
+        if (tracks is < 1 or > MostTracks)
+        {
+            why = SongRejection.TrackCount;
 
-        if (offset + SongHeaderRecord.SizeOf(tracks) > rom.Length) return null;
+            return null;
+        }
 
-        if (rom.ToOffsetOrNull(rom.ReadU32(offset + 4)) is not { } voicegroup) return null;
+        if (offset + SongHeaderRecord.SizeOf(tracks) > rom.Length)
+        {
+            why = SongRejection.PastTheEnd;
 
-        if (!voicegroupAt.Contains(voicegroup)) return null;
+            return null;
+        }
+
+        if (rom.ToOffsetOrNull(rom.ReadU32(offset + 4)) is not { } voicegroup)
+        {
+            why = SongRejection.VoicegroupNotAPointer;
+
+            return null;
+        }
+
+        if (!voicegroupAt.Contains(voicegroup))
+        {
+            why = SongRejection.VoicegroupNotConfirmed;
+
+            return null;
+        }
 
         var trackOffsets = new List<int>(tracks);
 
         for (int track = 0; track < tracks; track++)
         {
-            if (rom.ToOffsetOrNull(rom.ReadU32(offset + 8 + track * 4)) is not { } at) return null;
+            if (rom.ToOffsetOrNull(rom.ReadU32(offset + 8 + track * 4)) is not { } at)
+            {
+                why = SongRejection.TrackNotAPointer;
+
+                return null;
+            }
 
             trackOffsets.Add(at);
         }
 
         return new SongHeaderRecord(
             offset, tracks, rom.ReadU8(offset + 2), rom.ReadU8(offset + 3), voicegroup, trackOffsets);
+    }
+
+    /// <summary>
+    /// Why one song header the table names was not confirmed, asked one offset at a time.
+    /// <para>
+    /// Takes the walk's own result so that the question is asked against exactly the set of
+    /// voicegroups the walk itself had. Asking it against anything else would answer a
+    /// different question and look like this one.
+    /// </para>
+    /// </summary>
+    public static SongRejection WhyNot(Rom rom, SoundTreeResult tree, int offset)
+    {
+        var voicegroupAt = tree.Voicegroups
+            .SelectMany(v => v.Instruments.Select(i => i.Offset))
+            .ToHashSet();
+
+        Song(rom, offset, voicegroupAt, out SongRejection why);
+
+        return why;
+    }
+
+    /// <summary>
+    /// The first eight bytes at an offset, so a rejection can be read against the bytes that
+    /// caused it rather than believed.
+    /// </summary>
+    public static string BytesAt(Rom rom, int offset, int count = 8)
+    {
+        if (offset < 0 || offset >= rom.Length) return "(past the end of the file)";
+
+        int wide = Math.Min(count, rom.Length - offset);
+
+        return string.Join(" ", Enumerable.Range(0, wide).Select(i => $"{rom.ReadU8(offset + i):X2}"));
     }
 
     private static IReadOnlyList<SongHeaderRecord> Songs(

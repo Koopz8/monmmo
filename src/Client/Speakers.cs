@@ -40,6 +40,23 @@ public sealed class Speakers : IDisposable
     private readonly Jukebox _box;
     private readonly Mixer _mixer;
     private readonly CryLibrary _cries;
+
+    /// <summary>
+    /// Which performer each song belongs to, off its own table entry.
+    /// <para>
+    /// The number the eight-byte entry writes twice. It decides which one-off songs can
+    /// overlap and which replace each other, and it is read rather than decided here — a
+    /// song this cartridge does not list falls back to being its own performer, which is the
+    /// permissive answer and the one that cannot silence something real.
+    /// </para>
+    /// </summary>
+    private readonly IReadOnlyList<SongTableEntry> _table;
+
+    /// <summary>
+    /// The song a fight is playing, or nothing. Held here rather than pushed into the jukebox
+    /// because the map's own song arrives every frame — see <see cref="Play"/>.
+    /// </summary>
+    private int _fight = Jukebox.Nothing;
     private readonly short[] _buffer = new short[BufferSamples];
     private readonly bool _ready;
 
@@ -68,6 +85,7 @@ public sealed class Speakers : IDisposable
 
         _box = new Jukebox(song => SongLoader.Load(rom, tree, song, mixer), mixer);
         _cries = new CryLibrary(rom, tree.Samples, cries, entryFor);
+        _table = tree.Table;
 
         Raylib.InitAudioDevice();
 
@@ -103,8 +121,70 @@ public sealed class Speakers : IDisposable
     /// </summary>
     public void Play(int song)
     {
-        if (_ready) _box.Play(song);
+        if (!_ready) return;
+
+        // A fight's music outranks the map's. The map's number arrives every frame, so this
+        // has to be decided here rather than by whoever starts the fight — a caller that
+        // pushed a song in would have it overwritten before the next buffer.
+        _box.Play(_fight == Jukebox.Nothing ? song : _fight);
     }
+
+    /// <summary>
+    /// A one-off song over the top of whatever is playing: a door, a faint, a healing
+    /// machine, a menu beep.
+    /// <para>
+    /// All of those are song numbers in the same table as the town themes, which is why this
+    /// takes a number and not a recording. Which performer it goes to is read off the song's
+    /// own table entry.
+    /// </para>
+    /// </summary>
+    /// <returns>Whether this cartridge had the song.</returns>
+    public bool Effect(int song)
+    {
+        if (!_ready || song == Jukebox.Nothing) return false;
+
+        return _box.PlayOver(song, GroupOf(song));
+    }
+
+    /// <summary>
+    /// Which performer a song names, or the song itself when this cartridge does not list it.
+    /// <para>
+    /// Falling back to the song number makes an unlisted song its own performer, so it
+    /// overlaps everything instead of replacing something real. The permissive direction is
+    /// the right one: an effect too many is a noise, an effect cut off is a bug.
+    /// </para>
+    /// </summary>
+    private int GroupOf(int song) =>
+        song >= 0 && song < _table.Count ? _table[song].Group : song;
+
+    /// <summary>
+    /// Puts a fight's music on, and holds it against the map's until the fight is over.
+    /// <para>
+    /// <see cref="Jukebox.Nothing"/> means this build has no song for that sort of fight, and
+    /// the map's music carries on — which is what happened before any of this and is wrong in
+    /// a way a player can hear. It is left wrong and counted rather than filled in with a
+    /// number nobody can trace to a byte. See <see cref="BattleMusic"/>.
+    /// </para>
+    /// </summary>
+    public void Fight(int song)
+    {
+        if (!_ready) return;
+
+        _fight = song;
+
+        if (song != Jukebox.Nothing) _box.Play(song);
+    }
+
+    /// <summary>The fight is over; the next frame's map song takes over again.</summary>
+    public void FightOver()
+    {
+        if (!_ready) return;
+
+        _fight = Jukebox.Nothing;
+    }
+
+    /// <summary>Whether a fight's music is currently outranking the map's.</summary>
+    public bool InAFight => _fight != Jukebox.Nothing;
 
     public void Stop()
     {
@@ -125,7 +205,7 @@ public sealed class Speakers : IDisposable
 
         if (_cries.For(species) is not { } voice) return;
 
-        _box.PlayOver(voice, voice.Rate);
+        _box.PlayRecording(voice, voice.Rate);
     }
 
     /// <summary>How many creatures this cartridge has a noise for.</summary>
@@ -166,9 +246,17 @@ public sealed class Speakers : IDisposable
             return $"sound: song {_box.Playing} — {player.Instruments()}";
         }
 
+        // The tracks that have run out, against the tracks that were written to repeat. Those
+        // two numbers used to be one, and a song whose tracks stop where the music loops
+        // looked exactly like a song that had finished.
+        string stopped = player.LoopedAndStopped > 0
+            ? $"{player.Ran}/{player.TrackCount} run out INCLUDING {player.LoopedAndStopped} that loop"
+            : $"{player.Ran}/{player.TrackCount} run out, {player.Looping} loop";
+
         return $"sound: song {_box.Playing}, {player.BeatsPerMinute}bpm, {player.Ticks} ticks, "
                + $"{player.Commands} commands, {player.Notes} notes, "
-               + $"{player.Ran}/{player.TrackCount} tracks run out, {_mixer.Sounding} sounding";
+               + $"{stopped}, {_mixer.Sounding} sounding"
+               + (_box.Effects > 0 ? $", {_box.Effects} over the top" : "");
     }
 
     /// <summary>

@@ -189,7 +189,7 @@ public class WhatIsPlayingTests
 
         Assert.True(box.IsSilent);
 
-        box.PlayOver(Noise(), 8000);
+        box.PlayRecording(Noise(), 8000);
 
         Assert.Contains(box.Render(400), sample => sample != 0);
     }
@@ -221,7 +221,7 @@ public class WhatIsPlayingTests
         int music = box.Render(400).Max(s => Math.Abs((int)s));
 
         box.Play(2);
-        box.PlayOver(Noise(), 8000);
+        box.PlayRecording(Noise(), 8000);
 
         int both = box.Render(400).Max(s => Math.Abs((int)s));
 
@@ -235,9 +235,337 @@ public class WhatIsPlayingTests
     {
         var box = new Jukebox(_ => Anything(), new Mixer(8000));
 
-        box.PlayOver(new Voice([], 8000, false, 0), 8000);
+        box.PlayRecording(new Voice([], 8000, false, 0), 8000);
 
         Assert.All(box.Render(256), sample => Assert.Equal(0, sample));
+    }
+
+    // ---- one-off songs over the music ------------------------------------------------------
+
+    /// <summary>
+    /// A song built to sound for a while and then stop, which is the shape of every effect:
+    /// one note, a wait, and an end.
+    /// </summary>
+    private static SongPlayer Effect(Mixer mixer) =>
+        new(
+            [
+                new Track(
+                [
+                    new SequenceEvent(0, 0xD4, SequenceCommand.NoteOn, [60, 127]),
+                    new SequenceEvent(3, 0x82, SequenceCommand.Wait, []),
+                    new SequenceEvent(4, 0xB1, SequenceCommand.End, []),
+                ]),
+            ],
+            [new Instrument(Noise(), 60, 255, 255, 255, 255)],
+            mixer);
+
+    /// <summary>
+    /// Music that goes on for ever, so that anything laid over it has something to be over.
+    /// </summary>
+    private static SongPlayer Music(Mixer mixer) =>
+        new(
+            [
+                new Track(
+                [
+                    new SequenceEvent(0, 0xD4, SequenceCommand.NoteOn, [60, 127]),
+                    new SequenceEvent(3, 0x90, SequenceCommand.Wait, []),
+                    new SequenceEvent(4, 0xB2, SequenceCommand.Goto, [], 0),
+                ]),
+            ],
+            [new Instrument(Noise(), 60, 255, 255, 255, 255)],
+            mixer);
+
+    /// <summary>
+    /// A one-off song sounds over the music instead of replacing it.
+    /// <para>
+    /// The thing the sound work did not have. A faint, a door, a healing machine and a menu
+    /// beep are all song numbers in the same table as the town themes, and a jukebox that
+    /// performs one song at a time cannot sound one without stopping the music.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AOneOffSongSoundsOverTheMusic()
+    {
+        var mixer = new Mixer(8000);
+
+        var box = new Jukebox(song => song == 1 ? Music(mixer) : Effect(mixer), mixer);
+
+        box.Play(1);
+
+        int music = box.Render(200).Max(s => Math.Abs((int)s));
+
+        Assert.True(box.PlayOver(2, group: 0));
+
+        int both = box.Render(200).Max(s => Math.Abs((int)s));
+
+        Assert.True(music > 0, "the music was silent, so nothing could be over it");
+        Assert.True(both > music, $"{both} was no louder than {music}, so the effect replaced the song");
+
+        // And the music is still the song that is on, which is what "over" means.
+        Assert.Equal(1, box.Playing);
+    }
+
+    /// <summary>
+    /// And the music is still playing after the effect has finished, rather than having been
+    /// stopped by it.
+    /// </summary>
+    [Fact]
+    public void AndTheMusicIsStillThereAfterwards()
+    {
+        var mixer = new Mixer(8000);
+
+        var box = new Jukebox(song => song == 1 ? Music(mixer) : Effect(mixer), mixer);
+
+        box.Play(1);
+        box.PlayOver(2, group: 0);
+
+        // Long enough for the effect's one note and its end to have gone by.
+        box.Render(20_000);
+
+        Assert.Equal(0, box.Effects);
+
+        // A window wider than one turn of the music's own loop, because its recording is
+        // shorter than the wait after it — so a narrow window can land in the gap between
+        // one note ending and the next beginning and prove nothing.
+        Assert.Contains(box.Render(8000), sample => sample != 0);
+    }
+
+    /// <summary>
+    /// An effect that has finished is let go of rather than kept.
+    /// <para>
+    /// A performer left in place is one more thing advanced every sample for the rest of the
+    /// session, and its last note is one of twelve voices the music cannot have.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AnEffectThatHasFinishedIsLetGoOf()
+    {
+        var mixer = new Mixer(8000);
+
+        var box = new Jukebox(_ => Effect(mixer), mixer);
+
+        box.PlayOver(7, group: 0);
+
+        Assert.Equal(1, box.Effects);
+
+        box.Render(20_000);
+
+        Assert.Equal(0, box.Effects);
+    }
+
+    /// <summary>
+    /// The same effect asked for twice starts again, unlike music.
+    /// <para>
+    /// Not an inconsistency — the same rule applied to a different thing. Music asked for
+    /// twice carries on because a building's rooms are separate maps naming one theme; an
+    /// effect asked for twice is somebody pressing the button twice, and hearing nothing the
+    /// second time is the bug.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TheSameEffectAskedForTwiceStartsAgain()
+    {
+        var mixer = new Mixer(8000);
+
+        var box = new Jukebox(_ => Effect(mixer), mixer);
+
+        box.PlayOver(7, group: 0);
+        box.PlayOver(7, group: 0);
+
+        Assert.Equal(2, box.EffectFetches);
+    }
+
+    /// <summary>
+    /// And it replaces the one that was on that performer rather than piling up on it.
+    /// <para>
+    /// The group is the number the song's own table entry carries, written twice. Two songs
+    /// naming one performer cannot both be on, which is why a door opened twice quickly is
+    /// one noise and why holding a direction does not turn a menu beep into a drone.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AndItReplacesTheOneOnThatPerformer()
+    {
+        var mixer = new Mixer(8000);
+
+        var box = new Jukebox(_ => Effect(mixer), mixer);
+
+        box.PlayOver(7, group: 3);
+        box.PlayOver(8, group: 3);
+
+        Assert.Equal(1, box.Effects);
+    }
+
+    /// <summary>
+    /// And two effects naming different performers do both sound.
+    /// <para>
+    /// The other half of the same rule, and the one a fixture with a single group could not
+    /// tell apart from replacing everything.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AndTwoDifferentPerformersBothSound()
+    {
+        var mixer = new Mixer(8000);
+
+        var box = new Jukebox(_ => Effect(mixer), mixer);
+
+        box.PlayOver(7, group: 3);
+        box.PlayOver(8, group: 4);
+
+        Assert.Equal(2, box.Effects);
+    }
+
+    /// <summary>
+    /// A song this cartridge does not have leaves whatever was on that performer alone.
+    /// <para>
+    /// A missing effect silencing a real one would be a worse failure than a missing effect.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AnEffectThatIsNotThereLeavesTheOneThatIsAlone()
+    {
+        var mixer = new Mixer(8000);
+
+        var box = new Jukebox(song => song == 9 ? null : Effect(mixer), mixer);
+
+        box.PlayOver(7, group: 2);
+
+        Assert.False(box.PlayOver(9, group: 2));
+        Assert.Equal(1, box.Effects);
+    }
+
+    /// <summary>
+    /// Stopping stops the effects too, and lets their notes go.
+    /// <para>
+    /// Otherwise a performer outlives the jukebox that was holding it, advancing for ever
+    /// with nobody able to reach it.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void StoppingStopsTheEffectsToo()
+    {
+        var mixer = new Mixer(8000);
+
+        var box = new Jukebox(_ => Effect(mixer), mixer);
+
+        box.PlayOver(7, group: 1);
+        box.Stop();
+
+        Assert.Equal(0, box.Effects);
+    }
+
+    /// <summary>
+    /// The mixer is turned exactly once a sample, however many things are being performed.
+    /// <para>
+    /// The failure this whole split exists to prevent, and one nothing would have said a word
+    /// about. Two performers each turning the mixer for themselves would step every envelope
+    /// twice per sample and read every recording at twice its rate — so the music's notes
+    /// would decay faster for as long as an effect was sounding, and the effect would be
+    /// played at the wrong pitch.
+    /// </para>
+    /// <para>
+    /// Measured rather than asserted about: a recording is put on the mixer and rendered
+    /// alone, then the same recording is rendered with an effect running alongside. A mixer
+    /// turned twice per sample runs out of the recording in half the samples.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TheMixerIsTurnedOnceASampleHoweverManyArePerforming()
+    {
+        static int Lasts(bool alongside)
+        {
+            var mixer = new Mixer(8000);
+
+            var box = new Jukebox(_ => Effect(mixer), mixer);
+
+            // A recording that runs out rather than loops, so how long it lasts is a
+            // measurement of how fast the mixer is being turned.
+            box.PlayRecording(Noise(), 8000);
+
+            if (alongside) box.PlayOver(7, group: 0);
+
+            short[] rendered = box.Render(2000);
+
+            int last = 0;
+
+            for (int i = 0; i < rendered.Length; i++)
+                if (rendered[i] != 0) last = i;
+
+            return last;
+        }
+
+        int alone = Lasts(false);
+        int with = Lasts(true);
+
+        Assert.True(alone > 0, "the recording was silent, so nothing was measured");
+
+        // The effect's own note sounds too, so "with" may be longer. What it must not be is
+        // half, which is what a mixer turned twice a sample gives.
+        Assert.True(
+            with >= alone,
+            $"the recording ran out after {with} samples alongside an effect and {alone} alone — "
+            + "the mixer is being turned more than once a sample");
+    }
+
+    /// <summary>
+    /// An effect ending lets go of its own notes and nothing else's.
+    /// <para>
+    /// <b>This is the one nothing could fail.</b> The first version of this file tested that
+    /// the music survived an effect — and it did, however the letting-go was done, because
+    /// every fixture instrument here had a release of 255 and its track looped. A release of
+    /// 255 never fades and a looping track starts the note again a moment later, so a music
+    /// note wrongly released came straight back and the test could not see it.
+    /// </para>
+    /// <para>
+    /// So this one is built the other way round: the music is one long note that is never
+    /// started again, on an instrument whose release actually falls. Release the wrong note
+    /// and the music is gone and stays gone.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AnEffectEndingLetsGoOfItsOwnNotesAndNoOthers()
+    {
+        var mixer = new Mixer(8000);
+
+        // A recording that goes round and round, so the note sounds for as long as it is
+        // held rather than running out on its own.
+        var held = new Voice([.. Enumerable.Range(0, 64).Select(i => (sbyte)(i % 2 == 0 ? 100 : -100))], 8000, true, 0);
+
+        // Sustain full, release 32 — held for ever until let go, and gone within a few steps
+        // once it is.
+        var instrument = new Instrument(held, 60, 255, 255, 255, 32);
+
+        SongPlayer LongNote() =>
+            new(
+                [
+                    new Track(
+                    [
+                        new SequenceEvent(0, 0xD4, SequenceCommand.NoteOn, [60, 127]),
+                        new SequenceEvent(3, 0xB1, SequenceCommand.End, []),
+                    ]),
+                ],
+                [instrument],
+                mixer);
+
+        var box = new Jukebox(song => song == 1 ? LongNote() : Effect(mixer), mixer);
+
+        box.Play(1);
+        box.Render(2000);
+
+        Assert.Contains(box.Render(400), sample => sample != 0);
+
+        box.PlayOver(2, group: 0);
+
+        // Long enough for the effect to finish and be let go of, and for a wrongly released
+        // music note to have faded to nothing several times over.
+        box.Render(40_000);
+
+        Assert.Equal(0, box.Effects);
+
+        Assert.Contains(
+            box.Render(400),
+            sample => sample != 0);
     }
 
     // ---- which song a map names ------------------------------------------------------------------

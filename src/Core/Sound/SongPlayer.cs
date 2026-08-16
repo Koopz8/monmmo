@@ -20,7 +20,17 @@ public sealed record Instrument(Voice Voice, int Key, byte Attack, byte Decay, b
 }
 
 /// <summary>One track's worth of commands, in the order they were read.</summary>
-public sealed record Track(IReadOnlyList<SequenceEvent> Events);
+/// <param name="Events">The commands, flattened into the order they actually run in.</param>
+/// <param name="Loops">
+/// Whether this track ends by jumping back into itself rather than by stopping.
+/// <para>
+/// Carried so that a performer can say how many of a song's tracks are meant to stop. A song
+/// where most tracks loop and a few run out is a song being cut short; a song where they all
+/// run out is a song that is over. Those look identical from a count of finished tracks
+/// alone, which is the number that was being reported.
+/// </para>
+/// </param>
+public sealed record Track(IReadOnlyList<SequenceEvent> Events, bool Loops = false);
 
 /// <summary>
 /// Performing a song: turning parsed commands into notes on a mixer, in time.
@@ -158,6 +168,25 @@ public sealed class SongPlayer
     public int Ran => _cursors.Count(c => c.Finished);
 
     /// <summary>
+    /// How many tracks are written to repeat rather than to stop.
+    /// <para>
+    /// The number <see cref="Ran"/> has to be read against. A track that loops and has run
+    /// out is a contradiction and the strongest evidence there is that something upstream cut
+    /// it short; a track that does not loop and has run out has simply finished.
+    /// </para>
+    /// </summary>
+    public int Looping => _cursors.Count(c => c.Track.Loops);
+
+    /// <summary>
+    /// Tracks that were written to repeat and have stopped anyway.
+    /// <para>
+    /// Nought is the only right answer, and any other number names a fault rather than a
+    /// property of the music.
+    /// </para>
+    /// </summary>
+    public int LoopedAndStopped => _cursors.Count(c => c.Track.Loops && c.Finished);
+
+    /// <summary>
     /// How many ticks have been taken, how many commands run, and how many notes begun.
     /// <para>
     /// A song stuck on one note sounds from outside exactly like a song playing quietly,
@@ -222,19 +251,54 @@ public sealed class SongPlayer
 
         for (int i = 0; i < output.Length; i++)
         {
-            if (--_untilNextTick <= 0)
-            {
-                Tick();
+            Advance();
 
-                _untilNextTick = SamplesPerTick;
-            }
-
-            short[] one = _mixer.Render(1);
-
-            output[i] = one.Length > 0 ? one[0] : (short)0;
+            output[i] = _mixer.Next();
         }
 
         return output;
+    }
+
+    /// <summary>
+    /// One sample's worth of time, without touching the mixer.
+    /// <para>
+    /// The split that makes a second song possible. Performing used to mean advancing the
+    /// clock <em>and</em> turning the mixer, which is exactly right for the only performer
+    /// there was and wrong the moment there are two: they share one mixer, and two performers
+    /// each turning it once per sample would run it at twice the rate and read every
+    /// recording twice as fast.
+    /// </para>
+    /// <para>
+    /// So the mixer belongs to whoever is holding the performers rather than to a performer.
+    /// A performer advances its own clock and puts notes on; something above it turns the
+    /// mixer, once, however many performers there are.
+    /// </para>
+    /// </summary>
+    public void Advance()
+    {
+        if (--_untilNextTick > 0) return;
+
+        Tick();
+
+        _untilNextTick = SamplesPerTick;
+    }
+
+    /// <summary>
+    /// Lets go of every note this performer is holding, and nothing else's.
+    /// <para>
+    /// The mixer can already release everything on it, and that is the wrong thing here by
+    /// exactly the amount that matters: a sound effect ending would silence the music. Let
+    /// go rather than cut off — a released note fades at the rate its own instrument says,
+    /// and cutting it would put a click at the end of every effect in the game.
+    /// </para>
+    /// </summary>
+    public void Silence()
+    {
+        foreach (Cursor cursor in _cursors)
+        {
+            cursor.Sounding?.Release();
+            cursor.Sounding = null;
+        }
     }
 
     /// <summary>One tick of the sequencer: every track that is not waiting takes its turn.</summary>
