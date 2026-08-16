@@ -81,6 +81,10 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(TradeRequest), "tradeask")]
 [JsonDerivedType(typeof(DuelRequest), "duelask")]
 [JsonDerivedType(typeof(DuelAsked), "duelasked")]
+[JsonDerivedType(typeof(CompanyRequest), "companyask")]
+[JsonDerivedType(typeof(CompanyAsked), "companyasked")]
+[JsonDerivedType(typeof(CompanyLeaveRequest), "companyleave")]
+[JsonDerivedType(typeof(TravellingWith), "travellingwith")]
 [JsonDerivedType(typeof(TradeOffer), "tradeoffer")]
 [JsonDerivedType(typeof(TradeConfirm), "tradeyes")]
 [JsonDerivedType(typeof(TradeCancel), "tradestop")]
@@ -866,6 +870,38 @@ public sealed record DuelRequest(int WithPlayerId) : NetMessage;
 
 /// <summary>Somebody has challenged you, and asking back is how you accept.</summary>
 public sealed record DuelAsked(int FromPlayerId, string FromName) : NetMessage;
+
+/// <summary>
+/// Asks somebody to travel together, and accepts when they have already asked.
+/// <para>
+/// The same handshake as a trade and a duel — two requests pointing at each other — because
+/// a player should only have to learn it once. What it buys is that the two of you land in
+/// the same copy of everywhere you go, which walking through the same door only does by
+/// accident and only until one of you takes a different route.
+/// </para>
+/// </summary>
+public sealed record CompanyRequest(int WithPlayerId) : NetMessage;
+
+/// <summary>Somebody has asked you to travel together; asking back is how you accept.</summary>
+public sealed record CompanyAsked(int FromPlayerId, string FromName) : NetMessage;
+
+/// <summary>Stop travelling with whoever you are travelling with.</summary>
+public sealed record CompanyLeaveRequest : NetMessage;
+
+/// <summary>
+/// Who you are travelling with now, sent to everybody it changed for.
+/// <para>
+/// The whole party each time rather than "so-and-so joined", because a client that had to
+/// build the list from arrivals and departures would be a second copy of the server's list,
+/// and the two would disagree the first time a message was missed.
+/// </para>
+/// <para>
+/// An empty list means you are travelling alone, which is how a party ending is said. There
+/// is no separate message for it — the same reason a player walking out of sight sends the
+/// message a disconnect sends.
+/// </para>
+/// </summary>
+public sealed record TravellingWith(IReadOnlyList<int> PlayerIds, IReadOnlyList<string> Names) : NetMessage;
 
 /// <summary>Putting a party slot up, or −1 to take it back down.</summary>
 public sealed record TradeOffer(int Slot) : NetMessage;

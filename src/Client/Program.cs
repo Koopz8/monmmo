@@ -351,6 +351,7 @@ public static class Program
         // accepted with a key rather than by typing a player id.
         int askedBy = 0;
         int challengedBy = 0;
+        int invitedBy = 0;
         BattleScreen? battle = null;
         DialogueBox? talking = null;
 
@@ -519,7 +520,7 @@ public static class Program
             ApplyServerMessages(
                 network, others, player, view, data, trainers, items, speakers, script, carrying, storing, looking,
                 ref talking, ref battle, ref shop, ref minding, ref market, ref band, ref boat, ref bag, ref party, ref box, ref boxSize, ref money,
-                ref correction, ref looks, ref owned, ref trading, ref askedBy, ref challengedBy, ref watching, ref exclaimFor, ref scene, ref arrived, ref fadingIn, ref holdInput,
+                ref correction, ref looks, ref owned, ref trading, ref askedBy, ref challengedBy, ref invitedBy, ref watching, ref exclaimFor, ref scene, ref arrived, ref fadingIn, ref holdInput,
                 ref afterTheFight, ref cameOut, outcomes, rival, console);
 
             // A battle suspends the overworld entirely: the server is running it, and
@@ -717,14 +718,16 @@ public static class Program
             // wrong the first time this was played: the invitation opened a text box, a
             // text box swallows every key, and the one key it was telling the player to
             // press was the one it had just taken away.
-            if ((askedBy != 0 || challengedBy != 0) && !console.IsOpen
+            if ((askedBy != 0 || challengedBy != 0 || invitedBy != 0) && !console.IsOpen
                 && Raylib.IsKeyPressed(KeyboardKey.Y))
             {
                 if (challengedBy != 0) network.SendMessage(new DuelRequest(challengedBy));
+                else if (invitedBy != 0) network.SendMessage(new CompanyRequest(invitedBy));
                 else network.SendMessage(new TradeRequest(askedBy));
 
                 askedBy = 0;
                 challengedBy = 0;
+                invitedBy = 0;
                 talking = null;
             }
 
@@ -732,7 +735,10 @@ public static class Program
             {
                 people.Update();
 
-                if (people.TakePending() is GoToRequest asking) network.SendGoTo(asking.Name);
+                // Whatever the screen asked for, sent as it stands. It used to be one kind
+                // only, unwrapped and rebuilt — so a second kind added to that screen went
+                // nowhere and looked exactly like a key that does nothing.
+                if (people.TakePending() is { } asking) network.SendMessage(asking);
 
                 people.Draw();
 
@@ -2035,6 +2041,7 @@ public static class Program
         ref TradeScreen? trading,
         ref int askedBy,
         ref int challengedBy,
+        ref int invitedBy,
         ref int? watching,
         ref float exclaimFor,
         ref Cutscene? scene,
@@ -2281,6 +2288,24 @@ public static class Program
                 case TradeAsked asked:
                     askedBy = asked.FromPlayerId;
                     Note($"{asked.FromName} wants to trade — Y to agree");
+                    break;
+
+                case CompanyAsked together:
+                    invitedBy = together.FromPlayerId;
+                    // Answered by asking back, which is the same handshake a trade and a
+                    // duel use. Noted rather than put in a box: an invitation to travel is
+                    // not urgent, and a text box takes every key including the one that
+                    // answers it — which is a mistake this client has already made once.
+                    Note($"{together.FromName} wants to travel together — /travel {together.FromName}");
+                    break;
+
+                case TravellingWith company:
+                    // Announced rather than kept. The client does not model who you are
+                    // travelling with — nothing it draws depends on it yet — and holding a
+                    // copy of a list the server owns is how the two come to disagree.
+                    Note(company.Names.Count == 0
+                        ? "travelling alone"
+                        : $"travelling with {string.Join(", ", company.Names)}");
                     break;
 
                 case TradeUpdated table:

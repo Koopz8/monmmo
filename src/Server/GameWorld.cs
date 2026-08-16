@@ -739,6 +739,11 @@ public sealed class GameWorld
 
             stopped.AddRange(CancelDuel(playerId, "somebody left"));
 
+            // Nor does a company. Dropped before the player is removed, for the same reason
+            // and with the same care: the ones still travelling have to be told who is left,
+            // and asking for their names after the player is gone gets a number.
+            if (_companies.Drop(playerId) is { } company) stopped.AddRange(Announce(company));
+
             if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return [];
 
             string where = player.Where;
@@ -1100,13 +1105,15 @@ public sealed class GameWorld
     /// already has.
     /// </para>
     /// </summary>
-    private static IEnumerable<ObjectView> VisibleTo(ServerPlayer player, MapPopulation people)
+    private IEnumerable<ObjectView> VisibleTo(ServerPlayer player, MapPopulation people)
     {
         player.Seeing.Clear();
 
+        Func<int, bool> seen = WorldAsSeenBy(player);
+
         foreach (ServerObject entry in people.Objects)
         {
-            if (!entry.Template.IsHereFor(player.Script.Has)) continue;
+            if (!entry.Template.IsHereFor(seen)) continue;
 
             player.Seeing.Add(entry.LocalId);
 
@@ -1129,11 +1136,13 @@ public sealed class GameWorld
 
         var send = new List<Outgoing>();
 
+        Func<int, bool> seen = WorldAsSeenBy(player);
+
         foreach (ServerObject entry in people.Objects)
         {
             if (entry.Template.HiddenBy == 0) continue;
 
-            bool here = entry.Template.IsHereFor(player.Script.Has);
+            bool here = entry.Template.IsHereFor(seen);
 
             if (here == player.Seeing.Contains(entry.LocalId)) continue;
 
@@ -4118,7 +4127,13 @@ public sealed class GameWorld
         player.Shifted.Clear();
 
         player.MapId = mapId;
-        player.Copy = CopyWithRoom(mapId, player.Copy);
+        // Where the company is, if there is one, and where you were otherwise. A company's
+        // copy outranks your own: keeping your own number is what a doorway does, and it is
+        // exactly the rule that fails the moment two people arrive somewhere by different
+        // routes.
+        player.Copy = CompanyCopyOn(player.Id, mapId) is { } together
+            ? together
+            : CopyWithRoom(mapId, player.Copy);
         player.Square = arrival;
         StandsAt(player.Id, player.Where, arrival);
         player.Facing = facing;
@@ -4444,6 +4459,279 @@ public sealed class GameWorld
     public string? LastWorn { get; private set; }
 
     private readonly Duels _duels = new();
+
+    private readonly Companies _companies = new();
+
+    /// <summary>What the last attempt to travel with somebody came to.</summary>
+    public string? LastCompany { get; private set; }
+
+    /// <summary>Who this player is travelling with, for anybody who wants to ask.</summary>
+    public IReadOnlyList<int> CompanyOf(int playerId) =>
+        _companies.For(playerId) is { } company ? company.Members : [];
+
+    /// <summary>
+    /// Asks somebody to travel together, and accepts when they have already asked.
+    /// <para>
+    /// The same handshake as a trade and a duel. Within reach for the same reason: asking
+    /// somebody across the world to come with you is a different feature, and one that would
+    /// make every locked door in the game optional.
+    /// </para>
+    /// </summary>
+    public List<Outgoing> AskToTravelWith(int playerId, int withPlayerId)
+    {
+        lock (_gate)
+        {
+            LastCompany = null;
+
+            if (!_players.TryGetValue(playerId, out ServerPlayer? asking)) return [];
+
+            if (!_players.TryGetValue(withPlayerId, out ServerPlayer? asked)
+                || asked.MapId != asking.MapId)
+            {
+                LastCompany = "refused: they are not here";
+                return [];
+            }
+
+            if (!WithinReach(asking, asked.Square))
+            {
+                LastCompany = "refused: they are not within reach";
+                return [];
+            }
+
+            Company? company = _companies.Ask(playerId, withPlayerId, out Companies.Trouble why);
+
+            if (company is null)
+            {
+                LastCompany = why switch
+                {
+                    Companies.Trouble.Yourself => "refused: nobody travels with themselves",
+                    Companies.Trouble.AlreadyWithSomebody => "refused: somebody is already travelling",
+                    Companies.Trouble.Full => $"refused: a company holds {Company.MostMembers}",
+                    _ => $"asked {asked.Name} to travel together",
+                };
+
+                return why == Companies.Trouble.None
+                    ? [new Outgoing(new CompanyAsked(playerId, asking.Name), OnlyTo: withPlayerId)]
+                    : [];
+            }
+
+            LastCompany = $"travelling with {string.Join(", ", company.Members.Select(NameOfPlayer))}";
+
+            // And whoever has just joined goes to the copy the company is in, which is the
+            // whole point of the thing. Said in the words a doorway already uses.
+            List<Outgoing> gathered = Gather(company, withPlayerId);
+
+            // And the world everybody in it can now see, which has just changed for all of
+            // them. Reconcile is what already turns "a flag moved" into people appearing
+            // and disappearing; a company forming moves every flag its members hold, from
+            // the point of view of everybody else in it.
+            return [.. gathered, .. Announce(company), .. Resettle(company.Members)];
+        }
+    }
+
+    /// <summary>Stops travelling with whoever they were travelling with.</summary>
+    public List<Outgoing> TravelAlone(int playerId)
+    {
+        lock (_gate)
+        {
+            LastCompany = null;
+
+            if (_companies.For(playerId) is null)
+            {
+                LastCompany = "you are travelling alone already";
+                return [];
+            }
+
+            Company? was = _companies.Drop(playerId);
+
+            LastCompany = "travelling alone";
+
+            // Everybody it changed for, including the one who left — an empty list is how
+            // travelling alone is said, rather than a message of its own.
+            var said = new List<Outgoing>
+            {
+                new(new TravellingWith([], []), OnlyTo: playerId),
+            };
+
+            if (was is not null) said.AddRange(Announce(was));
+
+            // Everything borrowed, handed back. Whoever left sees their own story again and
+            // the ones still travelling stop seeing theirs — and both directions have to be
+            // put right, because a door that stays open after the person who opened it has
+            // gone is exactly the state this arrangement exists to avoid.
+            said.AddRange(Resettle([playerId, .. was?.Members ?? []]));
+
+            return said;
+        }
+    }
+
+    /// <summary>
+    /// Puts the world right for a set of people whose view of it has just changed.
+    /// <para>
+    /// Said in the words that already exist. A flag moving and a company forming are the
+    /// same event from a map's point of view — somebody is now on the other side of a gate —
+    /// so this is the same call a script makes after writing its flags.
+    /// </para>
+    /// </summary>
+    private List<Outgoing> Resettle(IEnumerable<int> playerIds)
+    {
+        var send = new List<Outgoing>();
+
+        foreach (int id in playerIds.Distinct())
+        {
+            if (_players.TryGetValue(id, out ServerPlayer? player)) send.AddRange(Reconcile(player));
+        }
+
+        return send;
+    }
+
+    private string NameOfPlayer(int id) =>
+        _players.TryGetValue(id, out ServerPlayer? player) ? player.Name : $"#{id}";
+
+    /// <summary>
+    /// Tells everybody still in a company who is in it.
+    /// <para>
+    /// A company that has fallen to one is over, and its last member is told they are
+    /// travelling alone rather than told they are travelling with themselves. That is the
+    /// same rule <see cref="Company.IsOver"/> states, said in the one place a client hears
+    /// about it — without this, the last person left gets a list with their own name in it
+    /// and no way to tell that from still having company.
+    /// </para>
+    /// </summary>
+    private List<Outgoing> Announce(Company company)
+    {
+        if (company.IsOver)
+        {
+            return
+            [
+                .. company.Members.Select(member => new Outgoing(
+                    new TravellingWith([], []), OnlyTo: member)),
+            ];
+        }
+
+        return
+        [
+            .. company.Members.Select(member => new Outgoing(
+                new TravellingWith([.. company.Members], [.. company.Members.Select(NameOfPlayer)]),
+                OnlyTo: member)),
+        ];
+    }
+
+    /// <summary>
+    /// Puts one member into the copy the rest of the company is in, if they are not already.
+    /// <para>
+    /// Reuses whatever going to somebody already does, because to everybody watching this is
+    /// exactly what happened: somebody walked out of one copy and into another.
+    /// </para>
+    /// </summary>
+    private List<Outgoing> Gather(Company company, int whoMoved)
+    {
+        if (!_players.TryGetValue(whoMoved, out ServerPlayer? player)) return [];
+
+        foreach (int other in company.Besides(whoMoved))
+        {
+            if (!_players.TryGetValue(other, out ServerPlayer? with)) continue;
+            if (with.MapId != player.MapId || with.Copy == player.Copy) continue;
+
+            return GoTo(whoMoved, with.Name);
+        }
+
+        return [];
+    }
+
+    /// <summary>
+    /// Which copy of a place a member of a company should arrive in.
+    /// <para>
+    /// The copy the rest of them are already in, whichever that is — which is the rule a
+    /// doorway only half-kept. Preferring the copy you came from works while two people walk
+    /// through the same door and stops the moment one of them warps, takes another route, or
+    /// is sent somewhere by a script. This asks where the company is instead of where you
+    /// were, so all three cases keep you together.
+    /// </para>
+    /// <para>
+    /// A full copy does not refuse. Forty is a target for arrivals rather than a wall, and
+    /// somebody who has asked to travel with a friend would rather stand in a copy of
+    /// forty-one than be told no.
+    /// </para>
+    /// </summary>
+    /// <summary>
+    /// What this player can see of the world, which is their own story plus whatever the
+    /// people they are travelling with have already opened.
+    /// <para>
+    /// <b>Borrowed, not given.</b> Nothing is written to anybody's save. This is a predicate
+    /// handed to the things that ask whether a door is open or a person is standing there,
+    /// and the moment somebody stops travelling it goes back to being their own flags — with
+    /// nothing to undo, because nothing was done.
+    /// </para>
+    /// <para>
+    /// This is what makes dropping in and out work. Somebody three gyms behind can join and
+    /// walk everywhere their friend can walk, immediately, without being handed three gyms
+    /// they did not play. When they leave they keep exactly what they earned: a flag is
+    /// written to a save only by a script that save actually ran.
+    /// </para>
+    /// <para>
+    /// The alternative — copying the flags across on joining — is the same thing except
+    /// irreversible, and it puts a save into a state its own inventory cannot justify. That
+    /// failure is quiet: the save loads, the world looks right, and something two hours away
+    /// behaves as though an event happened that this character has no evidence of.
+    /// </para>
+    /// </summary>
+    private Func<int, bool> WorldAsSeenBy(ServerPlayer player)
+    {
+        if (_companies.For(player.Id) is not { } company) return player.Script.Has;
+
+        // The list is taken once rather than asked per flag: this predicate is called for
+        // every person on a map, and a company changing mid-draw would show half a world.
+        List<ScriptState> theirs =
+        [
+            .. company.Besides(player.Id)
+                .Select(id => _players.TryGetValue(id, out ServerPlayer? other) ? other.Script : null)
+                .OfType<ScriptState>(),
+        ];
+
+        if (theirs.Count == 0) return player.Script.Has;
+
+        return flag => player.Script.Has(flag) || theirs.Any(t => t.Has(flag));
+    }
+
+    /// <summary>
+    /// Which copy this player would arrive in on a given map, and whether they can see a
+    /// flag. Both for tests — the two rules a company exists for, and neither is otherwise
+    /// observable without standing two clients next to each other.
+    /// </summary>
+    public int CopyForTest(int playerId, string mapId)
+    {
+        lock (_gate)
+        {
+            if (!_players.TryGetValue(playerId, out ServerPlayer? player)) return 0;
+
+            return CompanyCopyOn(playerId, mapId) is { } together
+                ? together
+                : CopyWithRoom(mapId, player.Copy);
+        }
+    }
+
+    public bool SeesForTest(int playerId, int flag)
+    {
+        lock (_gate)
+        {
+            return _players.TryGetValue(playerId, out ServerPlayer? player)
+                   && WorldAsSeenBy(player)(flag);
+        }
+    }
+
+    private int? CompanyCopyOn(int playerId, string mapId)
+    {
+        if (_companies.For(playerId) is not { } company) return null;
+
+        foreach (int other in company.Besides(playerId))
+        {
+            if (_players.TryGetValue(other, out ServerPlayer? with) && with.MapId == mapId)
+                return with.Copy;
+        }
+
+        return null;
+    }
 
     /// <summary>
     /// Who beat whom, in which band, waiting for somebody outside the lock to write it down.
@@ -5634,6 +5922,28 @@ public sealed class GameWorld
                 List<Outgoing> moved = GoTo(player.Id, friend);
 
                 return [.. moved, Said(player, LastGoTo ?? "nothing happened")];
+            }
+
+            case "travel":
+            {
+                if (line.Word(0) is not { Length: > 0 } name)
+                    return [Said(player, "/travel <player name>")];
+
+                ServerPlayer? who = _players.Values.FirstOrDefault(p =>
+                    string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
+
+                if (who is null) return [Said(player, $"nobody here is called {name}")];
+
+                List<Outgoing> asked = AskToTravelWith(player.Id, who.Id);
+
+                return [.. asked, Said(player, LastCompany ?? "nothing happened")];
+            }
+
+            case "alone":
+            {
+                List<Outgoing> left = TravelAlone(player.Id);
+
+                return [.. left, Said(player, LastCompany ?? "nothing happened")];
             }
 
             case "duel":

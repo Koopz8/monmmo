@@ -1483,6 +1483,24 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                             await DispatchAsync(challenged, playerId, cancellationToken).ConfigureAwait(false);
                             break;
 
+                        case CompanyRequest travelling when playerId != 0:
+                            List<Outgoing> joined = world.AskToTravelWith(playerId, travelling.WithPlayerId);
+
+                            if (world.LastCompany is { } company)
+                                Console.WriteLine($"% #{playerId} company: {company}");
+
+                            await DispatchAsync(joined, playerId, cancellationToken).ConfigureAwait(false);
+                            break;
+
+                        case CompanyLeaveRequest when playerId != 0:
+                            List<Outgoing> alone = world.TravelAlone(playerId);
+
+                            if (world.LastCompany is { } parting)
+                                Console.WriteLine($"% #{playerId} company: {parting}");
+
+                            await DispatchAsync(alone, playerId, cancellationToken).ConfigureAwait(false);
+                            break;
+
                         case SailRequest sail when playerId != 0:
                             List<Outgoing> sailed = world.Sail(playerId, sail.Number, Now);
 

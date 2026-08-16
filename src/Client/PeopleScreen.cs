@@ -61,6 +61,17 @@ public sealed class PeopleScreen
         if (Raylib.IsKeyPressed(KeyboardKey.Down)) _row = (_row + 1) % _names.Count;
         if (Raylib.IsKeyPressed(KeyboardKey.Up)) _row = (_row + _names.Count - 1) % _names.Count;
 
+        // Stop travelling with whoever you are travelling with. Here rather than on a
+        // screen of its own because this is the screen about other people, and it is the
+        // one place somebody looking for that would look.
+        if (Raylib.IsKeyPressed(KeyboardKey.L))
+        {
+            Pending = new CompanyLeaveRequest();
+            IsClosed = true;
+
+            return;
+        }
+
         if (Raylib.IsKeyPressed(KeyboardKey.Z))
         {
             // Asked, not done. The server decides whether that person is still here, on
