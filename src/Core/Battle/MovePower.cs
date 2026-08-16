@@ -49,6 +49,9 @@ public static class MovePower
     /// <summary>WEATHER BALL: whatever the sky is, and twice as hard when the sky is anything.</summary>
     public const byte Skyward = 0xCB;
 
+    /// <summary>PURSUIT: twice as hard against somebody on their way out.</summary>
+    public const byte Chasing = 0x80;
+
     /// <summary>FURY CUTTER: twice as hard for every turn running it has already landed.</summary>
     public const byte Building = 0x77;
 
@@ -99,7 +102,8 @@ public static class MovePower
     /// </para>
     /// </summary>
     public static int? Of(
-        MoveData move, Battler attacker, Battler? defender = null, Weather weather = Weather.None) =>
+        MoveData move, Battler attacker, Battler? defender = null, Weather weather = Weather.None,
+        bool leaving = false) =>
         move.Effect switch
     {
         // The three that answer somebody who is not standing where they were. This engine has
@@ -118,6 +122,10 @@ public static class MovePower
         // Twice as hard under any sky at all, and its record's own power under none. The
         // doubling is modelled; that the sky is what it depends on is the move's group.
         Skyward when weather != Weather.None => move.Power * 2,
+
+        // And the one whose power depends on what the other side chose rather than on
+        // anything about either creature. It is told; it does not look.
+        Chasing when leaving => move.Power * 2,
 
         // The two that climb. What they climb from is the battle's count of how many turns
         // running this same slot has been used — the only power here that depends on a turn

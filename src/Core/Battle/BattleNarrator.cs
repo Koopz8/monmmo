@@ -272,6 +272,14 @@ public static class BattleNarrator
 
         BattleEvent.StruckFromEarlier e => $"{names.Of(e.Side)} was hit by something from earlier!",
 
+        // The count, because it is the whole point: a bell that reached four is a different
+        // thing from a bell that reached the one standing there.
+        BattleEvent.RangClear e => e.Cleared == 1
+            ? "A bell chimed! One was cured!"
+            : $"A bell chimed! {e.Cleared} were cured!",
+
+        BattleEvent.PassedItOn e => $"{names.Of(e.Side)} passed on what it had built!",
+
         BattleEvent.Damped e => $"{names.Of(e.Side)} damped one kind of move down!",
 
         BattleEvent.Grazed e => $"{names.Of(e.Side)} is hurt reaching them!",

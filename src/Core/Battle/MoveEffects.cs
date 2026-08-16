@@ -206,6 +206,15 @@ public enum EffectKind
     /// <summary>Lands two turns from now, whoever is standing there then.</summary>
     Later,
 
+    /// <summary>Clears what ails everybody on this side, on the field and off it.</summary>
+    RingsClear,
+
+    /// <summary>Leaves, and hands on everything it had made of itself.</summary>
+    PassesItOn,
+
+    /// <summary>Twice as hard against somebody on their way out.</summary>
+    CatchesThemLeaving,
+
     /// <summary>Lands several times in one turn.</summary>
     MultiHit,
 
@@ -572,6 +581,11 @@ public static class MoveEffects
         0x4F => new MoveEffect(EffectKind.StandIn, OnUser: true),
         0x1A => new MoveEffect(EffectKind.Bides, OnUser: true),
         0x94 => new MoveEffect(EffectKind.Later, OnUser: false),
+
+        // And the three that reach past the two creatures standing on the field.
+        0x66 => new MoveEffect(EffectKind.RingsClear, OnUser: true),
+        0x7F => new MoveEffect(EffectKind.PassesItOn, OnUser: true),
+        0x80 => new MoveEffect(EffectKind.CatchesThemLeaving, OnUser: false),
 
         // Which type each damps is the item-name problem again: MUD SPORT is about Electric
         // because of what it is called, so the pairing is modelled and the grouping is read.

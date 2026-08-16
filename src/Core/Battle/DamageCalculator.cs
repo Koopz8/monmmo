@@ -118,7 +118,8 @@ public static class DamageCalculator
         int randomPercent,
         Weather weather = Weather.None,
         int damping = 100,
-        int hit = 0)
+        int hit = 0,
+        bool leaving = false)
     {
         // What the defender has put up against this kind of move. Halved, and applied at the
         // end with the other multipliers on the finished number rather than to the defence
@@ -151,7 +152,7 @@ public static class DamageCalculator
         // What this move actually hits for, when its record's number is a placeholder. Asked
         // before the "no power" refusal below, because FLAIL's record says one and one is a
         // record saying the number is somewhere else.
-        int power = MovePower.Of(move, attacker, defender, weather) ?? move.Power;
+        int power = MovePower.Of(move, attacker, defender, weather, leaving) ?? move.Power;
 
         // The one move whose power depends on which go of itself this is. Multiplying rather
         // than doubling, because the three goes are worth one, two and three of it rather
@@ -255,10 +256,11 @@ public static class DamageCalculator
         bool critical,
         Weather weather = Weather.None,
         int damping = 100,
-        int hit = 0)
+        int hit = 0,
+        bool leaving = false)
     {
         // The hardware rolls 0..15 and subtracts, giving 85..100 inclusive.
         int randomPercent = 100 - rng.Next(16);
-        return Calculate(attacker, defender, move, critical, randomPercent, weather, damping, hit);
+        return Calculate(attacker, defender, move, critical, randomPercent, weather, damping, hit, leaving);
     }
 }

@@ -104,6 +104,8 @@ public enum Side
 [JsonDerivedType(typeof(Gathering), "gathering")]
 [JsonDerivedType(typeof(GaveItBack), "gaveitback")]
 [JsonDerivedType(typeof(StruckFromEarlier), "struckfromearlier")]
+[JsonDerivedType(typeof(RangClear), "rangclear")]
+[JsonDerivedType(typeof(PassedItOn), "passediton")]
 [JsonDerivedType(typeof(Damped), "damped")]
 [JsonDerivedType(typeof(MustRepeat), "mustrepeat")]
 [JsonDerivedType(typeof(GotAway), "gotaway")]
@@ -406,6 +408,12 @@ public abstract record BattleEvent
 
     /// <summary>Was hit by something used two turns ago.</summary>
     public sealed record StruckFromEarlier(Side Side, int Damage) : BattleEvent;
+
+    /// <summary>Cleared what ailed this whole side, and how many it reached.</summary>
+    public sealed record RangClear(Side Side, int Cleared) : BattleEvent;
+
+    /// <summary>Left, and handed on what it had made of itself.</summary>
+    public sealed record PassedItOn(Side Side) : BattleEvent;
 
     /// <summary>Turned one kind of move down, for the room rather than for anybody.</summary>
     public sealed record Damped(Side Side) : BattleEvent;
@@ -1003,6 +1011,63 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
     public PokemonType Ground { get; init; } = PokemonType.Normal;
 
     /// <summary>
+    /// The rest of each side's party, for the one move that reaches past the field.
+    /// <para>
+    /// Supplied from outside, like the move table, the move a creature is left with, and
+    /// what the ground is made of. A battle has never held a party and should not start: a
+    /// party belongs to whoever owns the save, switching is the server's, and this class has
+    /// only ever been handed the two creatures standing there.
+    /// </para>
+    /// <para>
+    /// Empty by default, which makes the move affect only whoever is on the field — the
+    /// right answer for a wild fight and a truthful one everywhere else, since a battle that
+    /// was told about no party has no party to heal.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<Battler> PlayerParty { get; init; } = [];
+
+    public IReadOnlyList<Battler> OpponentParty { get; init; } = [];
+
+    private IReadOnlyList<Battler> PartyOf(Side side) =>
+        side == Side.Player ? PlayerParty : OpponentParty;
+
+    /// <summary>
+    /// What one creature had made of itself, kept for whoever comes in after it.
+    /// <para>
+    /// The stages and the things it had started, and deliberately not the things that are
+    /// <em>done to</em> somebody: a condition, a trap, a count of turns asleep. What is
+    /// passed on is what its owner built, which is the whole difference between handing on
+    /// an advantage and handing on a problem.
+    /// </para>
+    /// </summary>
+    public sealed record Passed(IReadOnlyDictionary<Stat, int> Stages, bool Seeded, int PerishTurns);
+
+    private readonly Dictionary<Side, Passed> _passing = [];
+
+    /// <summary>What is waiting to be handed on to this side's next creature, if anything.</summary>
+    public Passed? WaitingToBePassed(Side side) => _passing.GetValueOrDefault(side);
+
+    /// <summary>
+    /// Hands it on, and forgets it. Called by whoever actually brings somebody in, because
+    /// bringing somebody in is not this class's job.
+    /// </summary>
+    public void GiveWhatWasPassed(Side side, Battler incoming)
+    {
+        if (!_passing.Remove(side, out Passed? passed)) return;
+
+        foreach ((Stat stat, int stages) in passed.Stages) incoming.ChangeStage(stat, stages);
+
+        incoming.IsSeeded = passed.Seeded;
+        incoming.PerishTurns = passed.PerishTurns;
+    }
+
+    /// <summary>
+    /// Who has said they are leaving this turn, which is the one thing the move that catches
+    /// them needs and the one thing a battle can see without owning a party.
+    /// </summary>
+    private readonly HashSet<Side> _leaving = [];
+
+    /// <summary>
     /// How many turns a creature gathers before it gives back. <b>Modelled.</b>
     /// <para>
     /// Two, and nothing on the record says two. What the number changes is whether the move
@@ -1276,6 +1341,13 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
 
         _clawed = null;
 
+        // Who has said they are going. Noted before anything is ordered, because the move
+        // that catches somebody leaving has to be able to ask.
+        _leaving.Clear();
+
+        if (playerAction is BattleAction.SwitchTo) _leaving.Add(Side.Player);
+        if (opponentAction is BattleAction.SwitchTo) _leaving.Add(Side.Opponent);
+
         // What has happened to each of them this turn, which is nothing yet. Cleared here
         // rather than at the end, so that a fight inspected between turns still shows what
         // the turn did — and so a move that answers being hit cannot answer last turn's hit.
@@ -1399,8 +1471,25 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             : null;
     }
 
-    private static int PriorityOf(Battler battler, BattleAction action) =>
-        action is BattleAction.UseMove use && battler.MoveAt(use.Slot) is { } move ? move.Priority : 0;
+    private int PriorityOf(Battler battler, BattleAction action)
+    {
+        if (action is not BattleAction.UseMove use || battler.MoveAt(use.Slot) is not { } move)
+            return 0;
+
+        // The one move whose place in the order depends on what the other side chose. It
+        // catches somebody on their way out, and catching them means going before they go —
+        // so against a leaver it comes first, and against anybody else its record decides
+        // like every other move's.
+        if (MoveEffects.Of(move.Effect).Kind == EffectKind.CatchesThemLeaving
+            && _leaving.Contains(Other(SideOf(battler))))
+        {
+            return int.MaxValue;
+        }
+
+        return move.Priority;
+    }
+
+    private Side SideOf(Battler battler) => battler == Player ? Side.Player : Side.Opponent;
 
     /// <summary>
     /// One side's go.
@@ -1860,7 +1949,8 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         {
             bool critical = DamageCalculator.RollCritical(_rng, criticalStage);
             DamageResult result = DamageCalculator.Calculate(
-                _rng, attacker, defender, move, critical, Overhead, Damping(move.Type), hit);
+                _rng, attacker, defender, move, critical, Overhead, Damping(move.Type), hit,
+                _leaving.Contains(Other(side)));
 
             if (result.NoEffect)
             {
@@ -2375,6 +2465,66 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             Settle(defender, each);
 
             events.Add(new BattleEvent.HealthShared(at, each));
+
+            return;
+        }
+
+        if (effect.Kind == EffectKind.RingsClear)
+        {
+            // Everybody on this side, on the field and off it. The one move in this game
+            // that reaches somebody who is not standing there.
+            var everybody = new List<Battler> { target };
+
+            everybody.AddRange(PartyOf(at).Where(b => b != target));
+
+            int cleared = 0;
+
+            foreach (Battler one in everybody)
+            {
+                if (one.Status == StatusCondition.None) continue;
+
+                one.Status = StatusCondition.None;
+                one.SleepTurns = 0;
+
+                cleared++;
+            }
+
+            if (cleared == 0)
+            {
+                events.Add(new BattleEvent.NothingHappened(at));
+
+                return;
+            }
+
+            events.Add(new BattleEvent.RangClear(at, cleared));
+
+            return;
+        }
+
+        if (effect.Kind == EffectKind.PassesItOn)
+        {
+            // What its owner built, kept for whoever comes in. Not what was done to it: a
+            // condition, a trap and a count of turns asleep stay with the creature that has
+            // them, which is the difference between handing on an advantage and handing on a
+            // problem.
+            //
+            // The leaving itself is not done here. Bringing somebody in is the server's,
+            // and this class has never had a party to bring them from.
+            var stages = new Dictionary<Stat, int>();
+
+            foreach (Stat stat in MoveEffects.Five)
+            {
+                if (target.StageOf(stat) != 0) stages[stat] = target.StageOf(stat);
+            }
+
+            foreach (Stat stat in (Stat[])[Stat.Accuracy, Stat.Evasion])
+            {
+                if (target.StageOf(stat) != 0) stages[stat] = target.StageOf(stat);
+            }
+
+            _passing[at] = new Passed(stages, target.IsSeeded, target.PerishTurns);
+
+            events.Add(new BattleEvent.PassedItOn(at));
 
             return;
         }
