@@ -245,6 +245,10 @@ public static class BattleNarrator
 
         BattleEvent.HealthShared e => $"The battlers shared their pain, at {e.Each} each.",
 
+        BattleEvent.CopiedStages e => $"{names.Of(e.Side)} copied its foe's changes!",
+
+        BattleEvent.Damped e => $"{names.Of(e.Side)} damped one kind of move down!",
+
         BattleEvent.Grazed e => $"{names.Of(e.Side)} is hurt reaching them!",
 
         BattleEvent.BrokeFree e => $"{names.Of(e.Side)} got free of {names.MoveNamed(e.MoveId)}!",

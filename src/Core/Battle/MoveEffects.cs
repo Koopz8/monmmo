@@ -131,6 +131,21 @@ public enum EffectKind
     /// <summary>Both sides end up on the same health, whatever that comes to.</summary>
     Split,
 
+    /// <summary>Harder every time it is used running, and it stops the moment it is not.</summary>
+    BuildsUp,
+
+    /// <summary>The same, and its user has no say for as long as it lasts.</summary>
+    BuildsUpLocked,
+
+    /// <summary>Three goes, each harder than the last.</summary>
+    ThreeGoes,
+
+    /// <summary>Takes on whatever the other side has made of itself.</summary>
+    CopiesStages,
+
+    /// <summary>Damps one type down for everybody, while it holds.</summary>
+    Damps,
+
     /// <summary>Lands several times in one turn.</summary>
     MultiHit,
 
@@ -450,6 +465,16 @@ public static class MoveEffects
         0xBB => new MoveEffect(EffectKind.Yawn, OnUser: false),
         0xB5 => new MoveEffect(EffectKind.Ingrain, OnUser: true),
         0x72 => new MoveEffect(EffectKind.Perish, OnUser: false),
+
+        0x77 => new MoveEffect(EffectKind.BuildsUp, OnUser: true),
+        0x75 => new MoveEffect(EffectKind.BuildsUpLocked, OnUser: true),
+        0x68 => new MoveEffect(EffectKind.ThreeGoes, OnUser: true),
+        0x8F => new MoveEffect(EffectKind.CopiesStages, OnUser: true),
+
+        // Which type each damps is the item-name problem again: MUD SPORT is about Electric
+        // because of what it is called, so the pairing is modelled and the grouping is read.
+        0xC9 => new MoveEffect(EffectKind.Damps, OnUser: true, Stat: Stat.Speed),
+        0xD2 => new MoveEffect(EffectKind.Damps, OnUser: true, Stat: Stat.Attack),
 
         0xAF => new MoveEffect(EffectKind.Taunt, OnUser: false),
         0xA5 => new MoveEffect(EffectKind.Torment, OnUser: false),

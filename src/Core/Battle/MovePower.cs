@@ -43,6 +43,24 @@ public static class MovePower
     /// <summary>SMELLINGSALT: twice as hard against something that cannot move properly.</summary>
     public const byte Rousing = 0xAB;
 
+    /// <summary>FURY CUTTER: twice as hard for every turn running it has already landed.</summary>
+    public const byte Building = 0x77;
+
+    /// <summary>ROLLOUT and ICE BALL: the same climb, with no choice about staying on it.</summary>
+    public const byte Rolling = 0x75;
+
+    /// <summary>
+    /// How many doublings the climb is allowed. <b>Modelled.</b>
+    /// <para>
+    /// Nothing that doubles without a ceiling belongs in a game that people play for months:
+    /// four doublings turns a twenty into three hundred and twenty, which is already the
+    /// hardest hit in the game, and a fifth would make one move the answer to everything. The
+    /// number is not on any record — the cap is in the game's code — so it is named here and
+    /// tested as existing rather than as being four.
+    /// </para>
+    /// </summary>
+    public const int MostDoublings = 4;
+
     /// <summary>
     /// The five steps FLAIL and REVERSAL climb, as forty-eighths of full health and the
     /// power at each. <b>Modelled.</b>
@@ -83,6 +101,11 @@ public static class MovePower
         Overhead or Whirling or Underfoot when defender is { IsAway: true } => move.Power * 2,
 
         Rousing when defender is { Status: StatusCondition.Paralysis } => move.Power * 2,
+
+        // The two that climb. What they climb from is the battle's count of how many turns
+        // running this same slot has been used — the only power here that depends on a turn
+        // other than this one, which is why the count cannot live in this class.
+        Building or Rolling => move.Power << Math.Min(attacker.RunningCount, MostDoublings),
 
         Cornered => Climbing(attacker),
         Spending => Math.Max(1, Full * attacker.CurrentHp / Math.Max(1, attacker.MaxHp)),

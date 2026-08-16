@@ -93,6 +93,17 @@ public static class DamageCalculator
     /// <summary>
     /// Computes damage for one hit. <paramref name="randomPercent"/> is the 85..100
     /// roll; pass it explicitly so tests can pin an exact number.
+    /// <para>
+    /// <paramref name="damping"/> is what the field is doing to this type as a percentage —
+    /// a hundred when nothing is. It is a percentage rather than a flag because it is the
+    /// same shape as every other multiplier here, and it arrives as an argument rather than
+    /// being read off either creature because it is a fact about the room.
+    /// </para>
+    /// <para>
+    /// <paramref name="hit"/> is which go of a multi-hit move this is, counting from zero.
+    /// Every move in this game ignores it except the one that climbs, and that one is the
+    /// reason it exists at all.
+    /// </para>
     /// </summary>
     public static DamageResult Calculate(
         Battler attacker,
@@ -100,7 +111,9 @@ public static class DamageCalculator
         MoveData move,
         bool critical,
         int randomPercent,
-        Weather weather = Weather.None)
+        Weather weather = Weather.None,
+        int damping = 100,
+        int hit = 0)
     {
         // What the defender has put up against this kind of move. Halved, and applied at the
         // end with the other multipliers on the finished number rather than to the defence
@@ -134,6 +147,12 @@ public static class DamageCalculator
         // before the "no power" refusal below, because FLAIL's record says one and one is a
         // record saying the number is somewhere else.
         int power = MovePower.Of(move, attacker, defender) ?? move.Power;
+
+        // The one move whose power depends on which go of itself this is. Multiplying rather
+        // than doubling, because the three goes are worth one, two and three of it rather
+        // than one, two and four — a climb rather than a doubling, and the difference is the
+        // whole character of the move.
+        if (MoveEffects.Of(move.Effect).Kind == EffectKind.ThreeGoes) power *= hit + 1;
 
         if (move.Category == DamageCategory.Status || power == 0 || effectiveness == 0)
             return new DamageResult(0, false, effectiveness, false);
@@ -210,6 +229,11 @@ public static class DamageCalculator
         // percentage is the number on their own record rather than one written here.
         damage = damage * HeldItems.Boosting(attacker.Carried, type) / 100;
 
+        // And what the room is doing to this type, which is the last word because it is the
+        // only multiplier here that neither creature owns. Somebody who turned the electricity
+        // down turned it down for everybody, including themselves.
+        damage = damage * Math.Clamp(damping, 0, 100) / 100;
+
         // A hit that connects always does something, unless the type chart said the
         // move does not affect the target at all.
         if (damage < 1 && effectiveness > 0) damage = 1;
@@ -224,10 +248,12 @@ public static class DamageCalculator
         Battler defender,
         MoveData move,
         bool critical,
-        Weather weather = Weather.None)
+        Weather weather = Weather.None,
+        int damping = 100,
+        int hit = 0)
     {
         // The hardware rolls 0..15 and subtracts, giving 85..100 inclusive.
         int randomPercent = 100 - rng.Next(16);
-        return Calculate(attacker, defender, move, critical, randomPercent, weather);
+        return Calculate(attacker, defender, move, critical, randomPercent, weather, damping, hit);
     }
 }

@@ -140,6 +140,8 @@ public class MessageChannelTests
                     new BattleEvent.Bonded(Side.Player),
                     new BattleEvent.TookThemWith(Side.Opponent),
                     new BattleEvent.HealthShared(Side.Player, 14),
+                    new BattleEvent.CopiedStages(Side.Player),
+                    new BattleEvent.Damped(Side.Player),
                     new BattleEvent.Fainted(Side.Opponent),
                 ],
                 19, 0, [new BagEntry(4, 12)], [new BagEntry(13, 2)]),

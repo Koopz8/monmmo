@@ -93,6 +93,8 @@ public enum Side
 [JsonDerivedType(typeof(Bonded), "bonded")]
 [JsonDerivedType(typeof(TookThemWith), "tookthemwith")]
 [JsonDerivedType(typeof(HealthShared), "healthshared")]
+[JsonDerivedType(typeof(CopiedStages), "copiedstages")]
+[JsonDerivedType(typeof(Damped), "damped")]
 [JsonDerivedType(typeof(MustRepeat), "mustrepeat")]
 [JsonDerivedType(typeof(GotAway), "gotaway")]
 [JsonDerivedType(typeof(CouldNotGetAway), "couldnotgetaway")]
@@ -355,6 +357,12 @@ public abstract record BattleEvent
     /// <summary>Both sides ended up on the same health.</summary>
     public sealed record HealthShared(Side Side, int Each) : BattleEvent;
 
+    /// <summary>Took the other one's stat changes for its own — all of them.</summary>
+    public sealed record CopiedStages(Side Side) : BattleEvent;
+
+    /// <summary>Turned one kind of move down, for the room rather than for anybody.</summary>
+    public sealed record Damped(Side Side) : BattleEvent;
+
     /// <summary>Made to do the same thing again.</summary>
     public sealed record MustRepeat(Side Side, int MoveId) : BattleEvent;
 
@@ -491,6 +499,28 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
     public Weather Sky { get; private set; }
 
     public int SkyTurns { get; private set; }
+
+    /// <summary>
+    /// Which type the room has been turned down for, and for how much longer.
+    /// <para>
+    /// The second fact about the room, and it hangs off the battle for the same reason the
+    /// sky does: somebody who damped the electricity damped it for both sides, including
+    /// their own. A flag on the battler who used the move would have made it a shield.
+    /// </para>
+    /// <para>
+    /// Normal when nothing is damped, which is safe because no move in this game damps
+    /// Normal — the count beside it is what says whether it means anything.
+    /// </para>
+    /// </summary>
+    public PokemonType Damped { get; private set; }
+
+    public int DampedTurns { get; private set; }
+
+    /// <summary>
+    /// What a move of this type is worth as a percentage. Fifty or a hundred, and never
+    /// anything in between — this is a switch rather than a dial.
+    /// </summary>
+    private int Damping(PokemonType type) => DampedTurns > 0 && Damped == type ? 50 : 100;
 
     /// <summary>
     /// The weather as far as anybody in this fight is concerned.
@@ -1203,6 +1233,43 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             // freely chosen — a band that locked before the first choice would be a band
             // that chose for you.
             if (HeldItems.Locks(attacker.Carried)) attacker.ChoiceSlot ??= made.Slot;
+
+            // And how many turns running this same slot has been used, for the two moves
+            // whose power is a count rather than a number.
+            //
+            // It is kept here, beside the slot it counts for, and it is kept by the battle
+            // because only the battle can see the turn before this one. Any of the three
+            // things below can happen: the same slot again and the count climbs, one of
+            // these moves fresh and the count starts, or anything else at all and the count
+            // is gone — not paused, gone, which is what "running" means and is the whole of
+            // why these moves are a gamble rather than a ramp.
+            MoveEffect building = MoveEffects.Of(move.Effect);
+
+            if (building.Kind is EffectKind.BuildsUp or EffectKind.BuildsUpLocked
+                && attacker.RunningSlot == made.Slot)
+            {
+                attacker.RunningCount++;
+            }
+            else if (building.Kind is EffectKind.BuildsUp or EffectKind.BuildsUpLocked)
+            {
+                attacker.RunningCount = 0;
+                attacker.RunningSlot = made.Slot;
+            }
+            else
+            {
+                attacker.RunningCount = 0;
+                attacker.RunningSlot = null;
+            }
+
+            // And the one that does not let go once it has started. Started only at the
+            // bottom of the climb, because a lock renewed every turn would be a lock that
+            // never ended.
+            if (building.Kind == EffectKind.BuildsUpLocked && attacker.ForcedSlot is null
+                && attacker.RunningCount == 0)
+            {
+                attacker.ForcedSlot = made.Slot;
+                attacker.ForcedTurns = MovePower.MostDoublings;
+            }
         }
 
         events.Add(new BattleEvent.MoveUsed(side, move.Id));
@@ -1360,6 +1427,10 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         {
             EffectKind.MultiHit => RollHits(),
             EffectKind.Twice => 2,
+
+            // Three, and not a roll: this is the one multi-hit move in the game whose count
+            // is fixed and whose hits are not all worth the same.
+            EffectKind.ThreeGoes => 3,
             _ => 1,
         };
         // The move's own sharpness, plus whatever the attacker is carrying to add to it.
@@ -1375,7 +1446,8 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         for (int hit = 0; hit < times; hit++)
         {
             bool critical = DamageCalculator.RollCritical(_rng, criticalStage);
-            DamageResult result = DamageCalculator.Calculate(_rng, attacker, defender, move, critical, Overhead);
+            DamageResult result = DamageCalculator.Calculate(
+                _rng, attacker, defender, move, critical, Overhead, Damping(move.Type), hit);
 
             if (result.NoEffect)
             {
@@ -1841,6 +1913,46 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             Settle(defender, each);
 
             events.Add(new BattleEvent.HealthShared(at, each));
+
+            return;
+        }
+
+        if (effect.Kind == EffectKind.CopiesStages)
+        {
+            // Every stage, and the user's own are replaced rather than added to. Both halves
+            // matter: a move that took only the good ones would be a move nobody could play
+            // around, and one that added would turn two of these into six stages of anything.
+            attacker.CopyStagesFrom(defender);
+
+            events.Add(new BattleEvent.CopiedStages(at));
+
+            return;
+        }
+
+        if (effect.Kind == EffectKind.Damps)
+        {
+            // Which type each of them turns down is on the effect rather than in a branch
+            // here, because the two moves differ in nothing else at all.
+            //
+            // The stat field carries it: Speed for the one that damps electricity, Attack for
+            // the one that damps fire. That is a field being used for something other than
+            // its name, which is worth saying out loud — the effect table has no type field
+            // and adding one for two moves would be a column of nulls.
+            PokemonType damping = effect.Stat == Stat.Speed
+                ? PokemonType.Electric
+                : PokemonType.Fire;
+
+            if (DampedTurns > 0 && Damped == damping)
+            {
+                events.Add(new BattleEvent.NothingHappened(at));
+
+                return;
+            }
+
+            Damped = damping;
+            DampedTurns = Skies.Turns;
+
+            events.Add(new BattleEvent.Damped(at));
 
             return;
         }
@@ -2649,6 +2761,10 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             // And the walls, counted down with everything else that lasts turns.
             if (battler.ReflectTurns > 0) battler.ReflectTurns--;
             if (battler.ScreenTurns > 0) battler.ScreenTurns--;
+
+            // And the room's own count, taken off once rather than once per battler — this
+            // loop runs for both sides and a fact about the room does not tick twice.
+            if (side == Side.Player && DampedTurns > 0) DampedTurns--;
 
             // And again at the end, because poison and a sandstorm both land here and a
             // berry that only ever answered a move would sit uneaten while its carrier

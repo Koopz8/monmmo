@@ -406,6 +406,31 @@ public sealed class Battler
     /// </summary>
     public bool IsBonded { get; set; }
 
+    /// <summary>
+    /// How many times running this one has used the move it is building up, and which slot.
+    /// <para>
+    /// Two fields because one is meaningless without the other: a count with no slot cannot
+    /// tell "used again" from "used something else", which is the entire rule both moves that
+    /// read it are made of.
+    /// </para>
+    /// </summary>
+    public int RunningCount { get; set; }
+
+    public int? RunningSlot { get; set; }
+
+    /// <summary>Every stage this one has, copied from somebody else's.</summary>
+    public void CopyStagesFrom(Battler other)
+    {
+        ResetStages();
+
+        foreach (Stat stat in Enum.GetValues<Stat>())
+        {
+            int theirs = other.StageOf(stat);
+
+            if (theirs != 0) ChangeStage(stat, theirs);
+        }
+    }
+
     /// <summary>True while nothing may lower this one's stats from outside.</summary>
     public bool IsMisted => MistTurns > 0;
 
@@ -482,6 +507,8 @@ public sealed class Battler
         IsTormented = false;
         IsEnduring = false;
         IsBonded = false;
+        RunningCount = 0;
+        RunningSlot = null;
 
         // Not the perish count. Everything else here is forgotten by leaving the field and
         // that is the point of leaving; this one follows whoever heard it, which is the whole
