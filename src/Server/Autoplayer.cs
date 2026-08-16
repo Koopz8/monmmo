@@ -244,6 +244,19 @@ public sealed record Attempt(
     public IReadOnlyCollection<(string MapId, int LocalId)> Removed { get; init; } = [];
 
     /// <summary>
+    /// Whether the boat would have carried this character, whether or not it was allowed to.
+    /// <para>
+    /// Reported apart from the riding so that a run with the ferry switched off still says
+    /// the useful thing. "It never got to the islands" and "it was holding a ticket the whole
+    /// time and nobody asked" are the same output otherwise.
+    /// </para>
+    /// </summary>
+    public bool HeldATicket { get; init; }
+
+    /// <summary>Whether it was allowed to take the boat, which makes the reach an upper bound.</summary>
+    public bool RodeTheBoat { get; init; }
+
+    /// <summary>
     /// Maps that no door, map edge or scripted door anywhere in the world leads to.
     /// <para>
     /// A fact about the world file rather than about this run, and it belongs beside the run
@@ -311,12 +324,27 @@ public static class Autoplayer
     /// at one end of a map is in the bag by the time the person at the other end asks.
     /// </para>
     /// </param>
+    /// <param name="ridingTheBoat">
+    /// Whether the walk may take the ferry. <b>Off by default, and that is not timidity.</b>
+    /// <para>
+    /// Whether the boat will carry this character is read off the scripts — a flag or an item,
+    /// and the item half only became answerable when there was a bag to ask. Where it goes is
+    /// not: which places a ticket is worth lives inside the routine that draws the menu, so
+    /// switching this on joins every dock to every other, which is an upper bound.
+    /// </para>
+    /// <para>
+    /// A run with it off is a floor, as this instrument has always been. A run with it on is
+    /// an experiment, the same way <c>--answer</c> is, and the difference between the two is
+    /// what the archipelago is worth.
+    /// </para>
+    /// </param>
     public static Attempt Play(
         WorldData world,
         string startMapId,
         GameRules rules,
         Func<uint, IReadOnlyCollection<int>, Bag, PlayedScript> runScript,
-        Action<string>? log = null)
+        Action<string>? log = null,
+        bool ridingTheBoat = false)
     {
         var battles = new BattleFactory(rules);
         var progress = new Progression(rules);
@@ -359,7 +387,9 @@ public static class Autoplayer
         {
             passes = pass;
 
-            Reach reach = WorldWalker.Walk(world, startMapId, moves, flagsSet: flags, asIfGone: gone);
+            Reach reach = WorldWalker.Walk(
+                world, startMapId, moves, flagsSet: flags, asIfGone: gone,
+                carrying: [.. bag.Entries.Select(e => e.ItemId)], ridingTheBoat: ridingTheBoat);
 
             var stood = reach.Stood.ToHashSet();
 
@@ -496,7 +526,9 @@ public static class Autoplayer
             }
         }
 
-        Reach last = WorldWalker.Walk(world, startMapId, moves, flagsSet: flags, asIfGone: gone);
+        Reach last = WorldWalker.Walk(
+            world, startMapId, moves, flagsSet: flags, asIfGone: gone,
+            carrying: [.. bag.Entries.Select(e => e.ItemId)], ridingTheBoat: ridingTheBoat);
 
         // Built once. Inside the query below it would be rebuilt for every map in the world,
         // which is the same mistake the walker's own comment records making with its grids.
@@ -552,6 +584,9 @@ public static class Autoplayer
         {
             Carried = bag.Entries,
             Removed = gone,
+            RodeTheBoat = ridingTheBoat,
+            HeldATicket = world.FerryPasses.Count > 0
+                && world.FerryPasses.Any(p => flags.Contains(p.Flag) || bag.Has(p.ItemId)),
             // Except where the game starts, which is entered by waking up there rather than
             // through a door. It is the one map in the world that needs no way in, and
             // counting it would put a permanent false positive at the top of this list.

@@ -90,7 +90,9 @@ public static class WorldWalker
         IReadOnlyCollection<(string MapId, int LocalId)>? asIfGone = null,
         IReadOnlyCollection<int>? flagsSet = null,
         GridPosition? startSquare = null,
-        bool throughScriptedDoors = false)
+        bool throughScriptedDoors = false,
+        IReadOnlyCollection<int>? carrying = null,
+        bool ridingTheBoat = false)
     {
         IReadOnlyCollection<int> known = moves ?? [];
 
@@ -157,6 +159,19 @@ public static class WorldWalker
 
         var seen = new HashSet<(string, GridPosition)>();
         var doorsWalked = new HashSet<string>();
+        var docksSailed = new HashSet<string>();
+
+        // Whether the boat will carry this character at all.
+        //
+        // <b>Read.</b> Only one of the ten docks asks anything, and what it asks is in plain
+        // sight: a flag, and within a few commands the same checkitem the whole of milestone
+        // 172 was about. Either answer opens it, which is the cartridge's own "or" and not a
+        // convenience — the item half was unanswerable until there was a bag to ask.
+        //
+        // The list itself is a fact about the world file: a cartridge whose ferry asks for
+        // nothing has an empty one, and an empty one is not a locked boat.
+        bool ticket = world.FerryPasses.Count == 0
+            || world.FerryPasses.Any(p => flags.Contains(p.Flag) || carrying?.Contains(p.ItemId) == true);
 
         while (queue.Count > 0)
         {
@@ -195,6 +210,33 @@ public static class WorldWalker
                             : there.FirstWalkable();
 
                     if (there.IsWalkable(landing)) queue.Enqueue((behind, landing));
+                }
+            }
+
+            // And the boat, which is neither a square nor a script. Off by default and for
+            // the reason `--answer` is: what this walk reports is a floor, and this one edge
+            // is not one.
+            //
+            // <b>Riding at all is read; where it goes is modelled.</b> The ticket above comes
+            // out of the scripts. Which places a given ticket is worth is inside the routine
+            // that draws the menu and cannot be read from here — so every dock is joined to
+            // every other, which is an upper bound and is why this is not on by default.
+            //
+            // Sailed from the map rather than from the jetty, which is the same upper bound
+            // the scripted doors take and is said out loud for the same reason: whether the
+            // player can reach the sailor is a question this cannot ask.
+            if (ridingTheBoat && ticket && map.Ferry is not null && docksSailed.Add(map.Id))
+            {
+                foreach (MapData port in maps.Values.Where(m => m.Ferry is not null && m.Id != map.Id))
+                {
+                    CollisionGrid ashore = GridOf(port);
+
+                    // Where somebody arriving by sea is put down, which the dock's own record
+                    // carries. A jetty in a wall is a fault to report rather than to route
+                    // around, so nothing is invented when it will not take a passenger.
+                    GridPosition landing = port.Ferry!.Arrival;
+
+                    if (ashore.IsWalkable(landing)) queue.Enqueue((port, landing));
                 }
             }
 
