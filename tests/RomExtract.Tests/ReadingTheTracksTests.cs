@@ -139,6 +139,46 @@ public class ReadingTheTracksTests
     }
 
     /// <summary>
+    /// A read that fails says where it died and on what.
+    /// <para>
+    /// "The reader could not follow it" names no byte, no offset and nothing to fix, and on
+    /// a real cartridge it was the reason 142 songs of 255 did not come back — every one of
+    /// them. The likeliest cause is an argument width: a command whose arguments this reader
+    /// counts wrongly leaves the read a byte or two out and everything after it is nonsense,
+    /// so the byte it dies on is the evidence for which command that is.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AFailedReadSaysWhereItDied()
+    {
+        TrackRead ran = Read(SyntheticRom.UnendedTrackOffset);
+
+        Assert.False(ran.EndedProperly);
+
+        // It ran off the end of the file, so where it stopped is past the end of it.
+        Assert.True(ran.StoppedAt >= 0, "a read that failed did not say where");
+        Assert.True(ran.StoppedAt >= SyntheticRom.RomSize, $"it stopped at {ran.StoppedAt:X}, inside the file");
+    }
+
+    /// <summary>
+    /// And a read that begins on an argument says which byte that was, rather than only that
+    /// it was one.
+    /// </summary>
+    [Fact]
+    public void AndOneThatBeginsOnAnArgumentSaysWhichByte()
+    {
+        var rom = new SyntheticRom().ToRom();
+
+        int at = SyntheticRom.SequencesOffset + 1;
+
+        TrackRead track = SequenceReader.Read(rom, at);
+
+        Assert.False(track.EndedProperly);
+        Assert.Equal(at, track.StoppedAt);
+        Assert.Equal(rom.ReadU8(at), track.StoppedOn);
+    }
+
+    /// <summary>
     /// Every track of every song the walk found reads to an end, and the report says how
     /// many did — including when that number is smaller than the total.
     /// </summary>

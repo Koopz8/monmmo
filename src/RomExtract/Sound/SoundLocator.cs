@@ -310,13 +310,27 @@ public static class SoundLocator
     /// another zero. The doubled number and the two zeroes are as much of the signature as
     /// the pointer is.
     /// </summary>
-    private static SongTableEntry? Entry(Rom rom, int offset, int index, HashSet<int> songAt)
+    /// <summary>
+    /// An entry by its shape alone — a pointer that resolves, a group number written twice,
+    /// and two zeroes.
+    /// <para>
+    /// <b>Whether it names a confirmed song header is deliberately not asked here.</b> It
+    /// was, and that made the table end at the first song this build could not confirm and
+    /// begin after the last one before that — on a real cartridge it cut the first entry off
+    /// the front, which is why nothing in the file appeared to point at the table. The
+    /// address that <em>was</em> pointed at sat one entry earlier.
+    /// </para>
+    /// <para>
+    /// The confirmation still happens; it is asked of the run rather than of the entry. A run
+    /// most of whose entries name confirmed headers is a song table with a few songs in it
+    /// this build has not worked out yet. A run none of whose entries do is a coincidence.
+    /// </para>
+    /// </summary>
+    private static SongTableEntry? Shaped(Rom rom, int offset, int index)
     {
         if (offset + SongTableEntry.SizeBytes > rom.Length) return null;
 
         if (rom.ToOffsetOrNull(rom.ReadU32(offset)) is not { } header) return null;
-
-        if (!songAt.Contains(header)) return null;
 
         byte group = rom.ReadU8(offset + 4);
 
@@ -338,17 +352,24 @@ public static class SoundLocator
 
             int at = offset;
 
-            while (Entry(rom, at, run.Count, songAt) is { } entry)
+            while (Shaped(rom, at, run.Count) is { } entry)
             {
                 run.Add(entry);
                 at += SongTableEntry.SizeBytes;
             }
 
+            if (run.Count > 0) offset = Math.Max(offset, at - 4);
+
+            // The confirmation, asked of the run rather than of each entry. Most of a real
+            // table names headers this walk found; a run of eight-byte shapes that names
+            // none of them is a coincidence, however long it is.
+            int confirmed = run.Count(e => songAt.Contains(e.HeaderOffset));
+
+            if (confirmed < ShortestSongTable || confirmed * 2 < run.Count) continue;
+
             // The longest one wins. A cartridge has one song table and a great many things
             // that look like the first entry of one.
-            if (run.Count > best.entries.Count) best = (offset, run);
-
-            if (run.Count > 0) offset = Math.Max(offset, at - 4);
+            if (run.Count > best.entries.Count) best = (at - run.Count * SongTableEntry.SizeBytes, run);
         }
 
         if (best.entries.Count < ShortestSongTable)
@@ -361,7 +382,17 @@ public static class SoundLocator
             return (-1, []);
         }
 
+        int named = best.entries.Count(e => songAt.Contains(e.HeaderOffset));
+
         log?.Invoke($"  song table at 0x{best.offset:X6} with {best.entries.Count} songs");
+
+        // The disagreement, said out loud. An entry naming a header this walk did not confirm
+        // is a song this build cannot yet assemble, and it is still an entry of the table.
+        if (named < best.entries.Count)
+        {
+            log?.Invoke(
+                $"    {best.entries.Count - named} of them name a header this walk did not confirm");
+        }
 
         return (best.offset, best.entries);
     }

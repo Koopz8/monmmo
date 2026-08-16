@@ -17,6 +17,28 @@ public sealed record TrackRead(
     int Unknown)
 {
     public int Notes => Events.Count(e => e.Command == SequenceCommand.NoteOn);
+
+    /// <summary>
+    /// The byte this read was looking at when it stopped, when it stopped badly.
+    /// <para>
+    /// A track that does not end is dropped, and a song all of whose tracks are dropped does
+    /// not come back at all. On a real cartridge that is 142 songs out of 255, every one of
+    /// them for this reason — and "the reader could not follow it" names no byte, no offset
+    /// and nothing to fix. This does.
+    /// </para>
+    /// <para>
+    /// The likeliest cause is an argument width: a command whose arguments this reader counts
+    /// wrongly leaves the read one or two bytes out, and everything after it is nonsense. The
+    /// byte it dies on is the evidence for which command that is.
+    /// </para>
+    /// </summary>
+    public byte StoppedOn { get; init; }
+
+    /// <summary>Where it stopped, so the bytes either side can be looked at.</summary>
+    public int StoppedAt { get; init; } = -1;
+
+    /// <summary>The last command it read before it stopped, which is often the culprit.</summary>
+    public byte After { get; init; }
 }
 
 /// <summary>
@@ -72,6 +94,19 @@ public static class SequenceReader
     /// </summary>
     private static bool IsSetting(byte opcode) => opcode is >= 0xB5 and <= 0xCD;
 
+    /// <summary>
+    /// A read that did not reach an end, with what it was looking at when it gave up.
+    /// <para>
+    /// The byte and the offset are what turn "the reader could not follow it" into something
+    /// somebody can act on. A command whose argument count this reader has wrong leaves the
+    /// read a byte or two out and everything after it is nonsense — so the byte it dies on,
+    /// counted across a whole cartridge, names the command that is wrong.
+    /// </para>
+    /// </summary>
+    private static TrackRead Stopped(
+        int offset, List<SequenceEvent> events, int unknown, byte on, int at, byte after) =>
+        new(offset, events, false, unknown) { StoppedOn = on, StoppedAt = at, After = after };
+
     /// <summary>Reads one track from where its song header said it begins.</summary>
     public static TrackRead Read(Rom rom, int offset)
     {
@@ -89,7 +124,8 @@ public static class SequenceReader
 
         while (events.Count < MostCommands)
         {
-            if (at < 0 || at >= rom.Length) return new TrackRead(offset, events, false, unknown);
+            if (at < 0 || at >= rom.Length)
+                return Stopped(offset, events, unknown, 0, at, running);
 
             byte opcode = rom.ReadU8(at);
 
@@ -104,7 +140,7 @@ public static class SequenceReader
             // is a track this reader cannot follow rather than one it should guess at.
             if (opcode < FirstCommand)
             {
-                if (running == 0) return new TrackRead(offset, events, false, unknown);
+                if (running == 0) return Stopped(offset, events, unknown, opcode, start, running);
 
                 opcode = running;
             }
@@ -123,7 +159,8 @@ public static class SequenceReader
 
                 case GotoOpcode or CallOpcode:
                 {
-                    if (at + 4 > rom.Length) return new TrackRead(offset, events, false, unknown);
+                    if (at + 4 > rom.Length)
+                        return Stopped(offset, events, unknown, opcode, start, running);
 
                     uint address = rom.ReadU32(at);
 
@@ -203,8 +240,9 @@ public static class SequenceReader
         }
 
         // Out of budget rather than out of track. Reported as not having ended, because it
-        // did not.
-        return new TrackRead(offset, events, false, unknown);
+        // did not — and distinguishable from every other failure by the offset, which is the
+        // one place the read stopped somewhere it was still making sense.
+        return new TrackRead(offset, events, false, unknown) { StoppedAt = -1 };
     }
 
     /// <summary>

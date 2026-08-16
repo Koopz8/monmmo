@@ -5656,6 +5656,53 @@ public static class Program
                        - player.TrackCount;
         }
 
+        // Where the reads that failed actually died. A command whose argument count this
+        // reader has wrong leaves every read after it a byte or two out, so the byte it dies
+        // on — counted across a whole cartridge — names the command that is wrong.
+        var died = new Dictionary<byte, int>();
+        var after = new Dictionary<byte, int>();
+        var overBudget = 0;
+
+        foreach (SongHeaderRecord header in tree.Songs)
+        {
+            foreach (int track in header.TrackOffsets)
+            {
+                TrackRead read = SequenceReader.Read(rom, track);
+
+                if (read.EndedProperly) continue;
+
+                if (read.StoppedAt < 0)
+                {
+                    overBudget++;
+
+                    continue;
+                }
+
+                died[read.StoppedOn] = died.GetValueOrDefault(read.StoppedOn) + 1;
+                after[read.After] = after.GetValueOrDefault(read.After) + 1;
+            }
+        }
+
+        if (died.Count > 0 || overBudget > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine("  where the reads that failed died");
+
+            Console.WriteLine(
+                "    on byte: " + string.Join(
+                    ", ",
+                    died.OrderByDescending(p => p.Value).Take(10).Select(p => $"0x{p.Key:X2} x{p.Value}")));
+
+            Console.WriteLine(
+                "    after command: " + string.Join(
+                    ", ",
+                    after.OrderByDescending(p => p.Value).Take(10).Select(p => $"0x{p.Key:X2} x{p.Value}")));
+
+            if (overBudget > 0)
+                Console.WriteLine($"    and {overBudget} ran past the command budget, which is a different thing");
+        }
+
+        Console.WriteLine();
         Console.WriteLine($"  {loaded} of {tree.Table.Count} songs assemble, {tracks} tracks between them");
 
         if (dropped > 0)
