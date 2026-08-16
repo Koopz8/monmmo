@@ -168,6 +168,38 @@ public sealed class SongPlayer
     public int BeatsPerMinute => _beatsPerMinute;
 
     /// <summary>
+    /// What the instruments this song draws on are made of, said out loud.
+    /// <para>
+    /// A sequencer running correctly and a song that sounds like one held note are the same
+    /// thing when the notes never stop. The envelope decides when one stops, and its four
+    /// bytes are the least confirmed numbers in the whole sound chain — read from four
+    /// offsets nobody has ever checked against a sound. A recording that loops and an
+    /// envelope that never decays is a drone, whatever the sequencer does above it.
+    /// </para>
+    /// </summary>
+    public string Instruments()
+    {
+        var loops = 0;
+        var sustained = 0;
+        var silent = 0;
+
+        foreach (Instrument instrument in _voicegroup)
+        {
+            if (instrument.Voice.Audio.Length == 0) { silent++; continue; }
+
+            if (instrument.Voice.Loops) loops++;
+            if (instrument.Sustain >= 250 && instrument.Release >= 250) sustained++;
+        }
+
+        return $"{_voicegroup.Count} instruments, {silent} silent, {loops} loop, "
+               + $"{sustained} never fade — "
+               + string.Join(
+                   " ",
+                   _voicegroup.Where(i => i.Voice.Audio.Length > 0).Take(4)
+                       .Select(i => $"[{i.Voice.Rate}Hz key{i.Key} a{i.Attack} d{i.Decay} s{i.Sustain} r{i.Release}]"));
+    }
+
+    /// <summary>
     /// Fills a buffer, performing the song as it goes.
     /// <para>
     /// The tick clock is checked per sample rather than per buffer, so a buffer of any length
