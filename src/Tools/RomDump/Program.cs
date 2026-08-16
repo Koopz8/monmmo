@@ -10,6 +10,7 @@ using PokeMmo.Core.World;
 using PokeMmo.RomExtract.Items;
 using PokeMmo.RomExtract.Scripts;
 using PokeMmo.RomExtract.Sound;
+using PokeMmo.Core.Sound;
 using PokeMmo.RomExtract.Trainers;
 
 namespace PokeMmo.Tools.RomDump;
@@ -200,6 +201,8 @@ public static class Program
         if (options.Sound) WriteSound(rom);
 
         if (options.SequenceWidths) WriteSequenceWidths(rom);
+
+        if (options.OneSong is { } whichSong) WriteOneSong(rom, whichSong);
 
         if (options.Derive) WriteDerivedLengths(rom);
 
@@ -5867,6 +5870,86 @@ public static class Program
     /// </summary>
     private const int PromptlyCommands = 400;
 
+    /// <summary>
+    /// One song's tracks, byte by byte, with what this reader made of each.
+    /// <para>
+    /// Two rounds of inference have not settled where the reads derail, and the sweep's
+    /// answer does not describe any format — four commands wanting four bytes and three
+    /// wanting two is not what a real encoding looks like. So this stops inferring. It prints
+    /// the bytes and what was made of them, and the place where the two stop agreeing will be
+    /// visible to anybody who reads it.
+    /// </para>
+    /// </summary>
+    private static void WriteOneSong(Rom rom, int song)
+    {
+        Console.WriteLine();
+        Console.WriteLine($"SONG {song}");
+        Console.WriteLine();
+
+        SoundTreeResult tree = SoundLocator.Walk(rom);
+
+        if (song < 0 || song >= tree.Table.Count)
+        {
+            Console.WriteLine($"  the table has {tree.Table.Count} songs, so there is no song {song}");
+
+            return;
+        }
+
+        int at = tree.Table[song].HeaderOffset;
+
+        if (tree.Songs.FirstOrDefault(s => s.Offset == at) is not { } header)
+        {
+            Console.WriteLine($"  the table names 0x{at:X6}, which this walk did not confirm as a header");
+
+            return;
+        }
+
+        Console.WriteLine(
+            $"  header 0x{header.Offset:X6}: {header.TrackCount} tracks, "
+            + $"voicegroup 0x{header.VoicegroupOffset:X6}, priority {header.Priority}");
+
+        for (int track = 0; track < header.TrackOffsets.Count; track++)
+        {
+            int begins = header.TrackOffsets[track];
+
+            TrackRead read = SequenceReader.Read(rom, begins);
+
+            Console.WriteLine();
+            Console.WriteLine(
+                $"  track {track} at 0x{begins:X6}: {read.Events.Count} commands, "
+                + (read.EndedProperly ? "ended" : "DID NOT END")
+                + $", {read.Notes} notes, {read.Unknown} unaccounted");
+
+            // The raw bytes, so the reading below can be checked against them.
+            Console.Write("    bytes:");
+
+            for (int i = 0; i < BytesToShow && begins + i < rom.Length; i++)
+            {
+                if (i % 16 == 0) Console.Write($"{Environment.NewLine}      {begins + i:X6}  ");
+
+                Console.Write($"{rom.ReadU8(begins + i):X2} ");
+            }
+
+            Console.WriteLine();
+
+            // And what was made of them. Where these two stop agreeing is the answer.
+            foreach (SequenceEvent e in read.Events.Take(CommandsToShow))
+            {
+                Console.WriteLine(
+                    $"      {e.Offset:X6}  {e.Opcode:X2}  {e.Command,-8} "
+                    + (e.Arguments.Count > 0 ? string.Join(" ", e.Arguments.Select(b => $"{b:X2}")) : "")
+                    + (e.Target >= 0 ? $" -> {e.Target:X6}" : ""));
+            }
+
+            if (read.Events.Count > CommandsToShow)
+                Console.WriteLine($"      ... and {read.Events.Count - CommandsToShow} more");
+        }
+    }
+
+    private const int BytesToShow = 96;
+
+    private const int CommandsToShow = 40;
+
     private static void WriteSilentPeople(Rom rom)
     {
         Console.WriteLine();
@@ -7611,6 +7694,9 @@ public static class Program
                                      output directory and nowhere else.
               --overworld            report the overworld sprite tables and write a
                                      few of the walking figures as PNGs
+              --song <n>             print one song's tracks byte by byte, with what
+                                     this reader made of each — the raw bytes and the
+                                     reading side by side
               --sequence-widths      measure how many bytes each sequence command's
                                      arguments take, by trying every width against
                                      this cartridge and counting how many tracks
@@ -7785,6 +7871,9 @@ public static class Program
         /// <summary>Measure how many bytes each sequence command's arguments take.</summary>
         public bool SequenceWidths { get; private init; }
 
+        /// <summary>Print one song's tracks byte by byte, with what was made of each.</summary>
+        public int? OneSong { get; private init; }
+
         /// <summary>Score every argument width for the commands that stop a run.</summary>
         public bool Derive { get; private init; }
 
@@ -7890,6 +7979,7 @@ public static class Program
             bool silent = false;
             bool sound = false;
             bool sequenceWidths = false;
+            int? oneSong = null;
             bool derive = false;
             bool opcodes = false;
             bool audit = false;
@@ -8111,6 +8201,9 @@ public static class Program
                     case "--sequence-widths":
                         sequenceWidths = true;
                         break;
+                    case "--song":
+                        oneSong = int.Parse(Next(args, ref i, "--song"));
+                        break;
                     case "--derive":
                         derive = true;
                         break;
@@ -8286,6 +8379,7 @@ public static class Program
                 Silent = silent,
                 Sound = sound,
                 SequenceWidths = sequenceWidths,
+                OneSong = oneSong,
                 Derive = derive,
                 Opcodes = opcodes,
                 Audit = audit,
