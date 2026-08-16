@@ -82,6 +82,10 @@ public enum Side
 [JsonDerivedType(typeof(KnockedOff), "knockedoff")]
 [JsonDerivedType(typeof(ShookFree), "shookfree")]
 [JsonDerivedType(typeof(Identified), "identified")]
+[JsonDerivedType(typeof(HurtBySleep), "hurtbysleep")]
+[JsonDerivedType(typeof(Drowsy), "drowsy")]
+[JsonDerivedType(typeof(TookRoot), "tookroot")]
+[JsonDerivedType(typeof(PerishCount), "perishcount")]
 [JsonDerivedType(typeof(MustRepeat), "mustrepeat")]
 [JsonDerivedType(typeof(GotAway), "gotaway")]
 [JsonDerivedType(typeof(CouldNotGetAway), "couldnotgetaway")]
@@ -310,6 +314,18 @@ public abstract record BattleEvent
 
     /// <summary>This side can be found now, whatever it is and however well it was hiding.</summary>
     public sealed record Identified(Side Side) : BattleEvent;
+
+    /// <summary>Sleep is costing this side health.</summary>
+    public sealed record HurtBySleep(Side Side, int Damage, int RemainingHp) : BattleEvent;
+
+    /// <summary>This side will be asleep shortly.</summary>
+    public sealed record Drowsy(Side Side) : BattleEvent;
+
+    /// <summary>This side has taken root: health every turn, and no leaving.</summary>
+    public sealed record TookRoot(Side Side) : BattleEvent;
+
+    /// <summary>How many turns this side has left before it goes down regardless.</summary>
+    public sealed record PerishCount(Side Side, int Turns) : BattleEvent;
 
     /// <summary>Made to do the same thing again.</summary>
     public sealed record MustRepeat(Side Side, int MoveId) : BattleEvent;
@@ -1683,6 +1699,101 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             return;
         }
 
+        if (effect.Kind == EffectKind.Nightmare)
+        {
+            // Only on somebody asleep, which is the whole rule: it is not a condition of its
+            // own, it is a thing sleep does once somebody has made it do it.
+            if (target.Status != StatusCondition.Sleep || target.InNightmare)
+            {
+                events.Add(new BattleEvent.NothingHappened(at));
+
+                return;
+            }
+
+            target.InNightmare = true;
+
+            events.Add(new BattleEvent.Drowsy(at));
+
+            return;
+        }
+
+        if (effect.Kind == EffectKind.Yawn)
+        {
+            if (target.Status != StatusCondition.None || target.DrowsyTurns > 0)
+            {
+                events.Add(new BattleEvent.NothingHappened(at));
+
+                return;
+            }
+
+            // Two, so that it lands at the end of the turn after this one. Modelled, and the
+            // delay is the entire move — one that put somebody to sleep now would be a
+            // different and much better move.
+            target.DrowsyTurns = 2;
+
+            events.Add(new BattleEvent.Drowsy(at));
+
+            return;
+        }
+
+        if (effect.Kind == EffectKind.Ingrain)
+        {
+            if (target.IsRooted)
+            {
+                events.Add(new BattleEvent.NothingHappened(at));
+
+                return;
+            }
+
+            target.IsRooted = true;
+
+            // And it cannot leave, which is the price. The same field a wrap uses, because
+            // being unable to leave is one state however it was arrived at.
+            target.CannotEscape = true;
+
+            events.Add(new BattleEvent.TookRoot(at));
+
+            return;
+        }
+
+        if (effect.Kind == EffectKind.Perish)
+        {
+            // Everybody, including whoever sang it. That is the games' rule and it is what
+            // makes the move a threat rather than a win — and it is why this is the one thing
+            // on a battler that leaving the field does not clear.
+            foreach (Side heard in new[] { Side.Player, Side.Opponent })
+            {
+                Battler who = Of(heard);
+
+                if (who.PerishTurns > 0) continue;
+
+                who.PerishTurns = 4;
+
+                events.Add(new BattleEvent.PerishCount(heard, who.PerishTurns));
+            }
+
+            return;
+        }
+
+        if (effect.Kind == EffectKind.Goad)
+        {
+            // Stronger first and then confused, because a creature that fainted to its own
+            // confusion before the stage landed would be a move that sometimes did half of
+            // itself.
+            target.ChangeStage(effect.Stat, effect.Stages);
+
+            events.Add(new BattleEvent.StageChanged(at, effect.Stat, effect.Stages, true));
+
+            if (target.ConfusedTurns == 0 && !Abilities.RefusesConfusion(target.Ability))
+            {
+                target.ConfusedTurns = _rng.Next(4) + 2;
+
+                events.Add(new BattleEvent.Confused(at));
+            }
+
+            return;
+        }
+
         if (effect.Kind == EffectKind.HealByWeather)
         {
             // How much depends on what the sky is doing: more in sun, less in anything else
@@ -2327,6 +2438,60 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
 
                 if (battler.HasFainted)
                 {
+                    events.Add(new BattleEvent.Fainted(side));
+
+                    continue;
+                }
+            }
+
+            // What sleep is costing, which is only ever a thing while sleep lasts.
+            if (battler.InNightmare)
+            {
+                if (battler.Status != StatusCondition.Sleep)
+                {
+                    battler.InNightmare = false;
+                }
+                else
+                {
+                    int cost = battler.TakeDamage(Math.Max(1, battler.MaxHp / 4));
+
+                    events.Add(new BattleEvent.HurtBySleep(side, cost, battler.CurrentHp));
+
+                    if (battler.HasFainted)
+                    {
+                        events.Add(new BattleEvent.Fainted(side));
+
+                        continue;
+                    }
+                }
+            }
+
+            // What roots are giving back.
+            if (battler.IsRooted && battler.CurrentHp < battler.MaxHp)
+            {
+                int fed = battler.Heal(Math.Max(1, battler.MaxHp / Skies.Share));
+
+                if (fed > 0) events.Add(new BattleEvent.Recovered(side, fed));
+            }
+
+            // And the drowsiness, which lands rather than lapses.
+            if (battler.DrowsyTurns > 0 && --battler.DrowsyTurns <= 0
+                && battler.TryApplyStatus(StatusCondition.Sleep, sleepTurns: _rng.Next(3) + 1))
+            {
+                events.Add(new BattleEvent.StatusInflicted(side, StatusCondition.Sleep));
+            }
+
+            // And the count nobody can leave behind.
+            if (battler.PerishTurns > 0)
+            {
+                battler.PerishTurns--;
+
+                events.Add(new BattleEvent.PerishCount(side, battler.PerishTurns));
+
+                if (battler.PerishTurns == 0)
+                {
+                    battler.TakeDamage(battler.CurrentHp);
+
                     events.Add(new BattleEvent.Fainted(side));
 
                     continue;

@@ -223,6 +223,14 @@ public static class BattleNarrator
 
         BattleEvent.Identified e => $"{names.Of(e.Side)} was identified!",
 
+        BattleEvent.HurtBySleep e => $"{names.Of(e.Side)} is locked in a nightmare!",
+
+        BattleEvent.Drowsy e => $"{names.Of(e.Side)} grew drowsy!",
+
+        BattleEvent.TookRoot e => $"{names.Of(e.Side)} planted its roots!",
+
+        BattleEvent.PerishCount e => $"{names.Of(e.Side)}'s count fell to {e.Turns}!",
+
         BattleEvent.Grazed e => $"{names.Of(e.Side)} is hurt reaching them!",
 
         BattleEvent.BrokeFree e => $"{names.Of(e.Side)} got free of {names.MoveNamed(e.MoveId)}!",

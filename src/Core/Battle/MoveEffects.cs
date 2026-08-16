@@ -101,6 +101,21 @@ public enum EffectKind
     /// <summary>Shakes somebody out of being unable to move properly.</summary>
     Rouse,
 
+    /// <summary>Hurts whoever is asleep, every turn, until they wake.</summary>
+    Nightmare,
+
+    /// <summary>Puts somebody to sleep at the end of the turn after next.</summary>
+    Yawn,
+
+    /// <summary>Puts health back every turn, and gives up leaving in exchange.</summary>
+    Ingrain,
+
+    /// <summary>Everybody who hears it goes down in three turns.</summary>
+    Perish,
+
+    /// <summary>Makes somebody stronger and too confused to use it.</summary>
+    Goad,
+
     /// <summary>Lands several times in one turn.</summary>
     MultiHit,
 
@@ -413,6 +428,18 @@ public static class MoveEffects
         // SPITE, which needed nothing except PP, and PP has been spent here since moves ran
         // out.
         0x64 => new MoveEffect(EffectKind.Spite, OnUser: false),
+
+        // Five that happen later, which is the end-of-turn hook the berries were built on
+        // being used for the fifth, sixth, seventh and eighth time.
+        0x6B => new MoveEffect(EffectKind.Nightmare, OnUser: false),
+        0xBB => new MoveEffect(EffectKind.Yawn, OnUser: false),
+        0xB5 => new MoveEffect(EffectKind.Ingrain, OnUser: true),
+        0x72 => new MoveEffect(EffectKind.Perish, OnUser: false),
+
+        // Two that make somebody stronger and then too confused to use it. Which stat is in
+        // the game's code and is modelled; that they are one act is the group.
+        0x76 => new MoveEffect(EffectKind.Goad, OnUser: false, Stat: Stat.Attack, Stages: 2),
+        0xA6 => new MoveEffect(EffectKind.Goad, OnUser: false, Stat: Stat.SpAttack, Stages: 2),
 
         // Four that answer other moves, and every one of them was impossible until the thing
         // it answers existed. Three of the four became writable in the last three milestones.

@@ -369,6 +369,25 @@ public sealed class Battler
     /// </summary>
     public bool IsIdentified { get; set; }
 
+    /// <summary>True while sleep is costing this one health every turn.</summary>
+    public bool InNightmare { get; set; }
+
+    /// <summary>
+    /// Turns until this one falls asleep, or nought.
+    /// <para>
+    /// A count rather than a flag because the whole point of the move is the delay: it is
+    /// answerable, and a version that put somebody to sleep at once would be a different and
+    /// much better move.
+    /// </para>
+    /// </summary>
+    public int DrowsyTurns { get; set; }
+
+    /// <summary>True once this one has taken root: health every turn, and no leaving.</summary>
+    public bool IsRooted { get; set; }
+
+    /// <summary>Turns until this one goes down regardless, or nought.</summary>
+    public int PerishTurns { get; set; }
+
     /// <summary>True while nothing may lower this one's stats from outside.</summary>
     public bool IsMisted => MistTurns > 0;
 
@@ -438,6 +457,13 @@ public sealed class Battler
         IsFocused = false;
         IsSeeded = false;
         IsIdentified = false;
+        InNightmare = false;
+        DrowsyTurns = 0;
+        IsRooted = false;
+
+        // Not the perish count. Everything else here is forgotten by leaving the field and
+        // that is the point of leaving; this one follows whoever heard it, which is the whole
+        // of what makes it worth using.
         ReflectTurns = 0;
         ScreenTurns = 0;
         LastSlot = null;
