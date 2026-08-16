@@ -771,8 +771,10 @@ public class TellingAnIslandFromAGateTests
         var door = new ShutDoor(
             "1.0", new GridPosition(1, 1), "0.1", "SOMEWHERE",
             CouldStandOnIt: false, SquareIsWalkable: true, SomebodyIsInTheWay: false,
-            StoodOnThisMap: 1, WalkableOnThisMap: 4);
+            StoodOnThisMap: 0, WalkableOnThisMap: 4);
 
+        // Nought of four satisfies the ratio on its own. Without the floor on map size this
+        // would call a cupboard an island, and there are a great many cupboards.
         Assert.False(door.ArrivedOnAnIsland);
     }
 }
