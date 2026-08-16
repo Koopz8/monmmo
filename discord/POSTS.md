@@ -1,43 +1,56 @@
 # How to write a post in here
 
-**A devlog post is an update, not an overview.** It says what changed since the
-last one and stops. Anyone reading has already read the previous posts;
-re-explaining the market or the battle engine every time trains people to skim.
+Two rules above all others.
+
+**1. Write it for a player, not an engineer.** Most people reading have never
+opened the repo and never will. They want to know what's different in the game.
+If a sentence needs you to know what a fixture, a locator, a guard or a struct
+is, rewrite it or cut it.
+
+**2. Only what's new.** Check `COVERED.md` first. Anything already posted is
+history, not news — no matter how good it was the first time.
+
+---
+
+## Plain language, concretely
+
+| Don't write | Write |
+|---|---|
+| "the effect groups are no longer silent" | "every move actually does its thing now" |
+| "the sample locator rejected packed recordings" | "it was missing every creature cry" |
+| "instancing with a forty-player threshold" | "a busy town quietly splits into copies so it never becomes a crush" |
+| "interest management replaced broadcast" | "you're only told about people you could actually see" |
+| "1,568 tests passing" *as a headline* | one line at the end |
+
+Jargon is allowed **once**, if the sentence right after it explains the thing in
+ordinary words. Someone who reads the whole post should come away understanding
+something, not feeling talked past.
+
+Names of things in the game (SUBSTITUTE, COUNTER) are fine — people know those.
+Names of things in the code are not.
 
 ## The shape
 
-1. **One thing explained properly** — the most interesting change, in a short
-   paragraph. Usually a bug, a measurement, or a decision that went against the
-   obvious answer.
-2. **A bullet list** of everything else that landed. One line each.
-3. **The test count.**
-4. **What's still open**, briefly.
+1. **What changed**, in two or three short chunks. Bold the first few words of
+   each so it can be skimmed.
+2. **One thing that went wrong**, if there was one. These are the best-read part
+   of any devlog and the most honest thing in it. Tell it as a story.
+3. **The test count**, one line.
+4. **What's still to do**, briefly, in plain words.
 
 ## Rules of thumb
 
-- **One Discord message where possible.** Under 2000 characters. Two if the week
-  genuinely earned it. If it's running to four, it's an overview and needs
-  cutting.
-- **Point at #milestones** for the long version rather than reproducing it. That
-  is what that channel is for.
-- **Don't restate the project.** No "MonMMO is a from-scratch client for…" —
-  that lives in #welcome and gets synced separately.
-- **Don't re-announce things already announced.** If a previous post covered it,
-  it's history, not news.
-- **Numbers, not adjectives.** "1938 tests", "34 of 66 effects", "62% fewer
-  messages" — not "big improvements to stability".
-- **Say what's unfinished or unproved.** The count printed rather than rounded
-  up is the house voice; keep it.
+- **One or two Discord messages.** If it's running to four, it's an overview and
+  needs cutting.
+- **Point at #milestones** for the deep version rather than reproducing it.
+- **Don't restate the project.** That's #welcome's job and it syncs itself.
+- **Numbers, not adjectives** — but say what the number means.
+- **Say what's unfinished or unproved.** That's the house voice; keep it.
 
-## What not to write
-
-A post that opens with a heading per subsystem and works through all of them.
-That's the pinned channel copy's job, and `sync.js` already keeps it current.
-
-## Checking before you post
+## Before posting
 
 ```bash
 node post.js "" posts/<file>.md --dry-run
 ```
 
-It prints the message split. **More than two messages is the signal to cut.**
+More than two messages is the signal to cut. Then add a row to `COVERED.md`.
