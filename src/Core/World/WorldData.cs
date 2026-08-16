@@ -6,6 +6,27 @@ namespace PokeMmo.Core.World;
 public sealed record StartingVariable(int Id, int Value);
 
 /// <summary>One map's identity, size, walkability and encounters. No graphics.</summary>
+/// <summary>
+/// Where a new character wakes up.
+/// <para>
+/// One place, because it was two. The server had <c>"4.1"</c> in its argument default and the
+/// dump tool grew a second copy of it — and the copy started life as
+/// <c>world.Maps.First()</c>, which is map 0.0, a floor of CELADON DEPT. The first
+/// playthrough ever run reached one map and stopped, and every number it printed was about a
+/// shop.
+/// </para>
+/// <para>
+/// It is <b>modelled</b>: nothing on the cartridge says where a new game begins in a form this
+/// project reads, so it is a decision — and a decision written down twice is a decision that
+/// will differ. Everything that starts somebody starts them here.
+/// </para>
+/// </summary>
+public static class Beginning
+{
+    /// <summary>PALLET TOWN, which is where everybody starts.</summary>
+    public const string MapId = "4.1";
+}
+
 public sealed record MapData(string Id, string Name, int Width, int Height, byte[] Collision)
 {
     /// <summary>

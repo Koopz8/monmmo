@@ -24,6 +24,25 @@ public sealed record PlayedScript(
     (int Species, int Level)? Gives,
     int? Fights);
 
+/// <summary>
+/// A door out of somewhere it reached, into somewhere it never did.
+/// <para>
+/// The number that matters when a run stops. "246 maps it never got to" is a list nobody can
+/// act on; most of those are behind each other, and only a handful sit one step from ground
+/// the player is already standing on. Those few are the story's actual walls.
+/// </para>
+/// </summary>
+/// <param name="FromMapId">A map it reached.</param>
+/// <param name="Square">The door, so it can be looked at.</param>
+/// <param name="ToMapId">Where the door leads, which it never got to.</param>
+/// <param name="ToName">That map's name.</param>
+/// <param name="CouldStandOnIt">
+/// Whether it could actually stand on the door. False means the door was never the problem —
+/// something on this side of it was, and the frontier is where to look instead.
+/// </param>
+public sealed record ShutDoor(
+    string FromMapId, GridPosition Square, string ToMapId, string ToName, bool CouldStandOnIt);
+
 /// <summary>Why the playthrough stopped.</summary>
 public enum StoppedBecause
 {
@@ -50,7 +69,9 @@ public sealed record Attempt(
     int FightsLost,
     int FightsSkipped,
     int PartiesHealed,
-    IReadOnlyDictionary<int, int> Specials)
+    IReadOnlyDictionary<int, int> Specials,
+    IReadOnlyList<ShutDoor> ShutDoors,
+    IReadOnlyList<Frontier> Blocked)
 {
     /// <summary>The highest level anything in the party reached, which is the shape of a run.</summary>
     public int HighestLevel => Party.Count == 0 ? 0 : Party.Max(m => m.Level);
@@ -229,6 +250,27 @@ public static class Autoplayer
 
         Reach last = WorldWalker.Walk(world, startMapId, moves, flagsSet: flags);
 
+        var reached = last.Maps.ToHashSet();
+        var stoodAtTheEnd = last.Stood.ToHashSet();
+
+        // Every door out of somewhere it got to, into somewhere it did not. This is the list
+        // "246 maps unreached" should have been: most of those are behind each other, and only
+        // these sit one step from ground already under the player's feet.
+        List<ShutDoor> shut =
+        [
+            .. world.Maps
+                .Where(m => reached.Contains(m.Id))
+                .SelectMany(m => m.Warps
+                    .Where(w => !reached.Contains(w.TargetMapId))
+                    .Select(w => new ShutDoor(
+                        m.Id,
+                        w.Square,
+                        w.TargetMapId,
+                        world.Find(w.TargetMapId)?.Name ?? "(not exported)",
+                        stoodAtTheEnd.Contains((m.Id, w.Square)))))
+                .DistinctBy(d => (d.FromMapId, d.ToMapId, d.Square)),
+        ];
+
         return new Attempt(
             passes,
             stopped,
@@ -241,7 +283,9 @@ public static class Autoplayer
             lost,
             skipped,
             healed,
-            specials);
+            specials,
+            shut,
+            last.Blocked);
     }
 
     /// <summary>

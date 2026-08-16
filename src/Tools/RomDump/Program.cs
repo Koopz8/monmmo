@@ -5732,6 +5732,49 @@ public static class Program
                 "    or one reached before anything had been handed over to fight with");
         }
 
+        // What actually stopped it, which is a much shorter list than what it never reached.
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  {played.ShutDoors.Count} doors lead out of somewhere it reached into somewhere it did not");
+
+        foreach (ShutDoor door in played.ShutDoors
+                     .OrderByDescending(d => d.CouldStandOnIt)
+                     .ThenBy(d => d.ToMapId)
+                     .Take(30))
+        {
+            Console.WriteLine(
+                $"    {door.FromMapId,-8} {door.Square} -> {door.ToMapId,-8} {door.ToName}"
+                + (door.CouldStandOnIt ? "   <- it could stand on this one" : "   (never reached the door itself)"));
+        }
+
+        if (played.ShutDoors.Count > 30)
+            Console.WriteLine($"    ... and {played.ShutDoors.Count - 30} more");
+
+        int standable = played.ShutDoors.Count(d => d.CouldStandOnIt);
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    {standable} of those it could stand on — a door it stood on and did not go");
+        Console.WriteLine(
+            "    through is a warp that leads nowhere this build exported, or one it did not follow.");
+        Console.WriteLine(
+            $"    The other {played.ShutDoors.Count - standable} are behind something on this side.");
+
+        if (played.Blocked.Count > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine("  and the frontier: squares wanting a move nothing in the party has");
+
+            foreach (IGrouping<int, Frontier> wanting in played.Blocked
+                         .GroupBy(b => b.ShiftedBy)
+                         .OrderByDescending(g => g.Count()))
+            {
+                Console.WriteLine(
+                    $"    move {wanting.Key,3}: {wanting.Count(),4} squares — "
+                    + string.Join(", ", wanting.Take(3).Select(b => $"{b.MapId} {b.Square}")));
+            }
+        }
+
         Console.WriteLine();
         Console.WriteLine($"  {played.Unreached.Count} maps it never got to");
 
@@ -5829,16 +5872,7 @@ public static class Program
             "  their answer, so a stand-in for one of those buys no ground and is not worth writing");
     }
 
-    /// <summary>
-    /// Where a new character wakes up. The same default the server uses, and for the same
-    /// reason: it is not derived from anything, so it lives in one place and is overridable.
-    /// <para>
-    /// The first run of the playthrough started at <c>world.Maps.First()</c>, which is map
-    /// 0.0 — a floor of CELADON DEPT. It reached one map and stopped, and every number it
-    /// printed was about a shop.
-    /// </para>
-    /// </summary>
-    public const string DefaultStartingMap = "4.1";
+
 
     private static void WriteClosure(Rom rom, IReadOnlyDictionary<int, int> answers, string startAt)
     {
@@ -8694,7 +8728,7 @@ public static class Program
 
         public bool Play { get; private init; }
 
-        public string StartAt { get; private init; } = DefaultStartingMap;
+        public string StartAt { get; private init; } = Beginning.MapId;
 
         public IReadOnlyDictionary<int, int> RoutineAnswers { get; private init; } = new Dictionary<int, int>();
 
@@ -8812,7 +8846,7 @@ public static class Program
             bool closure = false;
             bool specialContracts = false;
             bool play = false;
-            string startAt = DefaultStartingMap;
+            string startAt = Beginning.MapId;
             var routineAnswers = new Dictionary<int, int>();
             bool sequenceWidths = false;
             int? oneSong = null;

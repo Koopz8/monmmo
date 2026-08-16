@@ -670,3 +670,48 @@ public class WhatTheFirstRealRunFoundTests
         Assert.Equal(0, played.PartiesHealed);
     }
 }
+
+/// <summary>
+/// Everybody starts in the same place, and it is written down once.
+/// <para>
+/// The server had <c>"4.1"</c> in its argument default; the dump tool grew a second copy of
+/// the same decision, and that copy began life as <c>world.Maps.First()</c> — map 0.0, a floor
+/// of CELADON DEPT. The first playthrough ever run reached one map and stopped, and every
+/// number it printed was about a shop.
+/// </para>
+/// <para>
+/// This is the third time this session that one decision written down twice has been the bug:
+/// <c>ContinueFrom</c> called by one of two callers, the benches set by neither, and now a
+/// starting map. The guard is the same each time — one place, and a test that says so.
+/// </para>
+/// </summary>
+public class EverybodyStartsInTheSamePlaceTests
+{
+    /// <summary>The beginning is PALLET TOWN, and it is a decision rather than a reading.</summary>
+    [Fact]
+    public void TheBeginningIsPalletTown()
+    {
+        Assert.Equal("4.1", Beginning.MapId);
+    }
+
+    /// <summary>
+    /// And a walk started there is not a walk started at whatever happens to be first in the
+    /// file.
+    /// <para>
+    /// The failure, reproduced: the first map in an export is not the first map of a game, and
+    /// nothing about the list says which is which.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AndItIsNotWhateverIsFirstInTheFile()
+    {
+        var world = new WorldData(
+        [
+            new MapData("0.0", "CELADON DEPT.", 4, 4, new byte[16]),
+            new MapData(Beginning.MapId, "PALLET TOWN", 4, 4, new byte[16]),
+        ]);
+
+        Assert.NotEqual(world.Maps.First().Id, Beginning.MapId);
+        Assert.Equal("PALLET TOWN", world.Find(Beginning.MapId)?.Name);
+    }
+}

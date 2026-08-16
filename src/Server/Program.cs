@@ -34,7 +34,7 @@ public static class Program
         // opens onto Pallet Town four squares from where the professor stops you.
         //
         // --map moves it, and --spawn puts you on a particular square of it.
-        string startingMap = ArgumentValue(args, "--map") ?? "4.1";
+        string startingMap = ArgumentValue(args, "--map") ?? Beginning.MapId;
         int port = int.TryParse(ArgumentValue(args, "--port"), out int parsed) ? parsed : DefaultPort;
         bool verbose = args.Contains("--verbose");
 
