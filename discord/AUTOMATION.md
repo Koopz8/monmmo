@@ -97,10 +97,28 @@ git fetch origin discord-state && git show origin/discord-state:sync-state.json 
 
 ## Updating what the channels say
 
-**The old pin is never touched.** Edit `content.js`, push, and the changed
-section is posted as a *new* message underneath the existing one and pinned as
-well. `#rules` and `#faq` end up with a visible history of what they used to
-say, which is the correct behaviour for a document people agreed to.
+**By default the old pin is never touched.** Edit `content.js`, push, and the
+changed section is posted as a *new* message underneath the existing one and
+pinned as well, so the channel keeps a visible history of what it used to say.
+
+**Two channels are the exception: `#welcome` and `#rules` are replaced.** The
+bot's own messages there are deleted and the new copy posted clean. Those two are
+reference documents rather than a log, and `#rules` is what Onboarding makes
+people accept — nobody should have to work out which of three pinned versions
+they agreed to.
+
+Change the list with `REPLACE_CHANNELS="welcome,rules,faq"`, or `REPLACE_CHANNELS=""`
+for none. Three guards sit behind it:
+
+- **Only the bot's own messages** are ever deleted — the filter is on author id.
+- **Only read-only channels** may be listed, checked by `verify.js`. In an open
+  channel the bot might have posted something that wasn't copy.
+- **A ceiling of 20.** More than that and it refuses and tells you to look first;
+  `--force` overrides. Messages older than 14 days are deleted individually,
+  because Discord's bulk delete silently refuses them.
+
+`node sync.js --dry-run` prints `REPLACE` in red for those channels, so the
+destructive path is never a surprise.
 
 An update carries a small dated subtext line so the newest version is obvious:
 

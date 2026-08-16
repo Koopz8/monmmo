@@ -307,6 +307,45 @@ t('the weekly post flags a falling test count instead of burying it', () => {
   assert(/went \*\*down\*\*/.test(out), 'a dropping test count is not called out');
 });
 
+console.log('\nWholesale replace');
+
+const syncSrc = require('fs').readFileSync('./sync.js', 'utf8');
+const replaceList = (syncSrc.match(/REPLACE_CHANNELS \?\? '([^']*)'/) || [, ''])[1]
+  .split(',').map((s) => s.trim()).filter(Boolean);
+
+t('every replaced channel exists', () => {
+  const keys = new Set(TREE.flatMap((cat) => cat.channels.map((ch) => ch.key)));
+  assert(replaceList.length > 0, 'nothing is set to replace — was the list emptied by accident?');
+  for (const k of replaceList) assert(keys.has(k), `REPLACE_WHOLESALE names "${k}", which is not a channel`);
+});
+
+t('replaced channels are locked, so the bot never posts anything else there', () => {
+  const byKey = new Map(TREE.flatMap((cat) => cat.channels.map((ch) => [ch.key, ch])));
+  for (const k of replaceList) {
+    const spec = byKey.get(k);
+    assert(spec, `no channel spec for "${k}"`);
+    assert(spec.mode && spec.mode.startsWith('readonly'),
+      `#${k} is NOT read-only. Wholesale replace deletes every message this bot has posted there — ` +
+      `in an open channel that could delete something that was not copy.`);
+  }
+});
+
+t('a channel that receives posts is never wholesale-replaced', () => {
+  // devlog, milestones, changelog, build-drops and commits accumulate real
+  // content from post.js, daily.js and webhooks. Deleting there loses history.
+  for (const k of ['devlog', 'milestones', 'changelog', 'build-drops', 'commits', 'general']) {
+    assert(!replaceList.includes(k), `#${k} accumulates posts — wholesale replace would delete them`);
+  }
+});
+
+t('the wipe only ever targets the bot\'s own messages', () => {
+  const fn = syncSrc.slice(syncSrc.indexOf('async function wipeOwnMessages'), syncSrc.indexOf('async function main'));
+  assert(/author\.id === meId/.test(fn), 'the wipe does not filter on author id');
+  assert(/WIPE_GUARD/.test(fn), 'the wipe has no upper bound');
+  assert(/bulkDelete/.test(fn) && /m\.delete\(\)/.test(fn),
+    'the wipe must handle both bulk delete and messages older than 14 days, which bulk delete refuses');
+});
+
 console.log('\nOnboarding');
 
 const FIN = require('./finish-setup.js');
