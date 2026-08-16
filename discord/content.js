@@ -22,9 +22,10 @@ the ROM you already own, on your own machine, at runtime**. The client ships non
 of it. The server never sees any of it.
 
 This is a solo engineering project, built in public, one measured milestone at a
-time. **1,568 tests**, none of which need a cartridge. An authoritative server, a
-Gen III battle engine accurate down to truncation order, and three things two
-people can do to each other: **see each other, trade, and fight**.
+time. **1,841 tests**, none of which need a cartridge. An authoritative server, a
+Gen III battle engine accurate down to truncation order, and a growing list of
+things two people can do to each other: **see each other, chat, add each other as
+friends, trade, fight, and buy and sell on a player market**.
 
 It is also built to hold a crowd. A load generator that speaks the real protocol
 found the wall was the *door*, not the game; the server now admits people at a
@@ -227,10 +228,37 @@ Two Gen III rules that silently poison everything if you get them wrong:
 
 Every division truncates and the order matters.
 
-**Recently modelled:** PP, which outlives the fight and cost the save format a
-field. Held items — 112 species name what a wild one may be carrying, and the
-data was extracted long before anything read it. Duels, which needed no engine
-change at all.
+**Recently modelled:** PP, held items, duels — and **abilities**, the first
+system here where half of it simply is not in the cartridge. The names and which
+species has which are read out of the image. What any of them *does* is ARM code,
+the same boundary the \`special\` routines sit behind, so every rule is modelled
+and the file says so once rather than seventy-eight times.
+
+The count is printed rather than rounded to "abilities: yes" — some are modelled,
+the rest **carried, named, shown, and silent**, which is a different state from
+"not supported". A test fails if anything is listed as modelled without a rule
+behind it, *or* has a rule and isn't listed.
+
+**More on abilities in the message below.**`,
+
+`Since abilities landed: **weather**, the **contact flag** that sat unread on
+every move record, and the abilities that refuse to be made worse at something.
+
+**GUTS is worth reading twice.** A burn does not halve its Attack — halving the
+Attack of the ability whose whole point is that being ill helps would leave it
+doing three quarters of what an unburned one does, which is the opposite of the
+rule.
+
+Where each half lives is deliberate: **the names stay with the client**, which
+owns the cartridge, and **the effects live on the server**, which owns the rules.
+The server is told a number and never learns what it is called — the same
+arrangement every other name in this project has.
+
+And which of its two abilities a creature has is a **slot**, rolled once and
+stored, exactly as its sex is. A creature asked twice would be immune to a move
+on one turn and not the next. The slot rather than the resolved ability, because
+the slot is what the dice decided and the ability is a lookup — keeping both
+would be two copies of one fact, and the second copy is the one that goes stale.
 
 **Still silent: ~119 move-effect groups** — and most of them should probably
 stay that way. What is left is largely numbers nobody can derive from the
@@ -254,10 +282,44 @@ turned out to be a field already extracted, already carried, and read by nothing
 a message with no sender, doors on no square, the byte saying who a move was
 for, PP, and held items.
 
-Still unread in the species table, if you want one: \`Ability1\`, \`Ability2\`, the
-six EV yields, \`SafariZoneFleeRate\`, \`EggCycles\`, \`BaseFriendship\`,
-\`EggGroup1/2\`, \`BodyColor\`. The EV yields are the biggest, and the one with a
-real save-format cost — exactly like PP was.
+The ability bytes and the move records' contact flag have since been read, which
+is two more off that list. Still unread: \`SafariZoneFleeRate\`, \`EggCycles\`,
+\`BaseFriendship\`, \`BodyColor\`.
+
+**Two traps worth knowing about if you go looking.** Ability names are found by
+anchoring on \`STENCH\`, the same way the move table anchors on \`POUND\` — one
+English word to find an address, and then none, so what comes out is whatever the
+cartridge says in whatever language it says it.
+
+And the exporter's anonymise step is a hand-written allowlist. A field left off it
+is a field the server never hears about however well it was extracted. That has
+now bitten twice: first the EV yields, then the ability bytes, both extracted and
+stored and arriving as nought.
+
+**Rule 1 is enforced by a test now — details in the message below.**`,
+
+`**The repo asks git whether anybody committed a cartridge.**
+
+Every *tracked* file is checked three ways: the extensions of cartridge images
+and saves, the names of the exporter's own outputs and the account database, and
+— the one that matters — **the bytes at offset four**, the logo every cartridge of
+this family carries.
+
+An extension list is a rule about filenames, and the failure it misses is the one
+that would actually happen: an image renamed to something harmless.
+
+**Tracked, not present.** What's in your working tree is your own business, and a
+cartridge sitting beside the checkout is exactly where a cartridge is supposed to
+be.
+
+Before this, "the client ships no cartridge data" was held up by \`.gitignore\`
+alone — and that file's own comment says what that was worth: the exporter's
+outputs "were only ever kept out of the repository by nobody having put one in
+the root, which is not the same as a rule."
+
+It was checked by putting a cartridge header in a file called \`assets-bundle.bin\`
+and watching it fail with the reason. **A guardrail nobody has seen fail is a
+guardrail nobody has tested.**
 
 Standing unsolved problems:
 - **The font.** Four mechanical methods ruled out. The mapping is not identity,
@@ -422,9 +484,9 @@ posting in #bug-reports.
 - **A thousand players on real hardware.** Every scaling number so far is from
   two cores with the load generator sharing them. Needs a second machine; the
   only open question code cannot answer.
-- **No shop yet** for the cosmetics that exist. Money is what makes wearing
-  something a choice, and it's the last piece of a feature that has been
-  three-quarters built for fifteen milestones.
+- **The market's last window.** The gap between the store committing and the
+  in-memory copy catching up. Same one creatures have had since the market was
+  built, and now the only thing left on that list.
 - **Text rendering.** The cartridge's font has not been located. Four mechanical
   methods are ruled out; the mapping is not identity, and the geometry may not
   even be 8×8.
@@ -447,6 +509,10 @@ posting in #bug-reports.
   broadcast, and past forty people a place opens another copy.
 - ~~A save rewrites everything about a character.~~ It now writes only the
   sections that changed — about thirty statements down to one.
+- ~~There is nowhere to buy cosmetics.~~ There is a counter now, and money is
+  what turned a wardrobe into a choice.
+- ~~The species table's ability bytes are read by nothing.~~ Read, and the
+  abilities they name are modelled where the engine can honestly support them.
 
 **Not bugs**
 - The client refusing a ROM whose SHA-1 doesn't match. Working as intended.
