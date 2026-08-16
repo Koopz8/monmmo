@@ -1,4 +1,5 @@
 using PokeMmo.Core.World;
+using PokeMmo.RomExtract.Scripts;
 using PokeMmo.Server;
 using Xunit;
 
@@ -255,5 +256,91 @@ public class CanItBeFinishedTests
             (_, _) => new ScriptOutcome([next++], [], [], []));
 
         Assert.Equal(StoryClosure.MostRounds, closed.Rounds.Count);
+    }
+}
+
+/// <summary>
+/// Standing in for a routine this project cannot execute.
+/// <para>
+/// A <c>special</c> is a call into the cartridge's own ARM code. The runner steps over it and
+/// the answer variable keeps its zero, so every script that branches on the answer takes the
+/// zero arm — and every badge check in this game is one of those, which is why the boundary
+/// lands squarely on the endgame.
+/// </para>
+/// <para>
+/// A stand-in is <b>modelled and is an experiment</b>, never a fact. What makes it worth
+/// having is that it is checkable: supply an answer, walk the story again, and see how much of
+/// the world opens. A number that opens nothing was wrong or irrelevant.
+/// </para>
+/// </summary>
+public class StandingInForARoutineTests
+{
+    /// <summary>
+    /// With no answer supplied the variable keeps its zero, which is the behaviour every
+    /// figure this project has printed so far was measured under.
+    /// </summary>
+    [Fact]
+    public void WithNoAnswerTheVariableKeepsItsZero()
+    {
+        var state = new PokeMmo.Core.Scripts.ScriptState();
+
+        Assert.Equal(0, state.Read(SpecialContracts.AnswerVariable));
+    }
+
+    /// <summary>
+    /// And a supplied answer reaches the variable the call answers into, so the compare and
+    /// the branch after it work exactly as they would have.
+    /// <para>
+    /// Written against the state rather than against a cartridge, because the thing being
+    /// checked is that the answer lands where a script would look for it — and that is a fact
+    /// about the variable, not about any image.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AndASuppliedAnswerLandsWhereAScriptLooksForIt()
+    {
+        var state = new PokeMmo.Core.Scripts.ScriptState();
+
+        state.Write(SpecialContracts.AnswerVariable, 8);
+
+        Assert.Equal(8, state.Read(SpecialContracts.AnswerVariable));
+    }
+
+    /// <summary>
+    /// A routine compared against a run from one upwards is counting something, and one
+    /// compared against a scatter of values is not.
+    /// <para>
+    /// The one piece of shape-reading in here, and the reason it is a property rather than a
+    /// judgement made while printing: a badge check reads as eight comparisons against one
+    /// through eight, and a routine asked "which of these three things happened" reads as
+    /// three unrelated numbers. Telling those apart is what makes the report worth reading.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ARunFromOneUpwardsLooksLikeACount()
+    {
+        var counting = new SpecialContract(
+            0x1B5, 8, 0, new Dictionary<int, int> { [1] = 1, [2] = 1, [3] = 1, [4] = 1 }, 8, []);
+
+        var scattered = new SpecialContract(
+            0x1B6, 3, 1, new Dictionary<int, int> { [0] = 1, [7] = 1, [40] = 1 }, 3, []);
+
+        Assert.True(counting.LooksLikeACount);
+        Assert.Equal(4, counting.Highest);
+
+        Assert.False(scattered.LooksLikeACount);
+    }
+
+    /// <summary>
+    /// And a yes-or-no is not a count either, which is the case a run of two would otherwise
+    /// be mistaken for.
+    /// </summary>
+    [Fact]
+    public void ButAYesOrNoIsNot()
+    {
+        var yesNo = new SpecialContract(
+            0x1B7, 20, 0, new Dictionary<int, int> { [0] = 10, [1] = 10 }, 20, []);
+
+        Assert.False(yesNo.LooksLikeACount);
     }
 }

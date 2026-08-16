@@ -320,7 +320,27 @@ public static class ScriptRunner
     /// <summary>The command that hands the screen to the game's own code and waits.</summary>
     private const byte WaitState = 0x27;
 
-    public static ScriptRun Run(Rom rom, uint address, ScriptState? state = null, int maxPages = 32)
+    /// <param name="answers">
+    /// Stand-ins for routines this project cannot execute, by routine number.
+    /// <para>
+    /// <b>Every one of these is modelled, and supplying one is an experiment rather than a
+    /// fact.</b> A special is a call into the cartridge's own code; what it does is in no
+    /// table. What <em>is</em> readable is the shape of what each caller expects — see
+    /// <see cref="SpecialContracts"/> — and that is a specification a stand-in has to satisfy,
+    /// not an implementation.
+    /// </para>
+    /// <para>
+    /// Nothing in the game supplies these. They exist so that the cost of the boundary can be
+    /// measured: answer a routine, walk the story again, and see how much of the world opens.
+    /// A number that opens nothing was wrong or irrelevant, and either way that is a result.
+    /// </para>
+    /// </param>
+    public static ScriptRun Run(
+        Rom rom,
+        uint address,
+        ScriptState? state = null,
+        int maxPages = 32,
+        IReadOnlyDictionary<int, int>? answers = null)
     {
         ScriptState save = (state ?? new ScriptState()).Copy();
 
@@ -525,6 +545,23 @@ public static class ScriptRunner
 
                 case SpecialCalls.Special:
                 case SpecialCalls.SpecialVar:
+                {
+                    // The routine number sits in a different place for the two opcodes: the
+                    // one that takes an answer names the variable first.
+                    int asked = code == SpecialCalls.Special ? command.Word() : command.Word(2);
+
+                    // A stand-in, when one was handed in. Written into the variable this call
+                    // answers into, so everything downstream — the compare, the branch — works
+                    // exactly as it would have if the routine had run.
+                    if (answers is not null && answers.TryGetValue(asked, out int stood))
+                    {
+                        int into = code == SpecialCalls.Special ? SpecialContracts.AnswerVariable : command.Word();
+
+                        save.Write(into, stood);
+                        written[into] = stood;
+                    }
+                }
+
                     // Stepped over, because it is a call into code on the cartridge that
                     // this cannot execute. Recorded, because the alternative is a script
                     // that quietly does less and looks like a script that does less.

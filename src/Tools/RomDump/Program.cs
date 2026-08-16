@@ -201,7 +201,8 @@ public static class Program
 
         if (options.Sound) WriteSound(rom);
         if (options.FlagGates) WriteFlagGates(rom);
-        if (options.Closure) WriteClosure(rom);
+        if (options.SpecialContracts) WriteSpecialContracts(rom);
+        if (options.Closure) WriteClosure(rom, options.RoutineAnswers);
 
         if (options.SequenceWidths) WriteSequenceWidths(rom);
 
@@ -5617,7 +5618,79 @@ public static class Program
     /// beside the result rather than left out of it.
     /// </para>
     /// </summary>
-    private static void WriteClosure(Rom rom)
+    /// <summary>
+    /// What every routine this project cannot execute is actually asked.
+    /// <para>
+    /// The boundary measured from the outside. What a routine <em>does</em> is compiled code
+    /// and unreadable; what its callers <em>expect</em> is in the bytes — how many arguments
+    /// they hand it, what they compare the answer against, and whether they branch at all.
+    /// </para>
+    /// <para>
+    /// That is the specification a stand-in would have to satisfy, and it is checkable in a
+    /// way a guess is not: supply an answer with <c>--answer</c>, walk the story again, and
+    /// see how much of the world opens.
+    /// </para>
+    /// </summary>
+    /// <summary>
+    /// A number written as decimal or as hex, because a routine number is always quoted in
+    /// hex and a badge count never is.
+    /// </summary>
+    private static bool TryNumber(string text, out int value)
+    {
+        text = text.Trim();
+
+        if (text.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+        {
+            return int.TryParse(
+                text[2..], System.Globalization.NumberStyles.HexNumber, null, out value);
+        }
+
+        return int.TryParse(text, out value);
+    }
+
+    private static void WriteSpecialContracts(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("WHAT THE ROUTINES ARE ASKED");
+        Console.WriteLine();
+
+        List<SpecialContract> contracts =
+            SpecialContracts.Derive(rom, MapLibrary.Open(rom), Console.WriteLine);
+
+        // Branched-on first: a routine nobody branches on cannot be shutting a door, whatever
+        // else it does, so it is not what a story walk is looking for.
+        Console.WriteLine();
+        Console.WriteLine("  the ones a script branches on, which are the ones that gate anything");
+
+        foreach (SpecialContract contract in contracts
+                     .Where(c => c.Branches > 0)
+                     .OrderByDescending(c => c.Branches))
+        {
+            Console.WriteLine(
+                $"    0x{contract.Routine:X3}  {contract.Sites,3} site(s), {contract.Branches,3} branch, "
+                + $"{contract.TakesArguments} argument(s)"
+                + (contract.LooksLikeACount ? "   <- compared against a run from 1, so it counts something" : ""));
+
+            if (contract.Compared.Count > 0)
+            {
+                Console.WriteLine(
+                    "        compared against " + string.Join(
+                        ", ", contract.Compared.OrderBy(p => p.Key).Select(p => $"{p.Key}x{p.Value}")));
+            }
+
+            Console.WriteLine($"        {string.Join("; ", contract.Where)}");
+        }
+
+        int quiet = contracts.Count(c => c.Branches == 0);
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  and {quiet} routines nothing branches on — called for their effect rather than");
+        Console.WriteLine(
+            "  their answer, so a stand-in for one of those buys no ground and is not worth writing");
+    }
+
+    private static void WriteClosure(Rom rom, IReadOnlyDictionary<int, int> answers)
     {
         Console.WriteLine();
         Console.WriteLine("CAN IT BE FINISHED");
@@ -5667,7 +5740,7 @@ public static class Program
 
             foreach (int flag in flags) state.Set(flag);
 
-            ScriptRun run = ScriptRunner.Run(rom, address, state);
+            ScriptRun run = ScriptRunner.Run(rom, address, state, answers: answers);
 
             return new ScriptOutcome(
                 run.FlagsSet,
@@ -8276,6 +8349,11 @@ public static class Program
                                      arguments take, by trying every width against
                                      this cartridge and counting how many tracks
                                      reach an end
+              --routines            what every routine this project cannot execute is
+                                    asked: how many arguments, what its answer is compared
+                                    against, how many sites branch on it.
+              --answer <r>=<v>      stand in for one routine while walking. Modelled, and
+                                    an experiment: supply it, walk again, see what opens.
               --can-it-be-finished  walk the story to a fixpoint from a fresh save: walk,
                                     run every script a player can stand in front of, take
                                     what it opens, walk again. Says how far a player can
@@ -8454,6 +8532,10 @@ public static class Program
 
         public bool Closure { get; private init; }
 
+        public bool SpecialContracts { get; private init; }
+
+        public IReadOnlyDictionary<int, int> RoutineAnswers { get; private init; } = new Dictionary<int, int>();
+
         /// <summary>Measure how many bytes each sequence command's arguments take.</summary>
         public bool SequenceWidths { get; private init; }
 
@@ -8566,6 +8648,8 @@ public static class Program
             bool sound = false;
             bool flagGates = false;
             bool closure = false;
+            bool specialContracts = false;
+            var routineAnswers = new Dictionary<int, int>();
             bool sequenceWidths = false;
             int? oneSong = null;
             bool derive = false;
@@ -8792,6 +8876,23 @@ public static class Program
                     case "--can-it-be-finished":
                         closure = true;
                         break;
+                    case "--routines":
+                        specialContracts = true;
+                        break;
+                    case "--answer":
+                    {
+                        // routine=value, so an experiment can be run without a rebuild.
+                        string[] halves = Next(args, ref i, "--answer").Split('=', 2);
+
+                        if (halves.Length == 2
+                            && TryNumber(halves[0], out int routine)
+                            && TryNumber(halves[1], out int answerValue))
+                        {
+                            routineAnswers[routine] = answerValue;
+                        }
+
+                        break;
+                    }
                     case "--sequence-widths":
                         sequenceWidths = true;
                         break;
@@ -8966,7 +9067,7 @@ public static class Program
                 Specials = specials,
                 ScriptedDoors = scriptedDoors,
                 Special = special,
-                Answers = answers,
+                RoutineAnswers = routineAnswers,
                 AnswerSweep = answerSweep,
                 SpecialsOn = specialsOn,
                 Shared = shared,
@@ -8974,6 +9075,8 @@ public static class Program
                 Sound = sound,
                 FlagGates = flagGates,
                 Closure = closure,
+                SpecialContracts = specialContracts,
+                Answers = answers,
                 SequenceWidths = sequenceWidths,
                 OneSong = oneSong,
                 Derive = derive,
