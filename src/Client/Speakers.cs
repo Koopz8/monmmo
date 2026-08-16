@@ -72,6 +72,12 @@ public sealed class Speakers : IDisposable
 
         if (!_ready) return;
 
+        // How big the card's own buffer is, said before the stream is made rather than
+        // after. Without this raylib picks a size of its own and refuses every write that is
+        // not exactly that — once a frame, for as long as the game is running, which is what
+        // a console full of "attempting to write too many frames to buffer" is.
+        Raylib.SetAudioStreamBufferSizeDefault(BufferSamples);
+
         // One channel, sixteen bits a sample, which is what the mixer gives back.
         _stream = Raylib.LoadAudioStream(Rate, 16, 1);
 
