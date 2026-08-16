@@ -147,6 +147,14 @@ const TREE = [
     ],
   },
   {
+    name: '🧑‍🔧 JOIN THE PROJECT',
+    channels: [
+      { key: 'open-roles',   name: 'open-roles',   type: 'text', mode: 'readonly', topic: 'What the project needs. All unpaid — nothing here is ever for sale.' },
+      { key: 'apply',        name: 'apply',        type: 'text', topic: 'Post one line naming a role. Staff opens a private thread with you.' },
+      { key: 'contributing', name: 'contributing', type: 'text', mode: 'readonly', topic: 'How work actually lands: the guardrails, the tests, the writeup.' },
+    ],
+  },
+  {
     name: '🧪 THE TESTING GROUNDS',
     gate: 'fieldTester',
     channels: [

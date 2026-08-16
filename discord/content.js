@@ -349,6 +349,154 @@ appended, content type \`application/json\`, and select the events you want
 Repo: {{REPO}}`,
   ],
 
+  // ──────────────────────────────────────────────────────── JOIN THE PROJECT
+  'open-roles': [
+`# What this project needs
+
+**Read this first: everything here is unpaid, and always will be.** Nothing in
+{{PROJECT}} is for sale — no cosmetics, no subscriptions, no donations tied to
+anything in-game. That is a legal position, not a business one, so there is no
+revenue and therefore no share of it. What there is: your name on the work, a
+role in here, and credit in the writeups.
+
+If that is not worth your time, that is an entirely reasonable conclusion and
+there are no hard feelings.
+
+**How to apply:** post one line in **#apply**. Read **#contributing** first if
+you write code.
+
+---
+
+## Engineering — C# / .NET
+
+The biggest need by volume. Three places, and you can care about one:
+
+> **Server** — netcode, instancing, the save path, the market.
+> **Client** — raylib-cs. No engine, so the screens are ours to build.
+> **Core** — shared by both sides, and the reason cheating is structurally
+> impossible rather than merely detected.
+
+Real jobs, open right now: the window between the market's store committing and
+the in-memory copy catching up · \`/with\` is a console command and needs a way for
+an ordinary player to ask · switching in a duel, currently refused on purpose.
+
+## Data archaeology
+
+The part of this project nobody else is doing, and the most fun if you like a
+locked door.
+
+> **The cartridge font.** Four mechanical methods ruled out. The mapping is not
+> identity, the sheet is not one of the four candidates, and the geometry may not
+> even be 8×8.
+> **The unread species fields** — safari flee rate, egg cycles, base friendship,
+> body colour. Fields keep turning out to be extracted, carried, and read by
+> nothing.
+> **The silent effect groups** — and, just as valuable, working out which ones
+> *should* stay silent because their numbers cannot be derived.
+
+**More roles in the message below.**`,
+
+`## Testing
+
+Not a junior role here. There are 1,841 tests and several of this project's worst
+bugs were rules enforced on one side of the client/server split with nothing
+checking the other. If you write the test that catches that class of thing, you
+are doing the most valuable work available.
+
+Two ways in: writing tests against the engine, or **Field Tester** — playing
+builds and filing reproductions somebody else can follow. A bug that cannot be
+reproduced cannot be fixed.
+
+## Original art and UI
+
+**Artists have zero legal exposure here**, which is worth saying plainly: the
+cosmetics are invented, not extracted. Nothing you draw touches the cartridge.
+
+> Twelve cosmetic slots, and a shop that now sells them.
+> The wardrobe mirror draws your figure over an outline of a person that is
+> deliberately a rectangle — the one drawing in this project allowed to be a
+> placeholder. It would like to stop being one.
+> Screen layout generally: the market, the who-is-here list, the party.
+
+## Community and writing
+
+> **Moderators** (the Archivist role) — mostly rule 1, which is ban-on-sight.
+> **Writing** — the milestone writeups are the best thing this project produces
+> and there are a hundred and thirty-odd of them. Editing, indexing, or turning
+> them into something a newcomer can start at.
+> **Running a playtest** — herding people onto one build and taking notes.
+
+## Infrastructure
+
+One very specific ask. **Every scaling number this project has is from two
+cores**, with the load generator sharing them with the server it measures. A
+thousand players on hardware that could actually hold them is the only open
+question left that code cannot answer. If you have a spare machine and an
+afternoon, that is a genuine contribution and it has your name on it.`,
+  ],
+
+  apply: [
+`**Post one line here** naming what you'd like to work on. That's all — for
+example: *"Applying: client/UI, some raylib experience"*.
+
+A staff member will open a **private thread** with you from that message. Skill
+level, timezone, age, links, anything else — all of that goes in the thread,
+where only you and staff can see it. Don't post personal details in this channel.
+
+**In the thread we'll ask:**
+
+\`\`\`
+Which role(s):
+What you've built before:   (links if you have them, none needed)
+Roughly how much time:
+Timezone:
+Anything you want to learn:
+\`\`\`
+
+**There is no bar to clear.** "I know some C# and I want to get better" is a
+real application and always has been. This project is one person; the useful
+question is whether you'll enjoy it, not whether you're senior enough.
+
+**What happens next:** we find you something small and real to do. Not a test
+task invented to grade you — an actual open item off **#open-roles**. If it goes
+well you get **Cartographer** and commit credit. If it doesn't, no harm done and
+no explanation owed.
+
+Slowest part is usually me. Nudge in #general if it's been a week.`,
+  ],
+
+  contributing: [
+`How work actually lands. Read before your first pull request.
+
+**One rule above all others: never commit cartridge data.** Not sprites, not
+maps, not text dumps, not the exporter's outputs. This is checked — every
+*tracked* file is tested for cartridge and save extensions, the exporter's own
+output names, and **the bytes at offset four**, the logo every cartridge of this
+family carries. A file renamed to something harmless still fails.
+
+That test is not there because anybody is suspected. It is there because the
+project's entire legal footing is that it distributes nothing, and a guardrail
+that depends on everyone remembering is not a guardrail.
+
+**Tests are the review.** New behaviour arrives with tests. The bar isn't
+coverage for its own sake — it's that a rule enforced on one side of the
+client/server split needs its counterpart checked on the other. That specific
+mistake has been made three times here.
+
+**Numbers before opinions.** If a change is about speed, measure it first and
+put the number in the pull request. The scaling work found the wall was the
+login door when everybody assumed it was the database.
+
+**Say what you got wrong.** The milestone writeups include the withdrawn
+findings and the roadmaps written from an instrument pointed at the wrong thing.
+That's the house style. A correction is worth more than a clean story.
+
+**Small first.** One contained change beats a large one — not as a test of you,
+but because reviewing is the scarce resource in a one-person project.
+
+Repo: {{REPO}}`,
+  ],
+
   // ──────────────────────────────────────────────────────── THE TESTING GROUNDS
   'build-drops': [
 `Builds land here. Locked — questions go to **#playtest-coordination**, breakage
