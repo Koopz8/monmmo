@@ -205,7 +205,8 @@ public static class Program
         if (options.SpecialContracts) WriteSpecialContracts(rom);
         if (options.Closure) WriteClosure(rom, options.RoutineAnswers, options.StartAt);
         if (options.Play)
-            WritePlaythrough(rom, options.RoutineAnswers, options.StartAt, options.Boat, options.Money);
+            WritePlaythrough(
+                rom, options.RoutineAnswers, options.StartAt, options.Boat, options.Money, options.SayYes);
         if (options.WhereFrom.Count > 0) WriteWhereFrom(rom, options.WhereFrom);
 
         if (options.SequenceWidths) WriteSequenceWidths(rom);
@@ -5739,7 +5740,8 @@ public static class Program
     }
 
     private static void WritePlaythrough(
-        Rom rom, IReadOnlyDictionary<int, int> answers, string startAt, bool boat = false, int money = 0)
+        Rom rom, IReadOnlyDictionary<int, int> answers, string startAt, bool boat = false, int money = 0,
+        bool sayYes = false)
     {
         Console.WriteLine();
         Console.WriteLine("A PLAYTHROUGH");
@@ -5781,22 +5783,75 @@ public static class Program
 
             ScriptRun run = ScriptRunner.Run(rom, address, state, answers: answers);
 
-            return new PlayedScript(
-                run.FlagsSet,
-                run.FlagsCleared,
-                run.GivesItem is { } item && teaches.TryGetValue(item, out int move) ? [move] : [],
-                run.SpecialsCalled,
-                run.GivesMon,
-                run.TrainerId)
+            var flagsSet = new List<int>(run.FlagsSet);
+            var flagsCleared = new List<int>(run.FlagsCleared);
+            var specials = new List<int>(run.SpecialsCalled);
+            var hides = new List<int>(run.Hides);
+            var asked = new List<(int, int, bool)>([.. run.ItemsAsked.Select(a => (a.ItemId, a.Count, a.Carried))]);
+
+            int? gives = run.GivesItem;
+            int givesCount = run.GivesCount;
+            int? takes = run.TakesItem;
+            int takesCount = run.TakesCount;
+            (int Species, int Level)? mon = run.GivesMon;
+            int? fights = run.TrainerId;
+
+            // And the yes-or-no, which nothing in this project has ever answered.
+            //
+            // <b>Modelled, and it is a policy rather than a reading.</b> The runner stops at
+            // one and hands back where to carry on from, because choosing needs a person.
+            // Saying yes is the choice that opens the most world, which makes this a ceiling
+            // exactly as --boat and --answer are: an offer accepted is not proof anybody
+            // would accept it, and an offer never reached is not proof of anything at all.
+            //
+            // Bounded, because a script can loop back to its own question — that is how a
+            // "which one do you want" prompt waits for an answer, and running it forever is
+            // not an answer either.
+            for (var answered = 0; sayYes && run.Question is { } carryOn && answered < 8; answered++)
             {
-                Gets = run.GivesItem is { } got ? (got, Math.Max(1, run.GivesCount)) : null,
-                Takes = run.TakesItem is { } gave ? (gave, Math.Max(1, run.TakesCount)) : null,
-                Hides = run.Hides,
-                Asked = [.. run.ItemsAsked.Select(a => (a.ItemId, a.Count, a.Carried))],
+                foreach (int flag in flagsSet) state.Set(flag);
+                foreach (int flag in flagsCleared) state.Clear(flag);
+
+                // Yes. The variable the box answers into is the one everything reads.
+                state.Write(SpecialContracts.AnswerVariable, 1);
+
+                run = ScriptRunner.Run(rom, carryOn, state, answers: answers);
+
+                flagsSet.AddRange(run.FlagsSet);
+                flagsCleared.AddRange(run.FlagsCleared);
+                specials.AddRange(run.SpecialsCalled);
+                hides.AddRange(run.Hides);
+                asked.AddRange(run.ItemsAsked.Select(a => (a.ItemId, a.Count, a.Carried)));
+
+                gives ??= run.GivesItem;
+                if (run.GivesItem is not null) givesCount = run.GivesCount;
+
+                takes ??= run.TakesItem;
+                if (run.TakesItem is not null) takesCount = run.TakesCount;
+
+                mon ??= run.GivesMon;
+                fights ??= run.TrainerId;
+            }
+
+            return new PlayedScript(
+                flagsSet,
+                flagsCleared,
+                [.. gives is { } item && teaches.TryGetValue(item, out int move) ? new[] { move } : []],
+                specials,
+                mon,
+                fights)
+            {
+                Gets = gives is { } got ? (got, Math.Max(1, givesCount)) : null,
+                Takes = takes is { } gave ? (gave, Math.Max(1, takesCount)) : null,
+                Hides = hides,
+                Asked = asked,
+                StoppedAtAQuestion = run.Question is not null,
             };
         }
 
         Attempt played = Autoplayer.Play(world, first.Id, rules, Run, Console.WriteLine, boat, money);
+
+        int hanging = played.Questions.Values.Sum();
 
         Console.WriteLine();
         Console.WriteLine(
@@ -5954,6 +6009,39 @@ public static class Program
 
             if (played.Refused.Count > 20)
                 Console.WriteLine($"    ... and {played.Refused.Count - 20} more");
+        }
+
+        // The yes-or-nos, which nothing in this project had ever answered or counted. A script
+        // that stops at one has not declined the offer — declining is a branch and would at
+        // least run — it has stopped mid-sentence, and from the outside that is identical to
+        // somebody having nothing more to say.
+        Console.WriteLine();
+
+        if (hanging == 0)
+        {
+            Console.WriteLine(sayYes
+                ? "  no reachable script was left hanging at a yes-or-no"
+                : "  no reachable script stopped at a yes-or-no");
+        }
+        else
+        {
+            Console.WriteLine(
+                $"  {hanging} reachable script(s) across {played.Questions.Count} map(s) stopped at a"
+                + " yes-or-no and were never answered");
+
+            foreach ((string mapId, int times) in played.Questions.OrderByDescending(q => q.Value).Take(10))
+                Console.WriteLine($"    {mapId,-8} {times} time(s)");
+
+            if (played.Questions.Count > 10)
+                Console.WriteLine($"    ... and {played.Questions.Count - 10} more maps");
+
+            if (!sayYes)
+            {
+                Console.WriteLine(
+                    "    try --say-yes: everything past one of these is unreached in a way that looks");
+                Console.WriteLine(
+                    "    exactly like a person with nothing more to say");
+            }
         }
 
         // The boat, said out loud either way. "It never got to the islands" and "it was
@@ -8888,6 +8976,10 @@ public static class Program
                                     game gives it any, and the payout table has never been
                                     located. Prices are read. It buys only what it has been
                                     refused, off shelves it can stand in front of.
+              --say-yes             answer every yes-or-no with yes and carry on from where the
+                                    script stopped. MODELLED: choosing needs a person, and yes
+                                    is the answer that opens the most world — a ceiling, like
+                                    --boat. Without it every offer in the game hangs mid-sentence.
               --boat                let the playthrough take the ferry. Whether the boat will
                                     carry it is READ off the scripts — a flag or an item; where
                                     the boat goes is MODELLED as every dock, so this makes the
@@ -9092,6 +9184,9 @@ public static class Program
         /// <summary>What the playthrough has to spend. Modelled, and nothing supplies it.</summary>
         public int Money { get; private init; }
 
+        /// <summary>Whether the playthrough says yes to every offer. Modelled, and a ceiling.</summary>
+        public bool SayYes { get; private init; }
+
         public string StartAt { get; private init; } = Beginning.MapId;
 
         public IReadOnlyDictionary<int, int> RoutineAnswers { get; private init; } = new Dictionary<int, int>();
@@ -9213,6 +9308,7 @@ public static class Program
             var whereFrom = new List<int>();
             bool boat = false;
             var money = 0;
+            bool sayYes = false;
             string startAt = Beginning.MapId;
             var routineAnswers = new Dictionary<int, int>();
             bool sequenceWidths = false;
@@ -9450,6 +9546,9 @@ public static class Program
                     case "--boat":
                         boat = true;
                         break;
+                    case "--say-yes":
+                        sayYes = true;
+                        break;
                     case "--money":
                         if (TryNumber(Next(args, ref i, "--money"), out int purse)) money = purse;
 
@@ -9669,6 +9768,7 @@ public static class Program
                 WhereFrom = whereFrom,
                 Boat = boat,
                 Money = money,
+                SayYes = sayYes,
                 StartAt = startAt,
                 Answers = answers,
                 SequenceWidths = sequenceWidths,

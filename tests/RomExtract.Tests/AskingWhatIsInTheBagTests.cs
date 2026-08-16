@@ -723,6 +723,59 @@ public class AskingWhatIsInTheBagTests
     }
 
     /// <summary>
+    /// A script left hanging at a yes-or-no is counted, and by map.
+    /// <para>
+    /// Nothing in this project had ever looked at <c>ScriptRun.Question</c> outside the runner
+    /// that produces it. A run stops at one because choosing needs a person — and stopping is
+    /// not declining, which would at least be a branch that ran. From the outside it is
+    /// identical to somebody having nothing more to say, which is why it went unnoticed for
+    /// every milestone this instrument has existed.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AScriptLeftHangingAtAYesOrNoIsCounted()
+    {
+        MapData start = Room("1.0") with
+        {
+            Objects =
+            [
+                new MapObject(1, 1, 1, 1, Direction.Down, 0, false) { ScriptAddress = 0x1000 },
+                new MapObject(2, 1, 2, 1, Direction.Down, 0, false) { ScriptAddress = 0x2000 },
+            ],
+        };
+
+        Attempt played = Autoplayer.Play(
+            new WorldData([start]),
+            "1.0",
+            TestRules.All,
+            (address, _, _) => address == 0x1000
+                ? Nothing with { StoppedAtAQuestion = true }
+                : Nothing);
+
+        Assert.Equal("1.0", Assert.Single(played.Questions).Key);
+        Assert.Equal(1, Assert.Single(played.Questions).Value);
+    }
+
+    /// <summary>
+    /// And a script that ran to its end is not one of them, which is the whole distinction:
+    /// most people in this game simply finish talking.
+    /// </summary>
+    [Fact]
+    public void AScriptThatRanToItsEndIsNotCountedAsHanging()
+    {
+        MapData start = Room("1.0") with
+        {
+            Objects = [new MapObject(1, 1, 1, 1, Direction.Down, 0, false) { ScriptAddress = 0x1000 }],
+        };
+
+        Attempt played = Autoplayer.Play(
+            new WorldData([start]), "1.0", TestRules.All, (_, _, _) => Nothing);
+
+        Assert.Empty(played.Questions);
+    }
+
+
+    /// <summary>
     /// And every refusal says where one could be got, in the world file's own terms.
     /// <para>
     /// The five ways a thing changes hands are listed apart rather than collapsed into
