@@ -395,88 +395,43 @@ Repo: {{REPO}}`,
 
   // ──────────────────────────────────────────────────────── JOIN THE PROJECT
   'open-roles': [
-`# What this project needs
+`# What we need
 
-**Read this first: everything here is unpaid, and always will be.** Nothing in
-{{PROJECT}} is for sale — no cosmetics, no subscriptions, no donations tied to
-anything in-game. That is a legal position, not a business one, so there is no
-revenue and therefore no share of it. What there is: your name on the work, a
-role in here, and credit in the writeups.
+Everything here is **unpaid, and always will be.** Nothing in {{PROJECT}} is ever
+sold, so there is no money to share out. What there is: your name on the work,
+a role in here, and credit in the writeups.
 
-If that is not worth your time, that is an entirely reasonable conclusion and
-there are no hard feelings.
+**Code — C#**
+The biggest need. Server, client, or the shared engine underneath both. Open
+right now: a screen for the ladder, a proper way for a player to join a friend's
+copy of a map, and switching creatures mid-duel.
 
-**How to apply:** post one line in **#apply**. Read **#contributing** first if
-you write code.
+**Digging through the game file**
+The lettering has beaten four attempts. A few record fields are still unread.
+Good if you like a locked door.
+
+**Testing**
+Writing tests, or playing builds and filing bugs somebody else can follow. Not a
+junior job here — most of our worst bugs were things the tests could not catch.
+
+**Art**
+Cosmetics are drawn from scratch, never taken from the game, so there is no legal
+risk in this one at all. Twelve slots to fill, and a placeholder rectangle in the
+wardrobe mirror that badly wants replacing.
+
+**Writing and moderation**
+Around 160 devlogs that could use an editor, and rules that need enforcing.
+
+**A spare computer**
+Genuinely. Every speed measurement we have is from two cores, so nobody has ever
+run a thousand players. One afternoon on a decent machine closes the last open
+question on the list.
 
 ---
 
-## Engineering — C# / .NET
-
-The biggest need by volume. Three places, and you can care about one:
-
-> **Server** — netcode, instancing, the save path, the market.
-> **Client** — raylib-cs. No engine, so the screens are ours to build.
-> **Core** — shared by both sides, and the reason cheating is structurally
-> impossible rather than merely detected.
-
-Real jobs, open right now: the window between the market's store committing and
-the in-memory copy catching up · \`/with\` is a console command and needs a way for
-an ordinary player to ask · switching in a duel, currently refused on purpose.
-
-## Data archaeology
-
-The part of this project nobody else is doing, and the most fun if you like a
-locked door.
-
-> **The cartridge font.** Four mechanical methods ruled out. The mapping is not
-> identity, the sheet is not one of the four candidates, and the geometry may not
-> even be 8×8.
-> **The unread species fields** — safari flee rate, egg cycles, base friendship,
-> body colour. Fields keep turning out to be extracted, carried, and read by
-> nothing.
-> **The silent effect groups** — and, just as valuable, working out which ones
-> *should* stay silent because their numbers cannot be derived.
-
-**More roles in the message below.**`,
-
-`## Testing
-
-Not a junior role here. There are 1,841 tests and several of this project's worst
-bugs were rules enforced on one side of the client/server split with nothing
-checking the other. If you write the test that catches that class of thing, you
-are doing the most valuable work available.
-
-Two ways in: writing tests against the engine, or **Field Tester** — playing
-builds and filing reproductions somebody else can follow. A bug that cannot be
-reproduced cannot be fixed.
-
-## Original art and UI
-
-**Artists have zero legal exposure here**, which is worth saying plainly: the
-cosmetics are invented, not extracted. Nothing you draw touches the cartridge.
-
-> Twelve cosmetic slots, and a shop that now sells them.
-> The wardrobe mirror draws your figure over an outline of a person that is
-> deliberately a rectangle — the one drawing in this project allowed to be a
-> placeholder. It would like to stop being one.
-> Screen layout generally: the market, the who-is-here list, the party.
-
-## Community and writing
-
-> **Moderators** (the Archivist role) — mostly rule 1, which is ban-on-sight.
-> **Writing** — the milestone writeups are the best thing this project produces
-> and there are a hundred and thirty-odd of them. Editing, indexing, or turning
-> them into something a newcomer can start at.
-> **Running a playtest** — herding people onto one build and taking notes.
-
-## Infrastructure
-
-One very specific ask. **Every scaling number this project has is from two
-cores**, with the load generator sharing them with the server it measures. A
-thousand players on hardware that could actually hold them is the only open
-question left that code cannot answer. If you have a spare machine and an
-afternoon, that is a genuine contribution and it has your name on it.`,
+**To apply:** post one line in **#apply**. There is no bar to clear — "I know some
+C# and want to get better" is a real application. Read **#contributing** first if
+you write code.`,
   ],
 
   apply: [
