@@ -60,9 +60,17 @@ fi
 
 export PATH="$PATH:$HOME/.dotnet"
 
-timeout 600 dotnet test --nologo -v q --filter "$filter" 2>&1 \
-    | grep -E "\[FAIL\]|error CS|Failed!|Passed!" \
-    | sed 's/^ */    /'
+raw="$(timeout 600 dotnet test --nologo -v q --filter "$filter" 2>&1)"
+
+echo "$raw" | grep -E "\[FAIL\]|error CS|Failed!|Passed!" | sed 's/^ */    /'
+
+# A run that produced no summary at all did not pass — it died. That is a legitimate way for
+# a guard to be caught (a broken recursion guard takes the whole process with it) and it must
+# not be reported as silence, which is indistinguishable from "no test noticed".
+if ! echo "$raw" | grep -qE "Failed!|Passed!"; then
+    echo "    the run produced no summary — it did not finish. That is the guard being caught,"
+    echo "    loudly, and it is worth seeing rather than swallowing."
+fi
 
 git checkout -- "$file"
 
