@@ -157,7 +157,24 @@ public sealed record FoundAt(string MapId, int LocalId, string How, bool Reached
     /// by <see cref="Reached"/>, which is why this is not a nullable.
     /// </para>
     /// </summary>
-    public IReadOnlyList<string> WayIn { get; init; } = [];
+    public IReadOnlyList<Hop> WayIn { get; init; } = [];
+}
+
+/// <summary>
+/// One step of a way in: a map, and how you get into it from the one before.
+/// <para>
+/// How, and not only where, because the three kinds are three different answers. A door
+/// and a map edge are things a player walks; a door a script makes — the lifts, the boats,
+/// being thrown out of somewhere — is on no square at all, and a map reachable only by one
+/// of those is not shut, it is somewhere the walk has no way of expressing.
+/// </para>
+/// </summary>
+public sealed record Hop(string MapId, string How)
+{
+    /// <summary>The first map of a chain, which is not entered from anywhere.</summary>
+    public const string Start = "stood there";
+
+    public override string ToString() => $"{MapId} ({How})";
 }
 
 /// <summary>Why the playthrough stopped.</summary>
@@ -208,6 +225,23 @@ public sealed record Attempt(
 
     /// <summary>People a script took off a map, which is how a doorway stops being blocked.</summary>
     public IReadOnlyCollection<(string MapId, int LocalId)> Removed { get; init; } = [];
+
+    /// <summary>
+    /// Maps that no door, map edge or scripted door anywhere in the world leads to.
+    /// <para>
+    /// A fact about the world file rather than about this run, and it belongs beside the run
+    /// because that is where it turned up: the only place in the game that sells a drink is
+    /// on one of these, so "the playthrough never got there" was never the problem.
+    /// </para>
+    /// <para>
+    /// The mirror of a question this project has had open for a while — <em>19 warps lead to
+    /// maps that are not here</em> — asked from the other end. A warp pointing at nothing may
+    /// be an unused room; a room nothing points at cannot be entered by anybody, which is
+    /// either a hole in the export or a doorway the cartridge makes some way that has never
+    /// been read.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<string> NoWayIn { get; init; } = [];
 }
 
 /// <summary>
@@ -447,6 +481,10 @@ public static class Autoplayer
 
         Reach last = WorldWalker.Walk(world, startMapId, moves, flagsSet: flags, asIfGone: gone);
 
+        // Built once. Inside the query below it would be rebuilt for every map in the world,
+        // which is the same mistake the walker's own comment records making with its grids.
+        Dictionary<string, List<Hop>> anyWayIn = WaysIn(world);
+
         var reached = last.Maps.ToHashSet();
         var stoodAtTheEnd = last.Stood.ToHashSet();
 
@@ -497,6 +535,15 @@ public static class Autoplayer
         {
             Carried = bag.Entries,
             Removed = gone,
+            // Except where the game starts, which is entered by waking up there rather than
+            // through a door. It is the one map in the world that needs no way in, and
+            // counting it would put a permanent false positive at the top of this list.
+            NoWayIn =
+            [
+                .. world.Maps.Select(m => m.Id)
+                    .Where(id => id != startMapId && !anyWayIn.ContainsKey(id))
+                    .Order(),
+            ],
             Refused =
             [
                 .. refused
@@ -531,10 +578,10 @@ public static class Autoplayer
     {
         // Worked out once per map rather than once per source, because a map with a shop on
         // it usually has several things on the list and they all came the same way.
-        var routes = new Dictionary<string, IReadOnlyList<string>>();
+        var routes = new Dictionary<string, IReadOnlyList<Hop>>();
 
-        IReadOnlyList<string> Through(string mapId) =>
-            routes.TryGetValue(mapId, out IReadOnlyList<string>? known)
+        IReadOnlyList<Hop> Through(string mapId) =>
+            routes.TryGetValue(mapId, out IReadOnlyList<Hop>? known)
                 ? known
                 : routes[mapId] = WayIn(world, mapId, reached);
 
@@ -593,29 +640,59 @@ public static class Autoplayer
     /// Map ids from the reached one to the target, inclusive of both, or nothing when no
     /// chain of doors joins them at all.
     /// </returns>
-    private static IReadOnlyList<string> WayIn(
-        WorldData world, string target, HashSet<string> reached)
+    /// <summary>
+    /// Every way into every map, by where it leads.
+    /// <para>
+    /// All three kinds, because this game uses all three: a door on a square, walking off
+    /// the side of a route, and a door a script makes on no square at all. The third was
+    /// left out of the first version of this, and that is how a map reached by a lift came
+    /// back as one nothing in the world leads to.
+    /// </para>
+    /// <para>
+    /// The 127.127 sentinels are not filtered out, deliberately. A dynamic warp's target is
+    /// the string "127.127", which is not a map any world file has — so it becomes a way in
+    /// to a map nobody ever asks about, and skipping it is a rule that cannot be broken. It
+    /// was written, it failed to fail, and it went.
+    /// </para>
+    /// </summary>
+    private static Dictionary<string, List<Hop>> WaysIn(WorldData world)
     {
-        // Every door and every edge, by where it leads. Both, because half this game's map
-        // graph is warps and the other half is walking off the side of a route.
-        var into = new Dictionary<string, List<string>>();
+        var into = new Dictionary<string, List<Hop>>();
+
+        void Joins(string from, string leadsTo, string how)
+        {
+            if (!into.TryGetValue(leadsTo, out List<Hop>? ways)) into[leadsTo] = ways = [];
+
+            if (!ways.Any(w => w.MapId == from)) ways.Add(new Hop(from, how));
+        }
 
         foreach (MapData map in world.Maps)
         {
-            // The 127.127 sentinels are not filtered out, and deliberately. A dynamic warp's
-            // target is the string "127.127", which is not a map any world file has — so it
-            // becomes a way in to a map nobody ever asks about, and skipping it is a rule
-            // that cannot be broken. It was written, it failed to fail, and it went.
-            foreach (string leadsTo in map.Warps.Select(w => w.TargetMapId)
-                         .Concat(map.Connections.Select(c => c.MapId)))
-            {
-                if (!into.TryGetValue(leadsTo, out List<string>? from)) into[leadsTo] = from = [];
+            foreach (Warp door in map.Warps) Joins(map.Id, door.TargetMapId, "a door");
 
-                if (!from.Contains(map.Id)) from.Add(map.Id);
-            }
+            foreach (MapConnection edge in map.Connections) Joins(map.Id, edge.MapId, "the map edge");
+
+            foreach (ScriptedDoor made in map.Doors)
+                Joins(map.Id, made.TargetMapId, $"a door a script makes ({made.What})");
         }
 
-        var back = new Dictionary<string, string> { [target] = target };
+        return into;
+    }
+
+    private static IReadOnlyList<Hop> WayIn(
+        WorldData world, string target, HashSet<string> reached)
+    {
+        // Every way into every map, by where it leads. All three kinds, because this game
+        // uses all three: a door on a square, walking off the side of a route, and a door a
+        // script makes on no square at all.
+        //
+        // The 127.127 sentinels are not filtered out, and deliberately. A dynamic warp's
+        // target is the string "127.127", which is not a map any world file has — so it
+        // becomes a way in to a map nobody ever asks about, and skipping it is a rule that
+        // cannot be broken. It was written, it failed to fail, and it went.
+        Dictionary<string, List<Hop>> into = WaysIn(world);
+
+        var back = new Dictionary<string, Hop>();
         var queue = new Queue<string>([target]);
 
         while (queue.Count > 0)
@@ -624,17 +701,30 @@ public static class Autoplayer
 
             if (reached.Contains(here))
             {
-                // Unwound forwards, so it reads the way somebody would walk it.
-                var chain = new List<string> { here };
+                // Unwound forwards, so it reads the way somebody would walk it. How you got
+                // into each map travels with the map you got into, so the labels come out
+                // one step behind where they were stored.
+                var chain = new List<Hop>();
+                var how = Hop.Start;
 
-                while (back[here] != here) chain.Add(here = back[here]);
+                for (string at = here; ; )
+                {
+                    chain.Add(new Hop(at, how));
+
+                    if (at == target) break;
+
+                    Hop next = back[at];
+
+                    how = next.How;
+                    at = next.MapId;
+                }
 
                 return chain;
             }
 
-            foreach (string from in into.GetValueOrDefault(here, []))
+            foreach (Hop way in into.GetValueOrDefault(here, []))
             {
-                if (back.TryAdd(from, here)) queue.Enqueue(from);
+                if (back.TryAdd(way.MapId, new Hop(here, way.How))) queue.Enqueue(way.MapId);
             }
         }
 

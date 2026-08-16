@@ -852,7 +852,8 @@ public class AskingWhatIsInTheBagTests
         FoundAt sold = Assert.Single(Assert.Single(played.Refused).Sources);
 
         Assert.False(sold.Reached);
-        Assert.Equal(["1.0", "1.1", "1.2"], sold.WayIn);
+        Assert.Equal(["1.0", "1.1", "1.2"], sold.WayIn.Select(h => h.MapId));
+        Assert.Equal([Hop.Start, "a door", "a door"], sold.WayIn.Select(h => h.How));
     }
 
     /// <summary>
@@ -899,7 +900,11 @@ public class AskingWhatIsInTheBagTests
 
         FoundAt sold = Assert.Single(Assert.Single(played.Refused).Sources);
 
-        Assert.Equal(["1.0", "1.1", "1.2"], sold.WayIn);
+        Assert.Equal(["1.0", "1.1", "1.2"], sold.WayIn.Select(h => h.MapId));
+
+        // And the last step says how it is made, which is the whole reason a hop is not
+        // just a map id: a door, an edge and a door a script makes are three answers.
+        Assert.Equal("the map edge", sold.WayIn[^1].How);
     }
 
     /// <summary>
@@ -938,5 +943,50 @@ public class AskingWhatIsInTheBagTests
 
         Assert.False(sold.Reached);
         Assert.Empty(sold.WayIn);
+
+        // And it is counted rather than only mentioned. One odd map is an anecdote; a count
+        // out of the whole world says whether this is an export hole or a doorway the
+        // cartridge makes some way nothing here has read.
+        Assert.Equal("1.9", Assert.Single(played.NoWayIn));
+    }
+
+    /// <summary>
+    /// And a door a script makes is a way in too — the lifts, the boats, being thrown out of
+    /// somewhere.
+    /// <para>
+    /// The decoy that mattered most, and it was found by the cartridge rather than by this
+    /// file. Counting only doors and edges reported the one map in FireRed that sells a drink
+    /// as somewhere nothing in the world leads to, which is a far larger claim than the truth
+    /// and would have sent the next milestone looking for a hole in the exporter.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ADoorAScriptMakesIsAWayInAsWell()
+    {
+        MapData start = Room("1.0") with
+        {
+            Doors = [new ScriptedDoor("the lift", "1.1", 0, 1, 1)],
+            Objects = [new MapObject(1, 1, 1, 1, Direction.Down, 0, false) { ScriptAddress = 0x1000 }],
+        };
+
+        // Reached by the lift and by nothing else whatsoever.
+        MapData upstairs = Room("1.1") with
+        {
+            Objects = [new MapObject(1, 1, 2, 1, Direction.Down, 0, false, Sells: [Tea])],
+        };
+
+        Attempt played = Autoplayer.Play(
+            new WorldData([start, upstairs]),
+            "1.0",
+            TestRules.All,
+            (_, _, _) => Nothing with { Asked = [(Tea, 1, false)] });
+
+        FoundAt sold = Assert.Single(Assert.Single(played.Refused).Sources);
+
+        Assert.Equal(["1.0", "1.1"], sold.WayIn.Select(h => h.MapId));
+        Assert.Equal("a door a script makes (the lift)", sold.WayIn[^1].How);
+
+        // And it does not read as adrift, which is the claim this guards against making.
+        Assert.Empty(played.NoWayIn);
     }
 }

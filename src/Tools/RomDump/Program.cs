@@ -5821,9 +5821,12 @@ public static class Program
                     // And the way in, which is the door to go and open. The first hop is
                     // the only one that matters — everything after it is behind that.
                     Console.WriteLine(one.WayIn.Count < 2
-                        ? $"               NO WAY IN TO {one.MapId} AT ALL — no door on any map leads there"
-                        : $"               the way in: {string.Join(" -> ", one.WayIn)}"
-                          + $"   (the shut step is {one.WayIn[0]} -> {one.WayIn[1]})");
+                        ? $"               NO WAY IN TO {one.MapId} AT ALL — no door, edge or scripted"
+                          + " door anywhere leads there"
+                        : $"               the way in: "
+                          + string.Join(
+                              " -> ", one.WayIn.Select(h => h.How == Hop.Start ? h.MapId : $"{h.MapId} by {h.How}"))
+                          + $"   (the shut step is {one.WayIn[0].MapId} -> {one.WayIn[1].MapId})");
                 }
             }
 
@@ -5837,6 +5840,32 @@ public static class Program
             Console.WriteLine(
                 $"  {played.Removed.Count} people were taken off a map by a script it ran — a person "
                 + "removed is a person not in a doorway");
+        }
+
+        // A fact about the world file rather than about the run, printed here because this is
+        // where it turned up. The mirror of "19 warps lead to maps that are not here", asked
+        // from the other end: a warp pointing at nothing may be an unused room, but a room
+        // nothing points at cannot be entered by anybody.
+        Console.WriteLine();
+
+        if (played.NoWayIn.Count == 0)
+        {
+            Console.WriteLine("  every map in this world has something leading into it");
+        }
+        else
+        {
+            Console.WriteLine(
+                $"  {played.NoWayIn.Count} of {world.Maps.Count} maps have NO way in at all — no door,"
+                + " no map edge, no scripted door");
+            Console.WriteLine(
+                "    either a hole in the export or a doorway the cartridge makes some way this has"
+                + " never read");
+
+            foreach (string adrift in played.NoWayIn.Take(20))
+                Console.WriteLine($"    {adrift,-8} {world.Find(adrift)?.Name ?? ""}");
+
+            if (played.NoWayIn.Count > 20)
+                Console.WriteLine($"    ... and {played.NoWayIn.Count - 20} more");
         }
 
         // What actually stopped it, which is a much shorter list than what it never reached.
