@@ -133,6 +133,7 @@ public sealed class Speakers : IDisposable
 
     private int _filled;
     private int _reported;
+    private int _described = int.MinValue;
 
     /// <summary>
     /// A line about what the sequencer is doing, about once a second, or nothing.
@@ -156,6 +157,14 @@ public sealed class Speakers : IDisposable
 
         if (_box.Performing is not { } player)
             return $"sound: song {_box.Playing} is not playing — nothing was assembled for it";
+
+        // Once per song rather than once a second: what it is made of does not change.
+        if (_described != _box.Playing)
+        {
+            _described = _box.Playing;
+
+            return $"sound: song {_box.Playing} — {player.Instruments()}";
+        }
 
         return $"sound: song {_box.Playing}, {player.BeatsPerMinute}bpm, {player.Ticks} ticks, "
                + $"{player.Commands} commands, {player.Notes} notes, "
