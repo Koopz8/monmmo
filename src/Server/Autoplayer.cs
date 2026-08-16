@@ -38,10 +38,31 @@ public sealed record PlayedScript(
 /// <param name="ToName">That map's name.</param>
 /// <param name="CouldStandOnIt">
 /// Whether it could actually stand on the door. False means the door was never the problem —
-/// something on this side of it was, and the frontier is where to look instead.
+/// something on this side of it was, and the two fields below say which.
+/// </param>
+/// <param name="SquareIsWalkable">
+/// Whether the square is walkable at all. <c>ToGrid</c> opens every warp square deliberately —
+/// "a door that cannot be stood on is a map that cannot be entered" — so a door that is
+/// <em>not</em> walkable is a fault in the export rather than a gate in the story.
+/// </param>
+/// <param name="SomebodyIsInTheWay">
+/// Somebody rooted on or beside the door. This is the shape most of FireRed's story gates
+/// take: a guard who wants a drink, a man who has not been given a reason to move.
+/// </param>
+/// <param name="IsDynamic">
+/// True when the target is the 127.127 sentinel — a warp a script fills in at the moment it is
+/// used, rather than a door to a fixed place. Nothing is missing when one of these is unopened
+/// and counting them as blockers would be counting a feature.
 /// </param>
 public sealed record ShutDoor(
-    string FromMapId, GridPosition Square, string ToMapId, string ToName, bool CouldStandOnIt);
+    string FromMapId,
+    GridPosition Square,
+    string ToMapId,
+    string ToName,
+    bool CouldStandOnIt,
+    bool SquareIsWalkable = true,
+    bool SomebodyIsInTheWay = false,
+    bool IsDynamic = false);
 
 /// <summary>Why the playthrough stopped.</summary>
 public enum StoppedBecause
@@ -267,7 +288,10 @@ public static class Autoplayer
                         w.Square,
                         w.TargetMapId,
                         world.Find(w.TargetMapId)?.Name ?? "(not exported)",
-                        stoodAtTheEnd.Contains((m.Id, w.Square)))))
+                        stoodAtTheEnd.Contains((m.Id, w.Square)),
+                        m.ToGrid().IsWalkable(w.Square),
+                        last.People.Any(p => p.MapId == m.Id && Near(p.Square, w.Square)),
+                        w.IsDynamic)))
                 .DistinctBy(d => (d.FromMapId, d.ToMapId, d.Square)),
         ];
 
@@ -451,6 +475,11 @@ public static class Autoplayer
             if (entry.ScriptAddress != 0) yield return entry.ScriptAddress;
         }
     }
+
+    /// <summary>Whether two squares are the same one or touching, which is close enough to be
+    /// in the way of a door.</summary>
+    private static bool Near(GridPosition one, GridPosition two) =>
+        Math.Abs(one.X - two.X) <= 1 && Math.Abs(one.Y - two.Y) <= 1;
 
     private static IEnumerable<(string, GridPosition)> Beside(string mapId, GridPosition at) =>
     [

@@ -5737,15 +5737,36 @@ public static class Program
         Console.WriteLine(
             $"  {played.ShutDoors.Count} doors lead out of somewhere it reached into somewhere it did not");
 
-        foreach (ShutDoor door in played.ShutDoors
+        // The sentinel warps first, out of the way: a script fills those in when it uses
+        // them, so an unopened one is a feature rather than a wall.
+        List<ShutDoor> real = [.. played.ShutDoors.Where(d => !d.IsDynamic)];
+
+        int dynamic = played.ShutDoors.Count - real.Count;
+
+        if (dynamic > 0)
+        {
+            Console.WriteLine(
+                $"    ({dynamic} of them are 127.127 sentinels, filled in by a script when used — not walls)");
+        }
+
+        foreach (ShutDoor door in real
                      .OrderByDescending(d => d.CouldStandOnIt)
                      .ThenBy(d => d.ToMapId)
                      .Take(30))
         {
+            string why = door.CouldStandOnIt
+                ? "stood on it and did not go through"
+                : !door.SquareIsWalkable
+                    ? "THE DOOR SQUARE IS NOT WALKABLE — an export fault, not a gate"
+                    : door.SomebodyIsInTheWay
+                        ? "somebody is standing in the way"
+                        : "never reached the door";
+
             Console.WriteLine(
-                $"    {door.FromMapId,-8} {door.Square} -> {door.ToMapId,-8} {door.ToName}"
-                + (door.CouldStandOnIt ? "   <- it could stand on this one" : "   (never reached the door itself)"));
+                $"    {door.FromMapId,-8} {door.Square} -> {door.ToMapId,-8} {door.ToName,-16} {why}");
         }
+
+        if (real.Count > 30) Console.WriteLine($"    ... and {real.Count - 30} more");
 
         if (played.ShutDoors.Count > 30)
             Console.WriteLine($"    ... and {played.ShutDoors.Count - 30} more");
