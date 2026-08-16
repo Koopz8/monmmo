@@ -307,6 +307,59 @@ public class BuyingWhatItWasRefusedTests
         Assert.Equal(2, bag.CountOf(9000));
     }
 
+    /// <summary>
+    /// And the playthrough gets the same answer, which needed its own decoy.
+    /// <para>
+    /// The bag tests above prove the predicate works; nothing proved the playthrough asks the
+    /// right question with it. A version that said "everything shares my pocket" passed every
+    /// one of them and reproduced the original fault exactly — sixty things carried, and the
+    /// shop it is standing in front of sells it nothing.
+    /// </para>
+    /// <para>
+    /// So: sixty things on the floor whose ids the rules have never heard of, and then a
+    /// POTION on a shelf. Nothing off that floor shares a pocket with a potion.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AFullPocketOfOneKindDoesNotStopItBuyingFromAnother()
+    {
+        const int filler = 9000;
+        const uint floor = 0x2000;
+
+        List<MapObject> objects =
+        [
+            new MapObject(1, 1, 0, 0, Direction.Down, 0, false) { ScriptAddress = 0x1000 },
+            new MapObject(2, 1, 1, 0, Direction.Down, 0, false, Sells: [TestRules.PotionItem]),
+        ];
+
+        for (var i = 0; i < Bag.PocketCapacity; i++)
+        {
+            objects.Add(
+                new MapObject(10 + i, 1, 2 + i % 12, 1 + i / 12, Direction.Down, 0, false)
+                    {
+                        ScriptAddress = floor + (uint)i,
+                    }
+                    with { GivesItemId = filler + i, GivesCount = 1, HiddenBy = 0x400 + i });
+        }
+
+        var world = new WorldData(
+            [new MapData("1.0", "1.0", 16, 16, new byte[256]) { Objects = objects }]);
+
+        Attempt played = Autoplayer.Play(
+            world,
+            "1.0",
+            TestRules.All,
+            (address, _, bag) => address >= floor
+                ? Nothing with { Gets = (filler + (int)(address - floor), 1) }
+                : Nothing with { Asked = [(TestRules.PotionItem, 1, bag.Has(TestRules.PotionItem))] },
+            null,
+            false,
+            9999);
+
+        Assert.Equal(Bag.PocketCapacity + 1, played.Carried.Count);
+        Assert.Equal(TestRules.PotionItem, Assert.Single(played.Bought).ItemId);
+    }
+
     // ---- and why it did not, when it did not --------------------------------------------
 
     /// <summary>
