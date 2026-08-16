@@ -47,6 +47,17 @@ public static class WorldExporter
 
                 string id = MapId(bank, number);
 
+                // Read once and used twice, rather than read twice.
+                //
+                // The list is used for the map's own objects and again for the boat, and
+                // both call sites used to read it. That is not only wasted work — every
+                // object dropped for sitting outside its map was reported once per read, so
+                // the same nine objects appeared four times each in the export log and
+                // looked like thirty-six problems. A count nobody can trust is worse than no
+                // count, and this project has an export log full of counts.
+                IReadOnlyList<MapObject> standing =
+                    MapLinkExtractor.ReadObjects(rom, header, grid.Width, grid.Height, log);
+
                 maps.Add(new MapData(
                     id,
                     names?.Resolve(header.RegionSectionId, indexBase) ?? $"SECTION {header.RegionSectionId}",
@@ -66,7 +77,7 @@ public static class WorldExporter
                     Encounters = encounters.GetValueOrDefault(id),
                     Connections = MapLinkExtractor.ReadConnections(rom, header, log),
                     Warps = MapLinkExtractor.ReadWarps(rom, header, grid.Width, grid.Height, log),
-                    Objects = MapLinkExtractor.ReadObjects(rom, header, grid.Width, grid.Height, log),
+                    Objects = standing,
                     Triggers = MapLinkExtractor.ReadTriggers(rom, header, grid.Width, grid.Height, log),
 
                     // The fifth list. Only the conditions travel — the addresses stay on
@@ -77,14 +88,12 @@ public static class WorldExporter
                     // A map's warp records say where its doorways go; these say where its
                     // boats and lifts do, and until now nothing on the server's side of
                     // the split had ever been told they existed.
-                    Doors = ScriptedDoors.On(rom, header, grid.Width, grid.Height, log),
+                    Doors = ScriptedDoors.On(rom, header, grid.Width, grid.Height, standing, log),
 
                     // And the boat, if this map is a stop on it. The one door in this
                     // game that is neither a square nor a script — see Ferries, where the
                     // reason it can be read at all is written down.
-                    Ferry = Ferries.DockOn(
-                        rom, header, id, grid.Width, grid.Height,
-                        MapLinkExtractor.ReadObjects(rom, header, grid.Width, grid.Height, log), log),
+                    Ferry = Ferries.DockOn(rom, header, id, grid.Width, grid.Height, standing, log),
                 });
             }
             catch (Exception ex)
@@ -406,7 +415,8 @@ public static class WorldExporter
         {
             if (maps.FirstOrDefault(m => m.Id == MapId(bank, number)) is not { Ferry: not null } dock) continue;
 
-            foreach (FerryPass pass in Ferries.Passes(rom, header, dock.Width, dock.Height, log))
+            foreach (FerryPass pass in Ferries.Passes(
+                rom, header, dock.Width, dock.Height, dock.Objects, log))
                 if (!passes.Contains(pass)) passes.Add(pass);
         }
 

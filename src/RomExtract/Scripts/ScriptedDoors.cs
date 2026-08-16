@@ -41,13 +41,20 @@ public static class ScriptedDoors
     private const byte Wherever = 0xFF;
 
     /// <summary>Every door the scripts on one map can make.</summary>
+    /// <param name="people">
+    /// This map's objects, already read. Passed in rather than read again: the exporter has
+    /// them, the reader reports every object it drops for being outside its map, and a
+    /// second read reports the same drops a second time. Four callers used to read them and
+    /// nine strays on a real cartridge came out as thirty-six lines.
+    /// </param>
     public static List<ScriptedDoor> On(
-        Rom rom, MapHeaderRecord header, int width, int height, Action<string>? log = null)
+        Rom rom, MapHeaderRecord header, int width, int height,
+        IReadOnlyList<MapObject> people, Action<string>? log = null)
     {
         var found = new List<ScriptedDoor>();
         var seen = new HashSet<(string, int, int, int)>();
 
-        foreach ((string what, uint address) in ScriptsOn(rom, header, width, height, log))
+        foreach ((string what, uint address) in ScriptsOn(rom, header, width, height, people, log))
         {
             foreach (ScriptCommand command in ScriptReader.ReadAll(rom, address))
             {
@@ -87,10 +94,10 @@ public static class ScriptedDoors
     /// </para>
     /// </summary>
     private static IEnumerable<(string What, uint Address)> ScriptsOn(
-        Rom rom, MapHeaderRecord header, int width, int height, Action<string>? log)
+        Rom rom, MapHeaderRecord header, int width, int height,
+        IReadOnlyList<MapObject> people, Action<string>? log)
     {
-        foreach (MapObject person in MapLinkExtractor.ReadObjects(rom, header, width, height, log)
-                     .Where(o => o.HasScript))
+        foreach (MapObject person in people.Where(o => o.HasScript))
         {
             yield return ($"person {person.LocalId}", person.ScriptAddress);
         }

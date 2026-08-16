@@ -62,11 +62,12 @@ public static class Ferries
 
     /// <summary>Every script whose last act is to hand over, having written where it stands.</summary>
     public static List<FerryStop> Stops(
-        Rom rom, MapHeaderRecord header, string mapId, int width, int height, Action<string>? log = null)
+        Rom rom, MapHeaderRecord header, string mapId, int width, int height,
+        IReadOnlyList<MapObject> people, Action<string>? log = null)
     {
         var found = new List<FerryStop>();
 
-        foreach ((string what, uint address) in ScriptsOn(rom, header, width, height, log))
+        foreach ((string what, uint address) in ScriptsOn(rom, header, width, height, people, log))
         {
             List<ScriptCommand> commands = [.. ScriptReader.ReadAll(rom, address).OrderBy(c => c.Offset)];
 
@@ -108,7 +109,7 @@ public static class Ferries
         Rom rom, MapHeaderRecord header, string mapId, int width, int height,
         IReadOnlyList<MapObject> people, Action<string>? log = null)
     {
-        List<FerryStop> stops = Stops(rom, header, mapId, width, height, log);
+        List<FerryStop> stops = Stops(rom, header, mapId, width, height, people, log);
 
         if (stops.FirstOrDefault(s => s.IsAPerson) is not { } stop) return null;
         if (people.FirstOrDefault(o => o.LocalId == stop.Attendant) is not { } sailor) return null;
@@ -139,11 +140,12 @@ public static class Ferries
     /// </para>
     /// </summary>
     public static List<FerryPass> Passes(
-        Rom rom, MapHeaderRecord header, int width, int height, Action<string>? log = null)
+        Rom rom, MapHeaderRecord header, int width, int height,
+        IReadOnlyList<MapObject> people, Action<string>? log = null)
     {
         var found = new List<FerryPass>();
 
-        foreach ((string _, uint address) in ScriptsOn(rom, header, width, height, log))
+        foreach ((string _, uint address) in ScriptsOn(rom, header, width, height, people, log))
         {
             List<ScriptCommand> commands = [.. ScriptReader.ReadAll(rom, address).OrderBy(c => c.Offset)];
 
@@ -174,10 +176,10 @@ public static class Ferries
     private const int Nearby = 4;
 
     private static IEnumerable<(string What, uint Address)> ScriptsOn(
-        Rom rom, MapHeaderRecord header, int width, int height, Action<string>? log)
+        Rom rom, MapHeaderRecord header, int width, int height,
+        IReadOnlyList<MapObject> people, Action<string>? log)
     {
-        foreach (MapObject person in MapLinkExtractor.ReadObjects(rom, header, width, height, log)
-                     .Where(o => o.HasScript))
+        foreach (MapObject person in people.Where(o => o.HasScript))
         {
             yield return ($"person {person.LocalId}", person.ScriptAddress);
         }
