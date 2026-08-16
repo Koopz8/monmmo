@@ -127,6 +127,8 @@ public static class Program
         if (options.Character is { } who)
             WriteOneCharacter(rom, who, options.OutputDirectory);
 
+        if (options.Story) WriteStoryReach(rom);
+
         if (options.DumpTrainers)
             WriteTrainers(rom, speciesCount);
 
@@ -6958,6 +6960,84 @@ public static class Program
     }
 
     /// <summary>
+    /// Walks the whole world from the beginning and says where it stops.
+    /// <para>
+    /// <b>The route is derived, not followed.</b> A walkthrough for this game is easy to find
+    /// and would have been easy to encode — eight gyms in a known order, a known list of
+    /// doors between them. A report built that way can only ever confirm that the walkthrough
+    /// is right; it cannot find that a door is missing from the world file, because it never
+    /// asks the world file where the doors are, and a missing door is the entire question.
+    /// </para>
+    /// <para>
+    /// So this asks the exported world what leads out of each map, over and over, until
+    /// nothing new turns up. A walkthrough is useful afterwards, as something to disagree
+    /// with: if this cannot reach a gym every guide puts on the way to the next one, that
+    /// disagreement is a finding, and it is one the guide-as-input version could never have
+    /// produced.
+    /// </para>
+    /// <para>
+    /// No badges and no obstacles yet, deliberately. This separates "the world file does not
+    /// connect" from "the player cannot get through yet", and only the first of those is a
+    /// defect: anything unreachable here is unreachable for everyone, for ever, however many
+    /// badges they have.
+    /// </para>
+    /// </summary>
+    private static void WriteStoryReach(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("Walking the world from the beginning");
+
+        Core.World.WorldData world = WorldExporter.Export(rom, _ => { });
+
+        if (world.Maps.Count == 0)
+        {
+            Console.WriteLine("  no maps were exported, so there is nothing to walk");
+            return;
+        }
+
+        // Where the game starts. Taken as the first map rather than looked up, and said out
+        // loud for exactly that reason — if this is the wrong map every number below is
+        // measuring the wrong walk, and somebody reading the report should be able to tell.
+        string start = world.Maps.First().Id;
+
+        Console.WriteLine($"  starting from {start}, of {world.Maps.Count} maps");
+
+        Core.World.StoryReach walked = Core.World.StoryWalk.WithTheBoat(world, start);
+
+        Console.WriteLine($"  reached {walked.Got.Count}, could not reach {walked.DidNot.Count}");
+
+        var byHow = walked.Got
+            .GroupBy(r => r.How)
+            .OrderByDescending(g => g.Count());
+
+        foreach (var how in byHow) Console.WriteLine($"    {how.Count(),4} {how.Key}");
+
+        Console.WriteLine($"  furthest anything sits from the beginning: {walked.Furthest} steps");
+
+        Console.WriteLine();
+        Console.WriteLine($"  {walked.Nowhere.Count} door(s) name somewhere this world file does not contain:");
+
+        foreach (Core.World.DoorToNowhere lost in walked.Nowhere.Take(40))
+            Console.WriteLine($"    {lost.OnMap,-8} -> {lost.Names,-8} ({lost.Kind})");
+
+        if (walked.Nowhere.Count > 40)
+            Console.WriteLine($"    ... and {walked.Nowhere.Count - 40} more");
+
+        Console.WriteLine();
+        Console.WriteLine($"  {walked.DidNot.Count} map(s) nothing leads to:");
+
+        foreach (string missed in walked.DidNot.Take(60)) Console.WriteLine($"    {missed}");
+
+        if (walked.DidNot.Count > 60)
+            Console.WriteLine($"    ... and {walked.DidNot.Count - 60} more");
+
+        Console.WriteLine();
+        Console.WriteLine("  A map nothing leads to is either somewhere the cartridge never uses");
+        Console.WriteLine("  or somewhere the exporter dropped. Those want opposite responses, so");
+        Console.WriteLine("  this report names them rather than deciding.");
+    }
+
+    /// <summary>
     /// Writes one character's walking frames out, plus the silhouette and the outline that
     /// the cosmetic art is actually placed against.
     /// <para>
@@ -7268,6 +7348,9 @@ public static class Program
               --encounters           dump wild encounter tables
               --behaviours <name>    report metatile behaviours for a named map
                                      (implies --encounters, does not render anything)
+              --story                walk the whole world from the beginning and
+                                     report every map that cannot be got to and
+                                     every door naming somewhere absent
               --character [id]       write one character's walking frames, the same
                                      frames at eight times, and a silhouette of each.
                                      Defaults to 0, the player. Writes to your own
@@ -7334,6 +7417,9 @@ public static class Program
         /// put on them. Null unless asked for.
         /// </summary>
         public int? Character { get; private init; }
+
+        /// <summary>Walk the whole world from the beginning and report where it stops.</summary>
+        public bool Story { get; private init; }
         public bool DumpTrainers { get; private init; }
         public bool DumpItems { get; private init; }
 
@@ -7501,6 +7587,7 @@ public static class Program
             string? exportRules = null;
             bool overworld = false;
             int? character = null;
+            bool story = false;
             bool trainers = false;
             bool items = false;
             bool holds = false;
@@ -7615,6 +7702,9 @@ public static class Program
                         break;
                     case "--overworld":
                         overworld = true;
+                        break;
+                    case "--story":
+                        story = true;
                         break;
                     case "--character":
                         // The graphics id, defaulting to the first player character, which is
@@ -7883,6 +7973,7 @@ public static class Program
                 ExportRulesPath = exportRules,
                 DumpOverworld = overworld,
                 Character = character,
+                Story = story,
                 DumpTrainers = trainers,
                 DumpItems = items,
                 DumpHolds = holds,
