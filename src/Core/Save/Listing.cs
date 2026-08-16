@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 using PokeMmo.Core.Battle;
 
 namespace PokeMmo.Core.Save;
@@ -57,7 +59,15 @@ public sealed record Listing(
     /// <summary>True when this is a pile of items rather than a creature.</summary>
     public bool IsItem => Item > 0;
 
-    /// <summary>The same six numbers as something that knows what they mean.</summary>
+    /// <summary>
+    /// The same six numbers as something that knows what they mean.
+    /// <para>
+    /// Kept off the wire. A listing goes to a client now that there is a screen, and this
+    /// is the six numbers beside it wrapped in an object — sending both would be sending
+    /// the same fact twice and inviting the day they disagree.
+    /// </para>
+    /// </summary>
+    [JsonIgnore]
     public Genes Born => Genes.Of(Ivs);
 
     /// <summary>

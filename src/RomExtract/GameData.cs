@@ -80,6 +80,23 @@ public sealed class GameData
         && !item.IsKeyItem
         && _holdingPockets.Contains(item.Pocket);
 
+    /// <summary>
+    /// Whether this is something nobody may put on the market.
+    /// <para>
+    /// The client's half of a rule the server enforces, exactly as <see cref="CanBeHeld"/>
+    /// is, and worth having on this side for the same reason: a market screen that offered
+    /// the BICYCLE would be offering a refusal that arrives a keypress after the decision.
+    /// </para>
+    /// <para>
+    /// An item this cartridge has never heard of answers yes, and that is the safe way
+    /// round here even though it sounds like the unsafe one. The server refuses key items
+    /// regardless; all this decides is what a bag <em>shows</em>, and answering no to the
+    /// unknown would empty the whole screen the day the item table failed to be located.
+    /// </para>
+    /// </summary>
+    public bool MayBeSold(int itemId) =>
+        itemId > 0 && (!_itemAt.TryGetValue(itemId, out ItemData? item) || !item.IsKeyItem);
+
     /// <summary>The machine items in pocket order, which is the order of the bits.</summary>
     public IReadOnlyList<int> MachineItems { get; }
 

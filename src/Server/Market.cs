@@ -57,6 +57,107 @@ public sealed class Market(IMarketStore store, Action<long>? forget = null)
     }
 
     /// <summary>
+    /// The same market, asked for by a screen instead of typed at.
+    /// <para>
+    /// This does not reimplement anything. It turns the request into the console line it is
+    /// equivalent to, runs that, and then takes a fresh picture of the whole market. One
+    /// implementation of listing and buying and collecting, two front ends — because the
+    /// alternative is two implementations of escrow, and the second one is the one that
+    /// loses somebody's creature.
+    /// </para>
+    /// <para>
+    /// What the screen gets back is the sentence the console would have printed, attached
+    /// to the picture rather than sent as a line of its own. A screen that showed a refusal
+    /// somewhere other than beside the thing refused is a screen that has to be read twice.
+    /// </para>
+    /// </summary>
+    public async Task<List<Outgoing>> ScreenAsync(
+        GameWorld world,
+        int playerId,
+        long accountId,
+        MarketRequest asked,
+        CancellationToken cancellationToken = default)
+    {
+        var sent = new List<Outgoing>();
+        string said = "";
+
+        if (LineFor(asked) is { } line)
+        {
+            sent = await RunAsync(world, playerId, accountId, line, cancellationToken);
+
+            // The console's own words, lifted off and put on the picture. Everything else
+            // an act produced — a bag update, say — still goes, because the bag screen is
+            // somebody else's and has to stay in step whether or not this screen is open.
+            said = string.Join(
+                "  ", sent.Select(o => o.Message).OfType<ConsoleReply>().Select(r => r.Text));
+
+            sent = [.. sent.Where(o => o.Message is not ConsoleReply)];
+        }
+
+        sent.Add(await PictureAsync(world, playerId, accountId, said, cancellationToken));
+
+        return sent;
+    }
+
+    /// <summary>
+    /// The console line a screen's request is the same thing as, or nothing when it is only
+    /// asking to look.
+    /// <para>
+    /// Public because it is the join between the two front ends and the only place they can
+    /// come apart. A new kind of ask added to the enum without an arm here falls through to
+    /// nothing and becomes a silent "just look" — a button that does nothing and reports
+    /// success. There is a test that walks the enum and asks this, which is only possible
+    /// if it can be asked.
+    /// </para>
+    /// </summary>
+    public static ConsoleLine? LineFor(MarketRequest asked) => asked.Asking switch
+    {
+        MarketAsk.Buy => ConsoleLine.Of($"buy {asked.Listing}"),
+        MarketAsk.Cancel => ConsoleLine.Of($"cancel {asked.Listing}"),
+        MarketAsk.Collect => ConsoleLine.Of("collect"),
+        MarketAsk.SellOne => ConsoleLine.Of($"sell {asked.Slot} {asked.Price}"),
+        MarketAsk.SellSome => ConsoleLine.Of($"sell item {asked.Item} {asked.Count} {asked.Price}"),
+        _ => null,
+    };
+
+    /// <summary>
+    /// The whole market as one message: the board, this player's own listings, what they
+    /// have to sell, and what they are owed.
+    /// </summary>
+    private async Task<Outgoing> PictureAsync(
+        GameWorld world,
+        int playerId,
+        long accountId,
+        string said,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<Listing> board = await store.BrowseAsync(APageful, cancellationToken);
+        IReadOnlyList<Listing> mine = await store.MineAsync(accountId, cancellationToken);
+
+        // What collecting would actually pay, worked out the way collecting works it out
+        // rather than as the sum of the prices. A screen that promised the gross and paid
+        // the net would be the market taking its cut by surprise.
+        int owed = mine.Where(l => l.Sold).Sum(l => l.Price);
+        owed -= owed * IMarketStore.Cut / 100;
+
+        ServerPlayer? player = world.Find(playerId);
+
+        return new Outgoing(
+            new MarketOpened(
+                board,
+                mine,
+                player is null ? [] : [.. player.Box],
+                player?.Bag.Entries ?? [],
+                player?.Money ?? 0,
+                said)
+            {
+                Owed = owed,
+                Cut = IMarketStore.Cut,
+            },
+            OnlyTo: playerId);
+    }
+
+    /// <summary>
     /// The board, or the part of it somebody asked about.
     /// <para>
     /// With no arguments this is the newest listings, which is the right answer to "what is

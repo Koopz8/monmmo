@@ -65,6 +65,30 @@ public class MessageChannelTests
                 [new SavedMon(16, 20, null, 40, StatusCondition.None, Nature.Bold, [33])],
                 3_940,
                 "We can raise them for you."),
+            new MarketRequest(MarketAsk.SellSome) { Item = 13, Count = 5, Price = 900 },
+
+            // Both kinds of listing, because a listing that is a pile of items and one that
+            // is a creature go down the same wire in the same field, and a screen that
+            // could only read one of them back would be a screen with half a market on it.
+            new MarketOpened(
+                [
+                    new Listing(4, "Koop", 150, 44, 2_500)
+                    {
+                        Ivs = [31, 30, 29, 28, 27, 26],
+                        Sex = Gender.Female,
+                    },
+                    new Listing(5, "Koop", 0, 0, 900) { Item = 13, Count = 5 },
+                ],
+                [new Listing(6, "Mason", 0, 0, 400) { Item = 14, Count = 2, Sold = true }],
+                [new SavedMon(7, 12, null, 30, StatusCondition.None, Nature.Bold, [33])],
+                [new BagEntry(13, 7)],
+                5_000,
+                "bought species 150 for 2500")
+            {
+                Owed = 380,
+                Cut = 5,
+            },
+
             new LoginRequest("Mason", "a-good-password"),
             new ScriptGave(1, 358),
             new LearnMoveRequest(33, 2),

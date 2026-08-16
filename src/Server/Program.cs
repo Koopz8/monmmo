@@ -1327,6 +1327,22 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                             if (_friends.Last is { } listed) Console.WriteLine($"& #{playerId} {listed}");
                             break;
 
+                        // The screen, which anybody may use. The console's market verbs are
+                        // behind /op below because a console is an operator's tool; a market
+                        // is not, and gating the screen the same way would be a market only
+                        // the person running the server could shop at.
+                        case MarketRequest shopping when playerId != 0 && _market is not null:
+                            await DispatchAsync(
+                                    await _market
+                                        .ScreenAsync(world, playerId, accountId, shopping, cancellationToken)
+                                        .ConfigureAwait(false),
+                                    playerId,
+                                    cancellationToken)
+                                .ConfigureAwait(false);
+
+                            if (_market.Last is { } shopped) Console.WriteLine($"~ #{playerId} {shopped}");
+                            break;
+
                         case ConsoleCommand market
                             when playerId != 0
                                 && _market is not null

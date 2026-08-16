@@ -217,6 +217,16 @@ public sealed class NetworkClient : IDisposable
     public void SendDaycare(int slot, bool leaving) => Send(new DaycareRequest(slot, leaving));
 
     /// <summary>
+    /// Ask the market for something, or just to look.
+    /// <para>
+    /// The request is passed through as it was built rather than taken apart into
+    /// arguments, because a market request is six shapes wearing one type and a sender
+    /// with six overloads would be six chances to fill in the wrong field.
+    /// </para>
+    /// </summary>
+    public void SendMarket(MarketRequest asking) => Send(asking);
+
+    /// <summary>
     /// Say something to the room, or to one person by name. Who hears it is the server's,
     /// and so is how often anybody may ask.
     /// </summary>

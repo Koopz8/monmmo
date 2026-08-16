@@ -353,6 +353,10 @@ public static class Program
 
         ShopScreen? shop = null;
         DaycareScreen? minding = null;
+
+        // The market. Opened by a key rather than by standing anywhere, because there is
+        // no market on this cartridge to stand at — see the screen's own note.
+        MarketScreen? market = null;
         FerryScreen? boat = null;
         IReadOnlyList<BagEntry> bag = [];
         int money = 0;
@@ -469,7 +473,7 @@ public static class Program
 
             ApplyServerMessages(
                 network, others, player, view, data, trainers, items, script, carrying, storing, looking,
-                ref talking, ref battle, ref shop, ref minding, ref boat, ref bag, ref party, ref box, ref boxSize, ref money,
+                ref talking, ref battle, ref shop, ref minding, ref market, ref boat, ref bag, ref party, ref box, ref boxSize, ref money,
                 ref correction, ref looks, ref owned, ref trading, ref askedBy, ref challengedBy, ref watching, ref exclaimFor, ref scene, ref arrived, ref fadingIn, ref holdInput,
                 ref afterTheFight, ref cameOut, outcomes, rival, console);
 
@@ -603,6 +607,15 @@ public static class Program
                 && Raylib.IsKeyPressed(KeyboardKey.C) && InARoomThatHeals(data, view, healer))
             {
                 storing = new BoxScreen(party, box, boxSize, data, items);
+            }
+
+            // The market, on its own key. Asking is all this does — the screen is built
+            // when the answer arrives, so a server with no market simply never opens one
+            // rather than opening an empty screen that cannot be used.
+            if (carrying is null && storing is null && looking is null && market is null
+                && talking is null && !console.IsOpen && Raylib.IsKeyPressed(KeyboardKey.M))
+            {
+                network.SendMarket(new MarketRequest(MarketAsk.Look));
             }
 
             // The party, on the key the box used to take. Nothing else is going on, the
@@ -773,6 +786,26 @@ public static class Program
                     boat = null;
                     network.SendTalkFinished();
                 }
+
+                continue;
+            }
+
+            // The market takes the whole screen the way the daycare does. It is the one
+            // screen here that shows other players' property, so everything on it is the
+            // server's word and nothing is drawn from anything this side worked out.
+            if (market is not null)
+            {
+                talking = null;
+
+                market.Update();
+
+                if (market.TakePending() is MarketRequest asked) network.SendMarket(asked);
+
+                Raylib.BeginDrawing();
+                market.Draw();
+                Raylib.EndDrawing();
+
+                if (market.IsClosed) market = null;
 
                 continue;
             }
@@ -1915,6 +1948,7 @@ public static class Program
         ref BattleScreen? battle,
         ref ShopScreen? shop,
         ref DaycareScreen? mindingScreen,
+        ref MarketScreen? marketScreen,
         ref FerryScreen? boat,
         ref IReadOnlyList<BagEntry> bag,
         ref IReadOnlyList<SavedMon> party,
@@ -2322,6 +2356,20 @@ public static class Program
 
                 case FerryOpened asked:
                     boat = new FerryScreen(asked);
+                    break;
+
+                // The whole market in one message, which opens the screen the first time
+                // and replaces what is on it every time after. The box, bag and money come
+                // with it because buying changes all three, and the overworld's own copies
+                // are updated here rather than left to catch up at the next save.
+                case MarketOpened stall:
+                    box = stall.Box;
+                    bag = stall.Bag;
+                    money = stall.Money;
+
+                    if (marketScreen is null) marketScreen = new MarketScreen(stall, data, items);
+                    else marketScreen.Apply(stall);
+
                     break;
 
                 case ShopUpdated updated:

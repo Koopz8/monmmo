@@ -65,6 +65,8 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(ChatSaid), "chatsaid")]
 [JsonDerivedType(typeof(DaycareUpdated), "daycare")]
 [JsonDerivedType(typeof(DaycareRequest), "daycareask")]
+[JsonDerivedType(typeof(MarketOpened), "market")]
+[JsonDerivedType(typeof(MarketRequest), "marketask")]
 [JsonDerivedType(typeof(CosmeticsOwned), "owned")]
 [JsonDerivedType(typeof(Welcome), "welcome")]
 [JsonDerivedType(typeof(AuthFailed), "authfailed")]
@@ -477,6 +479,92 @@ public sealed record BoxUpdated(
     IReadOnlyList<SavedMon> Box,
     int BoxSize,
     string Message) : NetMessage;
+
+/// <summary>
+/// The market, as one whole picture.
+/// <para>
+/// Everything a screen needs in one message, rather than a board here and a purse there:
+/// every act at a market changes at least two of these at once — buying moves a creature
+/// <em>and</em> money <em>and</em> takes a row off the board — and a client holding any of
+/// them stale is showing somebody a market that no longer exists.
+/// </para>
+/// <para>
+/// It carries the seller's own box and bag as well, which looks like more than a market
+/// needs until you ask what a screen is for. The thing you do at a market is decide, and
+/// deciding what to sell means looking at what you have next to what everybody else is
+/// asking for it. That comparison is the whole screen.
+/// </para>
+/// </summary>
+public sealed record MarketOpened(
+    IReadOnlyList<Listing> Board,
+    IReadOnlyList<Listing> Mine,
+    IReadOnlyList<SavedMon> Box,
+    IReadOnlyList<BagEntry> Bag,
+    int Money,
+    string Message) : NetMessage
+{
+    /// <summary>What is waiting to be collected, already with the cut taken off.</summary>
+    public int Owed { get; init; }
+
+    /// <summary>
+    /// What the market keeps, as a percentage, so the screen can say so rather than let
+    /// somebody discover it by counting their money afterwards.
+    /// </summary>
+    public int Cut { get; init; }
+}
+
+/// <summary>
+/// The six things anybody does at a market.
+/// <para>
+/// Named rather than numbered because the wire form is a string either way and a reader
+/// of a packet dump should not have to look up what four meant.
+/// </para>
+/// </summary>
+public enum MarketAsk
+{
+    /// <summary>Just show me. Sent when the screen opens and after nothing in particular.</summary>
+    Look,
+    Buy,
+    Cancel,
+    Collect,
+
+    /// <summary>One creature out of the box, at a price.</summary>
+    SellOne,
+
+    /// <summary>A number of one item out of the bag, at a price for the lot.</summary>
+    SellSome,
+}
+
+/// <summary>
+/// What a screen asks the market to do.
+/// <para>
+/// One message with a kind rather than six, for the reason the daycare has one: they
+/// differ in which fields matter and in nothing else, and six near-identical records would
+/// each need their own handler saying the same three things.
+/// </para>
+/// <para>
+/// Everything on it is a number the server checks. A client may say "sell box slot two for
+/// one", and what comes back is either a market with that on it or a market with a sentence
+/// explaining why not — the screen is never the thing that refused.
+/// </para>
+/// </summary>
+public sealed record MarketRequest(MarketAsk Asking) : NetMessage
+{
+    /// <summary>Which listing, for buying and cancelling.</summary>
+    public long Listing { get; init; }
+
+    /// <summary>Which box slot, for selling a creature.</summary>
+    public int Slot { get; init; }
+
+    /// <summary>Which item, for selling a pile.</summary>
+    public int Item { get; init; }
+
+    /// <summary>How many of it.</summary>
+    public int Count { get; init; }
+
+    /// <summary>What is being asked for it, for the lot rather than for each.</summary>
+    public int Price { get; init; }
+}
 
 /// <summary>
 /// What is on the daycare's shelf, and how far off an egg is.
