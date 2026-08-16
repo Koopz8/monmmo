@@ -468,4 +468,150 @@ public class GuildTests
         Assert.True(Guilds.Handles("guild"));
         Assert.False(Guilds.Handles("market"));
     }
+
+    // ---- the screen --------------------------------------------------------------------
+
+    private static async Task<GuildOpened> AskAsync(
+        Guilds guilds, GameWorld world, ServerPlayer player, long accountId, GuildRequest asking)
+    {
+        List<Outgoing> sent = await guilds.ScreenAsync(world, player.Id, accountId, asking);
+
+        return Assert.Single(sent.Select(o => o.Message).OfType<GuildOpened>());
+    }
+
+    /// <summary>
+    /// Every kind of ask a screen can make is a console line the guild answers to.
+    /// <para>
+    /// The guardrail the market's two front ends needed and this one needs for the same
+    /// reason. A kind added to the enum with no arm in the translation falls through to
+    /// nothing, which is the value <em>Look</em> has — so the button would do nothing, say
+    /// nothing, and report success.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void EveryKindOfAskIsALineTheGuildAnswersTo()
+    {
+        var stranded = new List<string>();
+
+        foreach (GuildAsk asking in Enum.GetValues<GuildAsk>())
+        {
+            ConsoleLine? line = Guilds.LineFor(new GuildRequest(asking, "Team Rocket"));
+
+            if (asking == GuildAsk.Look)
+            {
+                if (line is not null) stranded.Add($"{asking} should ask for nothing");
+                continue;
+            }
+
+            if (line is null) stranded.Add($"{asking} makes no line at all");
+            else if (!Guilds.Handles(line.Verb)) stranded.Add($"{asking} makes /{line.Verb}, not ours");
+        }
+
+        Assert.Empty(stranded);
+    }
+
+    [Fact]
+    public async Task LookingWithNoGuildGivesTheOffersInstead()
+    {
+        using SqlitePlayerStore store = SqlitePlayerStore.InMemory();
+
+        GameWorld world = World();
+        var guilds = new Guilds(store);
+
+        (ServerPlayer mason, long masonId) = await ArriveAsync(store, world, "Mason");
+        (ServerPlayer ash, long ashId) = await ArriveAsync(store, world, "Ash");
+
+        await RunAsync(guilds, world, mason, masonId, "/guild Team Rocket");
+        await RunAsync(guilds, world, mason, masonId, "/invite Ash");
+
+        GuildOpened seen = await AskAsync(guilds, world, ash, ashId, new GuildRequest(GuildAsk.Look));
+
+        Assert.False(seen.Exists);
+        Assert.Empty(seen.Members);
+        Assert.Equal("Team Rocket", Assert.Single(seen.Invitations));
+    }
+
+    [Fact]
+    public async Task AndWithOneGivesTheRosterAndWhoIsWhere()
+    {
+        using SqlitePlayerStore store = SqlitePlayerStore.InMemory();
+
+        GameWorld world = World();
+        var guilds = new Guilds(store);
+
+        (ServerPlayer mason, long masonId) = await ArriveAsync(store, world, "Mason");
+
+        // Registered but never joined the world, which is what "away" looks like from here.
+        long ash = await AccountAsync(store, "Ash");
+
+        await RunAsync(guilds, world, mason, masonId, "/guild Team Rocket");
+        await RunAsync(guilds, world, mason, masonId, "/invite Ash");
+        Assert.NotNull(await store.AcceptAsync(ash, "Team Rocket"));
+
+        GuildOpened seen = await AskAsync(guilds, world, mason, masonId, new GuildRequest(GuildAsk.Look));
+
+        Assert.True(seen.Exists);
+        Assert.True(seen.IsLeader);
+        Assert.Equal("Team Rocket", seen.Name);
+        Assert.Empty(seen.Invitations);
+
+        Assert.Equal(2, seen.Members.Count);
+        Assert.Equal("PALLET TOWN", seen.Members[0].Where);
+        Assert.Equal("", seen.Members[1].Where);
+    }
+
+    /// <summary>
+    /// A screen act is the same act as typing it, and the refusal comes back on the picture
+    /// rather than as a line of its own.
+    /// </summary>
+    [Fact]
+    public async Task FoundingThroughTheScreenIsTheSameActAndSaysSoOnThePicture()
+    {
+        using SqlitePlayerStore store = SqlitePlayerStore.InMemory();
+
+        GameWorld world = World();
+        var guilds = new Guilds(store);
+
+        (ServerPlayer mason, long masonId) = await ArriveAsync(store, world, "Mason");
+
+        List<Outgoing> sent = await guilds.ScreenAsync(
+            world, mason.Id, masonId, new GuildRequest(GuildAsk.Found, "Team Rocket"));
+
+        Assert.Empty(sent.Select(o => o.Message).OfType<ConsoleReply>());
+
+        GuildOpened seen = Assert.Single(sent.Select(o => o.Message).OfType<GuildOpened>());
+
+        Assert.Equal("Team Rocket", seen.Name);
+        Assert.Contains("Team Rocket exists", seen.Message);
+
+        // And a second one is refused, on the picture, without losing the first.
+        GuildOpened again = await AskAsync(
+            guilds, world, mason, masonId, new GuildRequest(GuildAsk.Found, "Team Aqua"));
+
+        Assert.Equal("Team Rocket", again.Name);
+        Assert.Contains("already in", again.Message);
+    }
+
+    /// <summary>
+    /// Somebody who is in a guild and does not lead it is told so, so a screen can hide the
+    /// two things they may not do rather than offering a refusal.
+    /// </summary>
+    [Fact]
+    public async Task AMemberIsNotToldTheyLeadIt()
+    {
+        using SqlitePlayerStore store = SqlitePlayerStore.InMemory();
+
+        GameWorld world = World();
+        var guilds = new Guilds(store);
+
+        (ServerPlayer mason, long masonId) = await ArriveAsync(store, world, "Mason");
+        (ServerPlayer ash, long ashId) = await ArriveAsync(store, world, "Ash");
+
+        await RunAsync(guilds, world, mason, masonId, "/guild Team Rocket");
+        await RunAsync(guilds, world, mason, masonId, "/invite Ash");
+        await RunAsync(guilds, world, ash, ashId, "/join Team Rocket");
+
+        Assert.True((await AskAsync(guilds, world, mason, masonId, new GuildRequest(GuildAsk.Look))).IsLeader);
+        Assert.False((await AskAsync(guilds, world, ash, ashId, new GuildRequest(GuildAsk.Look))).IsLeader);
+    }
 }

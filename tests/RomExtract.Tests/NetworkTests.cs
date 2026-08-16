@@ -65,6 +65,19 @@ public class MessageChannelTests
                 [new SavedMon(16, 20, null, 40, StatusCondition.None, Nature.Bold, [33])],
                 3_940,
                 "We can raise them for you."),
+            new GuildRequest(GuildAsk.Invite, "Ash"),
+
+            // Both states of the one message: a guild with people in it, and the offers
+            // somebody with no guild is looking at.
+            new GuildOpened(
+                "Team Rocket",
+                [new GuildFace("Mason", true, "PALLET TOWN"), new GuildFace("Ash", false, "")],
+                [],
+                IsLeader: true,
+                "Ash has been asked"),
+
+            new GuildOpened("", [], ["Team Rocket", "Team Aqua"], IsLeader: false, ""),
+
             new MarketRequest(MarketAsk.SellSome) { Item = 13, Count = 5, Price = 900 },
 
             // Both kinds of listing, because a listing that is a pile of items and one that

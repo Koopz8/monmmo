@@ -30,6 +30,96 @@ public sealed class Guilds(IGuildStore store)
     /// <summary>What the last thing anybody did with a guild came to, for the log.</summary>
     public string? Last { get; private set; }
 
+    /// <summary>
+    /// The same guild, asked for by a screen instead of typed at.
+    /// <para>
+    /// Built exactly like the market's, and for the reason that one was: this turns the
+    /// request into the console line it is equivalent to, runs that, and then takes a fresh
+    /// picture. One implementation of joining and leaving, two front ends — because two
+    /// implementations of "one guild each" is how somebody ends up in two.
+    /// </para>
+    /// </summary>
+    public async Task<List<Outgoing>> ScreenAsync(
+        GameWorld world,
+        int playerId,
+        long accountId,
+        GuildRequest asked,
+        CancellationToken cancellationToken = default)
+    {
+        var sent = new List<Outgoing>();
+        string said = "";
+
+        if (LineFor(asked) is { } line)
+        {
+            sent = await RunAsync(world, playerId, accountId, line, cancellationToken);
+
+            said = string.Join(
+                "  ", sent.Select(o => o.Message).OfType<ConsoleReply>().Select(r => r.Text));
+
+            sent = [.. sent.Where(o => o.Message is not ConsoleReply)];
+        }
+
+        sent.Add(await PictureAsync(world, playerId, accountId, said, cancellationToken));
+
+        return sent;
+    }
+
+    /// <summary>
+    /// The console line a screen's request is the same thing as, or nothing when it is only
+    /// asking to look.
+    /// <para>
+    /// Public for the reason the market's is: it is the join between the two front ends and
+    /// the only place they can come apart. A kind added to the enum with no arm here becomes
+    /// a silent "just look" — a button that does nothing and reports success — and there is
+    /// a test that walks the enum and asks this.
+    /// </para>
+    /// </summary>
+    public static ConsoleLine? LineFor(GuildRequest asked) => asked.Asking switch
+    {
+        GuildAsk.Found => ConsoleLine.Of($"guild {asked.Name}"),
+        GuildAsk.Invite => ConsoleLine.Of($"invite {asked.Name}"),
+        GuildAsk.Join => ConsoleLine.Of($"join {asked.Name}"),
+        GuildAsk.Leave => ConsoleLine.Of("leave"),
+        GuildAsk.Kick => ConsoleLine.Of($"kick {asked.Name}"),
+        _ => null,
+    };
+
+    /// <summary>The whole guild as one message, or the offers to join one.</summary>
+    private async Task<Outgoing> PictureAsync(
+        GameWorld world,
+        int playerId,
+        long accountId,
+        string said,
+        CancellationToken cancellationToken)
+    {
+        if (await store.OfAsync(accountId, cancellationToken) is not { } guild)
+        {
+            IReadOnlyList<Guild> asked = await store.InvitationsAsync(accountId, cancellationToken);
+
+            return new Outgoing(
+                new GuildOpened("", [], [.. asked.Select(a => a.Name)], false, said),
+                OnlyTo: playerId);
+        }
+
+        IReadOnlyList<GuildMember> members = await store.MembersAsync(guild.Id, cancellationToken);
+
+        var faces = new List<GuildFace>();
+        bool leading = false;
+
+        foreach (GuildMember member in members)
+        {
+            ServerPlayer? here = world.Named(member.Name);
+
+            faces.Add(new GuildFace(
+                member.Name, member.IsLeader, here is null ? "" : world.NameOfMap(here.MapId)));
+
+            if (member.IsLeader && here is not null && here.Id == playerId) leading = true;
+        }
+
+        return new Outgoing(
+            new GuildOpened(guild.Name, faces, [], leading, said), OnlyTo: playerId);
+    }
+
     public async Task<List<Outgoing>> RunAsync(
         GameWorld world,
         int playerId,

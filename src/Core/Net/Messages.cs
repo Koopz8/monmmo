@@ -65,6 +65,8 @@ namespace PokeMmo.Core.Net;
 [JsonDerivedType(typeof(ChatSaid), "chatsaid")]
 [JsonDerivedType(typeof(DaycareUpdated), "daycare")]
 [JsonDerivedType(typeof(DaycareRequest), "daycareask")]
+[JsonDerivedType(typeof(GuildOpened), "guild")]
+[JsonDerivedType(typeof(GuildRequest), "guildask")]
 [JsonDerivedType(typeof(MarketOpened), "market")]
 [JsonDerivedType(typeof(MarketRequest), "marketask")]
 [JsonDerivedType(typeof(CosmeticsOwned), "owned")]
@@ -479,6 +481,59 @@ public sealed record BoxUpdated(
     IReadOnlyList<SavedMon> Box,
     int BoxSize,
     string Message) : NetMessage;
+
+/// <summary>
+/// One person in a guild, as a screen needs them.
+/// <para>
+/// The roster half comes off the disk and the "where are they" half comes off the world,
+/// and they are one record here because a screen shows them on one line. Keeping them apart
+/// is right in the store, where one is durable and the other is only true for an instant;
+/// keeping them apart on the wire would just mean the client joining two lists by name.
+/// </para>
+/// </summary>
+public sealed record GuildFace(string Name, bool IsLeader, string Where);
+
+/// <summary>
+/// A guild, as one whole picture — or the offers to join one, when there is none.
+/// <para>
+/// One message for both states, because they are the same screen answering the same
+/// question from either side of having a guild. A client with no guild and three invitations
+/// has something to show; a second message kind for it would be a second thing to keep in
+/// step.
+/// </para>
+/// </summary>
+public sealed record GuildOpened(
+    string Name,
+    IReadOnlyList<GuildFace> Members,
+    IReadOnlyList<string> Invitations,
+    bool IsLeader,
+    string Message) : NetMessage
+{
+    /// <summary>True when this player is in one at all.</summary>
+    public bool Exists => Name.Length > 0;
+}
+
+/// <summary>The five things anybody does to a guild from a screen.</summary>
+public enum GuildAsk
+{
+    /// <summary>Just show me. Sent when the screen opens.</summary>
+    Look,
+    Found,
+    Invite,
+    Join,
+    Leave,
+    Kick,
+}
+
+/// <summary>
+/// What a screen asks about a guild.
+/// <para>
+/// One message with a kind and one name, for the reason the market's has one: they differ in
+/// what the name means and in nothing else, and five near-identical records would each need
+/// a handler saying the same three things.
+/// </para>
+/// </summary>
+public sealed record GuildRequest(GuildAsk Asking, string Name = "") : NetMessage;
 
 /// <summary>
 /// The market, as one whole picture.

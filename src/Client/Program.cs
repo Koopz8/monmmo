@@ -357,6 +357,10 @@ public static class Program
         // The market. Opened by a key rather than by standing anywhere, because there is
         // no market on this cartridge to stand at — see the screen's own note.
         MarketScreen? market = null;
+
+        // The guild, on its own key. Like the market, it has nowhere on the cartridge to
+        // stand — the cartridge has no guilds — so it is a key rather than a counter.
+        GuildScreen? band = null;
         FerryScreen? boat = null;
         IReadOnlyList<BagEntry> bag = [];
         int money = 0;
@@ -473,7 +477,7 @@ public static class Program
 
             ApplyServerMessages(
                 network, others, player, view, data, trainers, items, script, carrying, storing, looking,
-                ref talking, ref battle, ref shop, ref minding, ref market, ref boat, ref bag, ref party, ref box, ref boxSize, ref money,
+                ref talking, ref battle, ref shop, ref minding, ref market, ref band, ref boat, ref bag, ref party, ref box, ref boxSize, ref money,
                 ref correction, ref looks, ref owned, ref trading, ref askedBy, ref challengedBy, ref watching, ref exclaimFor, ref scene, ref arrived, ref fadingIn, ref holdInput,
                 ref afterTheFight, ref cameOut, outcomes, rival, console);
 
@@ -607,6 +611,16 @@ public static class Program
                 && Raylib.IsKeyPressed(KeyboardKey.C) && InARoomThatHeals(data, view, healer))
             {
                 storing = new BoxScreen(party, box, boxSize, data, items);
+            }
+
+            // The guild, on its own key, and asking is all it does — the screen is built
+            // when the answer arrives, so a server with no guilds never opens one rather
+            // than opening an empty screen nobody can use.
+            if (carrying is null && storing is null && looking is null && market is null
+                && band is null && talking is null && !console.IsOpen
+                && Raylib.IsKeyPressed(KeyboardKey.G))
+            {
+                network.SendGuild(new GuildRequest(GuildAsk.Look));
             }
 
             // The market, on its own key. Asking is all this does — the screen is built
@@ -786,6 +800,23 @@ public static class Program
                     boat = null;
                     network.SendTalkFinished();
                 }
+
+                continue;
+            }
+
+            if (band is not null)
+            {
+                talking = null;
+
+                band.Update();
+
+                if (band.TakePending() is GuildRequest guildAsk) network.SendGuild(guildAsk);
+
+                Raylib.BeginDrawing();
+                band.Draw();
+                Raylib.EndDrawing();
+
+                if (band.IsClosed) band = null;
 
                 continue;
             }
@@ -1949,6 +1980,7 @@ public static class Program
         ref ShopScreen? shop,
         ref DaycareScreen? mindingScreen,
         ref MarketScreen? marketScreen,
+        ref GuildScreen? guildScreen,
         ref FerryScreen? boat,
         ref IReadOnlyList<BagEntry> bag,
         ref IReadOnlyList<SavedMon> party,
@@ -2362,6 +2394,14 @@ public static class Program
                 // and replaces what is on it every time after. The box, bag and money come
                 // with it because buying changes all three, and the overworld's own copies
                 // are updated here rather than left to catch up at the next save.
+                // One message opens the screen and replaces what is on it, the way the
+                // market's and the box's do.
+                case GuildOpened together:
+                    if (guildScreen is null) guildScreen = new GuildScreen(together);
+                    else guildScreen.Apply(together);
+
+                    break;
+
                 case MarketOpened stall:
                     box = stall.Box;
                     bag = stall.Bag;

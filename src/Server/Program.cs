@@ -1351,6 +1351,18 @@ public sealed class GameServer(GameWorld world, IPlayerStore store, bool verbose
                             if (_market.Last is { } shopped) Console.WriteLine($"~ #{playerId} {shopped}");
                             break;
 
+                        case GuildRequest asking when playerId != 0 && _guilds is not null:
+                            await DispatchAsync(
+                                    await _guilds
+                                        .ScreenAsync(world, playerId, accountId, asking, cancellationToken)
+                                        .ConfigureAwait(false),
+                                    playerId,
+                                    cancellationToken)
+                                .ConfigureAwait(false);
+
+                            if (_guilds.Last is { } onScreen) Console.WriteLine($"# #{playerId} {onScreen}");
+                            break;
+
                         case ConsoleCommand rung
                             when playerId != 0
                                 && _ladder is not null

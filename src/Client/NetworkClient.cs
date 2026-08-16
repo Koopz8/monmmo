@@ -226,6 +226,9 @@ public sealed class NetworkClient : IDisposable
     /// </summary>
     public void SendMarket(MarketRequest asking) => Send(asking);
 
+    /// <summary>Ask the guild for something, or just to look. Passed through as it was built.</summary>
+    public void SendGuild(GuildRequest asking) => Send(asking);
+
     /// <summary>
     /// Say something to the room, or to one person by name. Who hears it is the server's,
     /// and so is how often anybody may ask.
