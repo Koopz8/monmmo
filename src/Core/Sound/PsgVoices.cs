@@ -64,6 +64,48 @@ public static class PsgVoices
     /// </summary>
     public static readonly IReadOnlyList<int> DutyEighths = [1, 2, 4, 6];
 
+    /// <summary>
+    /// The loudest a circuit channel's envelope counts to. <b>Read.</b>
+    /// <para>
+    /// Four bits, not eight. A real cartridge's town theme has twenty-four circuit slots and
+    /// every one of them reads a sustain of exactly fifteen — twenty-four coincidences is not
+    /// a coincidence, it is a scale. Read as if it were the recorded channels' nought-to-255
+    /// it means six per cent, which is why the melody was there and inaudible.
+    /// </para>
+    /// </summary>
+    public const int EnvelopeFull = 15;
+
+    /// <summary>
+    /// A circuit channel's four envelope bytes, on the scale the rest of this build uses.
+    /// <para>
+    /// <b>Modelled, and the nought is the interesting part.</b> On these channels nought does
+    /// not mean "none of this stage", it means "instantly" for attack and release and "never"
+    /// for decay — the opposite ends of the same byte. Read as an ordinary number a decay of
+    /// nought collapses a note to its sustain in one step, which is exactly what was
+    /// happening.
+    /// </para>
+    /// </summary>
+    public static (byte Attack, byte Decay, byte Sustain, byte Release) Shaping(
+        byte attack, byte decay, byte sustain, byte release)
+    {
+        const int Scale = 255 / EnvelopeFull;
+
+        return (
+            // Nought is immediate, which is what the player already does with a nought here.
+            attack == 0 ? (byte)255 : Up(attack),
+
+            // Nought is no decay at all: the note holds where the attack left it. A multiplier
+            // of the full scale is what "leave it alone" is in the player's arithmetic.
+            decay == 0 ? (byte)255 : (byte)(255 - Up(decay) + 1),
+
+            Up(sustain),
+
+            // Nought is immediate again, and the player's own floor takes it from there.
+            release == 0 ? (byte)0 : (byte)(255 - Up(release) + 1));
+
+        static byte Up(byte value) => (byte)Math.Min(255, Math.Max(1, (int)value) * Scale);
+    }
+
     /// <summary>One of the two square channels, at the given duty.</summary>
     public static Voice Square(int duty)
     {
