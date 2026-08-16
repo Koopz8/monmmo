@@ -452,6 +452,51 @@ public class AskingWhatIsInTheBagTests
     }
 
     /// <summary>
+    /// And the walk that <em>chooses whose script to run</em> is told too, which is a
+    /// separate rule and was the one nothing could fail.
+    /// <para>
+    /// Breaking the removal out of the per-pass walk and leaving it in the last one failed
+    /// no test at all: the reported reach came from the final walk, so the door read as open
+    /// while nobody behind it had ever been spoken to. That is the whole game — a door that
+    /// opens and opens nothing is not a door.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AndTheDoorOpensInTimeForWhoeverIsBehindIt()
+    {
+        const int behind = 0x999;
+
+        MapData near = Room("1.0") with
+        {
+            Warps = [new Warp(3, 1, 0, "1.1")],
+            Objects =
+            [
+                new MapObject(1, 1, 1, 1, Direction.Down, 0, false) { ScriptAddress = 0x1000 },
+                new MapObject(2, 1, 3, 1, Direction.Down, 0, false),
+            ],
+        };
+
+        MapData far = Room("1.1") with
+        {
+            Warps = [new Warp(1, 2, 0, "1.0")],
+            Objects = [new MapObject(3, 1, 1, 1, Direction.Down, 0, false) { ScriptAddress = 0x3000 }],
+        };
+
+        Attempt played = Autoplayer.Play(
+            new WorldData([near, far]),
+            "1.0",
+            TestRules.All,
+            (address, _, _) => address switch
+            {
+                0x1000 => Nothing with { Hides = [2] },
+                0x3000 => new PlayedScript([behind], [], [], [], null, null),
+                _ => Nothing,
+            });
+
+        Assert.Contains(behind, played.Flags);
+    }
+
+    /// <summary>
     /// And nobody talks to him afterwards. Being hidden by a flag and being removed by a
     /// command are the same thing to a player and two different things in the file — only
     /// the first was ever asked about, so a person taken off the map went on holding a
