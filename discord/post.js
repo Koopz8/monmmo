@@ -72,6 +72,14 @@ build-drops, announcements, changelog, general.
 
   const { meta, body } = lib.frontmatter(raw);
   channelKey = channelKey || meta.channel;
+
+  // A markdown file in posts/ with no channel is documentation, not a post.
+  // Skip it rather than failing the workflow — but only when no channel was
+  // asked for on the command line, so a genuine typo still errors.
+  if (!channelKey && !positional[0]) {
+    console.log(c.skip(`skipped ${file || 'input'} — no channel in its front matter, so it is not a post`));
+    process.exit(0);
+  }
   if (!channelKey) throw new Error('No channel given, and none in the file front matter.');
 
   const title = flag('title') || meta.title

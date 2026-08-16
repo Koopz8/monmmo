@@ -277,6 +277,23 @@ t('a horizontal rule in the body is not mistaken for front matter', () => {
   assert(body.includes('more prose'), 'ate the second half');
 });
 
+t('every post in posts/ names a real channel, or is skipped as documentation', () => {
+  const fsx = require('fs');
+  if (!fsx.existsSync('./posts')) return;
+  const keys = new Set(TREE.flatMap((c) => c.channels.map((ch) => ch.key)));
+  for (const f of fsx.readdirSync('./posts').filter((n) => n.endsWith('.md'))) {
+    const { meta } = lib.frontmatter(fsx.readFileSync(`./posts/${f}`, 'utf8'));
+    if (!meta.channel) continue;                    // documentation — post.js skips it
+    assert(keys.has(meta.channel), `posts/${f} targets "${meta.channel}", which is not a channel`);
+  }
+});
+
+t('a post with no channel is skipped rather than failing the workflow', () => {
+  const src = require('fs').readFileSync('./post.js', 'utf8');
+  assert(/no channel in its front matter/.test(src),
+    'a stray markdown file in posts/ would red the build instead of being skipped');
+});
+
 t('the example post parses and names a real channel', () => {
   const fsx = require('fs');
   const p = './posts/EXAMPLE-2026-09-01-the-three-flags.md';
