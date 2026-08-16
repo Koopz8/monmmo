@@ -57,6 +57,12 @@ public static class WorldExporter
                     // Behaviours are what tell the server which squares are grass, and
                     // are a byte a square — still no graphics, text or audio.
                     Behaviours = header.Layout.ReadBehaviours(rom),
+
+                    // Which song plays here. Read off the header since the map work and
+                    // carried nowhere until now: a number, which is all a world file is
+                    // allowed to know about music and all either side needs to agree on.
+                    Music = header.Music,
+
                     Encounters = encounters.GetValueOrDefault(id),
                     Connections = MapLinkExtractor.ReadConnections(rom, header, log),
                     Warps = MapLinkExtractor.ReadWarps(rom, header, grid.Width, grid.Height, log),

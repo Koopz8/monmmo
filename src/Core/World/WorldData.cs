@@ -14,6 +14,23 @@ public sealed record MapData(string Id, string Name, int Width, int Height, byte
     /// </summary>
     public byte[] Behaviours { get; init; } = [];
 
+    /// <summary>
+    /// Which song plays here, as the number the cartridge's own map header gives.
+    /// <para>
+    /// A number and never a name, for the same reason every other id in this file is a
+    /// number: the server has no idea what any of them sound like and must not be able to
+    /// find out. What it can do is say "this place is song 277", which is the one fact
+    /// about music that has to be agreed on by both sides — otherwise two people standing
+    /// in the same room hear different things.
+    /// </para>
+    /// <para>
+    /// Zero means the header said zero, which the cartridge uses for "carry on playing
+    /// whatever was already playing". That is a real value rather than a missing one, and
+    /// it is why this is not nullable.
+    /// </para>
+    /// </summary>
+    public int Music { get; init; }
+
     public MapEncounters? Encounters { get; init; }
 
     /// <summary>Neighbouring maps joined along this one's edges.</summary>
@@ -272,7 +289,7 @@ public sealed class WorldData
     /// <summary>Identifies the format, so a wrong or stale file fails loudly.</summary>
     private static readonly byte[] Magic = "MONWORLD"u8.ToArray();
 
-    private const int Version = 27;
+    private const int Version = 28;
 
     private readonly Dictionary<string, MapData> _maps;
 
@@ -371,6 +388,11 @@ public sealed class WorldData
             writer.Write(map.Behaviours.Length);
             writer.Write(map.Behaviours);
 
+            // Which song plays here. One number a map, written beside the behaviours
+            // because it is the same kind of fact: something the header said about the
+            // place, carried across the split as a number and never as a name.
+            writer.Write(map.Music);
+
             WriteEncounters(writer, map.Encounters);
             WriteLinks(writer, map);
         }
@@ -442,6 +464,8 @@ public sealed class WorldData
 
             byte[] behaviours = reader.ReadBytes(behaviourLength);
 
+            int music = reader.ReadInt32();
+
             MapEncounters? mapEncounters = ReadEncounters(reader, id);
             (IReadOnlyList<MapConnection> connections, IReadOnlyList<Warp> warps) = ReadLinks(reader, id);
             IReadOnlyList<MapObject> objects = ReadObjects(reader, id);
@@ -453,6 +477,7 @@ public sealed class WorldData
             maps.Add(new MapData(id, name, width, height, collision)
             {
                 Behaviours = behaviours,
+                Music = music,
                 Encounters = mapEncounters,
                 Connections = connections,
                 Warps = warps,
