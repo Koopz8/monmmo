@@ -413,6 +413,58 @@ public class AskingWhatIsInTheBagTests
     }
 
     /// <summary>
+    /// And somebody who merely hands something over is not deleted for it.
+    /// <para>
+    /// The decoy for the rule above, and it was needed: setting the hide flag on anybody
+    /// whose script gave something failed no test at all, because the fixture had only
+    /// balls in it. Nearly every gift in this game comes from a person who is still there
+    /// afterwards — the aides, the shop, the man on NUGGET BRIDGE — and most of them carry
+    /// a hide flag of their own for reasons that have nothing to do with the gift.
+    /// </para>
+    /// <para>
+    /// <c>CanBeTakenAway</c> is what separates the two, and it is the world file's own
+    /// predicate: gives something <em>and</em> has a flag to vanish behind. Asked rather
+    /// than re-decided, because the walker already walks through exactly that set.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void SomebodyWhoHandsSomethingOverIsStillThereAfterwards()
+    {
+        const int hides = 0x261;
+
+        MapData start = Room("1.0") with
+        {
+            Objects =
+            [
+                // A hide flag, and nothing on the floor: this is a person, not a ball.
+                new MapObject(1, 1, 1, 1, Direction.Down, 0, false) { ScriptAddress = 0x1000 }
+                    with { HiddenBy = hides },
+            ],
+        };
+
+        var spokenTo = 0;
+        var passes = 0;
+
+        Attempt played = Autoplayer.Play(
+            new WorldData([start]),
+            "1.0",
+            TestRules.All,
+            (_, _, _) =>
+            {
+                spokenTo++;
+
+                return new PlayedScript([0x500 + passes++], [], [], [], null, null)
+                {
+                    Gets = (TestRules.PotionItem, 1),
+                };
+            });
+
+        Assert.True(passes > 1, "there has to be a second pass for this to mean anything");
+        Assert.True(spokenTo > 1, "he handed something over; he did not stop existing");
+        Assert.DoesNotContain(hides, played.Flags);
+    }
+
+    /// <summary>
     /// A person a script takes off the map stops being in the way. <c>hideobject</c> has been
     /// read into <c>ScriptRun.Hides</c> for milestones and thrown away by everything that
     /// walks — so a guard who steps out of a doorway was, to the walker, standing in it
