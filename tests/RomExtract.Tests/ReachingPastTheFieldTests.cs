@@ -282,42 +282,31 @@ public class ReachingPastTheFieldTests
     }
 
     /// <summary>
-    /// And it goes before they go, whatever the speeds say — catching somebody on the way out
-    /// means acting before they are out.
+    /// It takes its record's own place in the order, and there is no special case making it
+    /// first against a leaver.
+    /// <para>
+    /// That absence is deliberate and was arrived at by trying the opposite. A rule giving
+    /// it first place against somebody switching out was written, and then breaking that
+    /// rule broke no test — because a switch is not resolved inside the battle at all. The
+    /// server does both switches before it calls in, precisely because a switch is not a
+    /// turn, so by the time an order is decided there is nobody left to go before.
+    /// </para>
+    /// <para>
+    /// So the rule was removed rather than propped up with a test written to fit it. What
+    /// this move needs to work is only that the battle be told somebody is leaving, which it
+    /// can be. Making the order matter too means moving the switch inside the turn, which is
+    /// a change to how a duel is run and is written down as not yet done.
+    /// </para>
     /// </summary>
     [Fact]
-    public void AndItGoesBeforeTheyGo()
-    {
-        // Far slower, and first anyway.
-        Battler you = Make(5, Move(Pursuit, 40));
-        Battler them = Make(200, Move(0x00, 0));
-
-        var battle = new Battle(you, them, 7);
-
-        List<BattleEvent> events = battle.ResolveTurn(
-            new BattleAction.UseMove(0), new BattleAction.SwitchTo(1));
-
-        BattleEvent.MoveUsed first = events.OfType<BattleEvent.MoveUsed>().First();
-
-        Assert.Equal(Side.Player, first.Side);
-    }
-
-    /// <summary>
-    /// And against somebody staying put it takes its ordinary place in the order, which is
-    /// what says the line above is about leaving rather than about this move always going
-    /// first.
-    /// </summary>
-    [Fact]
-    public void AndAgainstSomebodyStayingItTakesItsOrdinaryPlace()
+    public void ItTakesItsRecordsOwnPlaceInTheOrder()
     {
         Battler you = Make(5, Move(Pursuit, 40));
         Battler them = Make(200, Move(0x00, 10, id: 2));
 
         List<BattleEvent> events = Turn(new Battle(you, them, 7));
 
-        BattleEvent.MoveUsed first = events.OfType<BattleEvent.MoveUsed>().First();
-
-        Assert.Equal(Side.Opponent, first.Side);
+        Assert.Equal(Side.Opponent, events.OfType<BattleEvent.MoveUsed>().First().Side);
     }
 
     /// <summary>And the doubling reaches the damage rather than stopping at the power.</summary>

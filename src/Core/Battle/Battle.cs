@@ -1476,20 +1476,21 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
         if (action is not BattleAction.UseMove use || battler.MoveAt(use.Slot) is not { } move)
             return 0;
 
-        // The one move whose place in the order depends on what the other side chose. It
-        // catches somebody on their way out, and catching them means going before they go —
-        // so against a leaver it comes first, and against anybody else its record decides
-        // like every other move's.
-        if (MoveEffects.Of(move.Effect).Kind == EffectKind.CatchesThemLeaving
-            && _leaving.Contains(Other(SideOf(battler))))
-        {
-            return int.MaxValue;
-        }
-
+        // No special case here for the move that catches somebody leaving, and its absence
+        // is deliberate rather than an omission.
+        //
+        // It wants to go before they go. But a switch is not resolved inside this class at
+        // all — the server does both switches before it calls this, precisely because a
+        // switch is not a turn — so by the time an order is decided there is nobody left to
+        // go before. A rule saying "first against a leaver" would be a rule nothing could
+        // ever observe, which is the shape this project has now found nine times by breaking
+        // things on purpose, and it would have gone in here as the tenth.
+        //
+        // What the doubling needs is only that this class be TOLD, which it can be and is.
+        // Making the order matter as well means moving the switch inside the turn, and that
+        // is a change to how a duel is run rather than a line here.
         return move.Priority;
     }
-
-    private Side SideOf(Battler battler) => battler == Player ? Side.Player : Side.Opponent;
 
     /// <summary>
     /// One side's go.
