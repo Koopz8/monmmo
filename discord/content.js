@@ -22,22 +22,26 @@ the ROM you already own, on your own machine, at runtime**. The client ships non
 of it. The server never sees any of it.
 
 This is a solo engineering project, built in public, one measured milestone at a
-time. **1,841 tests**, none of which need a cartridge. An authoritative server, a
+time. **1,938 tests**, none of which need a cartridge. An authoritative server, a
 Gen III battle engine accurate down to truncation order, and a growing list of
-things two people can do to each other: **see each other, chat, add each other as
-friends, trade, fight, and buy and sell on a player market**.
+things two people can do to each other: **see each other, chat, add friends,
+form a guild, trade, duel, climb a ladder, and buy and sell on a player market**.
 
-It is also built to hold a crowd. A load generator that speaks the real protocol
-found the wall was the *door*, not the game; the server now admits people at a
-published rate it prints at startup, tells you only about what you could actually
-see, writes only the parts of a save that changed, and runs **more than one copy
-of a busy place** so forty people in a room never becomes four hundred.
+Breeding, IVs, EVs, natures, abilities, weather and held items are all in. The
+tier list is **recomputed from the cartridge's own base stats** rather than
+curated by anybody — five bands at the quintiles, so a different image gives
+different boundaries without a line changing.
+
+It is also built to hold a crowd: an admission rate the server publishes at
+startup, interest instead of broadcast, saves that write only what changed, and
+**more than one copy of a busy place** — so forty people in a room never becomes
+four hundred.
 
 **Where to go**
 
 > **#rules** — read this first. One of them will get you banned instantly.
 > **#announcements** — the only channel that will ever ping you unprompted.
-> **#devlog** — what got built this week, and what it cost.
+> **#devlog** — what got built each day, and what it cost.
 > **#milestones** — the long-form writeups. Start at the bottom.
 > **#general** — say hello.
 > **#setup-help** — stuck getting a build running.
@@ -206,6 +210,18 @@ shrinking the sight circle both leave a crowd standing there that the player
 cannot see and can walk into. **A copy has no crowd in it that anybody is being
 lied to about.**
 
+**More on the shared shape in the message below.**`,
+
+`**One shape, reused.** The market, guilds, friends and the ladder all split the
+same way: the world reports, and something outside the lock writes it down. A
+database transaction is not something to hold the world's lock for, because that
+lock is what every other player is waiting on.
+
+Guilds and the market also share a front-end pattern — a request is turned into
+the console line it is equivalent to and run through the path the console runs,
+so there is **one implementation and two front ends**. Two implementations of
+"one guild each" is how somebody ends up in two guilds.
+
 Open questions worth arguing about, any time:
 - **A thousand players on hardware that could hold them.** Every number in the
   scaling notes is two cores, with the load generator sharing them with the
@@ -242,7 +258,11 @@ behind it, *or* has a rule and isn't listed.
 **More on abilities in the message below.**`,
 
 `Since abilities landed: **weather**, the **contact flag** that sat unread on
-every move record, and the abilities that refuse to be made worse at something.
+every move record, the abilities that refuse to be made worse at something, and
+the consumed half of held items — every berry, both herbs. **34 of 66 held-item
+effects** and **44 of 76 fielded abilities** do something; the rest are carried
+and silent, and both counts are printed at export rather than rounded up to
+"yes".
 
 **GUTS is worth reading twice.** A burn does not halve its Attack — halving the
 Attack of the ability whose whole point is that being ill helps would leave it
@@ -632,18 +652,28 @@ posting in #bug-reports.
 - **A thousand players on real hardware.** Every scaling number so far is from
   two cores with the load generator sharing them. Needs a second machine; the
   only open question code cannot answer.
-- **The market's last window.** The gap between the store committing and the
-  in-memory copy catching up. Same one creatures have had since the market was
-  built, and now the only thing left on that list.
+- **Four more regions.** The largest item by far and the least like the others:
+  extraction work against cartridges this project does not have.
 - **Text rendering.** The cartridge's font has not been located. Four mechanical
   methods are ruled out; the mapping is not identity, and the geometry may not
   even be 8×8.
-- **Storage.** More than one box is not implemented — the count is stated
-  nowhere in the data, so it would have to be remembered rather than read.
+- **A ladder screen.** \`/ladder\`, \`/rating\` and \`/tier\` read it from the console;
+  there is no picture yet.
+- **Whether a duel should be refused across bands at all.** The ladder records
+  which band a fight counted in rather than restricting who may fight whom —
+  measure first, then decide whether to forbid.
+**More below.**`,
+
+`**Known and open, continued**
 - **Unsimulated maps.** Only maps with a player on them tick. Walk away and back
   and the townsfolk have reset to their starting positions.
 - **Switching in a duel** is refused, and says so in the code rather than
   hiding it.
+- **A flag set in memory that the save does not have**, and the older, vaguer
+  flag race that may be the same animal.
+- **One thing stated but not proved:** that a duel's result is taken exactly
+  once. Breaking it leaves every test green, because reaching it needs a real
+  duel driven to a finish through the world. Said out loud rather than assumed.
 
 **Closed items and non-bugs are in the message below.**`,
 
@@ -659,8 +689,15 @@ posting in #bug-reports.
   sections that changed — about thirty statements down to one.
 - ~~There is nowhere to buy cosmetics.~~ There is a counter now, and money is
   what turned a wardrobe into a choice.
-- ~~The species table's ability bytes are read by nothing.~~ Read, and the
-  abilities they name are modelled where the engine can honestly support them.
+- ~~The species table's ability bytes are read by nothing.~~ Read, and 44 of 76
+  fielded abilities now do something. The rest are carried and silent, and the
+  count is printed rather than rounded up.
+- ~~One box holds everything.~~ Eight now. Nothing on the cartridge says how
+  many there should be, so the number is modelled and the reason sits beside it.
+- ~~The market's window between committing and the in-memory copy.~~ Closed —
+  and it was worse than it sounded. It could put a creature in your box **and**
+  on the market at once, with both halves internally consistent and nothing
+  throwing, until two people owned it.
 
 **Not bugs**
 - The client refusing a ROM whose SHA-1 doesn't match. Working as intended.
