@@ -4435,6 +4435,19 @@ public sealed class GameWorld
 
     private readonly Duels _duels = new();
 
+    /// <summary>
+    /// Where the strength bands fall on this server's own rules file.
+    /// <para>
+    /// Computed once and kept, because it is a sort of four hundred numbers and the answer
+    /// cannot change while a server is running — the rules file it comes from was read at
+    /// startup and is not reread.
+    /// </para>
+    /// </summary>
+    private IReadOnlyList<int>? _boundaries;
+
+    public IReadOnlyList<int> Boundaries =>
+        _boundaries ??= _rules is null ? [] : Tiers.Boundaries(_rules.AllSpecies);
+
     /// <summary>What the last thing anybody did about a duel came to.</summary>
     public string? LastDuel { get; private set; }
 
@@ -5240,6 +5253,36 @@ public sealed class GameWorld
 
             case "where":
                 return [Said(player, $"{player.MapId} {_world.Find(player.MapId)?.Name} at {player.Square}")];
+
+            // Which band this party sits in, and why. The boundaries are printed with it
+            // because a tier somebody cannot check is a tier they can only be told, which is
+            // the thing this project is trying not to be.
+            case "tier":
+            {
+                if (_rules is null || Boundaries.Count == 0)
+                    return [Said(player, "this server has no stats to band anybody by")];
+
+                if (player.Party.Count == 0) return [Said(player, "you have nobody")];
+
+                var totals = new List<(string Name, int Total, int Band)>();
+
+                foreach (SavedMon member in player.Party)
+                {
+                    int total = _rules.SpeciesAt(member.Species)?.BaseStatTotal ?? 0;
+
+                    totals.Add(($"species {member.Species}", total, Tiers.Of(total, Boundaries)));
+                }
+
+                int band = totals.Max(t => t.Band);
+
+                return
+                [
+                    Said(player, $"{Tiers.NameOf(band)} — the highest of your party, not the average"),
+                    .. totals.Select(t =>
+                        Said(player, $"  {t.Name,-14} {t.Total,4}  {Tiers.NameOf(t.Band)}")),
+                    Said(player, $"bands end at {string.Join(", ", Boundaries)} — computed from this cartridge"),
+                ];
+            }
 
             case "tp":
             {

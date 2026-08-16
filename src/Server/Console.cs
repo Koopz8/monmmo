@@ -51,6 +51,7 @@ public static class ConsoleHelp
     public static readonly IReadOnlyList<string> Lines =
     [
         "/where                     what map and square you are on",
+        "/tier                      which strength band your party is in, and why",
         "/tp <map> <x> <y>          go somewhere, e.g. /tp 3.1 25 20",
         "/give <species> <level>    one more in the party",
         "/item <id> [count]         something for the bag",

@@ -133,6 +133,9 @@ public static class Program
         if (options.DumpHolds)
             WriteHolds(rom);
 
+        if (options.DumpTiers)
+            WriteTiers(rom);
+
         if (options.DumpScripts)
             WriteScripts(rom);
 
@@ -6688,6 +6691,58 @@ public static class Program
     /// whose members each have their own are different shapes of rule.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// The strength bands, computed from this cartridge and printed with their boundaries.
+    /// <para>
+    /// The whole point of publishing it. A curated tier list can only be argued with; one
+    /// computed from the image can be re-run, and this prints the boundaries beside the
+    /// members so anybody can check that the second follows from the first.
+    /// </para>
+    /// </summary>
+    private static void WriteTiers(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("Tiers");
+
+        List<SpeciesData> species =
+        [
+            .. RomExtractor.Open(rom).ExtractSpecies().Where(s => s.Index > 0 && s.BaseStatTotal > 0),
+        ];
+
+        if (species.Count == 0)
+        {
+            Console.WriteLine("  no base stats, so nothing to band");
+            return;
+        }
+
+        IReadOnlyList<int> cuts = Tiers.Boundaries(species);
+
+        Console.WriteLine(
+            $"  {species.Count} species with stats, in {Tiers.Bands} bands at the quintiles of their totals");
+
+        Console.WriteLine($"  boundaries: {string.Join(", ", cuts)}");
+        Console.WriteLine();
+
+        foreach (var band in species
+                     .GroupBy(s => Tiers.Of(s.BaseStatTotal, cuts))
+                     .OrderBy(g => g.Key))
+        {
+            int[] totals = [.. band.Select(s => s.BaseStatTotal).Order()];
+
+            Console.WriteLine(
+                $"  {Tiers.NameOf(band.Key),-12} {band.Count(),4} species, " +
+                $"totals {totals[0]}..{totals[^1]}");
+
+            // A handful from each end, because a band's edges are the only part anybody
+            // argues with and a full list of eighty is a list nobody reads.
+            foreach (SpeciesData one in band.OrderBy(s => s.BaseStatTotal).Take(3)
+                         .Concat(band.OrderByDescending(s => s.BaseStatTotal).Take(3).Reverse()))
+            {
+                Console.WriteLine($"      {one.Index,4} {one.Name,-14} {one.BaseStatTotal,4}");
+            }
+        }
+    }
+
     private static void WriteHolds(Rom rom)
     {
         Console.WriteLine();
@@ -7088,6 +7143,8 @@ public static class Program
         public bool DumpItems { get; private init; }
 
         public bool DumpHolds { get; private init; }
+
+        public bool DumpTiers { get; private init; }
         public bool DumpScripts { get; private init; }
         public string ScriptMap { get; private init; } = "";
 
@@ -7251,6 +7308,7 @@ public static class Program
             bool trainers = false;
             bool items = false;
             bool holds = false;
+            bool tiers = false;
             bool scripts = false;
             string scriptMap = "";
             string at = "";
@@ -7370,6 +7428,9 @@ public static class Program
                         break;
                     case "--holds":
                         holds = true;
+                        break;
+                    case "--tiers":
+                        tiers = true;
                         break;
                     case "--scripts":
                         scripts = true;
@@ -7613,6 +7674,7 @@ public static class Program
                 DumpTrainers = trainers,
                 DumpItems = items,
                 DumpHolds = holds,
+                DumpTiers = tiers,
                 DumpScripts = scripts,
                 ScriptMap = scriptMap,
                 At = at,
