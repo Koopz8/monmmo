@@ -259,6 +259,19 @@ public static class BattleNarrator
 
         BattleEvent.ChangedType e => $"{names.Of(e.Side)} transformed into the {e.Type} type!",
 
+        BattleEvent.PutSomethingUp e => $"{names.Of(e.Side)} put up a stand-in!",
+
+        // Only the breaking is worth a line. Saying "the stand-in took it" after every hit
+        // is the same sentence over and over, and the thing a player needs to know is the
+        // moment it stops being there.
+        BattleEvent.StandInTookIt e => e.Broke ? $"{names.Of(e.Side)}'s stand-in broke!" : "",
+
+        BattleEvent.Gathering e => $"{names.Of(e.Side)} is storing energy!",
+
+        BattleEvent.GaveItBack e => $"{names.Of(e.Side)} unleashed all its stored energy!",
+
+        BattleEvent.StruckFromEarlier e => $"{names.Of(e.Side)} was hit by something from earlier!",
+
         BattleEvent.Damped e => $"{names.Of(e.Side)} damped one kind of move down!",
 
         BattleEvent.Grazed e => $"{names.Of(e.Side)} is hurt reaching them!",

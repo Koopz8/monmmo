@@ -99,6 +99,11 @@ public enum Side
 [JsonDerivedType(typeof(AbilityMoved), "abilitymoved")]
 [JsonDerivedType(typeof(LostItsNerve), "lostitsnerve")]
 [JsonDerivedType(typeof(ChangedType), "changedtype")]
+[JsonDerivedType(typeof(PutSomethingUp), "putsomethingup")]
+[JsonDerivedType(typeof(StandInTookIt), "standintookit")]
+[JsonDerivedType(typeof(Gathering), "gathering")]
+[JsonDerivedType(typeof(GaveItBack), "gaveitback")]
+[JsonDerivedType(typeof(StruckFromEarlier), "struckfromearlier")]
 [JsonDerivedType(typeof(Damped), "damped")]
 [JsonDerivedType(typeof(MustRepeat), "mustrepeat")]
 [JsonDerivedType(typeof(GotAway), "gotaway")]
@@ -386,6 +391,21 @@ public abstract record BattleEvent
 
     /// <summary>Became a different type than the one it was born with.</summary>
     public sealed record ChangedType(Side Side, PokemonType Type) : BattleEvent;
+
+    /// <summary>Paid health to put something in front of itself.</summary>
+    public sealed record PutSomethingUp(Side Side, int Cost) : BattleEvent;
+
+    /// <summary>The thing in front took the hit, and whether that was the last it could take.</summary>
+    public sealed record StandInTookIt(Side Side, bool Broke) : BattleEvent;
+
+    /// <summary>Started taking it, with the intention of giving it back.</summary>
+    public sealed record Gathering(Side Side) : BattleEvent;
+
+    /// <summary>Gave back twice what it had taken.</summary>
+    public sealed record GaveItBack(Side Side, int Damage) : BattleEvent;
+
+    /// <summary>Was hit by something used two turns ago.</summary>
+    public sealed record StruckFromEarlier(Side Side, int Damage) : BattleEvent;
 
     /// <summary>Turned one kind of move down, for the room rather than for anybody.</summary>
     public sealed record Damped(Side Side) : BattleEvent;
@@ -983,6 +1003,43 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
     public PokemonType Ground { get; init; } = PokemonType.Normal;
 
     /// <summary>
+    /// How many turns a creature gathers before it gives back. <b>Modelled.</b>
+    /// <para>
+    /// Two, and nothing on the record says two. What the number changes is whether the move
+    /// is a gamble or a commitment: one turn is a slow counter, three is a turn nobody would
+    /// ever spend.
+    /// </para>
+    /// </summary>
+    public const int GatheringFor = 2;
+
+    /// <summary>How much of what it took a gathered move gives back. <b>Modelled.</b></summary>
+    public const int GivesBackTimes = 2;
+
+    /// <summary>
+    /// How many turns pass before a move used now lands. <b>Modelled.</b>
+    /// <para>
+    /// The whole character of the move: it is worth using because of what will be standing
+    /// there later, not because of what is standing there now.
+    /// </para>
+    /// </summary>
+    public const int LandsAfter = 2;
+
+    /// <summary>
+    /// Something used earlier that has not landed yet.
+    /// <para>
+    /// The first thing in this engine that outlives the turn that made it, and the first
+    /// that belongs to neither creature: it is aimed at a <em>side</em>, and what is standing
+    /// on that side when it arrives is not this record's business. That is the move.
+    /// </para>
+    /// </summary>
+    private sealed record Pending(Side At, int Damage)
+    {
+        public int Turns { get; set; }
+    }
+
+    private readonly List<Pending> _pending = [];
+
+    /// <summary>
     /// What one of the three type-changing moves turns its user into, or nothing when there
     /// is no answer.
     /// </summary>
@@ -1027,6 +1084,88 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
 
             default:
                 return null;
+        }
+    }
+
+    /// <summary>
+    /// Counts down whoever is gathering, and spends it when the count runs out.
+    /// <para>
+    /// Doubled, and never nothing: a creature that gathered through two quiet turns still
+    /// hits, because a move that could come to nothing after committing two turns to it is a
+    /// move nobody would ever press.
+    /// </para>
+    /// </summary>
+    private void GiveBackWhatWasGathered(List<BattleEvent> events)
+    {
+        foreach (Side side in (Side[])[Side.Player, Side.Opponent])
+        {
+            Battler battler = Of(side);
+
+            if (!battler.IsGathering) continue;
+
+            battler.GatheringTurns--;
+
+            if (battler.GatheringTurns > 0) continue;
+
+            Battler at = Of(Other(side));
+
+            int giving = Math.Max(1, battler.Gathered * GivesBackTimes);
+
+            battler.Gathered = 0;
+
+            int taken = at.TakeDamage(giving);
+
+            events.Add(new BattleEvent.GaveItBack(side, taken));
+
+            events.Add(new BattleEvent.DamageDealt(
+                Other(side), taken, at.CurrentHp, new DamageResult(taken, false, 100, false)));
+
+            if (at.HasFainted) events.Add(new BattleEvent.Fainted(Other(side)));
+
+            if (IsOver) return;
+        }
+    }
+
+    /// <summary>
+    /// Lands anything used earlier whose turn has come.
+    /// <para>
+    /// It goes through a stand-in like anything else, and it lands on whoever is standing
+    /// there rather than on whoever was there when it was used. Both of those are the move.
+    /// </para>
+    /// </summary>
+    private void LandWhatWasUsedEarlier(List<BattleEvent> events)
+    {
+        foreach (Pending pending in _pending.ToList())
+        {
+            pending.Turns--;
+
+            if (pending.Turns > 0) continue;
+
+            _pending.Remove(pending);
+
+            Battler at = Of(pending.At);
+
+            if (at.HasStandIn)
+            {
+                bool broke = pending.Damage >= at.StandInHp;
+
+                at.StandInHp = Math.Max(0, at.StandInHp - pending.Damage);
+
+                events.Add(new BattleEvent.StandInTookIt(pending.At, broke));
+
+                continue;
+            }
+
+            int taken = at.TakeDamage(pending.Damage);
+
+            events.Add(new BattleEvent.StruckFromEarlier(pending.At, taken));
+
+            events.Add(new BattleEvent.DamageDealt(
+                pending.At, taken, at.CurrentHp, new DamageResult(taken, false, 100, false)));
+
+            if (at.HasFainted) events.Add(new BattleEvent.Fainted(pending.At));
+
+            if (IsOver) return;
         }
     }
 
@@ -1178,6 +1317,12 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
 
         // And the two that hold for a count rather than for the turn. Ticked in the same
         // place for the same reason: whatever a fight does to a turn, it ends here.
+        // The two that come due at the end of a turn rather than in it. Both before the
+        // counters below, because both can finish somebody and a fight that has ended should
+        // not go on ticking things down.
+        if (!IsOver) GiveBackWhatWasGathered(events);
+        if (!IsOver) LandWhatWasUsedEarlier(events);
+
         // And how long each of them has been standing there, which goes up at the end so
         // that the turn somebody arrives is nought for the whole of it. Counting at the top
         // would make the move that only works on arrival never work at all.
@@ -1498,6 +1643,28 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             return;
         }
 
+        // Aimed at a turn rather than at a creature. Worked out now, from who is using it
+        // now, and landing on whoever is standing over there when it arrives — which is the
+        // whole of what makes it worth using.
+        if (kind.Kind == EffectKind.Later)
+        {
+            if (_pending.Any(p => p.At == Other(side)))
+            {
+                events.Add(new BattleEvent.NothingHappened(side));
+
+                return;
+            }
+
+            DamageResult coming = DamageCalculator.Calculate(
+                _rng, attacker, defender, move, false, Overhead, Damping(move.Type));
+
+            _pending.Add(new Pending(Other(side), Math.Max(1, coming.Damage)) { Turns = LandsAfter });
+
+            events.Add(new BattleEvent.Gathering(side));
+
+            return;
+        }
+
         if (kind.Kind == EffectKind.NeedsQuiet && attacker.HurtThisTurn > 0)
         {
             events.Add(new BattleEvent.LostItsNerve(side));
@@ -1732,6 +1899,29 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
                 braced = true;
             }
 
+            // And the thing standing in front of them, which takes the hit instead.
+            //
+            // The whole of the blow, including the part that is more than the stand-in had
+            // left. That is the rule worth getting right: a stand-in on one point absorbs a
+            // hit that would have taken two hundred, and the creature behind it takes
+            // nothing at all. Spilling the remainder through would make it a damage
+            // reduction, which is a different and much worse move.
+            if (defender.HasStandIn)
+            {
+                bool broke = coming >= defender.StandInHp;
+
+                defender.StandInHp = Math.Max(0, defender.StandInHp - coming);
+
+                events.Add(new BattleEvent.StandInTookIt(Other(side), broke));
+
+                // Nothing reaches the creature, so nothing here writes to what it has been
+                // hurt by this turn either — a move answering a hit it never felt would be
+                // the same leak in a different place.
+                if (broke) continue;
+
+                continue;
+            }
+
             int dealt = defender.TakeDamage(coming);
 
             // Written down for the six moves that are answers to being hit. The running
@@ -1740,6 +1930,11 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             // that give it back doubled are choosy about.
             defender.HurtThisTurn += dealt;
             defender.HurtThisTurnBy = move.Category;
+
+            // And into the pile, for the one that gives it back. Only what actually landed
+            // on the creature, which is why this sits below the stand-in rather than above
+            // it: energy nobody felt is not energy to give back.
+            if (defender.IsGathering) defender.Gathered += dealt;
 
             total += dealt;
             landed++;
@@ -2180,6 +2375,51 @@ public sealed class Battle(Battler player, Battler opponent, uint seed)
             Settle(defender, each);
 
             events.Add(new BattleEvent.HealthShared(at, each));
+
+            return;
+        }
+
+        if (effect.Kind == EffectKind.StandIn)
+        {
+            // A quarter of its own maximum, paid up front out of its own health. Modelled —
+            // nothing on the record says how much — and the payment is the whole balance of
+            // the move: it costs real health now to spend nothing later.
+            int cost = Math.Max(1, target.MaxHp / 4);
+
+            if (target.HasStandIn || target.CurrentHp <= cost)
+            {
+                // Not enough left to pay, or one already standing there. Both are refusals
+                // and the second matters: a second stand-in would be a free reset of the
+                // first, which turns a costly move into an endless one.
+                events.Add(new BattleEvent.NothingHappened(at));
+
+                return;
+            }
+
+            target.TakeDamage(cost);
+            target.StandInHp = cost;
+
+            events.Add(new BattleEvent.PutSomethingUp(at, cost));
+
+            return;
+        }
+
+        if (effect.Kind == EffectKind.Bides)
+        {
+            // Two turns of taking it, then the whole lot back doubled. Started here and
+            // spent at the end of a turn, because what it gives back depends on everything
+            // that happened in between.
+            if (target.IsGathering)
+            {
+                events.Add(new BattleEvent.NothingHappened(at));
+
+                return;
+            }
+
+            target.GatheringTurns = GatheringFor;
+            target.Gathered = 0;
+
+            events.Add(new BattleEvent.Gathering(at));
 
             return;
         }

@@ -355,6 +355,38 @@ public sealed class Battler
     public int TurnsOut { get; set; }
 
     /// <summary>
+    /// How much is left of the thing standing in front of this one, or nought for none.
+    /// <para>
+    /// It takes hits instead of its owner and it takes them from its own small pool of
+    /// health. When that runs out it is gone and the next hit reaches the creature — not the
+    /// remainder of the hit that broke it, which is the rule that matters and the one worth
+    /// getting right: a stand-in absorbs the <em>whole</em> of the blow that finishes it.
+    /// </para>
+    /// <para>
+    /// A number rather than an object, because there is nothing else about it to know. It has
+    /// no type, no stats and no name; what it has is an amount left.
+    /// </para>
+    /// </summary>
+    public int StandInHp { get; set; }
+
+    public bool HasStandIn => StandInHp > 0;
+
+    /// <summary>
+    /// How much this one has taken while gathering itself, and how much longer it will.
+    /// <para>
+    /// Nothing else in this engine accumulates across turns and then spends it. The count
+    /// runs down at the end of each turn and the total is given back doubled when it reaches
+    /// nought — so a creature part-way through this is committed, and being hit hard is what
+    /// makes it worth having committed.
+    /// </para>
+    /// </summary>
+    public int Gathered { get; set; }
+
+    public int GatheringTurns { get; set; }
+
+    public bool IsGathering => GatheringTurns > 0;
+
+    /// <summary>
     /// Puts a different move in a slot for the rest of this fight.
     /// <para>
     /// Two moves in this game do this and they differ in one thing only: whether it survives
@@ -602,6 +634,13 @@ public sealed class Battler
         // Back to nought, which is the whole of what makes the move that only works on the
         // turn its user arrives work again when they arrive again.
         TurnsOut = 0;
+
+        // The stand-in does not follow anybody out of the door, and neither does a
+        // half-gathered total. Both are things this creature started and neither is a thing
+        // it is.
+        StandInHp = 0;
+        Gathered = 0;
+        GatheringTurns = 0;
         DisabledSlot = null;
         DisabledTurns = 0;
         IsAway = false;

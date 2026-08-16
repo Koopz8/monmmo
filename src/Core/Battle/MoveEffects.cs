@@ -197,6 +197,15 @@ public enum EffectKind
     /// <summary>Its own type is whatever the sky is doing.</summary>
     TakesTheSky,
 
+    /// <summary>Puts something in front of its user that takes the hits instead.</summary>
+    StandIn,
+
+    /// <summary>Takes what comes for two turns and gives back twice the lot.</summary>
+    Bides,
+
+    /// <summary>Lands two turns from now, whoever is standing there then.</summary>
+    Later,
+
     /// <summary>Lands several times in one turn.</summary>
     MultiHit,
 
@@ -557,6 +566,12 @@ public static class MoveEffects
         0x5D => new MoveEffect(EffectKind.BecomesTheAnswer, OnUser: true),
         0xD5 => new MoveEffect(EffectKind.BecomesTheGround, OnUser: true),
         0xCB => new MoveEffect(EffectKind.TakesTheSky, OnUser: false),
+
+        // The three that were left because each needs machinery of its own rather than a
+        // line pointing at machinery that exists.
+        0x4F => new MoveEffect(EffectKind.StandIn, OnUser: true),
+        0x1A => new MoveEffect(EffectKind.Bides, OnUser: true),
+        0x94 => new MoveEffect(EffectKind.Later, OnUser: false),
 
         // Which type each damps is the item-name problem again: MUD SPORT is about Electric
         // because of what it is called, so the pairing is modelled and the grouping is read.
