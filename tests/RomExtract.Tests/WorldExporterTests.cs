@@ -46,4 +46,48 @@ public class WorldExporterTests
 
         Assert.Equal(mapsWithObjects, strays);
     }
+
+    /// <summary>
+    /// A warp naming the cartridge's own "no map" mark is not a missing map.
+    /// <para>
+    /// Bank 127, map 127 — every bit of both bytes set, which is this hardware's usual way
+    /// of saying "none". Counting those together with genuinely absent maps makes a number
+    /// nobody can act on: it is either a bug worth a day or nothing at all, and the total
+    /// says which only by accident.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ASentinelWarpIsNotAMissingMap()
+    {
+        var world = new WorldData(
+        [
+            new MapData("1.0", "HERE", 4, 4, new byte[16])
+            {
+                Warps =
+                [
+                    new Warp(1, 1, 0, WorldExporter.NoMap),
+                    new Warp(2, 2, 0, "9.9"),
+                ],
+            },
+        ]);
+
+        var known = world.Maps.Select(m => m.Id).ToHashSet();
+
+        int dangling = world.Maps.Sum(m => m.Warps.Count(w => !known.Contains(w.TargetMapId)));
+        int sentinels = world.Maps.Sum(m => m.Warps.Count(w => w.TargetMapId == WorldExporter.NoMap));
+
+        // Both are dangling by the old reckoning; only one of them is a finding.
+        Assert.Equal(2, dangling);
+        Assert.Equal(1, sentinels);
+    }
+
+    /// <summary>And the mark is what the cartridge writes, rather than a number chosen here.</summary>
+    [Fact]
+    public void AndTheMarkIsEveryBitOfBothBytes()
+    {
+        string[] halves = WorldExporter.NoMap.Split('.');
+
+        Assert.Equal(2, halves.Length);
+        Assert.All(halves, half => Assert.Equal(sbyte.MaxValue, int.Parse(half)));
+    }
 }

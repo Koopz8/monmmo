@@ -488,6 +488,41 @@ public static class Program
 
             if (world.FerryPasses.Count > 0 && !world.AnyPassCanBeHadHere)
                 Console.WriteLine("      so the boat is not gated: a gate with no key is a wall");
+
+            // And whatever is left when everything has been allowed: every move, every
+            // person stepped through, the water, the scripted doors and the boat.
+            //
+            // Named rather than counted. A count of what cannot be reached is a number
+            // nobody can act on — it is either a handful of rooms the cartridge never uses
+            // or a hole in the export, and only the names say which. This is the last
+            // question the reach report leaves open, so it is the one worth spelling out.
+            List<MapData> nowhere = [.. world.Maps.Where(m => !everywhere.Contains(m.Id))];
+
+            if (nowhere.Count == 0)
+            {
+                Console.WriteLine("    and nothing at all is out of reach");
+            }
+            else
+            {
+                Console.WriteLine($"    {nowhere.Count} maps are out of reach with everything allowed:");
+
+                foreach (MapData lost in nowhere.Take(40))
+                {
+                    // How somebody would get in, if anybody could. A map with no doors at all
+                    // is a different problem from one whose doors are all in other unreachable
+                    // places, and the two want opposite investigations.
+                    int waysIn = world.Maps.Sum(m =>
+                        m.Warps.Count(w => w.TargetMapId == lost.Id)
+                        + m.Connections.Count(c => c.MapId == lost.Id)
+                        + m.Doors.Count(d => d.TargetMapId == lost.Id));
+
+                    Console.WriteLine(
+                        $"      {lost.Id,-8} {lost.Name,-20} " +
+                        (waysIn == 0 ? "nothing anywhere leads in" : $"{waysIn} way(s) in, all from out of reach"));
+                }
+
+                if (nowhere.Count > 40) Console.WriteLine($"      ... and {nowhere.Count - 40} more");
+            }
         }
 
         if (reach.Beyond.Count > 0)

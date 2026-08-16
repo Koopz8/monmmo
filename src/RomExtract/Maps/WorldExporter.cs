@@ -451,7 +451,52 @@ public static class WorldExporter
         if (danglingWarps == 0 && danglingEdges == 0) return;
 
         log($"  {danglingWarps} warps and {danglingEdges} connections lead to maps that are not here");
+
+        // And which of them are not doors at all.
+        //
+        // The cartridge marks "no map on the far side" with bank 127, map 127 — every bit
+        // set in both bytes — and a warp record carrying it is a doorway that goes nowhere by
+        // design rather than a map this exporter dropped. Counting the two together makes a
+        // number that cannot be acted on: it is either a bug worth a day or nothing at all,
+        // and the total says which only by accident.
+        int sentinels = maps.Sum(m => m.Warps.Count(w => w.TargetMapId == NoMap));
+
+        log($"    {sentinels} of those warps name {NoMap}, which is the cartridge's own " +
+            "mark for a door with nothing on the far side — not a missing map");
+
+        // The rest, named, because a handful of real ones is a list somebody can go and look
+        // at and a count is not.
+        List<(string On, string Names)> real =
+        [
+            .. maps.SelectMany(m => m.Warps
+                .Where(w => !known.Contains(w.TargetMapId) && w.TargetMapId != NoMap)
+                .Select(w => (m.Id, w.TargetMapId)))
+                .Distinct(),
+        ];
+
+        if (real.Count == 0)
+        {
+            log("    so every one of them is a sentinel and no map is missing");
+
+            return;
+        }
+
+        log($"    {real.Count} genuinely name a map this export does not contain:");
+
+        foreach ((string on, string names) in real.Take(30))
+            log($"      {on,-8} -> {names}");
+
+        if (real.Count > 30) log($"      ... and {real.Count - 30} more");
     }
+
+    /// <summary>
+    /// What the cartridge writes on a warp with nothing on the far side.
+    /// <para>
+    /// Bank 127, map 127 — every bit of both bytes set, which is this hardware's usual way
+    /// of saying "none" and is why it is not a plausible map number.
+    /// </para>
+    /// </summary>
+    public const string NoMap = "127.127";
 
     /// <summary>The identifier both sides use for a map: the game's own bank and map numbers.</summary>
     public static string MapId(int bank, int number) => $"{bank}.{number}";
