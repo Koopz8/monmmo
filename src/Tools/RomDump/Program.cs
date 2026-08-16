@@ -5952,6 +5952,47 @@ public static class Program
                 "    is inside the routine that draws the menu. This reach is a ceiling, not a floor.");
         }
 
+        // What the boat actually asks for, named. Without this the output can say the run
+        // held no ticket and cannot say what a ticket is, which is the shortest possible
+        // distance between an answer and being no further forward.
+        foreach (FerryTicket ticket in played.Tickets)
+        {
+            Console.WriteLine(
+                $"    asks flag 0x{ticket.Flag:X4} or {NameOf(ticket.ItemId)} — "
+                + (ticket.Opens
+                    ? ticket.FlagSet ? "has the flag" : "has one"
+                    : "has neither"));
+
+            if (ticket.Opens) continue;
+
+            if (ticket.Sources.Count == 0)
+            {
+                Console.WriteLine(
+                    "      NOTHING ON ANY MAP HANDS ONE OVER — it comes from a routine");
+
+                continue;
+            }
+
+            foreach (IGrouping<string, FoundAt> how in ticket.Sources.GroupBy(s => s.How))
+            {
+                FoundAt one = how.FirstOrDefault(s => s.Reached) ?? how.First();
+
+                Console.WriteLine(
+                    $"      {how.Key} at {how.Count()} place(s), "
+                    + $"{how.Count(s => s.Reached)} of them on ground it reached"
+                    + $" — e.g. {one.MapId} (object {one.LocalId})");
+
+                if (one.Reached) continue;
+
+                Console.WriteLine(one.WayIn.Count < 2
+                    ? $"        no way in to {one.MapId} from anywhere it reached"
+                    : "        the way in: "
+                      + string.Join(
+                          " -> ",
+                          one.WayIn.Select(h => h.How == Hop.Start ? h.MapId : $"{h.MapId} by {h.How}")));
+            }
+        }
+
         if (played.Removed.Count > 0)
         {
             Console.WriteLine();

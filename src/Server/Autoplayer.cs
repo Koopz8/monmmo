@@ -135,6 +135,24 @@ public sealed record Wanted(int ItemId, int Count, string MapId, int Times)
     public IReadOnlyList<FoundAt> Sources { get; init; } = [];
 }
 
+/// <summary>
+/// What the boat asks for, and whether this run could answer it.
+/// <para>
+/// Kept apart from the shopping list rather than folded into it, and the reason is
+/// attribution. Every other refusal is a script asking, on a map, and says which. This one is
+/// asked by a walk rather than by a run — the sailor puts the flag first, so a save without it
+/// never reaches the <c>checkitem</c> and the question is never recorded as being put. Filing
+/// it under a map would be inventing the one thing this project never invents.
+/// </para>
+/// </summary>
+/// <param name="FlagSet">Whether the save holds the flag half of the cartridge's own "or".</param>
+/// <param name="Carried">Whether it holds the item half.</param>
+public sealed record FerryTicket(
+    int Flag, int ItemId, bool FlagSet, bool Carried, IReadOnlyList<FoundAt> Sources)
+{
+    public bool Opens => FlagSet || Carried;
+}
+
 /// <summary>Somewhere one item could be got, and how.</summary>
 /// <param name="How">
 /// In the world file's own terms — lying on the floor, handed over by somebody, paid for,
@@ -255,6 +273,15 @@ public sealed record Attempt(
 
     /// <summary>Whether it was allowed to take the boat, which makes the reach an upper bound.</summary>
     public bool RodeTheBoat { get; init; }
+
+    /// <summary>
+    /// What the boat asks for, whether the run could answer it, and where one comes from.
+    /// <para>
+    /// The archipelago's shopping list, which the ordinary one cannot hold — see
+    /// <see cref="FerryTicket"/> for why.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<FerryTicket> Tickets { get; init; } = [];
 
     /// <summary>
     /// Maps that no door, map edge or scripted door anywhere in the world leads to.
@@ -585,6 +612,15 @@ public static class Autoplayer
             Carried = bag.Entries,
             Removed = gone,
             RodeTheBoat = ridingTheBoat,
+            Tickets =
+            [
+                .. world.FerryPasses.Select(p => new FerryTicket(
+                    p.Flag,
+                    p.ItemId,
+                    flags.Contains(p.Flag),
+                    bag.Has(p.ItemId),
+                    [.. Everywhere(world, p.ItemId, reached)])),
+            ],
             HeldATicket = world.FerryPasses.Count > 0
                 && world.FerryPasses.Any(p => flags.Contains(p.Flag) || bag.Has(p.ItemId)),
             // Except where the game starts, which is entered by waking up there rather than
