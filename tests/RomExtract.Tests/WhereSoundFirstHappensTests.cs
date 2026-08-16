@@ -174,6 +174,42 @@ public class WhereSoundFirstHappensTests
         Assert.Equal([1, 2, 3, 4, 5, 6, 7, 8, 5, 6, 7, 8, 5, 6, 7, 8], heard);
     }
 
+    /// <summary>
+    /// And a loop at a rate that does not divide evenly keeps its fraction across the join.
+    /// <para>
+    /// This test exists because deleting the line that keeps it changed nothing. Every other
+    /// loop test here plays a recording at its own rate, where the position is always a whole
+    /// number and there is no fraction to lose — so the guard was watching a case none of
+    /// them could reach.
+    /// </para>
+    /// <para>
+    /// What losing it sounds like: a tiny click at every repeat, once per loop, for as long
+    /// as the note is held. The way to see it without ears is to play a looping recording
+    /// beside a long one that is the same thing already repeated, and require the two to
+    /// come out identical.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AndALoopAtAnAwkwardRateDoesNotJumpAtTheJoin()
+    {
+        sbyte[] once = [.. Enumerable.Range(0, 10).Select(i => (sbyte)(i * 11 - 55))];
+
+        sbyte[] laidOut = [.. Enumerable.Repeat(once, 8).SelectMany(x => x)];
+
+        // Twelve thousand into eight is a step of one and a half, so every second time round
+        // the loop lands between two samples.
+        var looping = new PlayingNote(
+            new Voice(once, 12000, Loops: true, LoopStart: 0), 12000, 8000,
+            new Envelope(255, 255, 255, 255));
+
+        var straight = new PlayingNote(
+            new Voice(laidOut, 12000, Loops: false, LoopStart: 0), 12000, 8000,
+            new Envelope(255, 255, 255, 255));
+
+        for (int i = 0; i < 40; i++)
+            Assert.Equal(straight.Next(), looping.Next());
+    }
+
     // ---- the mixer ---------------------------------------------------------------------
 
     /// <summary>Silence in, silence out, and no exceptions on the way.</summary>
