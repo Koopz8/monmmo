@@ -232,9 +232,11 @@ public static class SampleLocator
         // Said out loud whether it is zero or not, because a number that only appears when
         // it is inconvenient is a number nobody has a baseline for. This one used to be the
         // count of what was thrown away; it is now the count of what would have been.
+        // Counted at the moment the rate was read, so it includes headers that were thrown
+        // out afterwards for some other reason. "Of them" would be wrong and was.
         log?.Invoke(
-            $"    {unusual} of them carry a rate outside the driver's usual twelve, "
-            + "which used to be grounds for throwing them away");
+            $"    {unusual} headers got past the rate check carrying one outside the driver's "
+            + "usual twelve, which used to be grounds for refusing them");
 
         return found;
     }

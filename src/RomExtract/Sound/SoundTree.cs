@@ -40,13 +40,41 @@ public sealed record InstrumentRecord(int Offset, byte Type, InstrumentKind Kind
     public bool IsSampled => Kind == InstrumentKind.Sampled;
 }
 
-/// <summary>A run of instruments used together — what a song picks its sounds from.</summary>
+/// <summary>
+/// A run of instruments used together — what a song picks its sounds from.
+/// <para>
+/// <b>A run is not a voicegroup.</b> There is no delimiter between voicegroups on the file:
+/// they sit back to back, so one unbroken run of instrument-shaped entries usually covers
+/// several of them, and nothing in the data says where one ends. That is a fact about the
+/// format rather than a shortcoming of this walk — the boundaries are not written down, and
+/// the only thing that ever names one is a song header pointing at it.
+/// </para>
+/// <para>
+/// Which is why <see cref="Holds"/> exists. A song naming the middle of a run is naming a
+/// voicegroup, and a walk that only offered run starts rejected every song but the first.
+/// </para>
+/// </summary>
 public sealed record VoicegroupRecord(int Offset, IReadOnlyList<InstrumentRecord> Instruments)
 {
     public int Count => Instruments.Count;
 
     /// <summary>How many of them are recordings this build has already confirmed.</summary>
     public int Sampled => Instruments.Count(i => i.IsSampled);
+
+    /// <summary>Whether an instrument of this run begins exactly here.</summary>
+    public bool Holds(int offset) =>
+        offset >= Offset
+        && offset < Offset + Count * InstrumentRecord.SizeBytes
+        && (offset - Offset) % InstrumentRecord.SizeBytes == 0;
+
+    /// <summary>
+    /// The instruments from a given point to the end of the run, which is a voicegroup as
+    /// far as anything can tell — where the next one starts is not written down anywhere.
+    /// </summary>
+    public IReadOnlyList<InstrumentRecord> From(int offset) =>
+        Holds(offset)
+            ? [.. Instruments.Skip((offset - Offset) / InstrumentRecord.SizeBytes)]
+            : [];
 }
 
 /// <summary>

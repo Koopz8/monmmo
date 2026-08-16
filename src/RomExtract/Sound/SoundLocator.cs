@@ -54,7 +54,13 @@ public static class SoundLocator
 
         IReadOnlyList<VoicegroupRecord> voicegroups = Voicegroups(rom, sampleAt, log);
 
-        var voicegroupAt = voicegroups.Select(v => v.Offset).ToHashSet();
+        // Every instrument boundary, not only the first of each run. Voicegroups have no
+        // delimiter between them, so one run covers several and a song header names the
+        // middle of it — which used to be rejected as pointing at nothing confirmed. On a
+        // real cartridge that left sixteen song headers on a file with hundreds.
+        var voicegroupAt = voicegroups
+            .SelectMany(v => v.Instruments.Select(i => i.Offset))
+            .ToHashSet();
 
         IReadOnlyList<SongHeaderRecord> songs = Songs(rom, voicegroupAt, log);
 
@@ -98,6 +104,11 @@ public static class SoundLocator
     public static InstrumentKind? KindOf(byte type) => type switch
     {
         0x00 or 0x08 => InstrumentKind.Sampled,
+
+        // Read off a cartridge rather than off a document. The cry table's 388 entries all
+        // carry 0x20 and every one of them points at a confirmed recording, which is as
+        // direct a demonstration that it names a recording as this project can get.
+        0x20 or 0x28 => InstrumentKind.Sampled,
         0x01 or 0x02 or 0x09 or 0x0A => InstrumentKind.Square,
         0x03 or 0x0B => InstrumentKind.Wave,
         0x04 or 0x0C => InstrumentKind.Noise,
@@ -146,10 +157,25 @@ public static class SoundLocator
 
         int tooShort = 0;
 
+        // Type bytes this build rejects on twelve-byte entries that otherwise name a
+        // confirmed recording. Every one of them breaks a run in half, so this is the list
+        // of what to look at next — counted rather than guessed at, which is how 0x20 got
+        // into the enumeration above.
+        var unknownTypes = new Dictionary<byte, int>();
+
         for (int offset = 0; offset + InstrumentRecord.SizeBytes <= rom.Length;)
         {
             if (Instrument(rom, offset, sampleAt) is null)
             {
+                if (KindOf(rom.ReadU8(offset)) is null
+                    && rom.ToOffsetOrNull(rom.ReadU32(offset + 4)) is { } names
+                    && sampleAt.Contains(names))
+                {
+                    byte type = rom.ReadU8(offset);
+
+                    unknownTypes[type] = unknownTypes.GetValueOrDefault(type) + 1;
+                }
+
                 offset += 4;
                 continue;
             }
@@ -187,6 +213,23 @@ public static class SoundLocator
         }
 
         log?.Invoke($"    {tooShort} run(s) of instrument-shaped bytes were too short or named no recording");
+
+        if (found.Count > 0)
+        {
+            log?.Invoke(
+                $"    longest run {found.Max(v => v.Count)} instruments — a run covers as many "
+                + "voicegroups as sit next to each other, which nothing in the file marks");
+        }
+
+        if (unknownTypes.Count > 0)
+        {
+            log?.Invoke(
+                "    type bytes this build rejects on entries that do name a recording: "
+                + string.Join(
+                    ", ",
+                    unknownTypes.OrderByDescending(p => p.Value).Take(8)
+                        .Select(p => $"0x{p.Key:X2} x{p.Value}")));
+        }
 
         return found;
     }

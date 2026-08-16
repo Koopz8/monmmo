@@ -64,11 +64,16 @@ public static class SongLoader
     /// </summary>
     private static List<Instrument> Voicegroup(Rom rom, SoundTreeResult tree, int at)
     {
-        if (tree.Voicegroups.FirstOrDefault(v => v.Offset == at) is not { } group) return [];
+        // The run this offset falls inside, and the instruments from that offset on. A song
+        // names a voicegroup by pointing at its first instrument, and where the voicegroup
+        // ends is not written down anywhere — so it runs to the end of what was confirmed.
+        if (tree.Voicegroups.FirstOrDefault(v => v.Holds(at)) is not { } group) return [];
 
-        var built = new List<Instrument>(group.Count);
+        IReadOnlyList<InstrumentRecord> instruments = group.From(at);
 
-        foreach (InstrumentRecord instrument in group.Instruments)
+        var built = new List<Instrument>(instruments.Count);
+
+        foreach (InstrumentRecord instrument in instruments)
         {
             if (!instrument.IsSampled)
             {

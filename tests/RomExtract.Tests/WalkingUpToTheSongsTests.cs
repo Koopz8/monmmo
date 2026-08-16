@@ -125,14 +125,84 @@ public class WalkingUpToTheSongsTests
             Assert.Equal(found.TrackCount, found.TrackOffsets.Count);
 
             Assert.Equal(
-                SyntheticRom.VoicegroupsOffset
-                    + SyntheticRom.VoicegroupForSong(song) * SyntheticRom.VoicegroupStride,
+                song == SyntheticRom.SongNamingAMergedVoicegroup
+                    ? SyntheticRom.SecondAdjacentVoicegroupOffset
+                    : SyntheticRom.VoicegroupsOffset
+                      + SyntheticRom.VoicegroupForSong(song) * SyntheticRom.VoicegroupStride,
                 found.VoicegroupOffset);
         }
 
         // And the counts really do differ, so the loop cannot be comparing a constant with
         // itself.
         Assert.True(tree.Songs.Select(s => s.TrackCount).Distinct().Count() > 1);
+    }
+
+    /// <summary>
+    /// A song naming the middle of a run of instruments is a song, not a rejection.
+    /// <para>
+    /// There is no delimiter between voicegroups: they sit back to back, so one unbroken run
+    /// covers several and nothing in the file says where one ends. A walk that only offered
+    /// run starts rejected every song but the first of each run — on a real cartridge that
+    /// left sixteen song headers on a file that has hundreds.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ASongNamingTheMiddleOfARunIsStillASong()
+    {
+        SoundTreeResult tree = Walked();
+
+        int at = SyntheticRom.SongHeadersOffset
+                 + SyntheticRom.SongNamingAMergedVoicegroup * SyntheticRom.SongStride;
+
+        SongHeaderRecord song = tree.Songs.Single(s => s.Offset == at);
+
+        Assert.Equal(SyntheticRom.SecondAdjacentVoicegroupOffset, song.VoicegroupOffset);
+
+        // And it really is the middle of one: the run it falls in starts earlier.
+        VoicegroupRecord run = tree.Voicegroups.Single(v => v.Holds(song.VoicegroupOffset));
+
+        Assert.True(
+            run.Offset < song.VoicegroupOffset,
+            "the run starts where the song points, so this proves nothing about the middle");
+    }
+
+    /// <summary>
+    /// And a pointer landing part way through an instrument is not one. Twelve bytes is the
+    /// stride, and four bytes into one of them is not the start of anything.
+    /// </summary>
+    [Fact]
+    public void ButAPointerIntoTheMiddleOfAnInstrumentIsNot()
+    {
+        SoundTreeResult tree = Walked();
+
+        VoicegroupRecord run = tree.Voicegroups.Single(
+            v => v.Holds(SyntheticRom.SecondAdjacentVoicegroupOffset));
+
+        Assert.False(run.Holds(SyntheticRom.SecondAdjacentVoicegroupOffset + 4));
+        Assert.Empty(run.From(SyntheticRom.SecondAdjacentVoicegroupOffset + 4));
+    }
+
+    /// <summary>
+    /// And what it draws on begins where it pointed rather than where the run does.
+    /// <para>
+    /// The half that would still be wrong if only the confirming were fixed: a song naming
+    /// the second group would load, and every instrument number in it would be off by the
+    /// length of the first.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AndWhatItDrawsOnBeginsWhereItPointed()
+    {
+        SoundTreeResult tree = Walked();
+
+        VoicegroupRecord run = tree.Voicegroups.Single(
+            v => v.Holds(SyntheticRom.SecondAdjacentVoicegroupOffset));
+
+        IReadOnlyList<InstrumentRecord> from = run.From(SyntheticRom.SecondAdjacentVoicegroupOffset);
+
+        Assert.NotEmpty(from);
+        Assert.Equal(SyntheticRom.SecondAdjacentVoicegroupOffset, from[0].Offset);
+        Assert.True(from.Count < run.Count, "the run and the voicegroup are the same length");
     }
 
     // ---- the table -----------------------------------------------------------------------

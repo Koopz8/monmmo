@@ -728,6 +728,30 @@ public sealed class SyntheticRom
             _data[VoicegroupsOffset + group * VoicegroupStride + InstrumentsPerVoicegroup * 12] = 0x7F;
         }
 
+        // And two more with nothing between them at all.
+        //
+        // This is what a real cartridge looks like and what this fixture did not: every
+        // voicegroup above is followed by a byte the instrument reader rejects, so each run
+        // ends exactly where its group does. On the file there is no such byte and no
+        // delimiter of any kind — voicegroups sit back to back, so a walk finds one run
+        // covering several of them and knows only where the first begins. Every song naming
+        // any of the others is then rejected for pointing at something unconfirmed.
+        for (int group = 0; group < 2; group++)
+        {
+            for (int i = 0; i < InstrumentsPerVoicegroup; i++)
+            {
+                int at = AdjacentVoicegroupsOffset + group * InstrumentsPerVoicegroup * 12 + i * 12;
+
+                _data[at] = 0x00;
+                _data[at + 1] = (byte)(50 + group);
+                WriteU32(at + 4, Rom.BaseAddress + (uint)SampleOffsetAt((group * 3 + i) % SampleCount));
+                _data[at + 8] = 0xFF;
+                _data[at + 10] = 0xFF;
+            }
+        }
+
+        _data[AdjacentVoicegroupsOffset + 2 * InstrumentsPerVoicegroup * 12] = 0x7F;
+
         // And a run of two, which is instrument-shaped and too short to be anything.
         for (int i = 0; i < 2; i++)
         {
@@ -792,7 +816,9 @@ public sealed class SyntheticRom
 
             WriteU32(
                 at + 4,
-                Rom.BaseAddress + (uint)(VoicegroupsOffset + VoicegroupForSong(song) * VoicegroupStride));
+                song == SongNamingAMergedVoicegroup
+                    ? Rom.BaseAddress + (uint)SecondAdjacentVoicegroupOffset
+                    : Rom.BaseAddress + (uint)(VoicegroupsOffset + VoicegroupForSong(song) * VoicegroupStride));
 
             for (int track = 0; track < tracks; track++)
             {
@@ -1460,6 +1486,21 @@ public sealed class SyntheticRom
     public const int VoicegroupStride = InstrumentsPerVoicegroup * 12 + 64;
 
     /// <summary>
+    /// Two voicegroups with nothing between them, the way a cartridge writes them.
+    /// <para>
+    /// Every other voicegroup here is followed by a byte the instrument reader rejects, which
+    /// is a courtesy no real file extends. Without a pair like this the walk can never be
+    /// asked what it does when one run covers two groups — and the answer, until this was
+    /// written, was that it kept the first offset and lost the second.
+    /// </para>
+    /// </summary>
+    public const int AdjacentVoicegroupsOffset = VoicegroupsOffset + VoicegroupCount * VoicegroupStride + 0x800;
+
+    /// <summary>Where the second of the pair begins, in the middle of one run.</summary>
+    public const int SecondAdjacentVoicegroupOffset =
+        AdjacentVoicegroupsOffset + InstrumentsPerVoicegroup * 12;
+
+    /// <summary>
     /// A run of instrument-shaped bytes too short to be a voicegroup, so the rejected-run
     /// count has something real to count.
     /// </summary>
@@ -1493,6 +1534,15 @@ public sealed class SyntheticRom
 
     /// <summary>Which voicegroup a given song draws on.</summary>
     public static int VoicegroupForSong(int index) => index % VoicegroupCount;
+
+    /// <summary>
+    /// The song that names the second of the two voicegroups with nothing between them.
+    /// <para>
+    /// It points at the middle of a run rather than the start of one, which is the ordinary
+    /// case on a cartridge and the case that used to be rejected.
+    /// </para>
+    /// </summary>
+    public const int SongNamingAMergedVoicegroup = 5;
 
     /// <summary>Where each song's track sequences live.</summary>
     public const int SequencesOffset = 0x150000;

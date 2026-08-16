@@ -194,7 +194,7 @@ public class FindingTheRecordedSoundsTests
 
         // And how many carry a rate outside the driver's usual twelve. Always printed, and
         // here it has something real to report.
-        Assert.Contains(said, line => line.Contains("outside the driver's usual twelve"));
+        Assert.Contains(said, line => line.Contains("outside the driver's"));
     }
 
     /// <summary>
