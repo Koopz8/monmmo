@@ -50,6 +50,13 @@ public sealed record TrackRead(
 /// commands and the settings, and 0xD0 upwards is a note.
 /// </para>
 /// <para>
+/// <b>Which command a bare byte repeats.</b> Only a command that has something after it can
+/// be the running one. A wait takes nothing, so a byte below 0x80 after a wait repeats
+/// whatever came before the wait — almost always a note. Reading it as a repeated wait
+/// consumes no bytes at all and the read stays where it is for ever, which is what every
+/// failing song on a real cartridge was doing: twenty thousand commands at one address.
+/// </para>
+/// <para>
 /// <b>The one genuine ambiguity, named rather than hidden.</b> A note takes a key, then
 /// optionally a loudness, then optionally a length — all of them bytes below 0x80, which is
 /// also what a repeat of the previous command looks like. There is no marker separating "a
@@ -93,6 +100,20 @@ public static class SequenceReader
     /// structural commands takes exactly one byte after it.
     /// </summary>
     private static bool IsSetting(byte opcode) => opcode is >= 0xB5 and <= 0xCD;
+
+    /// <summary>
+    /// Whether a command has anything after it, which is what decides whether it can be the
+    /// running command.
+    /// <para>
+    /// The settings, the note-off and the notes do; the waits and the four structural
+    /// commands do not. A command with nothing after it cannot be repeated by a bare
+    /// argument byte, because there is no argument for that byte to be.
+    /// </para>
+    /// </summary>
+    private static bool TakesOperands(byte opcode) => opcode >= FirstSetting;
+
+    /// <summary>Where the commands that carry something after them begin.</summary>
+    private const byte FirstSetting = 0xB5;
 
     /// <summary>
     /// A read that did not reach an end, with what it was looking at when it gave up.
@@ -169,8 +190,23 @@ public static class SequenceReader
             else
             {
                 at++;
-                running = opcode;
+
+                // A command that takes no operands does not become the running command.
+                //
+                // This is read off a cartridge, and it is the single rule that had every
+                // failing song failing. A wait takes nothing after it, so repeating a wait
+                // consumes no bytes at all — and a read that made a wait the running command
+                // sat on one offset for twenty thousand commands and then gave up. It is
+                // also what the bytes plainly say: after a note and a wait, a bare key byte
+                // is another note, and reading it as a repeated wait turns a bar of music
+                // into an infinite loop.
+                if (TakesOperands(opcode)) running = opcode;
             }
+
+            // Nothing below may leave the read where it found it. With the rule above there
+            // is no way for that to happen, which is exactly why it is worth saying: the last
+            // thing that could spin for ever here did so silently for four rounds of looking.
+            int wasAt = at;
 
             switch (opcode)
             {
