@@ -204,7 +204,8 @@ public static class Program
         if (options.FlagGates) WriteFlagGates(rom);
         if (options.SpecialContracts) WriteSpecialContracts(rom);
         if (options.Closure) WriteClosure(rom, options.RoutineAnswers, options.StartAt);
-        if (options.Play) WritePlaythrough(rom, options.RoutineAnswers, options.StartAt, options.Boat);
+        if (options.Play)
+            WritePlaythrough(rom, options.RoutineAnswers, options.StartAt, options.Boat, options.Money);
         if (options.WhereFrom.Count > 0) WriteWhereFrom(rom, options.WhereFrom);
 
         if (options.SequenceWidths) WriteSequenceWidths(rom);
@@ -5738,7 +5739,7 @@ public static class Program
     }
 
     private static void WritePlaythrough(
-        Rom rom, IReadOnlyDictionary<int, int> answers, string startAt, bool boat = false)
+        Rom rom, IReadOnlyDictionary<int, int> answers, string startAt, bool boat = false, int money = 0)
     {
         Console.WriteLine();
         Console.WriteLine("A PLAYTHROUGH");
@@ -5795,7 +5796,7 @@ public static class Program
             };
         }
 
-        Attempt played = Autoplayer.Play(world, first.Id, rules, Run, Console.WriteLine, boat);
+        Attempt played = Autoplayer.Play(world, first.Id, rules, Run, Console.WriteLine, boat, money);
 
         Console.WriteLine();
         Console.WriteLine(
@@ -5843,6 +5844,25 @@ public static class Program
 
         if (played.Carried.Count > 12)
             Console.WriteLine($"    ... and {played.Carried.Count - 12} more");
+
+        if (money > 0 || played.Bought.Count > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine(
+                $"  it was handed {money} to spend (MODELLED — nothing in this game gives it any)"
+                + $" and spent {money - played.MoneyLeft} of it");
+
+            foreach (Bought buy in played.Bought)
+                Console.WriteLine($"    bought {NameOf(buy.ItemId)} for {buy.Price} at {buy.MapId}");
+
+            if (played.Bought.Count == 0)
+            {
+                Console.WriteLine(
+                    "    and bought nothing: either nothing it was refused is on a shelf it can");
+                Console.WriteLine(
+                    "    stand in front of, or it could not afford what is");
+            }
+        }
 
         Console.WriteLine();
 
@@ -8859,6 +8879,10 @@ public static class Program
                                     walk, talk to everybody reachable, fight whoever picks
                                     a fight, take what is given, walk again. Says where it
                                     stopped and what it never got to. Takes --answer too.
+              --money N             give the playthrough N to spend. MODELLED — nothing in this
+                                    game gives it any, and the payout table has never been
+                                    located. Prices are read. It buys only what it has been
+                                    refused, off shelves it can stand in front of.
               --boat                let the playthrough take the ferry. Whether the boat will
                                     carry it is READ off the scripts — a flag or an item; where
                                     the boat goes is MODELLED as every dock, so this makes the
@@ -9060,6 +9084,9 @@ public static class Program
         /// <summary>Whether the playthrough may take the ferry, which makes its reach a ceiling.</summary>
         public bool Boat { get; private init; }
 
+        /// <summary>What the playthrough has to spend. Modelled, and nothing supplies it.</summary>
+        public int Money { get; private init; }
+
         public string StartAt { get; private init; } = Beginning.MapId;
 
         public IReadOnlyDictionary<int, int> RoutineAnswers { get; private init; } = new Dictionary<int, int>();
@@ -9180,6 +9207,7 @@ public static class Program
             bool play = false;
             var whereFrom = new List<int>();
             bool boat = false;
+            var money = 0;
             string startAt = Beginning.MapId;
             var routineAnswers = new Dictionary<int, int>();
             bool sequenceWidths = false;
@@ -9417,6 +9445,10 @@ public static class Program
                     case "--boat":
                         boat = true;
                         break;
+                    case "--money":
+                        if (TryNumber(Next(args, ref i, "--money"), out int purse)) money = purse;
+
+                        break;
                     case "--where-from":
                     {
                         // One or more item ids, decimal or hex, so the three drinks can be
@@ -9631,6 +9663,7 @@ public static class Program
                 Play = play,
                 WhereFrom = whereFrom,
                 Boat = boat,
+                Money = money,
                 StartAt = startAt,
                 Answers = answers,
                 SequenceWidths = sequenceWidths,
