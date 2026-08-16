@@ -418,6 +418,98 @@ public sealed class SyntheticRom
         WriteItems();
         WriteSamples();
         WriteSoundTree();
+        WriteAnimations();
+    }
+
+    /// <summary>
+    /// Move animations in the shape the cartridge uses, built on EMBER's — load a graphic,
+    /// loop a sound panned to the attacker, make three sprites four frames apart, play a
+    /// second sound, end.
+    /// </summary>
+    private void WriteAnimations()
+    {
+        for (int move = 0; move < AnimCount; move++)
+        {
+            int at = AnimScriptsOffset + move * AnimStride;
+            int wrote = 0;
+
+            void Put(params byte[] bytes)
+            {
+                foreach (byte b in bytes) _data[at + wrote++] = b;
+            }
+
+            void PutU16(int value) => Put((byte)(value & 0xFF), (byte)(value >> 8 & 0xFF));
+
+            void PutU32(uint value)
+            {
+                Put((byte)(value & 0xFF), (byte)(value >> 8 & 0xFF));
+                Put((byte)(value >> 16 & 0xFF), (byte)(value >> 24 & 0xFF));
+            }
+
+            Put(0x00);                              // loadspritegfx
+            PutU16(200 + move % 7);
+
+            Put(0x1C);                              // loopsewithpan
+            PutU16(AnimSoundFor(move));
+            Put(0xC0, 5, 2);
+
+            for (int sprite = 0; sprite < 3; sprite++)
+            {
+                Put(0x02);                          // createsprite
+                PutU32(AnimTemplateFor(move));
+                Put(1);                             // which battler
+                Put(2);                             // how many arguments
+                PutU16(20);
+                PutU16(sprite * 16 - 16);
+
+                Put(0x04, (byte)AnimFramesFor(move));   // delay
+            }
+
+            Put(0x19);                              // playsewithpan
+            PutU16(AnimSoundFor(move) + 1);
+            Put(0x3F);
+
+            Put(0x05);                              // waitforvisualfinish
+            Put(0x08);                              // end
+        }
+
+        WriteAnimWithACall();
+
+        // A script that stops on an opcode the format does not define.
+        _data[AnimWithABadOpcodeOffset] = 0x04;
+        _data[AnimWithABadOpcodeOffset + 1] = 8;
+        _data[AnimWithABadOpcodeOffset + 2] = 0xEE;
+
+        // The move-indexed table.
+        for (int move = 0; move < AnimCount; move++)
+        {
+            WriteU32(
+                AnimTableOffset + move * 4,
+                Rom.BaseAddress + (uint)(AnimScriptsOffset + move * AnimStride));
+        }
+    }
+
+    private void WriteAnimWithACall()
+    {
+        int at = AnimWithACallOffset;
+
+        _data[at++] = 0x04;                          // delay
+        _data[at++] = 6;
+        _data[at++] = 0x0E;                          // call
+
+        WriteU32(at, Rom.BaseAddress + (uint)AnimCalledSubsectionOffset);
+        at += 4;
+
+        _data[at++] = 0x04;                          // a delay after coming back
+        _data[at++] = 9;
+        _data[at] = 0x08;                            // end
+
+        int sub = AnimCalledSubsectionOffset;
+
+        _data[sub++] = 0x09;                         // playse
+        _data[sub++] = 0x2A;
+        _data[sub++] = 0x00;
+        _data[sub] = 0x0F;                           // return
     }
 
     /// <summary>
@@ -1307,6 +1399,42 @@ public sealed class SyntheticRom
     /// file. The reader has to report this rather than throw.
     /// </summary>
     public const int UnendedTrackOffset = RomSize - 12;
+
+    // --- move animations --------------------------------------------------------------
+
+    /// <summary>Where the synthetic animation scripts start.</summary>
+    public const int AnimScriptsOffset = 0x170000;
+
+    /// <summary>How many moves have one. Comfortably over the locator's floor.</summary>
+    public const int AnimCount = 48;
+
+    public const int AnimStride = 128;
+
+    /// <summary>Where the move-indexed pointer table lives.</summary>
+    public const int AnimTableOffset = 0x180000;
+
+    /// <summary>Frames of delay written into a given move's animation.</summary>
+    public static int AnimFramesFor(int move) => 4 + move % 12;
+
+    /// <summary>
+    /// The sprite template a given move names. Deliberately repeats across moves, because
+    /// templates repeating is the property the whole next layer depends on.
+    /// </summary>
+    public static uint AnimTemplateFor(int move) => 0x0810_0000u + (uint)(move % 5) * 0x40;
+
+    /// <summary>The sound a given move plays.</summary>
+    public static int AnimSoundFor(int move) => 100 + move % 9;
+
+    /// <summary>A script that calls a subsection and comes back.</summary>
+    public const int AnimWithACallOffset = 0x181000;
+
+    public const int AnimCalledSubsectionOffset = 0x181100;
+
+    /// <summary>
+    /// A script that stops on an opcode the format does not define. Reading it is the
+    /// failure the locator leans on to reject things that were never scripts.
+    /// </summary>
+    public const int AnimWithABadOpcodeOffset = 0x181200;
 
     public const int ItemTableOffset = 0x110000;
     public const int ItemDescriptionsOffset = 0x114000;
