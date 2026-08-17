@@ -36,7 +36,6 @@ public class TheCoinCaseTests
     private const byte GiveItem = 0x46;
     private const byte GiveCreature = 0x79;
     private const byte CopyVar = 0x19;
-    private const byte Lock = 0x6A;
 
     private const int Size = 0x20000;
 
@@ -264,10 +263,12 @@ public class TheCoinCaseTests
 
         Ceiling(image, 0x1000, 0x4001, 90, 10);
 
-        // lock, which takes no arguments, where the branch was — so the hand-over still sits at
-        // index three and the only thing that changed is that nothing acts on the comparison.
-        Put(image, 0x1008, Lock, Filler, Filler, Filler, Filler, Filler);
-        Put(image, 0x100E, TheCoinCase.HandOver, 0x0A, 0x00, End);
+        // Something exactly as wide as the branch, in the branch's place, so the hand-over
+        // still lands at index three and the ONLY thing that changed is that nothing acts on
+        // the comparison. Filler here instead would stop the read dead and the fixture would
+        // pass because the block was unreadable rather than because the branch was missing —
+        // which is how the first version of this test let a break through.
+        Put(image, 0x1008, TheCoinCase.AskAfterMoney, 0x01, 0x00, 0x00, 0x00, 0x00);
 
         Assert.Empty(TheCoinCase.Ceilings(new Rom(image)));
     }
