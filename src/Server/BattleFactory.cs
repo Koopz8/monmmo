@@ -230,6 +230,27 @@ public sealed class BattleFactory(GameRules rules)
     };
 
     /// <summary>
+    /// What to write down for a battler that already had a save.
+    /// <para>
+    /// <b>The line the note above says every caller writes, made into something a caller
+    /// cannot forget to write.</b> One did. The autoplayer wrote its party back after every
+    /// fight with <see cref="Save(Battler)"/> and nothing put the experience back, so each
+    /// win reset the total to nothing and the next award started from the bottom of the level
+    /// it was already at. Ninety-four fights won, not one level gained, a party of six at
+    /// twenty-five for the whole game — and a floor of 179 maps reported as a fact about the
+    /// cartridge.
+    /// </para>
+    /// <para>
+    /// Nothing failed. A creature that does not grow plays every battle correctly and loses
+    /// the ones it should lose, which is the shape of every fault this project has spent a
+    /// session on: right at every step and quietly smaller at the end.
+    /// </para>
+    /// </summary>
+    /// <param name="before">The save this battler was restored from, for what a battle cannot carry.</param>
+    public static SavedMon Save(Battler battler, SavedMon before) =>
+        Save(battler) with { Experience = before.Experience };
+
+    /// <summary>
     /// A party member restored to full health, as a visit to a centre would leave it.
     /// <para>
     /// Rebuilt rather than patched, because maximum health is computed from base stats

@@ -6030,6 +6030,18 @@ public static class Program
             + $"{played.FightsSkipped} never fought at all"
             + $" (healed {played.PartiesHealed} times)");
 
+        // THE PARTY, ONE LINE PER CREATURE.
+        //
+        // "highest level 25" is a summary, and a summary is where a fact goes to hide. It read
+        // the same on every pass of a run that won ninety-four fights, which is either a party
+        // that does not grow or a maximum pinned by a gift — and one of those is a fault in
+        // this project and the other is not. One line each says which without anybody guessing.
+        Console.WriteLine(
+            "    the party: "
+            + (played.Party.Count == 0
+                ? "empty"
+                : string.Join(", ", played.Party.Select(m => $"#{m.Species} at {m.Level}"))));
+
         if (played.FightsSkipped > 0)
         {
             Console.WriteLine(
