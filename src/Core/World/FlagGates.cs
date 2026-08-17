@@ -96,6 +96,34 @@ public sealed class FlagGates
 
     /// <summary>How many flags gate anything at all.</summary>
     public int Count => _gates.Count;
+
+    /// <summary>
+    /// How many of these flags gate something — the denominator a run's flag count has never had.
+    /// <para>
+    /// <b>"153 flags" cannot come back surprising.</b> A run reports how many flags it set and
+    /// nothing about what any of them hold up, so a run that set a hundred and fifty marks on a
+    /// character and a run that opened a hundred and fifty doors print the same line. Milestone
+    /// 209 did this fix one line lower down, on the money ceiling, and 207 needed it here badly
+    /// enough to hand-patch a print into two worktrees to get it.
+    /// </para>
+    /// </summary>
+    public int HowManyOf(IEnumerable<int> flags) => flags.Count(IsAboutTheWorld);
+
+    /// <summary>
+    /// The flags that gate something and are not in this set — the wall, counted from the
+    /// runner's side rather than from the world's.
+    /// <para>
+    /// The half that can come back empty, and the one that says what a run has left to do. The
+    /// shut-door list answers a narrower question: it names doors, and most of what a flag
+    /// holds up in this game is a person rather than a door.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<int> NotIn(IEnumerable<int> flags)
+    {
+        var had = new HashSet<int>(flags);
+
+        return [.. _gates.Keys.Where(f => !had.Contains(f)).Order()];
+    }
 }
 
 /// <summary>

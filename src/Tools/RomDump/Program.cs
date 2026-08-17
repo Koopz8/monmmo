@@ -6044,6 +6044,37 @@ public static class Program
             $"    {played.Flags.Count} flags, {played.Moves.Count} field moves, "
             + $"{played.Party.Count} in the party, highest level {played.HighestLevel}");
 
+        // AND WHICH FLAGS, WITH A DENOMINATOR — the same fix 209 made one line below this.
+        //
+        // "153 flags" cannot come back surprising: a run that set a hundred and fifty marks on
+        // a character and a run that opened a hundred and fifty doors print the same line, and
+        // diffing two runs means reading a number rather than a list. 207 needed the list to
+        // find which three flags a milestone had added and had to hand-patch a print into two
+        // worktrees to get it.
+        //
+        // The rule that decides which flags count is FlagGates', not this printer's — the
+        // seventh time a line like it has moved out of here.
+        var gates = new FlagGates(world);
+
+        IReadOnlyList<int> missing = gates.NotIn(played.Flags);
+
+        Console.WriteLine(
+            $"      of those, {gates.HowManyOf(played.Flags)} gate something in this world file"
+            + $" (of {gates.Count} that do), so {missing.Count} gating flag(s) it never set");
+
+        Console.WriteLine(
+            "      set: "
+            + string.Join(", ", played.Flags.Order().Take(14).Select(f => $"0x{f:X4}"))
+            + (played.Flags.Count > 14 ? $", +{played.Flags.Count - 14} more" : ""));
+
+        Console.WriteLine(
+            missing.Count == 0
+                ? "      and it set EVERY flag that gates anything, which is the answer that"
+                  + " would mean there is nothing left to reach"
+                : "      never set: "
+                  + string.Join(", ", missing.Take(14).Select(f => $"0x{f:X4}"))
+                  + (missing.Count > 14 ? $", +{missing.Count - 14} more" : ""));
+
         // WHY IT COULD CROSS WATER, WHICH WAS A COMMAND-LINE FLAG UNTIL NOW.
         //
         // The sea is 1245 squares across 35 maps and the walk has always been told whether to
