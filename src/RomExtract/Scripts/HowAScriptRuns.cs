@@ -54,7 +54,8 @@ public sealed class HowAScriptRuns(
     IReadOnlyDictionary<int, int>? variables = null,
     bool sayYes = false,
     IReadOnlyCollection<int>? beaten = null,
-    IDictionary<int, int>? remembered = null)
+    IDictionary<int, int>? remembered = null,
+    int? watch = null)
 {
     /// <summary>
     /// Where the scratch pads stop and the story's own memory begins.
@@ -124,9 +125,10 @@ public sealed class HowAScriptRuns(
         foreach ((int variable, int put) in variables ?? new Dictionary<int, int>())
             state.Write(variable, put);
 
-        ScriptRun run = ScriptRunner.Run(rom, address, state, answers: answers);
+        ScriptRun run = ScriptRunner.Run(rom, address, state, answers: answers, watch: watch);
 
         var wrote = new Dictionary<int, int>(run.VariablesWritten);
+        var touched = new List<VariableTouch>(run.Touched);
         var flagsSet = new List<int>(run.FlagsSet);
         var flagsCleared = new List<int>(run.FlagsCleared);
         var specials = new List<int>(run.SpecialsCalled);
@@ -209,9 +211,14 @@ public sealed class HowAScriptRuns(
             // Yes. The variable the box answers into is the one everything reads.
             state.Write(SpecialContracts.AnswerVariable, 1);
 
-            run = ScriptRunner.Run(rom, carryOn, state, answers: answers);
+            run = ScriptRunner.Run(rom, carryOn, state, answers: answers, watch: watch);
 
             foreach ((int variable, int value) in run.VariablesWritten) wrote[variable] = value;
+
+            // The far side of a question is the same scene continuing, and the balls in the
+            // lab do their asking before their giving — so a trace that stopped at the
+            // question would stop exactly where the interesting part starts.
+            touched.AddRange(run.Touched);
 
             flagsSet.AddRange(run.FlagsSet);
             flagsCleared.AddRange(run.FlagsCleared);
@@ -253,6 +260,7 @@ public sealed class HowAScriptRuns(
             Asked = asked,
             StoppedAtAQuestion = run.Question is not null,
             StoppedAt = stoppedAt,
+            Touched = touched,
         };
     }
 

@@ -106,6 +106,25 @@ public sealed record WhatRan
 /// used, rather than a door to a fixed place. Nothing is missing when one of these is unopened
 /// and counting them as blockers would be counting a feature.
 /// </param>
+/// <summary>
+/// One look at or change to a watched variable, with where in the run it happened.
+/// <para>
+/// <b>The instrument this project did not have.</b> <c>--who-writes</c> answers who writes a
+/// variable <em>anywhere in the image</em>, statically, following every arm of every branch —
+/// which is the right answer to "where in the file is this touched" and the wrong answer to
+/// "what happened here". A run takes one arm per conditional, so a script that writes six on
+/// one arm and eight on another writes neither when it takes a third; the static list names it
+/// as a writer of both, and reading a cause off that list is reading it off the wrong
+/// instrument.
+/// </para>
+/// </summary>
+public sealed record Traced(int Pass, string MapId, int LocalId, uint Address, VariableTouch What)
+{
+    public override string ToString() =>
+        $"pass {Pass}  {MapId}" + (LocalId == 0 ? "" : $" person {LocalId}") +
+        $"  0x{Address:X8}  {What}";
+}
+
 public sealed record ShutDoor(
     string FromMapId,
     GridPosition Square,
@@ -405,6 +424,26 @@ public sealed record Attempt(
     /// </summary>
     public IReadOnlyDictionary<uint, WhatRan> Ran { get; init; } = new Dictionary<uint, WhatRan>();
 
+    /// <summary>
+    /// Every look at and change to the watched variable, in the order the run did them.
+    /// <para>
+    /// Empty unless a variable was watched. This is the ordered half of the story's memory:
+    /// the run has always been able to say what a counter ended up holding and has never been
+    /// able to say what it held <b>at the moment somebody read it</b>, which is the only
+    /// question a counter ever raises.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<Traced> Trace { get; init; } = [];
+
+    /// <summary>
+    /// How many touches were dropped because the trace filled up.
+    /// <para>
+    /// Printed rather than swallowed. A silent cap reads as "that is all that happened",
+    /// which is the failure this project has spent a session finding in its own output.
+    /// </para>
+    /// </summary>
+    public int TraceDropped { get; init; }
+
     /// <summary>People a script took off a map, which is how a doorway stops being blocked.</summary>
     public IReadOnlyCollection<(string MapId, int LocalId)> Removed { get; init; } = [];
 
@@ -492,6 +531,17 @@ public static class Autoplayer
     /// </para>
     /// </summary>
     public const int MostTurns = 300;
+
+    /// <summary>
+    /// How many touches of a watched variable are kept.
+    /// <para>
+    /// <b>Modelled</b>, and the overflow is counted and printed rather than dropped quietly.
+    /// A scratch pad is written a hundred and sixty-eight times by three hundred scripts on
+    /// twenty-four passes, and a trace of one is a book nobody reads; the story's own counters
+    /// are touched a few dozen times each and fit inside this many times over.
+    /// </para>
+    /// </summary>
+    public const int MostTraced = 4096;
 
     /// <param name="runScript">
     /// Runs one script with the flags and the bag it should see, and says what it did.
@@ -610,6 +660,12 @@ public static class Autoplayer
         // in different halves of the output with nothing joining them.
         var spokenTo = new Dictionary<(string MapId, int LocalId), PlayedScript>();
 
+        // The ordered record of one variable, when somebody asked for one. Bounded, and the
+        // overflow is counted rather than dropped quietly: a trace that silently stops reads
+        // exactly like a run that stopped touching the thing.
+        var trace = new List<Traced>();
+        var dropped = 0;
+
         var won = 0;
         var lost = 0;
         var skipped = 0;
@@ -643,6 +699,13 @@ public static class Autoplayer
                 foreach (Runnable what in Reachable(map, stood, flags, gone, remembered, inOrder))
                 {
                     PlayedScript did = runScript(what.Address, flags, bag);
+
+                    // In the order it happened, which is the entire point of the thing.
+                    foreach (VariableTouch touch in did.Touched)
+                    {
+                        if (trace.Count >= MostTraced) dropped++;
+                        else trace.Add(new Traced(pass, map.Id, what.LocalId, what.Address, touch));
+                    }
 
                     // That it ran at all, which is a different fact from the map being
                     // reached. A trigger fires only for somebody standing exactly on it —
@@ -966,6 +1029,8 @@ public static class Autoplayer
         {
             FightAttemptsLost = lost,
             Carried = bag.Entries,
+            Trace = trace,
+            TraceDropped = dropped,
             Ran = ran,
             Removed = gone,
             Moved = [.. moved.Keys],
@@ -1398,11 +1463,18 @@ public static class Autoplayer
         // always run them regardless — which makes the run a CEILING in that respect: it takes
         // arms of the story no single playthrough could take in one pass.
         //
-        // PALLET TOWN is the case. Its counter goes to 1 at the trigger north of town, 2 at the
-        // lab's arrival script, and then 3 to 9 across the lab's own scripts — so a pass that
-        // runs all of them ratchets it to 9 before the three balls read it, and the balls answer
-        // "you already have one". The starter is the only creature in this game a player
-        // chooses, and the run has never held one.
+        // PALLET TOWN is the case, and this comment described it WRONGLY for three milestones
+        // because it was read off --who-writes, which answers the same question of the image
+        // rather than of the run: statically, down every arm of every branch. It said the
+        // counter ratcheted to nine before the three balls read it and the balls answered "you
+        // already have one". Traced through an actual run, the balls read ONE, every pass, for
+        // seven passes — the counter was too LOW, not too high, and the cause was the ordering
+        // fixed below rather than this lever.
+        //
+        // What is true here, measured with the order corrected: the map has several arrival
+        // scripts and running all of them takes the counter past two in one pass, so the ceiling
+        // still does not hold a starter and the floor now does. That is a real cost of the
+        // ceiling, and it is the one this paragraph was reaching for.
         //
         // Honoured, the same walk is a floor: it runs what a save in this state would run.
         // Both are worth having and neither is the truth on its own, so it is a lever.
@@ -1414,6 +1486,42 @@ public static class Autoplayer
         // like a rule and is not one.
         bool Fires(int variable, int value) =>
             !inOrder || (remembered?.GetValueOrDefault(variable) ?? 0) == value;
+
+        // ARRIVING FIRST, WHICH IS THE ONLY ORDER THERE IS.
+        //
+        // This ran LAST — after every person on the map — and the ordering was never chosen,
+        // it is the order the three loops happened to be written in.
+        //
+        // It is not a modelling choice and it has no defensible reading: an arrival script is
+        // what runs when you arrive, and nobody has ever talked to somebody on a map they had
+        // not yet arrived on. The other way round is not a stricter run or a looser one, it is
+        // an order the cartridge cannot produce.
+        //
+        // PALLET TOWN is the case, and `--trace 0x4055` is how it was seen rather than argued
+        // about. The trigger north of town writes ONE; the lab's arrival script reads that one
+        // and writes TWO; TWO is the only number that makes the three balls hand anything over.
+        // Running the people first, all three balls read ONE — "you are not ready" — and the
+        // two arrives immediately after they have all been asked. On the next pass the map to
+        // the north has moved it to five and they answer "you already have one".
+        //
+        // So the counter was right for one instant, between the lab's own script and the next
+        // map, and nobody was looking. Every instrument this project has printed the five at
+        // the end and none of them could say the balls never saw a two.
+        foreach (MapEntryScript entry in map.OnEntry)
+        {
+            if (entry.ScriptAddress != 0 && Fires(entry.Variable, entry.Value))
+                yield return new Runnable(entry.ScriptAddress, 0);
+        }
+
+        foreach (MapTrigger trigger in map.Triggers)
+        {
+            if (trigger.HasScript
+                && stood.Contains((map.Id, trigger.Square))
+                && Fires(trigger.Variable, trigger.Value))
+            {
+                yield return new Runnable(trigger.ScriptAddress, 0);
+            }
+        }
 
         foreach (MapObject person in map.Objects)
         {
@@ -1432,22 +1540,6 @@ public static class Autoplayer
                     person.CanBeTakenAway ? person.HiddenBy : 0,
                     person.LocalId);
             }
-        }
-
-        foreach (MapTrigger trigger in map.Triggers)
-        {
-            if (trigger.HasScript
-                && stood.Contains((map.Id, trigger.Square))
-                && Fires(trigger.Variable, trigger.Value))
-            {
-                yield return new Runnable(trigger.ScriptAddress, 0);
-            }
-        }
-
-        foreach (MapEntryScript entry in map.OnEntry)
-        {
-            if (entry.ScriptAddress != 0 && Fires(entry.Variable, entry.Value))
-                yield return new Runnable(entry.ScriptAddress, 0);
         }
     }
 

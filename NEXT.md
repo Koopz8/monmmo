@@ -6,17 +6,21 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **The second width found WRONG rather than missing.** `[0x6F]` was 1; it is 4.
-  Five sites, all after a `setvar 0x8004`, all landing on `copyvar` then `compare`
-  at four and on padding at three. Found by following the drift rather than the
-  stop — the `0xC0` stop it caused sat thirty-seven bytes downstream of it.
-- **A wrong width does not only hide things. It invents them.** Read one byte
-  short, this command's own arguments decode as a `setflag`. Fixing it took flags
-  moved 259 → 258 and the playthrough's own count 286 → 284 — **down**. Every flag
-  figure this project has published was inflated by a misalignment, which is the
-  opposite of the failure it has been chasing and reads identically from outside.
-- **58 → 53 stopped blocks, 3806 → 3836 reached.**
-- The new guard asserts `DoesNotContain` — the first one here that catches a read
-  for holding something rather than for missing something. Its fixture says in
-  writing that it separates four from one and **not** four from three, because a
-  nop absorbs that difference on the cartridge too.
+- **The run has a starter.** `--play --say-yes --in-order` comes back with a party
+  of four and the fourth is `#3` — the only creature in this game a player
+  chooses, and no run this project has printed has ever held one. It arrives on
+  the **floor**, which is the strictest run there is.
+- **One line of ordering, never chosen.** A map's arrival script ran *after* every
+  person on that map — the order the three loops happen to sit in. Nobody has ever
+  talked to somebody on a map they had not yet arrived on.
+- **And the cause written down for three milestones was the opposite of the real
+  one.** The roadmap said the counter ratcheted *past* two before the balls read
+  it. Traced, the balls read **one**, every pass, for seven passes. The two landed
+  immediately after the last of them had been asked. The number was right for one
+  instant and nobody was looking.
+- **`--trace 0xNNNN`** is the new instrument: every look at *and read of* one
+  variable, in order, with what it held at the moment somebody looked.
+  `--who-writes` answers the same question of the image, down every arm of every
+  branch; a run takes one arm, and reading a cause off the static list was reading
+  it off the wrong instrument.
+- Not one of 2721 tests noticed when the order changed. Seven do now.
