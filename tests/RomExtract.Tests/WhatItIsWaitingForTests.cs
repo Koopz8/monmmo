@@ -330,10 +330,22 @@ public class WhatItIsWaitingForTests
             Pointer(image, 0x101 + (block * 0x10), (uint)(0x08000110 + (block * 0x10)));
         }
 
-        Put(image, 0x160, Release, End);
+        // And the gate at the far end of it, which is what a limit costs.
+        Put(image, 0x160, CheckFlag, Waiting & 0xFF, Waiting >> 8);
+        Put(image, 0x163, GotoIf, IfEqual);
+        Pointer(image, 0x165, 0x08000200);
+        Put(image, 0x169, Release, End);
+        Put(image, 0x200, SetFlag, Opened & 0xFF, Opened >> 8, Release, End);
 
-        Assert.True(WhatItIsWaitingFor.Asks(new Rom(image), 0x08000100, maxScripts: 3).Truncated);
-        Assert.False(WhatItIsWaitingFor.Asks(new Rom(image), 0x08000100).Truncated);
+        WaitingOn stopped = WhatItIsWaitingFor.Asks(new Rom(image), 0x08000100, maxScripts: 3);
+
+        Assert.True(stopped.Truncated);
+        Assert.Empty(stopped.Flags);
+
+        WaitingOn whole = WhatItIsWaitingFor.Asks(new Rom(image), 0x08000100);
+
+        Assert.False(whole.Truncated);
+        Assert.Equal(Waiting, Assert.Single(whole.Flags).Flag);
     }
 
     /// <summary>
