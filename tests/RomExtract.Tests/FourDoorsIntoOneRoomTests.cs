@@ -124,6 +124,39 @@ public class FourDoorsIntoOneRoomTests
     }
 
     /// <summary>
+    /// AND THE OTHER DIRECTION, which the first version of this rule got wrong. One script is
+    /// attached to nineteen different Pokémon Centres and one to eight gym guides — the same
+    /// address, reached from eight maps, is EIGHT scenes and not one. Keyed on the address
+    /// alone, seven of every eight were silently dropped.
+    /// <para>
+    /// Two maps here, the same script address on both, and somebody on each who has to move.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void OneScriptSharedByTwoMapsIsTwoScenes()
+    {
+        MapData Shared(string id) => new MapData(id, id, 4, 3, new byte[12])
+        {
+            Objects = [Person(1, 0, 2, 0x1000), Person(3, 2, 0, 0)],
+        };
+
+        var world = new WorldData([Shared("1.0") with { Warps = [new Warp(3, 2, 0, "1.1")] },
+                                   Shared("1.1") with { Warps = [new Warp(3, 2, 0, "1.0")] }]);
+
+        Attempt played = Autoplayer.Play(
+            world,
+            "1.0",
+            TestRules.All,
+            (address, _, _) => address == 0x1000
+                ? Nothing with { Walked = [(3, (IReadOnlyList<Direction>)[Direction.Down], 0x08165DC0u)] }
+                : Nothing);
+
+        Assert.Equal(2, played.WalkSites);
+        Assert.Contains(("1.0", 3), played.Moved);
+        Assert.Contains(("1.1", 3), played.Moved);
+    }
+
+    /// <summary>
     /// And the count of asks is kept beside the count of commands rather than instead of it.
     /// The two being far apart is the finding; one number cannot say it.
     /// </summary>
