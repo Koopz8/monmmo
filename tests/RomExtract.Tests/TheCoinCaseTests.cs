@@ -35,6 +35,8 @@ public class TheCoinCaseTests
     private const byte SetVar = 0x16;
     private const byte GiveItem = 0x46;
     private const byte GiveCreature = 0x79;
+    private const byte CopyVar = 0x19;
+    private const byte Lock = 0x6A;
 
     private const int Size = 0x20000;
 
@@ -225,13 +227,47 @@ public class TheCoinCaseTests
         Assert.Equal(0x1000, only.Offset);
     }
 
-    /// <summary>A read with no compare after it is not a guard either.</summary>
+    /// <summary>
+    /// A read with no compare after it is not a guard either — and the fixture has to put
+    /// something ELSE four bytes wide there, carrying the same variable.
+    /// <para>
+    /// <c>B3 v; B4 g; end</c> looks like the test for this and is not one: the hand-over lands
+    /// at index one, which the fall-through scan never reaches, so the instrument answers
+    /// correctly for a reason that has nothing to do with the compare. A break that removed the
+    /// compare check came back green against exactly that fixture. <c>copyvar</c> is the same
+    /// four bytes with the same variable in the same place, and it discriminates.
+    /// </para>
+    /// </summary>
     [Fact]
-    public void AReadWithNoCompareAfterItIsNotAGuard()
+    public void AReadFollowedBySomethingThatIsNotACompareIsNotAGuard()
     {
         byte[] image = Blank();
 
-        Put(image, 0x1000, TheCoinCase.HowMany, 0x01, 0x40, TheCoinCase.HandOver, 0x0A, 0x00, End);
+        Ceiling(image, 0x1000, 0x4001, 90, 10);
+
+        // copyvar 0x4001 -> 0x8000, in the compare's place: four bytes, same variable first.
+        image[0x1003] = CopyVar;
+        Word(image, 0x1004, 0x4001);
+        Word(image, 0x1006, 0x8000);
+
+        Assert.Empty(TheCoinCase.Ceilings(new Rom(image)));
+    }
+
+    /// <summary>
+    /// And a compare nobody branches on is not a guard: it is a comparison whose answer is
+    /// thrown away, and the hand-over after it is unconditional.
+    /// </summary>
+    [Fact]
+    public void ACompareNobodyBranchesOnIsNotAGuard()
+    {
+        byte[] image = Blank();
+
+        Ceiling(image, 0x1000, 0x4001, 90, 10);
+
+        // lock, which takes no arguments, where the branch was — so the hand-over still sits at
+        // index three and the only thing that changed is that nothing acts on the comparison.
+        Put(image, 0x1008, Lock, Filler, Filler, Filler, Filler, Filler);
+        Put(image, 0x100E, TheCoinCase.HandOver, 0x0A, 0x00, End);
 
         Assert.Empty(TheCoinCase.Ceilings(new Rom(image)));
     }
