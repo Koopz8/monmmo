@@ -538,7 +538,9 @@ public static class Autoplayer
         bool ridingTheBoat = false,
         int money = 0,
         ISet<int>? beaten = null,
-        bool surfing = false)
+        bool surfing = false,
+        IReadOnlyDictionary<int, int>? remembered = null,
+        bool inOrder = false)
     {
         var battles = new BattleFactory(rules);
         var progress = new Progression(rules);
@@ -638,7 +640,7 @@ public static class Autoplayer
 
             foreach (MapData map in world.Maps.Where(m => reach.Maps.Contains(m.Id)))
             {
-                foreach (Runnable what in Reachable(map, stood, flags, gone))
+                foreach (Runnable what in Reachable(map, stood, flags, gone, remembered, inOrder))
                 {
                     PlayedScript did = runScript(what.Address, flags, bag);
 
@@ -1386,8 +1388,33 @@ public static class Autoplayer
         MapData map,
         HashSet<(string MapId, GridPosition Square)> stood,
         HashSet<int> flags,
-        HashSet<(string MapId, int LocalId)> gone)
+        HashSet<(string MapId, int LocalId)> gone,
+        IReadOnlyDictionary<int, int>? remembered = null,
+        bool inOrder = false)
     {
+        // WHETHER A SCRIPT'S OWN CONDITION IS HONOURED, WHICH IS WHAT THE FLOOR MEANS.
+        //
+        // A trigger and an arrival script each carry a variable and a value, and this walk has
+        // always run them regardless — which makes the run a CEILING in that respect: it takes
+        // arms of the story no single playthrough could take in one pass.
+        //
+        // PALLET TOWN is the case. Its counter goes to 1 at the trigger north of town, 2 at the
+        // lab's arrival script, and then 3 to 9 across the lab's own scripts — so a pass that
+        // runs all of them ratchets it to 9 before the three balls read it, and the balls answer
+        // "you already have one". The starter is the only creature in this game a player
+        // chooses, and the run has never held one.
+        //
+        // Honoured, the same walk is a floor: it runs what a save in this state would run.
+        // Both are worth having and neither is the truth on its own, so it is a lever.
+        // No special case for an unconditional entry, and that is measured rather than assumed:
+        // an entry with no condition is (0, 0), an unwritten variable holds nought, so it passes
+        // this comparison already. The clause that said so was written, broken on purpose, and
+        // came back green — then removed, because --play prints the same 215 maps and 193 flags
+        // with and without it on the real image. A clause that cannot change an answer looks
+        // like a rule and is not one.
+        bool Fires(int variable, int value) =>
+            !inOrder || (remembered?.GetValueOrDefault(variable) ?? 0) == value;
+
         foreach (MapObject person in map.Objects)
         {
             if (!person.HasScript) continue;
@@ -1409,13 +1436,18 @@ public static class Autoplayer
 
         foreach (MapTrigger trigger in map.Triggers)
         {
-            if (trigger.HasScript && stood.Contains((map.Id, trigger.Square)))
+            if (trigger.HasScript
+                && stood.Contains((map.Id, trigger.Square))
+                && Fires(trigger.Variable, trigger.Value))
+            {
                 yield return new Runnable(trigger.ScriptAddress, 0);
+            }
         }
 
         foreach (MapEntryScript entry in map.OnEntry)
         {
-            if (entry.ScriptAddress != 0) yield return new Runnable(entry.ScriptAddress, 0);
+            if (entry.ScriptAddress != 0 && Fires(entry.Variable, entry.Value))
+                yield return new Runnable(entry.ScriptAddress, 0);
         }
     }
 

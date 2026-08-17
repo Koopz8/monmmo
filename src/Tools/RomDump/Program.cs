@@ -207,7 +207,7 @@ public static class Program
         if (options.Play)
             WritePlaythrough(
                 rom, options.RoutineAnswers, options.StartAt, options.Boat, options.Money, options.SayYes,
-                options.Variables, options.Surf);
+                options.Variables, options.Surf, options.InOrder);
         if (options.WhereFrom.Count > 0) WriteWhereFrom(rom, options.WhereFrom);
         if (options.InTheImage.Count > 0) WriteInTheImage(rom, options.InTheImage);
         if (options.ClimbFrom.Count > 0) WriteClimb(rom, options.ClimbFrom);
@@ -5902,7 +5902,8 @@ public static class Program
 
     private static void WritePlaythrough(
         Rom rom, IReadOnlyDictionary<int, int> answers, string startAt, bool boat = false, int money = 0,
-        bool sayYes = false, IReadOnlyDictionary<int, int>? variables = null, bool surf = false)
+        bool sayYes = false, IReadOnlyDictionary<int, int>? variables = null, bool surf = false,
+        bool inOrder = false)
     {
         Console.WriteLine();
         Console.WriteLine("A PLAYTHROUGH");
@@ -5918,6 +5919,10 @@ public static class Program
         // Shared with the walk below: it fills this in as it wins, and the reader above reads
         // it before every script.
         var beatenTrainers = new HashSet<int>();
+
+        // The story's own memory, shared between the reader that writes it and the walk that
+        // decides which scripts fire on it.
+        var remembered = new Dictionary<int, int>();
 
         Console.WriteLine(
             $"  {world.Maps.Count} maps, {rules.TrainerCount} trainers, {teaches.Count} machines; "
@@ -5947,10 +5952,12 @@ public static class Program
         // Running a script is deciding what a scene does given what the run holds; that is not
         // printing, and it does not belong in a file nothing can test. Two live faults were
         // sitting in it when it moved.
-        var reader = new HowAScriptRuns(rom, teaches, answers, variables, sayYes, beatenTrainers);
+        var reader = new HowAScriptRuns(
+            rom, teaches, answers, variables, sayYes, beatenTrainers, remembered);
 
         Attempt played = Autoplayer.Play(
-            world, first.Id, rules, reader.Read, Console.WriteLine, boat, money, beatenTrainers, surf);
+            world, first.Id, rules, reader.Read, Console.WriteLine, boat, money, beatenTrainers, surf,
+            remembered, inOrder);
 
         int hanging = played.Questions.Values.Sum();
 
@@ -5968,6 +5975,25 @@ public static class Program
                 : "")
             + $", {played.FightsSkipped} never fought at all"
             + $" (healed {played.PartiesHealed} times)");
+
+        // WHAT THE STORY IS HOLDING AT THE END, WHICH IS THE OTHER HALF OF "FLAGS".
+        //
+        // A run prints how many flags it set and has never printed a single one of the numbers.
+        // They are the same kind of fact — PALLET TOWN's whole opening is a counter — and the
+        // difference between "the run never reached the scene" and "the run reached it and the
+        // counter was on the wrong number" is invisible without this.
+        if (remembered.Count > 0)
+        {
+            Console.WriteLine(
+                $"    the story's memory: "
+                + string.Join(", ", remembered.OrderBy(v => v.Key).Take(12)
+                    .Select(v => $"0x{v.Key:X4}={v.Value}"))
+                + (remembered.Count > 12 ? $", +{remembered.Count - 12} more" : ""));
+        }
+        else
+        {
+            Console.WriteLine("    the story's memory: empty — nothing it ran left a number behind");
+        }
 
         // THE PARTY, ONE LINE PER CREATURE.
         //
@@ -10335,6 +10361,12 @@ public static class Program
                                     something a map opens or reaches a literal. The same walk
                                     --in-the-image does, off its leash: half the time the thing
                                     worth asking about is a block rather than a flag.
+              --in-order            run a trigger or an arrival script only when its own
+                                    condition is met. Without it the run takes arms of the story
+                                    no single playthrough could take in one pass — PALLET TOWN's
+                                    counter goes to nine before the three balls read it, and the
+                                    balls answer "you already have one". A ceiling without it and
+                                    a floor with it; neither is the truth alone.
               --surf                let the walk cross water. MODELLED, and a ceiling exactly as
                                     --boat is: the walker has always been able to swim and the
                                     playthrough has never told it to, so every sea in the game
@@ -10551,6 +10583,15 @@ public static class Program
         /// </summary>
         public bool Surf { get; private init; }
 
+        /// <summary>
+        /// Whether a trigger or an arrival script only runs when its own condition is met.
+        /// <para>
+        /// Off, the run is a ceiling: it takes arms of the story no single playthrough could
+        /// take in one pass. On, it is a floor. Neither is the truth on its own.
+        /// </para>
+        /// </summary>
+        public bool InOrder { get; private init; }
+
         /// <summary>What the playthrough has to spend. Modelled, and nothing supplies it.</summary>
         public int Money { get; private init; }
 
@@ -10694,6 +10735,7 @@ public static class Program
             var whoWrites = new List<int>();
             bool boat = false;
             var surf = false;
+            var inOrder = false;
             var money = 0;
             bool sayYes = false;
             string startAt = Beginning.MapId;
@@ -10930,6 +10972,9 @@ public static class Program
                         break;
                     case "--play":
                         play = true;
+                        break;
+                    case "--in-order":
+                        inOrder = true;
                         break;
                     case "--surf":
                         surf = true;
@@ -11210,6 +11255,7 @@ public static class Program
                 WhoWrites = whoWrites,
                 Boat = boat,
                 Surf = surf,
+                InOrder = inOrder,
                 Money = money,
                 SayYes = sayYes,
                 StartAt = startAt,

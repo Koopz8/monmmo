@@ -6,19 +6,20 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **`--who-writes 0xNNNN`** is the mirror of `--in-the-image`: every place in the
-  whole file that puts a number in one of the story's own variables. A gate is a
-  flag or a variable and only one could be hunted through the image.
-- **It answers the starter in one run.** `0x4055` goes 1 at the trigger north of
-  PALLET TOWN, 2 at the lab's arrival script, then 3–9 across the lab — and 2 is
-  what makes the three balls hand something over.
-- **And why no run ever held one**: the run rebuilt every variable from nothing at
-  every script. Flags crossed, the bag crossed, beaten trainers crossed. Numbers
-  did not. Fixed.
-- **Where the scratch pads stop is READ**: the `0x4000`s are written up to 168
-  times each, every band above tops out at 21. There is a cliff at `0x4010` and
-  `--who-writes` prints the bands.
-- **The starter still doesn't arrive**, and now for a reason worth having: the run
-  runs every script on a map regardless of its condition, so `0x4055` ratchets to
-  9 before the balls read it. That is the four-milestone-old open question with a
-  case attached at last.
+- **`--in-order`** runs a trigger or an arrival script only when its own
+  condition is met — 215 maps / 193 flags, against 215 / 195 without. A ceiling
+  without it, a floor with it. That closes the "should `Reachable` honour a
+  trigger's own condition" question by making it askable both ways.
+- **`--play` prints the story's memory now** — the other half of "N flags", never
+  printed before. `0x4055=5` at the end.
+- **And it says why the starter still doesn't arrive, and it isn't the lever.**
+  The counter reaches 5 but is never **2 at the moment the balls read it**. OAK
+  writes 6 and 8 and he is person 4; the balls are people 5, 6 and 7; a pass
+  talks to everybody in map order. The scene that advances the story runs before
+  the scene it should follow, every pass, for ever.
+- **A run of this kind is a fixpoint, and a counter is what a fixpoint cannot
+  hold** — the ordering *is* the information and a fixpoint has only convergence.
+  **Next: an ordered playthrough.** That is a new instrument, not a lever.
+- A clause in the new lever came back green when broken and turned out to be
+  dead, not unguarded: `(0,0)` passes the comparison anyway. Removed, after
+  checking the cartridge prints the same numbers without it.
