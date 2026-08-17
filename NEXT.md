@@ -6,19 +6,20 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **Five walks in six were landing off the map.** A scene that walks somebody
-  aside had its steps summed and applied in one jump, from wherever they already
-  were — and the run replays the scene every pass. **364 of 426** of those landed
-  off the edge; one person at `x = -29` on a map 48 wide. *Somebody is standing in
-  the way* is computed against exactly those squares.
-- The steps travel now and the walk does the walking: one square at a time,
-  stopping at the first square nobody can stand on. **Nobody is off the map at any
-  lever setting**, and no headline moved.
-- **`--surf` is gone as a fact** (191): the walk crosses water when the party knows
-  the move. `--boat --in-order` reaches **390 of 425** with no surf lever, and
-  `--say-yes` alone reaches **243** where it used to reach 215.
-- **A fight has two exits and only one was ever read** (190): a beaten trainer
-  resumed inside the victory, so all eight gyms handed their TM over once per pass.
-- Left deliberately unshipped, with all three measurements written down: the settle
-  test compares counts, so the boat run stops at pass 6 with its own reach at 381
-  and reports 390. Fixing it properly needs a flag nobody has read yet.
+- **It was never a flag. There was only ever one scene.** PEWTER CITY writes one
+  cutscene as four twelve-byte stubs — `lockall; 0x4001 <- N; goto the scene` —
+  one per square you can cross to start it, each saying which door it came in by.
+  A player crosses one. A fixpoint stands on all four and plays the scene four
+  times.
+- **61 movement commands, asked for 416 times** on the floor run. Every entry runs
+  the same commands at the same addresses, so the same command is the same
+  movement and it applies once. Identity, not a decision — nothing here is
+  modelled.
+- The boat runs go **390 → 381**, and down is the honest direction: the extra nine
+  were reached by walking people repeatedly out of their own doorways.
+- It also closed the thing the last milestone couldn't. The run reported 390 while
+  its own last pass reached 381, because the settle test compares counts. Now the
+  final walk and the last pass agree **exactly** — two designs costed for that
+  problem turned out not to be needed.
+- The break came back green first time: the test read the counter the milestone
+  added instead of the world it changed.
