@@ -108,23 +108,31 @@ public class TheShoreItTurnedBackFromTests
             Warps = [new Warp(2, 0, 0, "1.1")],
         };
 
+        // Somebody on the far side with something to say, because the walk that decides which
+        // maps get their scripts run is not the walk that reports what was reached. Asserting
+        // on the reach alone left the first of those two unguarded.
         MapData across = new MapData("1.1", "1.1", 2, 1, new byte[2])
         {
             Behaviours = [MetatileBehaviour.Normal, MetatileBehaviour.Normal],
             Warps = [new Warp(0, 0, 0, "1.0")],
+            Objects = [new MapObject(1, 1, 1, 0, Direction.Down, 0, false) { ScriptAddress = 0x1000 }],
         };
 
         var world = new WorldData([shore, across]);
 
-        PlayedScript nothing = new([], [], [], [], null, null);
+        const int Across = 0x0321;
 
-        Attempt ashore = Autoplayer.Play(world, "1.0", TestRules.All, (_, _, _) => nothing);
-        Attempt afloat = Autoplayer.Play(world, "1.0", TestRules.All, (_, _, _) => nothing, surfing: true);
+        PlayedScript said = new([Across], [], [], [], null, null);
+
+        Attempt ashore = Autoplayer.Play(world, "1.0", TestRules.All, (_, _, _) => said);
+        Attempt afloat = Autoplayer.Play(world, "1.0", TestRules.All, (_, _, _) => said, surfing: true);
 
         Assert.NotEmpty(ashore.Shore);
         Assert.DoesNotContain("1.1", ashore.Reached);
+        Assert.DoesNotContain(Across, ashore.Flags);
 
         Assert.Empty(afloat.Shore);
         Assert.Contains("1.1", afloat.Reached);
+        Assert.Contains(Across, afloat.Flags);
     }
 }
