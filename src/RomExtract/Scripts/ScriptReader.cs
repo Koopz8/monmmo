@@ -1073,6 +1073,44 @@ public static class ScriptCommands
         // and the one that takes. What each does is NOT claimed here; only how wide it is.
         [0x91] = 5,
 
+        // Three, on seven sites — and the widths that LOOK best are the false column
+        // milestone 200 wrote down.
+        //
+        // Read nought, one or two wide, all seven sites resume on 0x00. Seven agreements,
+        // the widest anywhere in this table, and worth nothing: every site is landing in
+        // the middle of the same run of zero bytes inside the same argument. Read three
+        // wide they resume on 0x30, 0x30, 0x80, 0xC2, 0x0F, 0x31 and 0x19 — SEVEN
+        // DIFFERENT BYTES, which is what a real command boundary looks like. Opcodes vary
+        // between sites and arguments have columns; here the disagreement is the evidence.
+        //
+        // And the chains are long. 0x0816F875 reads on for eight commands:
+        //
+        //   95 00 00 00 | 31 01 01 | 67 <0x0819DBD3> | 66 32 | 7D 00 81 00 | 03
+        //   0F 00 <0x0819DC07> | 09 04 | 94 00 00 | 6C 02
+        //
+        // — ending on `94 00 00 | 6C 02`, which is the exact shape 0x94 was settled on
+        // eleven entries above. 0x081BF4F7 lands on `19 08 80 0D 80`, a copyvar between
+        // two real variables. 0x0816D3E6 lands on a loadpointer carrying 0x08197D07.
+        [0x95] = 3,
+
+        // Two, on three sites, and the longest chain in this table.
+        //
+        //   C2 00 05 | 7D 00 01 40 | 31 01 01 | 67 <0x081A5DF1> | 66 32
+        //   0F 00 <0x081A56A7> | 09 05 | 21 0D 80 01 00 | 06 01 <0x0816CD83>
+        //
+        // Eight commands, each parsing into the next, two of them carrying addresses that
+        // are real and one a comparison against 0x800D. That is 0xB7's test several times
+        // over, and it does not happen by accident at any other width.
+        //
+        // One is refuted rather than unpreferred: it resumes on 0x05 at all three sites and
+        // the four bytes after read 0x4001007D twice and 0x8001001A once. Nought resumes on
+        // a nop and then the same invalid goto.
+        //
+        // 0xC2 sits immediately after 0xB5 at all three of its sites, the way 0x95 sits
+        // after 0x91 at four of nine and after 0x94 at the GAME CORNER. The pairs keep
+        // pairing, and what any of them MEAN is still not claimed.
+        [0xC2] = 2,
+
         // One byte, and the column says so. Fifteen places in this game a read stops on
         // 0x97; at every one of them the byte after it is 1, 2 or 3 and nothing else,
         // which is an argument rather than an opcode — opcodes vary between sites and
