@@ -210,6 +210,7 @@ public static class Program
                 options.Variables);
         if (options.WhereFrom.Count > 0) WriteWhereFrom(rom, options.WhereFrom);
         if (options.InTheImage.Count > 0) WriteInTheImage(rom, options.InTheImage);
+        if (options.ClimbFrom.Count > 0) WriteClimb(rom, options.ClimbFrom);
 
         if (options.SequenceWidths) WriteSequenceWidths(rom);
 
@@ -1990,6 +1991,23 @@ public static class Program
     /// the only way to find out which command is in the way is to count them.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Where reads stop, across every kind of script and every block they reach.
+    /// <para>
+    /// <b>This asked two smaller questions and read as though it had asked this one.</b> It
+    /// walked <em>people</em>, and only the <em>first block</em> of each — so a command that
+    /// stops a read had to be in a person's opening straight line to be counted at all. It
+    /// reported eight stopped reads on a cartridge where the true figure is a different number
+    /// entirely, and eight is small enough to look like a solved problem.
+    /// </para>
+    /// <para>
+    /// What it was blind to, exactly: 1.80's on-arrival script runs through a goto into a
+    /// shared block, and stops on <c>0x9E</c> eleven bytes before a <c>call</c> that clears
+    /// the flag keeping nineteen people off eleven maps. Neither a person nor a first block,
+    /// so neither half of the old reading could see it, and the output was identical to a
+    /// reading that had looked.
+    /// </para>
+    /// </summary>
     private static void WriteScripts(Rom rom)
     {
         Console.WriteLine();
@@ -1997,44 +2015,74 @@ public static class Program
 
         MapLibrary library = MapLibrary.Open(rom);
 
-        int withScripts = 0;
-        int cleanEnd = 0;
-        int withMart = 0;
-        int withTrainer = 0;
-
         var stoppers = new Dictionary<byte, int>();
+        var byKind = new Dictionary<string, int>();
+        var opened = new Dictionary<string, int>();
         var examples = new Dictionary<byte, (int Start, int Stop)>();
+        var seen = new HashSet<uint>();
+
+        var scripts = 0;
+        var blocks = 0;
+        var stopped = 0;
+        var withMart = 0;
+        var withTrainer = 0;
 
         foreach (LoadedMap map in library.All())
         {
-            foreach (MapObject person in map.Objects.Where(o => o.HasScript))
+            foreach (SetsAFlag script in EveryScriptOn(map))
             {
-                withScripts++;
+                scripts++;
 
-                if (ScriptReader.StoppedAt(rom, person.ScriptAddress) is { } code)
+                string kind = KindOf(script);
+
+                opened[kind] = opened.GetValueOrDefault(kind) + 1;
+
+                if (script.What.StartsWith("person", StringComparison.Ordinal))
                 {
-                    stoppers[code] = stoppers.GetValueOrDefault(code) + 1;
+                    if (ScriptReader.FindMart(rom, script.Address).Count > 0) withMart++;
+                    if (ScriptReader.FindTrainer(rom, script.Address) is not null) withTrainer++;
+                }
 
-                    if (!examples.ContainsKey(code) &&
-                        rom.ToOffsetOrNull(person.ScriptAddress) is { } start &&
-                        ScriptReader.StoppedAtOffset(rom, person.ScriptAddress) is { } stop)
+                // Every block it reaches, not just the one it starts in. A read stops per
+                // block, and most of the work in this game is at the other end of a call.
+                foreach (uint block in ScriptReader.Reachable(rom, script.Address))
+                {
+                    if (!seen.Add(block)) continue;
+
+                    blocks++;
+
+                    if (ScriptReader.StoppedAt(rom, block) is not { } code) continue;
+
+                    stopped++;
+                    stoppers[code] = stoppers.GetValueOrDefault(code) + 1;
+                    byKind[kind] = byKind.GetValueOrDefault(kind) + 1;
+
+                    if (!examples.ContainsKey(code)
+                        && rom.ToOffsetOrNull(block) is { } from
+                        && ScriptReader.StoppedAtOffset(rom, block) is { } at)
                     {
-                        examples[code] = (start, stop);
+                        examples[code] = (from, at);
                     }
                 }
-                else
-                {
-                    cleanEnd++;
-                }
-
-                if (ScriptReader.FindMart(rom, person.ScriptAddress).Count > 0) withMart++;
-                if (ScriptReader.FindTrainer(rom, person.ScriptAddress) is not null) withTrainer++;
             }
         }
 
-        Console.WriteLine($"  {withScripts} people with a script");
-        Console.WriteLine($"  {cleanEnd} read to a proper end, {withScripts - cleanEnd} stopped at a command we do not know");
-        Console.WriteLine($"  {withTrainer} name a trainer, {withMart} open a shop");
+        Console.WriteLine(
+            $"  {scripts} script(s) on {library.All().Count()} map(s), reaching {blocks} block(s)");
+        Console.WriteLine(
+            "    by kind: " + string.Join(", ", opened.OrderByDescending(k => k.Value).Select(k => $"{k.Value} {k.Key}")));
+        Console.WriteLine(
+            $"  {blocks - stopped} of those blocks read to a proper end, {stopped} stopped at a command "
+            + "this project does not have a width for");
+
+        if (byKind.Count > 0)
+        {
+            Console.WriteLine(
+                "    the stops, by what the script is attached to: "
+                + string.Join(", ", byKind.OrderByDescending(k => k.Value).Select(k => $"{k.Value} {k.Key}")));
+        }
+
+        Console.WriteLine($"  {withTrainer} people name a trainer, {withMart} open a shop");
         Console.WriteLine();
         Console.WriteLine("  The commands stopping the most reads:");
 
@@ -2046,9 +2094,9 @@ public static class Program
         // length resumes inside an argument and invents every instruction after it.
         // The bytes are what settle it: a pointer is recognisable on sight.
         Console.WriteLine();
-        Console.WriteLine("  One script for each, from the start, with ^ under where it stopped:");
+        Console.WriteLine("  One block for each, from its start, with ^ under where it stopped:");
 
-        foreach (byte code in stoppers.OrderByDescending(s => s.Value).Take(6).Select(s => s.Key))
+        foreach (byte code in stoppers.OrderByDescending(s => s.Value).Take(8).Select(s => s.Key))
         {
             if (!examples.TryGetValue(code, out (int Start, int Stop) example)) continue;
 
@@ -2068,6 +2116,11 @@ public static class Program
                 Console.WriteLine($"      {new string(' ', 8)}  {new string(' ', (example.Stop - from) * 3)}^^");
             }
         }
+
+        static string KindOf(SetsAFlag script) =>
+            script.What.StartsWith("on ", StringComparison.Ordinal)
+                ? string.Join(" ", script.What.Split(' ').Take(2))
+                : script.What.Split(' ')[0];
     }
 
     /// <summary>
@@ -6720,6 +6773,42 @@ public static class Program
     }
 
     /// <summary>
+    /// The climb, on any address at all.
+    /// <para>
+    /// It was reachable only by naming a flag, and the question it answers is not about flags:
+    /// <em>who runs this block?</em> is worth asking of a block whatever happens to be inside
+    /// it. Written the third time it was wanted and improvised around.
+    /// </para>
+    /// </summary>
+    private static void WriteClimb(Rom rom, IReadOnlyList<uint> addresses)
+    {
+        Console.WriteLine();
+        Console.WriteLine("CLIMBING");
+        Console.WriteLine();
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        List<SetsAFlag> scripts = [.. library.All().SelectMany(EveryScriptOn)];
+
+        int[] covered = EverywhereInTheImage.Opened(rom, scripts);
+
+        IReadOnlyDictionary<uint, IReadOnlyList<int>> index = EverywhereInTheImage.PointerIndex(rom);
+
+        foreach (uint address in addresses)
+        {
+            int offset = rom.ToOffsetOrNull(address) ?? 0;
+
+            Climb(
+                rom,
+                index,
+                covered,
+                scripts,
+                new FlagSite(
+                    offset, 0, true, true, offset < covered.Length && covered[offset] != EverywhereInTheImage.Nobody));
+        }
+    }
+
+    /// <summary>
     /// What names this address, and what names that, until it reaches the world or nothing.
     /// <para>
     /// A block is jumped into at its first command, and the flag being hunted is usually some
@@ -6740,7 +6829,7 @@ public static class Program
     {
         Console.WriteLine();
         Console.WriteLine(
-            $"    climbing from {site} at 0x{site.Address:X8}"
+            $"    climbing from {(site.Flag == 0 ? $"0x{site.Offset:X6}" : site.ToString())} at 0x{site.Address:X8}"
             + (site.Opened ? $" — opened by {Owner(site.Offset)}" : " — opened by nothing"));
 
         var seen = new HashSet<uint>();
@@ -8311,6 +8400,13 @@ public static class Program
         // of the whole image for a byte would mostly find that byte inside an argument.
         var sites = new Dictionary<byte, List<int>>();
 
+        // And what was opened, by kind — the project's standing answer to the fault that keeps
+        // coming back. This report rolled its own four-kind list and was blind to the fifth for
+        // as long as it existed; nothing failed, because nothing can fail in here. A line per
+        // kind cannot stop that happening, but it makes it visible in the output the moment it
+        // does: a kind with no line is a kind nothing looked at.
+        var kinds = new Dictionary<string, int>();
+
         // Every script on every map, and everything reachable from each of them.
         //
         // This used to run each person's script on a fresh save and record where that
@@ -8322,16 +8418,27 @@ public static class Program
         // decides nothing.
         foreach (LoadedMap map in library.All())
         {
-            IEnumerable<uint> starts =
-            [
-                .. map.Objects.Where(o => o.HasScript).Select(o => o.ScriptAddress),
-                .. map.Signs.Where(s => s.HasScript).Select(s => s.ScriptAddress),
-                .. map.Triggers.Where(t => t.HasScript).Select(t => t.ScriptAddress),
-                .. map.OnEntry.Where(e => e.HasScript).Select(e => e.ScriptAddress),
-            ];
-
-            foreach (uint start in starts)
+            // AND THE FIFTH KIND, WHICH THIS ROLLED ITS OWN LIST TO LEAVE OUT.
+            //
+            // Four kinds were written out by hand here — people, signs, triggers, on-entry —
+            // long after `EveryScriptOn` was created so that "what counts as every script"
+            // would live in one place and be wrong in one place. It was not called, so the
+            // map's own script list was invisible, and 0xD0 — which stops fifty-one blocks,
+            // more than the next three commands together — did not appear in this report at
+            // all. Not scored low. Absent.
+            //
+            // A width nobody derives is a read that stops, and a read that stops does not
+            // fail: it comes back clean and quietly contains less.
+            foreach (SetsAFlag what in EveryScriptOn(map))
             {
+                string kind = what.What.StartsWith("on ", StringComparison.Ordinal)
+                    ? string.Join(" ", what.What.Split(' ').Take(2))
+                    : what.What.Split(' ')[0];
+
+                kinds[kind] = kinds.GetValueOrDefault(kind) + 1;
+
+                uint start = what.Address;
+
                 foreach (uint reachable in ScriptReader.Reachable(rom, start))
                 {
                     if (ScriptReader.StoppedAt(rom, reachable) is not { } code) continue;
@@ -8343,6 +8450,18 @@ public static class Program
                 }
             }
         }
+
+        Console.WriteLine(
+            "  opened, by kind: "
+            + string.Join(", ", kinds.OrderByDescending(k => k.Value).Select(k => $"{k.Value} {k.Key}")));
+        Console.WriteLine(
+            "    a kind with no line here is a kind nothing looked at, which reads exactly like");
+        Console.WriteLine(
+            "    a kind with nothing in it. This report was blind to the fifth for a year.");
+
+        // Every pointer in the image, once. What it is for is below: a width that carries the
+        // read on into an address something else names has swallowed a block boundary.
+        IReadOnlyDictionary<uint, IReadOnlyList<int>> index = EverywhereInTheImage.PointerIndex(rom);
 
         foreach ((byte code, List<int> where) in sites.OrderByDescending(e => e.Value.Count))
         {
@@ -8369,7 +8488,29 @@ public static class Program
                 // And the same idea from the other side: a width that resumes on nothing
                 // but nops and ends at nearly every site has landed in the padding at
                 // the tail of an argument rather than on the next instruction.
-                bool ruled = column >= 0.9 || ResumesOnWork(rom, where, width) <= 0.1;
+                // AND THE ONE THAT SETTLED 0xD0, WHICH EVERY TEST ABOVE GOT WRONG.
+                //
+                // You do not fall into a block that has its own pointer. If a width carries
+                // the read on into an address something else in the image names, that width
+                // has eaten a block boundary — usually an `end` — and is now reading the
+                // neighbouring script as though it were this one.
+                //
+                // 0xD0 stops fifty-one blocks, more than the next three commands together. At
+                // three bytes it reads on into a textbox and scores beautifully; at two it
+                // stops at an `end` and scores worse on every continuation test there was.
+                // Eleven of its sixteen sites have something pointing at that textbox, so the
+                // textbox is a script in its own right and the byte three bytes along is an
+                // `end`. Two is right and every other test here preferred three.
+                //
+                // This is the trap the note on 0x4F describes, from the other side: the
+                // continuation tests reward the width that swallows whatever the reader cannot
+                // yet handle. A block boundary is the one thing they cannot see, and it is the
+                // only thing in the file that says "the script stops HERE" out loud.
+                double intoSomebodyElses = EverywhereInTheImage.ReadsOnIntoSomebodyElses(index, where, width);
+
+                bool ruled = column >= 0.9
+                    || ResumesOnWork(rom, where, width) <= 0.1
+                    || intoSomebodyElses >= 0.5;
 
                 foreach (int at in where)
                 {
@@ -8458,7 +8599,9 @@ public static class Program
             foreach ((int width, double cleanly, double pointing, double deep, double speech, bool ruled) in scores)
             {
                 string mark = ruled
-                    ? "  ruled out: it eats a page, an instruction, or resumes on a column"
+                    ? EverywhereInTheImage.ReadsOnIntoSomebodyElses(index, where, width) >= 0.5
+                        ? "  ruled out: it reads on into a block something else points at"
+                        : "  ruled out: it eats a page, an instruction, or resumes on a column"
                     : (top > 0 || spoken > 0) && shortlist.Contains(width) ? " <-" : "";
 
                 Console.WriteLine(
@@ -8466,7 +8609,8 @@ public static class Program
                     $"{cleanly,5:P0} read on to an end, {pointing,5:P0} of those pointers land, " +
                     $"{speech,5:P0} of the text they name reads as speech, " +
                     $"{ResumesOnAColumn(rom, where, width),5:P0} resume on the same byte, " +
-                    $"{ResumesOnWork(rom, where, width),5:P0} resume on real work{mark}");
+                    $"{ResumesOnWork(rom, where, width),5:P0} resume on real work, " +
+                    $"{EverywhereInTheImage.ReadsOnIntoSomebodyElses(index, where, width),5:P0} read on into somebody else's block{mark}");
             }
 
             Console.WriteLine(
@@ -9955,6 +10099,10 @@ public static class Program
                                     Then it climbs: what names this, what names that, until it
                                     reaches something a map opens, or a literal, which is the
                                     code boundary with an address on it.
+              --climb 0xNNNNNNNN    who names this address, who names them, until it reaches
+                                    something a map opens or reaches a literal. The same walk
+                                    --in-the-image does, off its leash: half the time the thing
+                                    worth asking about is a block rather than a flag.
               --routines            what every routine this project cannot execute is
                                     asked: how many arguments, what its answer is compared
                                     against, how many sites branch on it.
@@ -10150,6 +10298,9 @@ public static class Program
         /// </summary>
         public IReadOnlyList<int> InTheImage { get; private init; } = [];
 
+        /// <summary>Addresses to climb from, for when the question is not about a flag.</summary>
+        public IReadOnlyList<uint> ClimbFrom { get; private init; } = [];
+
         /// <summary>Whether the playthrough may take the ferry, which makes its reach a ceiling.</summary>
         public bool Boat { get; private init; }
 
@@ -10292,6 +10443,7 @@ public static class Program
             bool play = false;
             var whereFrom = new List<int>();
             var inTheImage = new List<int>();
+            var climbFrom = new List<uint>();
             bool boat = false;
             var money = 0;
             bool sayYes = false;
@@ -10551,6 +10703,18 @@ public static class Program
 
                         break;
                     }
+                    case "--climb":
+                    {
+                        // Any address at all. The climb was reachable only through a flag,
+                        // and half the time the thing worth asking about is a block — "who
+                        // runs this?" is the same question whatever is inside it.
+                        foreach (string named in Next(args, ref i, "--climb").Split(','))
+                        {
+                            if (TryNumber(named, out int address)) climbFrom.Add((uint)address);
+                        }
+
+                        break;
+                    }
                     case "--in-the-image":
                     {
                         // One or more flag numbers. Two of them is the interesting case: a
@@ -10781,6 +10945,7 @@ public static class Program
                 Play = play,
                 WhereFrom = whereFrom,
                 InTheImage = inTheImage,
+                ClimbFrom = climbFrom,
                 Boat = boat,
                 Money = money,
                 SayYes = sayYes,

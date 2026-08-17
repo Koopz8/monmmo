@@ -368,6 +368,35 @@ public static class EverywhereInTheImage
     }
 
     /// <summary>
+    /// How often a candidate argument width carries a read on into an address something names.
+    /// <para>
+    /// <b>The one signal in this file that says where a script stops.</b> A block with its own
+    /// pointer is a script somebody jumps to, and you do not fall into one — so a width whose
+    /// next command lands on such an address has almost always eaten the <c>end</c> in front of
+    /// it and is now reading the neighbouring script as though it were this one.
+    /// </para>
+    /// <para>
+    /// Every continuation test this project has preferred the longer width for exactly that
+    /// reason: the longer width skips whatever the reader cannot yet handle and lands on
+    /// something that parses beautifully and is not there. 0xD0 — fifty-one stopped blocks,
+    /// more than the next three commands together — went that way, and this is what caught it.
+    /// </para>
+    /// <para>
+    /// Lives here rather than in whoever is printing, because it is a rule about telling two
+    /// cases apart and this project has now three times written one of those into the reporting
+    /// layer, which has no tests.
+    /// </para>
+    /// </summary>
+    public static double ReadsOnIntoSomebodyElses(
+        IReadOnlyDictionary<uint, IReadOnlyList<int>> index, IReadOnlyList<int> sites, int width)
+    {
+        if (sites.Count == 0) return 0;
+
+        return sites.Count(at => index.ContainsKey(Rom.BaseAddress + (uint)(at + 1 + width)))
+            / (double)sites.Count;
+    }
+
+    /// <summary>
     /// Everything that names this address, or any address in the bytes just above it.
     /// <para>
     /// The slack is the point. A script jumped into at its first command is named exactly; a

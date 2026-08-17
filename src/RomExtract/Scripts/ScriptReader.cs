@@ -358,6 +358,56 @@ public static class ScriptCommands
         // ordinary setvar in the same slot, which is the same shape from the other side.
         [0x9F] = 2,
 
+        // Two, and the largest single stop on this cartridge once every kind of script was
+        // being read: fifty-one blocks, more than the next three commands together. Every one
+        // of the fifty-one is behind a `goto` or on a map's own script list, which is why a
+        // reader that walked people's opening straight lines had never met it.
+        //
+        // The column, at sixteen sites:
+        //
+        //   D0 A4 08 | 02 | 0F 00 55 22 17 08 09 02 02
+        //   D0 A5 08 | 02 | 0F 00 E0 2A 17 08 09 03 02
+        //   D0 B0 08 | 02 | 0F 00 2D 96 17 08 09 03 02
+        //   D0 17 08 | 0F 00 B2 D0 17 08 09 04 68
+        //
+        // The second byte varies and the third is 0x08 at every site, which is a word. What
+        // settles the width is the byte after it: at three sites in four it is 0x02, and at
+        // ELEVEN OF SIXTEEN something else in the image points at the byte after that. You do
+        // not fall into a block that has its own pointer — so the 0x02 is an `end`, the
+        // textbox after it is a script in its own right, and this command is two bytes wide.
+        //
+        // Every continuation test in --derive preferred three, because three skips the `end`
+        // and reads on into a textbox that parses beautifully and is not this script. That is
+        // the trap the note on 0x4F describes, from the other side, and it is why --derive now
+        // counts how often a width reads on into a block something else names.
+        [0xD0] = 2,
+
+        // Four, and a pointer. Seventeen blocks, in a run of near-identical scripts where the
+        // command sits between a 0x69 and a 0x6D at every one of them:
+        //
+        //   69 | 78 9F 92 1A 08 | 6D 6B 02
+        //   69 | 78 A3 92 1A 08 | 6D 6B 02
+        //   69 | 78 A7 92 1A 08 | 6D 6B 02
+        //   69 | 78 AB 92 1A 08 | 6D 6B 02
+        //
+        // A cartridge address in plain sight, a lock either side of it, and the whole shape
+        // repeating every nine bytes. No other width ends on a pointer at all.
+        [0x78] = 4,
+
+        // Two, and it travels in a pair with 0x9C carrying the same word. Three sites, on maps
+        // that share nothing:
+        //
+        //   9C 3E 00 | 9E 3E 00 | 28 28 00 | 16 01 40 01 00 | 04 1A 65 1A 08
+        //   9C 40 00 | 9E 40 00 | 26 0D 80 1E 01
+        //   9C 19 00 | 9E 19 00 | 4F 0F 80 ED 75 1A 08
+        //
+        // 0x9C has been two bytes for milestones; this is the same word again, and at two the
+        // read resumes on a known command at all three. The one at the top is the evidence
+        // that matters: three commands later is `call 0x081A651A`, a pointer landing exactly
+        // on a script — and that script is the `clearflag 0x009D` that puts nineteen people
+        // on eleven maps. One missing width was hiding all of them.
+        [0x9E] = 2,
+
         // Two: one word, and small numbers in it. Six sites, and three of them are read
         // by what comes next rather than by what comes before:
         //
