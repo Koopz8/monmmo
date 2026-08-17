@@ -309,6 +309,34 @@ public class WhatItIsWaitingForTests
     }
 
     /// <summary>
+    /// A read that ran into its own limit says so.
+    /// <para>
+    /// The failure this project keeps meeting: a traversal that stops early comes back clean
+    /// and quietly contains less, and every sentence built on it — <em>asks about no flag at
+    /// all</em>, above all — reads as a finding rather than as a limit. A door reported as
+    /// waiting on nothing, because the reader gave up two blocks short, is a person written
+    /// out of the story by a number in a default parameter.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AReadThatHitItsOwnLimitSaysSo()
+    {
+        var image = new byte[0x2000];
+
+        // A chain longer than the reader is allowed to follow.
+        for (var block = 0; block < 6; block++)
+        {
+            Put(image, 0x100 + (block * 0x10), Goto);
+            Pointer(image, 0x101 + (block * 0x10), (uint)(0x08000110 + (block * 0x10)));
+        }
+
+        Put(image, 0x160, Release, End);
+
+        Assert.True(WhatItIsWaitingFor.Asks(new Rom(image), 0x08000100, maxScripts: 3).Truncated);
+        Assert.False(WhatItIsWaitingFor.Asks(new Rom(image), 0x08000100).Truncated);
+    }
+
+    /// <summary>
     /// And the other half of the job: who turns it on. A flag nothing sets is a door behind
     /// the code boundary; a flag somebody two maps away sets is a walk.
     /// </summary>
