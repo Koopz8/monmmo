@@ -1406,8 +1406,14 @@ public static class Autoplayer
         //
         // Honoured, the same walk is a floor: it runs what a save in this state would run.
         // Both are worth having and neither is the truth on its own, so it is a lever.
+        // No special case for an unconditional entry, and that is measured rather than assumed:
+        // an entry with no condition is (0, 0), an unwritten variable holds nought, so it passes
+        // this comparison already. The clause that said so was written, broken on purpose, and
+        // came back green — then removed, because --play prints the same 215 maps and 193 flags
+        // with and without it on the real image. A clause that cannot change an answer looks
+        // like a rule and is not one.
         bool Fires(int variable, int value) =>
-            !inOrder || variable == 0 || (remembered?.GetValueOrDefault(variable) ?? 0) == value;
+            !inOrder || (remembered?.GetValueOrDefault(variable) ?? 0) == value;
 
         foreach (MapObject person in map.Objects)
         {
