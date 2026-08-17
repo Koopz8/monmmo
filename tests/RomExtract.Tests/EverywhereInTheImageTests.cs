@@ -163,10 +163,10 @@ public class EverywhereInTheImageTests
     {
         Rom rom = Rom();
 
-        bool[] covered = EverywhereInTheImage.Opened(rom, TheWorld());
+        int[] covered = EverywhereInTheImage.Opened(rom, TheWorld());
 
-        Assert.True(covered[Shared]);
-        Assert.True(covered[InTheOpen]);
+        Assert.NotEqual(EverywhereInTheImage.Nobody, covered[Shared]);
+        Assert.NotEqual(EverywhereInTheImage.Nobody, covered[InTheOpen]);
     }
 
     /// <summary>
@@ -177,20 +177,20 @@ public class EverywhereInTheImageTests
     [Fact]
     public void ACommandsArgumentsAreOpenedTooNotJustItsOpcode()
     {
-        bool[] covered = EverywhereInTheImage.Opened(Rom(), TheWorld());
+        int[] covered = EverywhereInTheImage.Opened(Rom(), TheWorld());
 
-        Assert.True(covered[Trigger + 1]);
-        Assert.True(covered[InTheOpen + 1]);
+        Assert.NotEqual(EverywhereInTheImage.Nobody, covered[Trigger + 1]);
+        Assert.NotEqual(EverywhereInTheImage.Nobody, covered[InTheOpen + 1]);
     }
 
     /// <summary>Nothing points at the orphan, so nothing opens it.</summary>
     [Fact]
     public void WhatNoMapLeadsToIsNotOpened()
     {
-        bool[] covered = EverywhereInTheImage.Opened(Rom(), TheWorld());
+        int[] covered = EverywhereInTheImage.Opened(Rom(), TheWorld());
 
-        Assert.False(covered[Orphan]);
-        Assert.False(covered[Literal]);
+        Assert.Equal(EverywhereInTheImage.Nobody, covered[Orphan]);
+        Assert.Equal(EverywhereInTheImage.Nobody, covered[Literal]);
     }
 
     /// <summary>
@@ -432,7 +432,7 @@ public class EverywhereInTheImageTests
         int real = EverywhereInTheImage.EveryFlagMoved(rom).Values.Sum(s => s.Count);
 
         Assert.Equal(6, real);
-        Assert.True(EverywhereInTheImage.NoiseFloor(rom) < real);
+        Assert.True(EverywhereInTheImage.NoiseFloor(rom).Sites < real);
     }
 
     /// <summary>
@@ -447,7 +447,7 @@ public class EverywhereInTheImageTests
 
         new Random(20250817).NextBytes(bytes);
 
-        Assert.True(EverywhereInTheImage.NoiseFloor(new Rom(bytes)) > 0);
+        Assert.True(EverywhereInTheImage.NoiseFloor(new Rom(bytes)).Sites > 0);
     }
 
     /// <summary>
@@ -494,6 +494,39 @@ public class EverywhereInTheImageTests
 
         Assert.DoesNotContain(outside, f => f.Flag == OnlyInTheOpen);
         Assert.DoesNotContain(outside, f => f.Flag == 0x0BAD);
+    }
+
+    /// <summary>
+    /// <b>Which script opened a byte, not merely that one did.</b> A climb that reaches an
+    /// opened byte and says "a map leads here" has answered a question nobody asked; the next
+    /// question is always <em>which</em>, and it costs an index to answer.
+    /// </summary>
+    [Fact]
+    public void AnOpenedByteNamesTheScriptThatOpenedIt()
+    {
+        SetsAFlag[] world = TheWorld();
+
+        int[] covered = EverywhereInTheImage.Opened(Rom(), world);
+
+        Assert.Equal("1.1 trigger (0,0)", world[covered[InTheOpen]].ToString());
+    }
+
+    /// <summary>
+    /// And the control covers the promoted filter too. A noise figure on the raw count with
+    /// none on the filtered one leaves the filtered one looking rigorous by association — which
+    /// is the number anybody would actually act on.
+    /// </summary>
+    [Fact]
+    public void TheControlMeasuresTheJumpedIntoFilterAsWellAsTheRawOne()
+    {
+        var bytes = new byte[1 << 21];
+
+        new Random(20260817).NextBytes(bytes);
+
+        (int sites, int jumpedInto) = EverywhereInTheImage.NoiseFloor(new Rom(bytes));
+
+        Assert.True(sites > 0);
+        Assert.True(jumpedInto < sites);
     }
 
     /// <summary>And it finds a flag that is only ever cleared, for the same reason as above.</summary>

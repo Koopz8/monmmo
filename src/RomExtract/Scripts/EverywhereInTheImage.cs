@@ -100,23 +100,37 @@ public static class EverywhereInTheImage
     public static double ByChance(Rom rom, int patternBytes) =>
         rom.Length / Math.Pow(256, patternBytes);
 
+    /// <summary>Nothing opened this byte.</summary>
+    public const int Nobody = -1;
+
     /// <summary>
-    /// Every byte of the image that a reading of these scripts actually decodes as a command.
+    /// Which script opened each byte of the image, or <see cref="Nobody"/>.
     /// <para>
     /// <b>The blind spot, with a size on it.</b> Not how many scripts were opened — that number
     /// has been printed for a session and it cannot be compared with anything. This is which
     /// bytes, so that any address at all can be asked whether it was inside or outside, and
     /// "the scan never looked here" stops being a suspicion.
     /// </para>
+    /// <para>
+    /// <b>And <em>whose</em>, which is the half this came back without.</b> A climb that reaches
+    /// an opened byte can say "a map leads here" and stop, which is true and is not an answer:
+    /// the next question is always which map, and an index into the caller's own list of scripts
+    /// answers it for the cost of three bytes a byte. The first script to decode a byte owns it;
+    /// several may reach the same shared block, and which one is named is arbitrary among them
+    /// rather than wrong.
+    /// </para>
     /// </summary>
-    public static bool[] Opened(Rom rom, IEnumerable<SetsAFlag> scripts, int maxScripts = 96)
+    public static int[] Opened(Rom rom, IReadOnlyList<SetsAFlag> scripts, int maxScripts = 96)
     {
-        var covered = new bool[rom.Length];
+        var covered = new int[rom.Length];
+
+        Array.Fill(covered, Nobody);
+
         var seen = new HashSet<uint>();
 
-        foreach (SetsAFlag script in scripts)
+        for (var which = 0; which < scripts.Count; which++)
         {
-            foreach (uint block in ScriptReader.Reachable(rom, script.Address, maxScripts))
+            foreach (uint block in ScriptReader.Reachable(rom, scripts[which].Address, maxScripts))
             {
                 if (!seen.Add(block)) continue;
 
@@ -124,7 +138,7 @@ public static class EverywhereInTheImage
                 {
                     for (int i = command.Offset; i < command.Offset + 1 + command.Arguments.Length; i++)
                     {
-                        if (i >= 0 && i < covered.Length) covered[i] = true;
+                        if (i >= 0 && i < covered.Length && covered[i] == Nobody) covered[i] = which;
                     }
                 }
             }
@@ -141,7 +155,7 @@ public static class EverywhereInTheImage
     /// worked it out, in which case every site reports as unopened — which is honest about the
     /// caller rather than about the file, and is why it is a parameter and not a default.
     /// </param>
-    public static IReadOnlyList<FlagSite> Moves(Rom rom, int flag, bool[]? covered = null)
+    public static IReadOnlyList<FlagSite> Moves(Rom rom, int flag, int[]? covered = null)
     {
         var sites = new List<FlagSite>();
 
@@ -157,7 +171,7 @@ public static class EverywhereInTheImage
                     flag,
                     sets,
                     ReadsAsAScript(rom, Rom.BaseAddress + (uint)offset),
-                    covered is not null && offset < covered.Length && covered[offset]));
+                    covered is not null && offset < covered.Length && covered[offset] != Nobody));
             }
         }
 
@@ -181,7 +195,7 @@ public static class EverywhereInTheImage
     /// </para>
     /// </summary>
     public static IReadOnlyDictionary<int, IReadOnlyList<FlagSite>> EveryFlagMoved(
-        Rom rom, bool[]? covered = null)
+        Rom rom, int[]? covered = null)
     {
         var found = new Dictionary<int, List<FlagSite>>();
 
@@ -201,7 +215,7 @@ public static class EverywhereInTheImage
                 flag,
                 code == SetFlag,
                 true,
-                covered is not null && offset < covered.Length && covered[offset]));
+                covered is not null && offset < covered.Length && covered[offset] != Nobody));
         }
 
         return found.ToDictionary(p => p.Key, p => (IReadOnlyList<FlagSite>)p.Value);
@@ -274,13 +288,27 @@ public static class EverywhereInTheImage
     /// only honest thing to put next to the real count.
     /// </para>
     /// </summary>
-    public static int NoiseFloor(Rom rom)
+    /// <param name="slack">The same reach the real climb uses, or the control is not one.</param>
+    /// <returns>
+    /// How many sites the sweep finds there, and how many of those something jumps into.
+    /// <b>Both, because both are printed.</b> A control on the raw count and none on the
+    /// filtered one leaves the filtered one looking rigorous by association.
+    /// </returns>
+    public static (int Sites, int JumpedInto) NoiseFloor(Rom rom, int slack = 192)
     {
         byte[] backwards = rom.Span.ToArray();
 
         Array.Reverse(backwards);
 
-        return EveryFlagMoved(new Rom(backwards)).Values.Sum(sites => sites.Count);
+        var nowhere = new Rom(backwards);
+
+        IReadOnlyList<FlagSite> found = [.. EveryFlagMoved(nowhere).Values.SelectMany(sites => sites)];
+
+        IReadOnlyDictionary<uint, IReadOnlyList<int>> index = PointerIndex(nowhere);
+
+        return (
+            found.Count,
+            found.Count(s => WhoNames(nowhere, index, s.Address, slack).Any(n => n.AJump)));
     }
 
     /// <summary>
