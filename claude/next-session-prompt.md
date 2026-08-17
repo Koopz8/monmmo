@@ -1,7 +1,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-229`, 2759 tests green.
+`claude-230`, 2767 tests green.
 
 Standing rules — do not break these:
 
@@ -65,9 +65,9 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-193-four-doors-into-one-room.md` first, then `192`, `191`, `190`, `189`,
+Read `claude/milestone-194-the-map-is-half-the-key.md` first, then `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
-**Seventeen faults closed and every one was in this project, not on the cartridge.** A walk that
+**Eighteen faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
 script" list; a list ranked by a count instead of by what it costs; a party that could not gain
 a level; a roadmap line that called a fix a cost; a continuation that carried flags and not
@@ -81,8 +81,8 @@ which skipped a `checkflag` at all eight gyms.
 reversal control). `184` adds `--who-writes`. `187`/`188` are the two wrong widths and
 `--stops`. `189` is `--trace` and the ordering. `190` is `--fights` and the handover count. `191` is
 `--who-knows` and the sea. `192` is the walk. `193` is the one that
-retired both of 192's proposed designs by reading the bytes instead.
-`173-reading-the-other-arm` still has the best table of wrong turns.
+retired both of 192's proposed designs by reading the bytes instead, and `194` is `--entries`
+and the fault 193 shipped. `173-reading-the-other-arm` still has the best table of wrong turns.
 
 **The pattern, thirteen times over: right at every step and quietly wrong at the end.** Nothing
 in this project fails when it is wrong. Assume the number in front of you is distorted until an
@@ -99,6 +99,7 @@ dotnet run -c Release --project src/Tools/RomDump -- firered.gba --flags
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --scripts
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --fights
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --who-knows
+dotnet run -c Release --project src/Tools/RomDump -- firered.gba --entries
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --in-the-image 0x003E,0x003F
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --who-writes 0x4055
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --play --say-yes --in-order --trace 0x4055
@@ -118,7 +119,10 @@ stopped read of one command with the run-up and **where the read started**. `--f
 back "nothing of this kind skips a guard" for six of the eight kinds, which is the answer it
 has to be able to give. `--who-knows` asks the WHOLE FILE who knows a move — the obstacle scan
 asks the maps, and the maps are 0.6% of it — and prints the reversed-image floor beside the
-count, because 600 against 787 is noise and 7 against 0 is not.
+count, because 600 against 787 is noise and 7 against 0 is not. `--entries` counts the scenes
+this cartridge writes as several doors into one room, and separates them from the shared
+routines that look identical — by the number each door says, which is different per door for a
+scene and the same for a crowd.
 
 ## The floor, restated
 
@@ -162,28 +166,31 @@ sets. CERULEAN CAVE is closed: the run now reaches it, off the SAPPHIRE thread.
 
 ## The next task, precisely
 
-1. **The 41 doors never reached** at 381 of 425, and `1.103` MT. EMBER behind `0x0089` — nothing
+1. **38 of the run's script executions are a scene it has already played** — `--entries` says
+   so. The walking is handled (193, 194). Everything else the run counts is still counted per
+   script: the routines it could not answer, the questions it stopped at, the commands with no
+   width, the items it was refused. Each of those numbers is inflated by however many doors the
+   scene has, and nobody has looked at what that does to the error bars this project quotes.
+   `--play` prints all four.
+2. **12 blocks are reached from more than one MAP.** Anything in this repository keyed on a
+   script address alone is wrong about them, the way 193 was about three walk sites. That is a
+   grep worth doing rather than a guess: `ran`, `spokenTo`, `refused`, `unread`, `specials`.
+3. **`--entries` reads only the scripts the map scan opens**, which is 0.6% of the file. The
+   same sweep asked of the whole image is `--in-the-image`'s question and has never been asked
+   of this shape.
+4. **The 41 doors never reached** at 381 of 425, and `1.103` MT. EMBER behind `0x0089` — nothing
    in the world sets it, so it is the code boundary with an address on it. The RUBY is behind it
    (`1.102` person 1), and `32.0` person 3 wants the RUBY and the SAPPHIRE both. The SAPPHIRE
-   half is closed (`1.114` person 6's fight, since 190); the RUBY half is not.
-2. **The 53 blocks that still stop.** Two entries turned out to be symptoms of a wrong width
+   half is closed (190); the RUBY half is not.
+5. **The 53 blocks that still stop.** Two entries turned out to be symptoms of a wrong width
    upstream rather than commands, so **check alignment before adopting a width**: `--stops
    0xNN` prints where each read started. The remaining named stops are `0xB3`, `0xCA`, `0xC3`,
    `0xC4`, `0x43`, `0x73`, `0xE6` — 17 of 24 have something behind them at every width that
-   reads on.
-
-   **`--derive`'s verdict is advisory — READ THE BYTES.** It is wrong about `0xD0` and it threw
-   out both plausible widths for `0x3F`; neither has been tuned away, and tuning a scorer until
-   it agrees with a reading is decoration rather than evidence.
-3. **The four that no width reads on from** — `0x92`, `0x9B`, `0xD3`, `0x62`. Misreads, so those
+   reads on. **`--derive`'s verdict is advisory — READ THE BYTES.**
+6. **The four that no width reads on from** — `0x92`, `0x9B`, `0xD3`, `0x62`. Misreads, so those
    blocks are wrong earlier; finding where is the job that found `0x1F` and `0x6F`.
-4. **The five wall flags** — `0x0013`, `0x0012`, `0x0089`, `0x0053`, `0x0017` — and the ~28
+7. **The five wall flags** — `0x0013`, `0x0012`, `0x0089`, `0x0053`, `0x0017` — and the ~28
    hand-rolled map walks left in `Program.cs`.
-5. **The entry-stub shape has never been counted.** 193 read it on two scenes on one map. How
-   many scenes in this cartridge are written as N stubs into one block, and does anything else
-   the run does once-per-Runnable have the same problem — the routines it counts, the questions
-   it counts, the flags it reports? `0x4001` is the marker: a block whose first act is
-   `setvar 0x4001, N` followed by a `goto` or `call` is an entry stub, and they sit in runs.
 
 ## Fixtures lie in one direction
 
@@ -205,6 +212,11 @@ Guards have come back green because **the fixture was more forgiving than the ca
    behaviour and left the counter alone, and the test asserted the counter. Rewritten so that
    *one step* and *two steps* are different answers, it caught it. The number a milestone adds
    and the thing that milestone changed are two different claims.
+
+7. **Every fixture in the milestone using one of the thing** (194). 193's tests all used one
+   map, so none of them could see that a script attached to nineteen Pokémon Centres is
+   nineteen scenes. If the rule has a key, the fixture needs two of whatever the key is made
+   of — two maps, two numbers, two addresses.
 
 Check for these shapes directly rather than waiting for a break to find them. And the same nop
 that makes a slide can make a width **undiscriminable**: the `0x6F` fixture separates four from
@@ -271,7 +283,8 @@ a break passes, suspect the fixture — or where the rule lives — before the c
   every person the cartridge places stands on the map it places them on. Do not put the sum back.
 * **What stops a scene running twice.** Nothing does, and nothing needs to: it is not a flag,
   it is that four entry stubs are one scene, so the same `applymovement` command runs four
-  times. Each command applies once, by identity. 193 closed this and retired both designs 192
+  times. Each command applies once **per map** — nineteen Centres share one nurse and that is
+  nineteen scenes, which 193 got wrong and 194 fixed. 193 closed this and retired both designs 192
   had costed for it — including changing the settle test, which is now **sound**: the state
   stops moving when the loop stops, and the final walk agrees with the last pass exactly.
 * **The run's reach being the last pass rather than the union.** Measured at 190, 191 and 192:
