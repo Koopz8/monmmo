@@ -6,16 +6,15 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **The run stands in front of at most one shop counter in the entire game.** Twenty
-  stand on ground it reached with the boat open; it got beside one. And every
-  single one of the other nineteen is **exactly two squares away** — 11 of 11 at
-  the floor, 14 of 14, 19 of 19, at every lever setting, no exceptions.
-- A clerk stands behind a counter and the player talks across it. This walk requires
-  orthogonal adjacency, so it has never been able to buy anything anywhere. The
-  shopping list read as a money problem and three of its six entries are; one is
-  this, and two come from a routine.
-- **The whole buying report was printing nothing at all** — not "it bought nothing",
-  nothing — because it sat behind `money > 0`. A silence and a nought read alike.
-- And the obvious proof came back the other way: the clerks are **not** walled in.
-  Every one has two or three walkable squares beside them. Walkable is not
-  reachable, and the reading that looked stricter was wrong about the question.
+- **The square a shop is talked across has a name now: `0x80`.** Read twice, with a
+  control each time — 91.9% of the unwalkable squares beside a shopkeeper against
+  8.9% beside anybody, and 22.5% of its own squares have somebody on one side with
+  floor directly opposite against 0.3% for ordinary ground.
+- The walk may now be spoken to across exactly one counter square. **Reach did not
+  move at any of the six lever settings** — a shopkeeper opens no doors — and it is
+  **+2 flags at five of the six**. Every counter is now reached: 11 of 11, 14 of 14,
+  20 of 20.
+- **A command with no width turned up that nothing had ever reached**: `0xC1`, one
+  place, on the far side of a counter. `0xB3` went from 3 places to 7.
+- And the POKé DOLL is a money problem after all — 1000 against a purse of nought.
+  The milestone before this one had filed it as a reach problem.

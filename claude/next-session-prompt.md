@@ -1,7 +1,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-233`, 2779 tests green.
+`claude-234`, 2783 tests green.
 
 Standing rules — do not break these:
 
@@ -76,7 +76,7 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-197-the-run-cannot-stand-where-the-player-stands.md` first, then `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
+Read `claude/milestone-198-the-square-a-shop-is-talked-across.md` first, then `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
 **Nineteen faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
@@ -112,6 +112,7 @@ dotnet run -c Release --project src/Tools/RomDump -- firered.gba --scripts
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --fights
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --who-knows
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --entries
+dotnet run -c Release --project src/Tools/RomDump -- firered.gba --counters
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --in-the-image 0x003E,0x003F
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --who-writes 0x4055
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --play --say-yes --in-order --trace 0x4055
@@ -179,36 +180,37 @@ sets. CERULEAN CAVE is closed: the run now reaches it, off the SAPPHIRE thread.
 
 ## The next task, precisely
 
-1. **Talking across a counter.** 197 found the run stands in front of AT MOST ONE shop counter
-   in the whole game — 11 of 11, 14 of 14, 19 of 19 of the others are **exactly two squares
-   away** at every lever setting, no exceptions and no tail. A clerk stands behind a counter and
-   the player talks across it; this walk requires orthogonal adjacency, so it can never buy
-   anything anywhere. Fixing it is a change to who the walk may speak to, which is the most
-   load-bearing rule in the project: its own milestone, its own break, and reach measured at all
-   six settings before believing the direction. **Down is not a regression.** And read 197's
-   second half first — the obvious proof (that the clerks are walled in) was measured and came
-   back the OTHER WAY: every clerk has 2 or 3 walkable squares beside them. Walkable is not
-   reachable, and the collision byte answers a different question from the distance.
-2. **`Attempt.Ran` is fixed (196) and it moved nothing, for a reason worth carrying.** The key
+1. **`0xC1`, and `0xB3` at seven places.** 198 let the walk talk across a counter and a command
+   with no width appeared that nothing had ever reached — one place, on the far side of a shop
+   counter. `0xB3` went from 3 places to 7 at the same time. This is the job that found `0x1F`
+   and `0x6F`: `--stops 0xC1` prints where the read started, and **check alignment before
+   adopting a width** — two earlier entries turned out to be symptoms of a wrong width upstream
+   rather than commands.
+2. **Money, for real this time.** Three drinks at 200/300/350 and a POKé DOLL at 1000, all READ,
+   all at counters the run now reaches, against a purse of nought. `--money N` is the lever and
+   it is MODELLED; the payout table has never been located. 197 filed the POKé DOLL as a reach
+   problem and 198's rule change showed it is a money problem after all — the reverse of 197's
+   own correction, and only the fix could tell.
+3. **`Attempt.Ran` is fixed (196) and it moved nothing, for a reason worth carrying.** The key
    is `(map, address)` now and five breaks caught it. But the tally 196 added says the only
    consumer in the repository is asked about **one** setter at three lever settings and **zero**
    at the other three. `--flags` never looked at it at all — it takes only the ROM. Before the
    next "X is wrong everywhere", print how many places ask X.
-3. **`--entries` reads only the scripts the map scan opens**, which is 0.6% of the file. The
+4. **`--entries` reads only the scripts the map scan opens**, which is 0.6% of the file. The
    same sweep asked of the whole image is `--in-the-image`'s question and has never been asked
    of this shape.
-4. **The 41 doors never reached** at 381 of 425, and `1.103` MT. EMBER behind `0x0089` — nothing
+5. **The 41 doors never reached** at 381 of 425, and `1.103` MT. EMBER behind `0x0089` — nothing
    in the world sets it, so it is the code boundary with an address on it. The RUBY is behind it
    (`1.102` person 1), and `32.0` person 3 wants the RUBY and the SAPPHIRE both. The SAPPHIRE
    half is closed (190); the RUBY half is not.
-5. **The 53 blocks that still stop.** Two entries turned out to be symptoms of a wrong width
+6. **The 53 blocks that still stop.** Two entries turned out to be symptoms of a wrong width
    upstream rather than commands, so **check alignment before adopting a width**: `--stops
    0xNN` prints where each read started. The remaining named stops are `0xB3`, `0xCA`, `0xC3`,
    `0xC4`, `0x43`, `0x73`, `0xE6` — 17 of 24 have something behind them at every width that
    reads on. **`--derive`'s verdict is advisory — READ THE BYTES.**
-6. **The four that no width reads on from** — `0x92`, `0x9B`, `0xD3`, `0x62`. Misreads, so those
+7. **The four that no width reads on from** — `0x92`, `0x9B`, `0xD3`, `0x62`. Misreads, so those
    blocks are wrong earlier; finding where is the job that found `0x1F` and `0x6F`.
-7. **The five wall flags** — `0x0013`, `0x0012`, `0x0089`, `0x0053`, `0x0017` — and the ~28
+8. **The five wall flags** — `0x0013`, `0x0012`, `0x0089`, `0x0053`, `0x0017` — and the ~28
    hand-rolled map walks left in `Program.cs`.
 
 ## Fixtures lie in one direction
@@ -264,12 +266,13 @@ a break passes, suspect the fixture — or where the rule lives — before the c
 
 ## Things already ruled out — don't re-chase these
 
-* **Money being the reason the run buys nothing.** It is not, or not first. The run cannot get
-  to the till: at most one counter in the game is ever stood beside. Money stays MODELLED and
-  `--money N` is the lever, but it is downstream of the walk now.
-* **The clerks being walled in.** They are not. Every one has 2 or 3 walkable squares beside
-  them and the run stood on none of them, because those squares are the clerk's side of the
-  counter. Do not re-measure the collision; it answers a different question.
+* **What is between a shopkeeper and the floor.** `0x80`, read twice with a control each time —
+  91.9% against 8.9% by what it stands beside, 22.5% against 0.3% by its own shape. Named on
+  `MetatileBehaviour.Counter` with the evidence. The walk talks across exactly one of them.
+  Closed; do not re-derive it.
+* **The clerks being walled in.** They are not — every one has 2 or 3 walkable squares beside
+  them, on the clerk's side of the counter. Walkable is not reachable, and the collision byte
+  answers a different question from the distance.
 * **`--flags` using the playthrough.** It does not. `case "--flags"` reaches
   `WriteFlagGates(rom)` — one parameter, and it is the ROM. Nothing in it has ever seen an
   `Attempt`. Diffing `--flags` across a playthrough change is diffing a scan that did not look.
