@@ -508,6 +508,21 @@ public sealed record Attempt(
     public IReadOnlyList<HandedOver> Handovers { get; init; } = [];
 
     /// <summary>
+    /// The move this cartridge crosses water with, and the pass the party first knew it.
+    /// <para>
+    /// Nought for a pass means never — the sea was a wall for the whole run, which is a
+    /// different finding from a run that was never allowed to swim and printed the same
+    /// number for years.
+    /// </para>
+    /// </summary>
+    public int SurfMove { get; init; }
+
+    public int LearnedToCrossOnPass { get; init; }
+
+    /// <summary>Whether it swam because it was told to rather than because it knew how.</summary>
+    public bool SwamAnyway { get; init; }
+
+    /// <summary>
     /// The ones that did it more than once, which is the ceiling.
     /// <para>
     /// Here rather than in whoever prints, because a <c>Where</c> in a printer is a rule
@@ -716,6 +731,11 @@ public static class Autoplayer
 
         StoppedBecause stopped = StoppedBecause.ItNeverSettled;
 
+        // The pass the party first knew how to swim, or nought for never. Recorded rather than
+        // recomputed at the end: "it can swim" and "it could swim in time for that to matter"
+        // are different claims and only one of them is about a run.
+        var learnedToCross = 0;
+
         // Where something changed hands, by the script that did it. Kept by script rather
         // than by what it hands over: five shopkeepers selling the same potion is not one
         // place handing it over five times, and the question here is about the second.
@@ -727,7 +747,7 @@ public static class Autoplayer
             passes = pass;
 
             Reach reach = WorldWalker.Walk(
-                world, startMapId, moves, surfing: surfing, flagsSet: flags, asIfGone: gone,
+                world, startMapId, moves, surfing: surfing || KnowsHowToCross(rules, moves), flagsSet: flags, asIfGone: gone,
                 ridingTheBoat: ridingTheBoat, movedTo: moved);
 
             var stood = reach.Stood.ToHashSet();
@@ -1010,6 +1030,8 @@ public static class Autoplayer
                 }
             }
 
+            if (learnedToCross == 0 && KnowsHowToCross(rules, moves)) learnedToCross = pass;
+
             log?.Invoke(
                 $"  pass {pass,2}: {reach.Maps.Count,3} maps, {flags.Count,4} flags, "
                 + $"{party.Count} in the party (highest level {(party.Count == 0 ? 0 : party.Max(m => m.Level))}), "
@@ -1030,7 +1052,7 @@ public static class Autoplayer
         }
 
         Reach last = WorldWalker.Walk(
-            world, startMapId, moves, surfing: surfing, flagsSet: flags, asIfGone: gone,
+            world, startMapId, moves, surfing: surfing || KnowsHowToCross(rules, moves), flagsSet: flags, asIfGone: gone,
             ridingTheBoat: ridingTheBoat, movedTo: moved);
 
         // Built once. Inside the query below it would be rebuilt for every map in the world,
@@ -1118,6 +1140,9 @@ public static class Autoplayer
         {
             FightAttemptsLost = lost,
             Carried = bag.Entries,
+            SurfMove = rules.SurfMove,
+            LearnedToCrossOnPass = learnedToCross,
+            SwamAnyway = surfing,
             Handovers =
             [
                 .. handovers
@@ -1650,6 +1675,23 @@ public static class Autoplayer
     /// </para>
     /// </summary>
     private sealed record Runnable(uint Address, int TakenAway, int LocalId = 0);
+
+    /// <summary>
+    /// Whether anything in the party knows the move that crosses water.
+    /// <para>
+    /// <b>READ, and it is the cartridge's own condition.</b> The one block in this image that
+    /// offers to cross water — <c>--who-knows</c> finds it at <c>0x081A6AD6</c>, jumped into,
+    /// on no map, saying <em>the water is dyed a deep blue… would you like to SURF?</em> —
+    /// opens by asking who knows the move and stops if the answer is nobody. So does this.
+    /// </para>
+    /// <para>
+    /// Which move that is comes off the cartridge twice over: the move table's own name, and
+    /// the move that block names. Zero when this cartridge has no such move, and zero means no
+    /// swimming rather than a guess at which move it might have been.
+    /// </para>
+    /// </summary>
+    private static bool KnowsHowToCross(GameRules rules, IReadOnlyCollection<int> moves) =>
+        rules.SurfMove > 0 && moves.Contains(rules.SurfMove);
 
     /// <summary>How many squares of a map anybody could stand on at all.</summary>
     private static int Walkable(MapData map)

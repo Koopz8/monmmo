@@ -107,6 +107,33 @@ public sealed record NamesIt(int Offset, uint Points, byte Opcode)
 /// to feel confident.
 /// </para>
 /// </summary>
+/// <summary>One place in the image that asks which party slot knows a move.</summary>
+/// <param name="Offset">Where the command is.</param>
+/// <param name="Move">Which move it names.</param>
+/// <param name="ReadsAsAScript">Whether the bytes from here run to a proper end.</param>
+/// <param name="Opened">Whether the map scan ever decoded this byte.</param>
+public sealed record MoveSite(int Offset, int Move, bool ReadsAsAScript, bool Opened)
+{
+    public uint Address => Rom.BaseAddress + (uint)Offset;
+
+    /// <summary>
+    /// Whether the block goes on to offer to do something: a yes-or-no, then a field effect.
+    /// <para>
+    /// <b>This is what separates a move a scene uses from three bytes that happen to look like
+    /// one.</b> A raw sweep for the command finds six hundred sites and the same sweep on the
+    /// reversed image finds seven hundred and eighty-seven — the pattern is three bytes and
+    /// this image is sixteen megabytes. The offer is the shape, and it is the cartridge's own.
+    /// </para>
+    /// </summary>
+    public bool Offers => Question != 0 && FieldEffect != 0;
+
+    /// <summary>Where the yes-or-no's text is, or zero.</summary>
+    public uint Question { get; init; }
+
+    /// <summary>Which field effect it does when the answer is yes, or zero.</summary>
+    public int FieldEffect { get; init; }
+}
+
 public static class EverywhereInTheImage
 {
     private const byte SetFlag = 0x29;
@@ -272,6 +299,117 @@ public static class EverywhereInTheImage
 
     /// <summary>The four commands that put a number in a variable, in the order they were derived.</summary>
     private static readonly byte[] Writers = [0x16, 0x17, 0x18, 0x1A];
+
+    /// <summary>
+    /// Everywhere in the file something asks which party slot knows a move.
+    /// <para>
+    /// <b><see cref="ObstacleMoves"/> asks this of the maps, and the maps are 0.6% of the
+    /// file.</b> Two hundred objects across forty-seven maps open by naming a move and asking
+    /// who knows it, and that is where CUT, STRENGTH and ROCK SMASH were read. The move that
+    /// crosses water is not on that list, and "not on the list" has meant "not in the game"
+    /// for as long as the list has been the maps'.
+    /// </para>
+    /// <para>
+    /// A move id is two bytes with no shape of its own, so this is a three-byte pattern like
+    /// every other one here and it turns up by accident: <see cref="ByChance"/> is the error
+    /// bar and the reversed image is the control. <paramref name="mostMoves"/> comes off the
+    /// cartridge's own move table rather than from a number written here.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<MoveSite> AsksWhoKnows(Rom rom, int mostMoves, int[]? covered = null)
+    {
+        var sites = new List<MoveSite>();
+
+        foreach (int offset in rom.FindAll(new[] { ObstacleMoves.FindMove }))
+        {
+            if (offset + 3 > rom.Length) continue;
+
+            int move = rom.ReadU16(offset + 1);
+
+            if (move < 1 || move > mostMoves) continue;
+
+            (uint question, int effect) = TheOffer(rom, Rom.BaseAddress + (uint)offset);
+
+            sites.Add(new MoveSite(
+                offset,
+                move,
+                ReadsAsAScript(rom, Rom.BaseAddress + (uint)offset),
+                covered is not null && offset < covered.Length && covered[offset] != Nobody)
+            {
+                Question = question,
+                FieldEffect = effect,
+            });
+        }
+
+        return sites;
+    }
+
+    /// <summary>Which routine number is the yes-or-no.</summary>
+    private const byte TheYesOrNo = 5;
+
+    /// <summary>The command that does a field effect, and the one that loads what to say.</summary>
+    private const byte DoFieldEffect = 0x9C;
+
+    /// <summary>
+    /// Reading on from "who knows this move" to see whether anything is being offered.
+    /// <para>
+    /// The straight line only, down to the first branch's own arms — a scene that asks
+    /// something and then does it puts the question and the effect in one block, and following
+    /// branches would let any block in the file reach any offer in the file.
+    /// </para>
+    /// </summary>
+    private static (uint Question, int FieldEffect) TheOffer(Rom rom, uint address)
+    {
+        uint said = 0;
+        uint asked = 0;
+
+        foreach (ScriptCommand command in ScriptReader.ReadAll(rom, address, maxScripts: 4))
+        {
+            switch (command.Code)
+            {
+                case ScriptCommands.LoadPointer:
+                    said = command.Pointer(1);
+                    break;
+
+                case ScriptCommands.CallStandard
+                    when command.Arguments.Length > 0 && command.Arguments[0] == TheYesOrNo:
+                    asked = said;
+                    break;
+
+                case DoFieldEffect when asked != 0:
+                    return (asked, command.Word());
+            }
+        }
+
+        return (0, 0);
+    }
+
+    /// <summary>
+    /// The same sweep on the image backwards: same bytes, same frequencies, no commands.
+    /// <para>
+    /// Written beside the real one rather than left to whoever prints, because a count with no
+    /// floor under it is the finding this project has thrown away twice.
+    /// </para>
+    /// </summary>
+    public static (int Sites, int ReadsAsScript, int JumpedInto) MoveNoiseFloor(
+        Rom rom, int mostMoves, int slack = 192)
+    {
+        byte[] backwards = rom.Span.ToArray();
+
+        Array.Reverse(backwards);
+
+        var nowhere = new Rom(backwards);
+
+        IReadOnlyList<MoveSite> found = AsksWhoKnows(nowhere, mostMoves);
+
+        IReadOnlyDictionary<uint, IReadOnlyList<int>> index = PointerIndex(nowhere);
+
+        return (
+            found.Count,
+            found.Count(s => s.ReadsAsAScript),
+            found.Count(s => s.ReadsAsAScript
+                             && WhoNames(nowhere, index, s.Address, slack).Any(n => n.AJump)));
+    }
 
     /// <summary>
     /// Every flag moved anywhere in the file, by flag, in one pass.
