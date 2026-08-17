@@ -6646,7 +6646,7 @@ public static class Program
                 continue;
             }
 
-            foreach (FlagSite site in found)
+            foreach (FlagSite site in found.Take(40))
             {
                 Console.WriteLine(
                     $"    0x{site.Offset:X6}  {(site.Sets ? "setflag  " : "clearflag")}  "
@@ -6654,6 +6654,8 @@ public static class Program
                     + "  "
                     + (site.Opened ? "the map scan opened this" : "NEVER OPENED BY THE MAP SCAN"));
             }
+
+            if (found.Count > 40) Console.WriteLine($"    ... and {found.Count - 40} more");
         }
 
         // The two halves of one scene. Two lists of sites cannot say "one piece of script does
