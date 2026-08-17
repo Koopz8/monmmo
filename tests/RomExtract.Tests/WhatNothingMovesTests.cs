@@ -25,6 +25,17 @@ public class WhatNothingMovesTests
     private const int Movable = 0x0037;
     private const int OnlyCleared = 0x0036;
 
+    /// <summary>
+    /// More people than the wall has, and not one of them in anybody's way.
+    /// <para>
+    /// The decoy the first version of this fixture lacked. With every flag's crowd and wall
+    /// counts rising together, ranking by crowd and ranking by wall give the same list, and
+    /// the whole point of the second number is invisible. On the cartridge these outnumber the
+    /// walls by about fifty to one.
+    /// </para>
+    /// </summary>
+    private const int Crowd = 0x0079;
+
     private static MapData Room(string id) => new(id, id, 4, 4, new byte[16]);
 
     private static MapObject Person(int id, int hiddenBy, int x = 1, int y = 1) =>
@@ -45,6 +56,13 @@ public class WhatNothingMovesTests
                 Objects = [Person(1, Stuck, 2, 1), Person(2, Stuck, 0, 3), Person(3, Movable)],
             },
             Room("14.0") with { Objects = [Person(1, Stuck), Person(2, Absent), Person(3, OnlyCleared)] },
+
+            // Four villagers on squares nobody needs, behind a flag nothing moves. More people
+            // than the wall, and no wall at all.
+            Room("2.1") with
+            {
+                Objects = [Person(1, Crowd), Person(2, Crowd), Person(3, Crowd), Person(4, Crowd)],
+            },
         ])
         {
             // A fresh save is not an empty save: this one hides somebody before the first frame.
@@ -170,10 +188,15 @@ public class WhatNothingMovesTests
     {
         IReadOnlyList<WhatMoves> ranked = Ranked();
 
+        // The wall first, though the crowd is larger. Ranking by how many people a flag
+        // holds puts four villagers in a room with no doors above the three standing in one.
         Assert.Equal(Stuck, ranked[0].Flag);
-        Assert.Equal(Absent, ranked[1].Flag);
-        Assert.True(ranked[0].InDoorways > ranked[1].InDoorways, "a wall outranks a crowd");
-        Assert.All(ranked.Take(2), f => Assert.True(f.NothingCanMoveIt));
-        Assert.All(ranked.Skip(2), f => Assert.False(f.NothingCanMoveIt));
+        Assert.Equal(Crowd, ranked[1].Flag);
+
+        Assert.True(ranked[0].People < ranked[1].People, "the crowd is the bigger of the two");
+        Assert.True(ranked[0].InDoorways > ranked[1].InDoorways, "and the wall still comes first");
+
+        Assert.All(ranked.Take(3), f => Assert.True(f.NothingCanMoveIt));
+        Assert.All(ranked.Skip(3), f => Assert.False(f.NothingCanMoveIt));
     }
 }
