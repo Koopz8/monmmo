@@ -1,3 +1,4 @@
+using PokeMmo.Core.Scripts;
 using PokeMmo.Core.Save;
 using PokeMmo.Core.World;
 using PokeMmo.Server;

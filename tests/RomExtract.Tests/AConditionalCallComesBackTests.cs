@@ -1,3 +1,4 @@
+using PokeMmo.Core.Scripts;
 using PokeMmo.Core.World;
 using PokeMmo.RomExtract.Scripts;
 using PokeMmo.Server;
