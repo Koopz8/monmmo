@@ -373,7 +373,13 @@ public static class WhatItIsWaitingFor
     /// </summary>
     public static IReadOnlyList<OnTheWay>? PathTo(Rom rom, uint address, int flag, int maxSteps = 8192)
     {
-        var seen = new HashSet<(uint Block, int At)>();
+        // Where we are AND what we know when we get there.
+        //
+        // THE SECOND FAULT. Keyed on the block alone, a block reachable two ways is walked
+        // once, with whichever path arrived first — so a route that arrives knowing 0x4001 is
+        // 2 is silently dropped because another route already came through holding 0. That is
+        // a false "no path", which is the most expensive answer this instrument can give.
+        var seen = new HashSet<(uint Block, int At, string Knowing)>();
         var queue = new Queue<(uint Block, int At, List<OnTheWay> Chain, Dictionary<int, (byte How, int Value)> Put)>();
 
         queue.Enqueue((address, 0, [], []));
@@ -385,7 +391,7 @@ public static class WhatItIsWaitingFor
             (uint block, int at, List<OnTheWay> chain, Dictionary<int, (byte How, int Value)> put) =
                 queue.Dequeue();
 
-            if (!seen.Add((block, at))) continue;
+            if (!seen.Add((block, at, Knowing(put)))) continue;
             if (rom.ToOffsetOrNull(block) is null) continue;
 
             List<ScriptCommand> commands = ScriptReader.Read(rom, block);
@@ -471,6 +477,22 @@ public static class WhatItIsWaitingFor
                     chain = [.. chain, step with { TookTheBranch = false }];
 
                     asked = null;
+
+                    continue;
+                }
+
+                // THE FIRST FAULT, and the one that made this instrument overrule a better
+                // one. A fight carries scripts of its own and `ReadAll` has followed them
+                // since milestone 73 — two of the three flags in the middle of this game are
+                // cleared inside one. This walked past every `trainerbattle` in the cartridge,
+                // so it could not reach anything behind a fight, and then reported that as
+                // "no run can get there".
+                //
+                // SILPH CO. is a building with GIOVANNI in it.
+                if (command.Code == ScriptCommands.TrainerBattle)
+                {
+                    foreach (uint after in ScriptReader.ScriptsAfterAFight(rom, command))
+                        queue.Enqueue((after, 0, chain, new(put)));
 
                     continue;
                 }
@@ -572,6 +594,22 @@ public static class WhatItIsWaitingFor
 
         return found.ToDictionary(p => p.Key, p => (IReadOnlyList<WritesAVariable>)p.Value);
     }
+
+    /// <summary>
+    /// What is known about the variables, as one comparable string.
+    /// <para>
+    /// Only what a <c>setvar</c> put there, because that is the only thing the pruning above
+    /// acts on — two arrivals that differ in something neither of them can use are the same
+    /// arrival, and keying on everything would walk the same block once per meaningless
+    /// difference until the step cap ran out.
+    /// </para>
+    /// </summary>
+    private static string Knowing(Dictionary<int, (byte How, int Value)> put) =>
+        string.Join(
+            ",",
+            put.Where(p => p.Value.How == SetVar)
+                .OrderBy(p => p.Key)
+                .Select(p => $"{p.Key}={p.Value.Value}"));
 
     /// <summary>
     /// What a called block puts in variables before it branches, folded into the caller's view.

@@ -39,6 +39,7 @@ public class WhatItIsWaitingForTests
     private const byte AddVar = 0x17;
     private const byte CopyVar = 0x19;
     private const byte SpecialVar = 0x26;
+    private const byte TrainerBattle = 0x5C;
 
     /// <summary>Jump when the comparison came out equal — a checkflag's "already done" arm.</summary>
     private const byte IfEqual = 1;
@@ -769,6 +770,75 @@ public class WhatItIsWaitingForTests
             [new MapEntryScript(0x4050, 1, 0)]);
 
         Assert.Empty(found);
+    }
+
+    /// <summary>
+    /// A fight carries scripts of its own, and the flag is often inside one.
+    /// <para>
+    /// <b>The fault that let this instrument overrule a better one.</b> <c>ReadAll</c> has
+    /// followed <c>trainerbattle</c> continuations since milestone 73 — two of the three flags
+    /// in the middle of this game are cleared inside one. This walked straight past every
+    /// fight in the cartridge, found nothing behind any of them, and reported that as <em>no
+    /// run can get there</em> — which is how SAFFRON came to be declared behind the code
+    /// boundary. SILPH CO. is a building with GIOVANNI in it.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TheScriptsAFightLeadsToAreOnTheWayToo()
+    {
+        var image = new byte[0x2000];
+
+        // The shape the ROCKET HIDEOUT uses, and the one already proven to read: a kind-2
+        // fight, two pages of text, and the script the fight leads to.
+        Put(image, 0x100, TrainerBattle, 2, 0x70, 0x01, 0x00, 0x00);
+        Pointer(image, 0x106, 0x08000700);
+        Pointer(image, 0x10A, 0x08000700);
+        Pointer(image, 0x10E, 0x08000200);
+        Put(image, 0x112, Release, End);
+
+        // What the fight leads to, which is where the flag is.
+        Put(image, 0x200, SetFlag, Opened & 0xFF, Opened >> 8, Release, End);
+
+        // And text, so the other two pointers do not read as scripts.
+        Put(image, 0x700, 0xFE, 0xFE, 0xFE, 0xFE);
+
+        Assert.NotNull(WhatItIsWaitingFor.PathTo(new Rom(image), 0x08000100, Opened));
+    }
+
+    /// <summary>
+    /// A block two paths reach is walked once per thing worth knowing, not once.
+    /// <para>
+    /// One route arrives having set the switch to 0, the other to 2, and only the second can
+    /// reach the flag. Keyed on the block alone, whichever arrived first wins and the other is
+    /// dropped — a false <em>no path</em>, which is the most expensive answer this can give,
+    /// because it reads as a finding about the cartridge rather than about the reader.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ABlockTwoRoutesReachIsWalkedForEachThingWorthKnowing()
+    {
+        var image = new byte[0x2000];
+
+        // Two entrances into the same shared block, each setting a different switch.
+        Put(image, 0x100, CheckFlag, Waiting & 0xFF, Waiting >> 8);
+        Put(image, 0x103, GotoIf, IfEqual);
+        Pointer(image, 0x105, 0x08000200);
+        Put(image, 0x109, SetVar, 0x01, 0x40, 0x00, 0x00);
+        Put(image, 0x10E, Goto);
+        Pointer(image, 0x10F, 0x08000300);
+
+        Put(image, 0x200, SetVar, 0x01, 0x40, 0x02, 0x00);
+        Put(image, 0x205, Goto);
+        Pointer(image, 0x206, 0x08000300);
+
+        // The shared block, which opens the door only for the second of them.
+        Put(image, 0x300, Compare, 0x01, 0x40, 0x02, 0x00);
+        Put(image, 0x305, GotoIf, IfEqual);
+        Pointer(image, 0x307, 0x08000400);
+        Put(image, 0x30B, Release, End);
+        Put(image, 0x400, SetFlag, Opened & 0xFF, Opened >> 8, Release, End);
+
+        Assert.NotNull(WhatItIsWaitingFor.PathTo(new Rom(image), 0x08000100, Opened));
     }
 
     /// <summary>
