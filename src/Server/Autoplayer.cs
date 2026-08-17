@@ -1313,7 +1313,13 @@ public static class Autoplayer
         bool ours = mine.Any(m => !m.HasFainted);
 
         // Whatever survived, written back.
-        for (var i = 0; i < mine.Count && i < party.Count; i++) party[i] = BattleFactory.Save(mine[i]);
+        // Written back WITH what the battle could not carry. A battler has no experience — the
+        // note on Save says so and says every caller starting from a save puts it back — and
+        // this caller did not. Every win reset the total to nothing, the next award started
+        // from the bottom of the level it was already at, and nothing in this party ever
+        // reached the next one.
+        for (var i = 0; i < mine.Count && i < party.Count; i++)
+            party[i] = BattleFactory.Save(mine[i], party[i]);
 
         // And what winning is worth. Without this the party stays at the level it was handed
         // over at for the whole game — which the first real run printed twenty-four times in a

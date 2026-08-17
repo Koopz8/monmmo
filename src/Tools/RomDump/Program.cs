@@ -6030,6 +6030,37 @@ public static class Program
             + $"{played.FightsSkipped} never fought at all"
             + $" (healed {played.PartiesHealed} times)");
 
+        // THE PARTY, ONE LINE PER CREATURE.
+        //
+        // "highest level 25" is a summary, and a summary is where a fact goes to hide. It read
+        // the same on every pass of a run that won ninety-four fights, which is either a party
+        // that does not grow or a maximum pinned by a gift — and one of those is a fault in
+        // this project and the other is not. One line each says which without anybody guessing.
+        Console.WriteLine(
+            "    the party: "
+            + (played.Party.Count == 0
+                ? "empty"
+                : string.Join(", ", played.Party.Select(m => $"#{m.Species} at {m.Level}"))));
+
+        // AND WHETHER IT TOOK THE SAME GIFT TWICE, WHICH MAKES THIS A CEILING.
+        //
+        // Every pass runs every script again. A gift the cartridge hands over once is handed
+        // over once per pass here unless something stops it, and five copies of the same
+        // creature is a party no player could assemble. This run's numbers are a floor in every
+        // other respect and this one line is where they stop being one — so it is printed
+        // rather than left to be noticed in the list above.
+        int copies = played.Party.Count - played.Party.Select(m => m.Species).Distinct().Count();
+
+        if (copies > 0)
+        {
+            Console.WriteLine(
+                $"    {copies} of those are a second copy of something already in it — a gift taken");
+            Console.WriteLine(
+                "    again on a later pass. THIS RUN IS NOT A FLOOR IN THAT RESPECT: no player");
+            Console.WriteLine(
+                "    assembles this party, and whatever it wins with it is a ceiling.");
+        }
+
         if (played.FightsSkipped > 0)
         {
             Console.WriteLine(
