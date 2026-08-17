@@ -53,7 +53,8 @@ public sealed class HowAScriptRuns(
     IReadOnlyDictionary<int, int>? answers = null,
     IReadOnlyDictionary<int, int>? variables = null,
     bool sayYes = false,
-    IReadOnlyCollection<int>? beaten = null)
+    IReadOnlyCollection<int>? beaten = null,
+    IDictionary<int, int>? remembered = null)
 {
     /// <summary>
     /// Where the scratch pads stop and the story's own memory begins.
@@ -87,7 +88,12 @@ public sealed class HowAScriptRuns(
     /// has printed has ever held a starter.
     /// </para>
     /// </summary>
-    private readonly Dictionary<int, int> _remembered = [];
+    /// <para>
+    /// Shared with the walk when the walk is honouring conditions, because a trigger that fires
+    /// at <c>0x4055 == 1</c> and a script that reads <c>0x4055</c> have to be looking at the
+    /// same number or the run is two runs.
+    /// </para>
+    private readonly IDictionary<int, int> _remembered = remembered ?? new Dictionary<int, int>();
     /// <summary>
     /// Run one script with everything the walk has learned so far, and say what it did.
     /// </summary>
