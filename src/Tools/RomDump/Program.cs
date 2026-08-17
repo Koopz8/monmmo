@@ -153,7 +153,7 @@ public static class Program
             WriteSquare(rom, options.At);
 
         if (!string.IsNullOrEmpty(options.ScriptRun))
-            WriteScriptRuns(rom, options.ScriptRun);
+            WriteScriptRuns(rom, options.ScriptRun, options.Variables, options.RoutineAnswers, options.SayYes);
 
         if (options.ScriptRuns) WriteRunHistogram(rom);
 
@@ -2854,10 +2854,36 @@ public static class Program
     /// whether the second one is a different sentence rather than the same one.
     /// </para>
     /// </summary>
-    private static void WriteScriptRuns(Rom rom, string mapId)
+    /// <summary>
+    /// Every script on one map, run, with the levers the playthrough has.
+    /// <para>
+    /// <b>They were not wired in, and that is how a question stayed unanswerable.</b> The
+    /// starter is behind <c>0x4055 == 2</c> and then a yes-or-no, and this is the one tool that
+    /// shows a script line by line — so the only way to see what happens on the other side of
+    /// either was to run the whole playthrough and infer it from a party list. A lever that
+    /// exists on one instrument and not on the one that shows the detail is a lever nobody can
+    /// aim.
+    /// </para>
+    /// </summary>
+    private static void WriteScriptRuns(
+        Rom rom,
+        string mapId,
+        IReadOnlyDictionary<int, int>? variables = null,
+        IReadOnlyDictionary<int, int>? answers = null,
+        bool sayYes = false)
     {
         Console.WriteLine();
         Console.WriteLine($"Running the scripts on {mapId}");
+
+        if (variables is { Count: > 0 })
+        {
+            Console.WriteLine(
+                "  MODELLED: starting with "
+                + string.Join(", ", variables.Select(v => $"0x{v.Key:X4} = {v.Value}"))
+                + " — nothing on the cartridge says a run holds these");
+        }
+
+        if (sayYes) Console.WriteLine("  MODELLED: answering yes to every offer");
 
         MapLibrary library = MapLibrary.Open(rom);
 
@@ -2871,7 +2897,31 @@ public static class Program
 
         foreach (MapObject person in map.Objects.Where(o => o.HasScript))
         {
-            ScriptRun fresh = ScriptRunner.Run(rom, person.ScriptAddress);
+            var start = new ScriptState(variables: variables?.Select(v => new KeyValuePair<int, int>(v.Key, v.Value)));
+
+            ScriptRun fresh = ScriptRunner.Run(rom, person.ScriptAddress, start, answers: answers);
+
+            // And the offers taken, the same way the playthrough takes them: run again from
+            // where it stopped, up to a handful of times, so a scene behind two questions is
+            // not a scene behind one.
+            for (var answered = 0; sayYes && fresh.Question is { } carryOn && answered < 8; answered++)
+            {
+                foreach ((int variable, int value) in fresh.VariablesWritten) start.Write(variable, value);
+
+                start.Write(SpecialContracts.AnswerVariable, 1);
+
+                ScriptRun next = ScriptRunner.Run(rom, carryOn, start, answers: answers);
+
+                fresh = fresh with
+                {
+                    Pages = [.. fresh.Pages, .. next.Pages],
+                    FlagsSet = [.. fresh.FlagsSet, .. next.FlagsSet],
+                    FlagsCleared = [.. fresh.FlagsCleared, .. next.FlagsCleared],
+                    GivesMon = fresh.GivesMon ?? next.GivesMon,
+                    GivesItem = fresh.GivesItem ?? next.GivesItem,
+                    Question = next.Question,
+                };
+            }
 
             Console.WriteLine();
             Console.WriteLine($"  person {person.LocalId} at ({person.X}, {person.Y}), script 0x{person.ScriptAddress:X8}");
@@ -5864,6 +5914,10 @@ public static class Program
 
         Dictionary<int, int> teaches = TeachingMachines(rom);
 
+        // Shared with the walk below: it fills this in as it wins, and the reader above reads
+        // it before every script.
+        var beatenTrainers = new HashSet<int>();
+
         Console.WriteLine(
             $"  {world.Maps.Count} maps, {rules.TrainerCount} trainers, {teaches.Count} machines; "
             + $"starting at {first.Id} ({first.Name})");
@@ -5898,6 +5952,11 @@ public static class Program
             };
 
             foreach (int flag in flags) state.Set(flag);
+
+            // And who it has beaten, which is half of what a trainerbattle asks. Without this
+            // the fight is always in front of the script and everything the victory unlocks is
+            // behind it, on every pass, however many the run wins.
+            foreach (int trainer in beatenTrainers) state.MarkBeaten(trainer);
 
             // Modelled, and put in before the script rather than after: a counter is read on
             // the first line of the scene it gates.
@@ -5972,6 +6031,19 @@ public static class Program
                 foreach (int flag in flagsSet) state.Set(flag);
                 foreach (int flag in flagsCleared) state.Clear(flag);
 
+                // AND THE VARIABLES, WHICH WERE NOT CARRIED AND ARE HALF OF WHAT A SCENE IS.
+                //
+                // The flags crossed this line and the numbers did not. PALLET TOWN's three
+                // balls each write which species they are into 0x4002 and then ask whether you
+                // want it; the `givemon` on the far side of that question reads 0x4002 back.
+                // Continuing with a state that had never heard of it made the species nought,
+                // and `givemon` of nought hands over nothing — so the run answered yes to the
+                // professor and walked out of the lab with an empty party, for every one of
+                // the six passes, in every run this project has ever printed.
+                //
+                // The starter is the only creature in this game a player chooses.
+                foreach ((int variable, int value) in run.VariablesWritten) state.Write(variable, value);
+
                 // Yes. The variable the box answers into is the one everything reads.
                 state.Write(SpecialContracts.AnswerVariable, 1);
 
@@ -6014,7 +6086,8 @@ public static class Program
             };
         }
 
-        Attempt played = Autoplayer.Play(world, first.Id, rules, Run, Console.WriteLine, boat, money);
+        Attempt played = Autoplayer.Play(
+            world, first.Id, rules, Run, Console.WriteLine, boat, money, beatenTrainers);
 
         int hanging = played.Questions.Values.Sum();
 
@@ -6026,8 +6099,11 @@ public static class Program
             $"    {played.Flags.Count} flags, {played.Moves.Count} field moves, "
             + $"{played.Party.Count} in the party, highest level {played.HighestLevel}");
         Console.WriteLine(
-            $"    {played.FightsWon} fights won, {played.FightsLost} lost, "
-            + $"{played.FightsSkipped} never fought at all"
+            $"    {played.FightsWon} fights won, {played.FightsLost} lost to"
+            + (played.FightAttemptsLost > played.FightsLost
+                ? $" ({played.FightAttemptsLost} attempts — it goes back every pass)"
+                : "")
+            + $", {played.FightsSkipped} never fought at all"
             + $" (healed {played.PartiesHealed} times)");
 
         // THE PARTY, ONE LINE PER CREATURE.
