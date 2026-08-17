@@ -1,3 +1,4 @@
+using PokeMmo.Core.World;
 using PokeMmo.RomExtract.Scripts;
 using PokeMmo.Server;
 using Xunit;
@@ -196,5 +197,43 @@ public class AConditionalCallComesBackTests
         var quiet = new WhatRan().And(new PlayedScript([], [], [], [], null, null));
 
         Assert.Empty(quiet.Fought);
+    }
+
+    /// <summary>
+    /// And the run carries the commands it could not read all the way out, so the report can
+    /// say so.
+    /// <para>
+    /// <b>The half of the error bar that was missing.</b> A run has always named the routines it
+    /// could not answer and never the commands it could not step over. They are different
+    /// boundaries: a routine is the game's own code, and a command with no width is a gap in a
+    /// table in this repository. One of those is where the world ends and the other is a job,
+    /// and reporting only the first made a small world look like the cartridge's fault.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TheRunCarriesOutTheCommandsItCouldNotRead()
+    {
+        MapData start = new MapData("1.0", "1.0", 4, 4, new byte[16]) with
+        {
+            Objects = [new MapObject(1, 1, 1, 1, Direction.Down, 0, false) { ScriptAddress = 0x1000 }],
+        };
+
+        Attempt played = Autoplayer.Play(
+            new WorldData([start]),
+            "1.0",
+            TestRules.All,
+            (_, _, _) => new PlayedScript([], [], [], [], null, null) { StoppedAt = [0xEE] });
+
+        Assert.Equal(1, played.UnreadCommands.GetValueOrDefault((byte)0xEE));
+
+        // And a run that read everything says nothing, so an empty list means empty rather
+        // than unmeasured.
+        Attempt clean = Autoplayer.Play(
+            new WorldData([start]),
+            "1.0",
+            TestRules.All,
+            (_, _, _) => new PlayedScript([], [], [], [], null, null));
+
+        Assert.Empty(clean.UnreadCommands);
     }
 }

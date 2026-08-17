@@ -2083,11 +2083,52 @@ public static class Program
         }
 
         Console.WriteLine($"  {withTrainer} people name a trainer, {withMart} open a shop");
+        // AND WHAT IS BEHIND EACH ONE, WHICH IS THE RANKING.
+        //
+        // How often a command stops a read is a count, and this project has written down once
+        // already that a count is not a ranking. 0x73 stops three hundred and seventy-eight
+        // runs of the playthrough — more than every other unknown command put together — and at
+        // every one of its sites what follows is a release and an end. Nothing is behind it.
+        // 0x9E stopped three blocks and one of the three was eleven bytes from the call that
+        // puts nineteen people on eleven maps.
+        //
+        // The width is unknown, so this does not pick one: it tries them all, keeps the ones
+        // that read to a proper end, and reports what they find between them. "Every width that
+        // parses finds nothing" needs no guess to stand on.
         Console.WriteLine();
-        Console.WriteLine("  The commands stopping the most reads:");
+        Console.WriteLine("  The commands stopping the most reads, and what is behind each:");
+
+        var behind = new Dictionary<byte, Behind>();
+
+        foreach ((byte code, int _) in stoppers)
+        {
+            if (examples.TryGetValue(code, out (int Start, int Stop) where))
+                behind[code] = WhatIsBehindAStop.Of(rom, where.Stop);
+        }
 
         foreach ((byte code, int count) in stoppers.OrderByDescending(s => s.Value).Take(20))
-            Console.WriteLine($"    0x{code:X2}  stops {count}");
+        {
+            Console.WriteLine(
+                $"    0x{code:X2}  stops {count,3}  — "
+                + (behind.TryGetValue(code, out Behind? what) ? what.ToString() : "not sampled"));
+        }
+
+        List<byte> costly =
+        [
+            .. stoppers.Keys
+                .Where(code => behind.TryGetValue(code, out Behind? what) && !what.NothingBehindIt
+                    && what.WidthsThatParse > 0)
+                .OrderByDescending(code => stoppers[code]),
+        ];
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  {costly.Count} of those {stoppers.Count} have something behind them at every width "
+            + "that reads on. THAT is the list:");
+        Console.WriteLine(
+            "    " + (costly.Count == 0
+                ? "none — every stop on this cartridge is two bytes from the end of its block"
+                : string.Join(", ", costly.Take(12).Select(code => $"0x{code:X2} ({stoppers[code]})"))));
 
         // A count says which command is in the way; it does not say how long that
         // command is, and guessing a length is worse than not knowing one — a wrong
@@ -5904,6 +5945,9 @@ public static class Program
 
             Follow(run);
             var asked = new List<(int, int, bool)>([.. run.ItemsAsked.Select(a => (a.ItemId, a.Count, a.Carried))]);
+            var stoppedAt = new List<byte>();
+
+            if (run.StoppedAt is { } firstUnread) stoppedAt.Add(firstUnread);
 
             int? gives = run.GivesItem;
             int givesCount = run.GivesCount;
@@ -5940,6 +5984,8 @@ public static class Program
                 asked.AddRange(run.ItemsAsked.Select(a => (a.ItemId, a.Count, a.Carried)));
                 Follow(run);
 
+                if (run.StoppedAt is { } unread) stoppedAt.Add(unread);
+
                 gives ??= run.GivesItem;
                 if (run.GivesItem is not null) givesCount = run.GivesCount;
 
@@ -5964,6 +6010,7 @@ public static class Program
                 Walked = walked,
                 Asked = asked,
                 StoppedAtAQuestion = run.Question is not null,
+                StoppedAt = stoppedAt,
             };
         }
 
@@ -6419,6 +6466,45 @@ public static class Program
         Console.WriteLine();
         Console.WriteLine("    try --routines to see what each of those is asked, then --answer");
         Console.WriteLine("    one of them and run this again. What opens is the measurement.");
+
+        // AND THE OTHER ERROR BAR, WHICH WAS NOT HERE.
+        //
+        // The routines are the game's own code and nothing in this project will ever follow
+        // one. A command with no width is not that: it is a gap in a table in this repository,
+        // and a script that stops at one comes back short with no error anywhere. One byte with
+        // no entry hid nineteen people on eleven maps, and every reading of this cartridge
+        // reported a smaller world, cleanly, for as long as it was missing.
+        //
+        // The two must not be printed as one number and must not be left as one. A routine is
+        // the boundary; a missing width is a job.
+        Console.WriteLine();
+
+        if (played.UnreadCommands.Count == 0)
+        {
+            Console.WriteLine(
+                "  and not one script it ran stopped at a command with no width — the reading is");
+            Console.WriteLine(
+                "  not what is holding this run back");
+        }
+        else
+        {
+            Console.WriteLine(
+                $"  {played.UnreadCommands.Values.Sum()} script run(s) stopped at "
+                + $"{played.UnreadCommands.Count} command(s) this project has no width for");
+
+            foreach ((byte code, int times) in played.UnreadCommands.OrderByDescending(p => p.Value).Take(8))
+                Console.WriteLine($"    0x{code:X2} stopped {times} run(s)");
+
+            Console.WriteLine();
+            Console.WriteLine(
+                "    unlike the routines above, these are not the game's code — they are a gap in");
+            Console.WriteLine(
+                "    a table in this repository. Everything past one of them is unreached in a way");
+            Console.WriteLine(
+                "    that looks exactly like a person having nothing more to say. --scripts ranks");
+            Console.WriteLine(
+                "    them across the whole cartridge and --derive scores the widths.");
+        }
 
         static string Why(StoppedBecause stopped) => stopped switch
         {
