@@ -8400,6 +8400,13 @@ public static class Program
         // of the whole image for a byte would mostly find that byte inside an argument.
         var sites = new Dictionary<byte, List<int>>();
 
+        // And what was opened, by kind — the project's standing answer to the fault that keeps
+        // coming back. This report rolled its own four-kind list and was blind to the fifth for
+        // as long as it existed; nothing failed, because nothing can fail in here. A line per
+        // kind cannot stop that happening, but it makes it visible in the output the moment it
+        // does: a kind with no line is a kind nothing looked at.
+        var kinds = new Dictionary<string, int>();
+
         // Every script on every map, and everything reachable from each of them.
         //
         // This used to run each person's script on a fresh save and record where that
@@ -8422,8 +8429,16 @@ public static class Program
             //
             // A width nobody derives is a read that stops, and a read that stops does not
             // fail: it comes back clean and quietly contains less.
-            foreach (uint start in EveryScriptOn(map).Select(what => what.Address))
+            foreach (SetsAFlag what in EveryScriptOn(map))
             {
+                string kind = what.What.StartsWith("on ", StringComparison.Ordinal)
+                    ? string.Join(" ", what.What.Split(' ').Take(2))
+                    : what.What.Split(' ')[0];
+
+                kinds[kind] = kinds.GetValueOrDefault(kind) + 1;
+
+                uint start = what.Address;
+
                 foreach (uint reachable in ScriptReader.Reachable(rom, start))
                 {
                     if (ScriptReader.StoppedAt(rom, reachable) is not { } code) continue;
@@ -8435,6 +8450,14 @@ public static class Program
                 }
             }
         }
+
+        Console.WriteLine(
+            "  opened, by kind: "
+            + string.Join(", ", kinds.OrderByDescending(k => k.Value).Select(k => $"{k.Value} {k.Key}")));
+        Console.WriteLine(
+            "    a kind with no line here is a kind nothing looked at, which reads exactly like");
+        Console.WriteLine(
+            "    a kind with nothing in it. This report was blind to the fifth for a year.");
 
         // Every pointer in the image, once. What it is for is below: a width that carries the
         // read on into an address something else names has swallowed a block boundary.
