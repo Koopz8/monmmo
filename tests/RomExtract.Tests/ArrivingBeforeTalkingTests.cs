@@ -1,5 +1,7 @@
 using PokeMmo.Core.Scripts;
 using PokeMmo.Core.World;
+using PokeMmo.RomExtract;
+using PokeMmo.RomExtract.Scripts;
 using PokeMmo.Server;
 using Xunit;
 
@@ -189,5 +191,77 @@ public class ArrivingBeforeTalkingTests
         Assert.True(
             played.TraceDropped >= 50,
             $"it dropped {played.TraceDropped}, so the overflow is invisible");
+    }
+
+    /// <summary>
+    /// And the runner itself records the read, with what was in the variable at that moment.
+    /// <para>
+    /// The four above run against a stand-in that hands its touches over ready-made, which
+    /// guards the walk's plumbing and not the recording. This one runs bytes: a
+    /// <c>setvar</c> and then a <c>compare</c> on the same variable.
+    /// </para>
+    /// <para>
+    /// Both halves are asserted because both were missing. <c>VariablesWritten</c> has existed
+    /// all along and it is a dictionary of final values — no order, and no reads at all — so
+    /// "the counter ended on five" and "the ball was looking at five" have been the same
+    /// sentence, and they are the two different findings this whole milestone is about.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TheRunnerRecordsAReadAndWhatItHeld()
+    {
+        var image = new byte[0x2000];
+
+        // setvar <counter>, 2
+        image[0x100] = 0x16;
+        image[0x101] = unchecked((byte)Counter);
+        image[0x102] = Counter >> 8;
+        image[0x103] = Ready;
+        image[0x104] = 0;
+
+        // compare <counter>, 3
+        image[0x105] = 0x21;
+        image[0x106] = unchecked((byte)Counter);
+        image[0x107] = Counter >> 8;
+        image[0x108] = 3;
+        image[0x109] = 0;
+
+        image[0x10A] = 0x02;                    // end
+
+        ScriptRun run = ScriptRunner.Run(new Rom(image), 0x08000100, watch: Counter);
+
+        Assert.Collection(
+            run.Touched,
+            first =>
+            {
+                Assert.True(first.Wrote);
+                Assert.Equal(Ready, first.Value);
+                Assert.Equal(0, first.Held);
+            },
+            second =>
+            {
+                Assert.False(second.Wrote);
+                Assert.Equal(Ready, second.Held);
+                Assert.Equal(3, second.Value);
+            });
+    }
+
+    /// <summary>
+    /// And records nothing when nobody asked, because a diagnostic that costs the measurement
+    /// is not one — a full run touches variables tens of thousands of times.
+    /// </summary>
+    [Fact]
+    public void AndNothingAtAllWhenNobodyIsWatching()
+    {
+        var image = new byte[0x2000];
+
+        image[0x100] = 0x16;
+        image[0x101] = unchecked((byte)Counter);
+        image[0x102] = Counter >> 8;
+        image[0x103] = Ready;
+        image[0x104] = 0;
+        image[0x105] = 0x02;
+
+        Assert.Empty(ScriptRunner.Run(new Rom(image), 0x08000100).Touched);
     }
 }
