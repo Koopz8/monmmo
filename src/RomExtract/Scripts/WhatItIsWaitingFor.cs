@@ -453,6 +453,18 @@ public static class WhatItIsWaitingFor
                 if (command.Code is ScriptCommands.Goto or ScriptCommands.Call
                     && rom.IsRomAddress(command.Pointer()))
                 {
+                    // A call comes back, so whatever it puts in a variable is in there for
+                    // the rest of this block — and most of the work in this game is at the
+                    // other end of a call. Without this, a script that sets its own switch
+                    // inside a called block and reads it back in the caller reports the read
+                    // as a gate on somebody else's number.
+                    //
+                    // Only the callee's straight line: what it does before its first
+                    // conditional is what happens whichever way that conditional goes, and
+                    // crediting the caller with an arm of it would be inventing a path.
+                    if (command.Code == ScriptCommands.Call)
+                        StraightLineWrites(rom, command.Pointer(), put, 8);
+
                     queue.Enqueue((command.Pointer(), 0, chain, new(put)));
 
                     if (command.Code == ScriptCommands.Goto) break;
@@ -498,6 +510,43 @@ public static class WhatItIsWaitingFor
         }
 
         return found.ToDictionary(p => p.Key, p => (IReadOnlyList<WritesAVariable>)p.Value);
+    }
+
+    /// <summary>
+    /// What a called block puts in variables before it branches, folded into the caller's view.
+    /// <para>
+    /// Straight line only, and deliberately: what a block does before its first conditional
+    /// happens whichever way that conditional goes, and everything after it depends on an
+    /// answer this has not chosen. Crediting the caller with one arm of a callee's branch
+    /// would be inventing a path through somebody else's script.
+    /// </para>
+    /// </summary>
+    private static void StraightLineWrites(
+        Rom rom, uint address, Dictionary<int, (byte How, int Value)> put, int depth)
+    {
+        if (depth <= 0 || rom.ToOffsetOrNull(address) is null) return;
+
+        foreach (ScriptCommand command in ScriptReader.Read(rom, address))
+        {
+            if (command.Code is ScriptCommands.GotoIf or ScriptCommands.CallIf) return;
+
+            if (command.Code is SetVar or AddVar or SubVar or CopyVar or CopyVarIfNotZero
+                && command.Arguments.Length >= 4)
+            {
+                put[command.Word()] = (command.Code, command.Word(2));
+            }
+
+            if (command.Code == SpecialCalls.SpecialVar && command.Arguments.Length >= 4)
+                put[command.Word()] = (SpecialCalls.SpecialVar, command.Word(2));
+
+            if (command.Code is ScriptCommands.Goto or ScriptCommands.Call
+                && rom.IsRomAddress(command.Pointer()))
+            {
+                StraightLineWrites(rom, command.Pointer(), put, depth - 1);
+
+                if (command.Code == ScriptCommands.Goto) return;
+            }
+        }
     }
 
     private const byte SetVar = 0x16;

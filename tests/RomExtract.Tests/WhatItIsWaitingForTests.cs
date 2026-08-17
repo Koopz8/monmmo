@@ -590,6 +590,68 @@ public class WhatItIsWaitingForTests
     }
 
     /// <summary>
+    /// A <c>call</c> comes back, so what it put in a variable is in there afterwards.
+    /// <para>
+    /// Most of the work in this game is at the other end of a call — the fault
+    /// <c>ReadAll</c> was written for in the first place. A script that sets its own switch
+    /// inside a called block and reads it back in the caller has decided something, and
+    /// without this the read prints as a gate on somebody else's number: the exact wrong
+    /// answer this rule exists to prevent, reached by a different route.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void WhatACalledBlockPutsInAVariableIsStillThereAfterwards()
+    {
+        var image = new byte[0x2000];
+
+        Put(image, 0x100, Call);
+        Pointer(image, 0x101, 0x08000500);
+        Put(image, 0x105, Compare, 0x01, 0x40, 0x02, 0x00);
+        Put(image, 0x10A, GotoIf, IfEqual);
+        Pointer(image, 0x10C, 0x08000200);
+        Put(image, 0x110, Release, End);
+        Put(image, 0x200, SetFlag, Opened & 0xFF, Opened >> 8, Release, End);
+
+        Put(image, 0x500, SetVar, 0x01, 0x40, 0x02, 0x00, Return);
+
+        OnTheWay step = Assert.Single(WhatItIsWaitingFor.PathTo(new Rom(image), 0x08000100, Opened)!);
+
+        Assert.True(step.DecidedHere);
+        Assert.Contains("NOT A GATE", step.ToString());
+    }
+
+    /// <summary>
+    /// But only its straight line. What a called block does after its own conditional depends
+    /// on an answer nothing here has chosen, and crediting the caller with one arm of it is
+    /// inventing a path through somebody else's script.
+    /// </summary>
+    [Fact]
+    public void AndOnlyWhatTheCalledBlockDoesBeforeItsOwnBranch()
+    {
+        var image = new byte[0x2000];
+
+        Put(image, 0x100, Call);
+        Pointer(image, 0x101, 0x08000500);
+        Put(image, 0x105, Compare, 0x01, 0x40, 0x02, 0x00);
+        Put(image, 0x10A, GotoIf, IfEqual);
+        Pointer(image, 0x10C, 0x08000200);
+        Put(image, 0x110, Release, End);
+        Put(image, 0x200, SetFlag, Opened & 0xFF, Opened >> 8, Release, End);
+
+        // The write is behind the callee's own branch, so it is not something the caller can
+        // count on having happened.
+        Put(image, 0x500, CheckFlag, Waiting & 0xFF, Waiting >> 8);
+        Put(image, 0x503, GotoIf, IfEqual);
+        Pointer(image, 0x505, 0x08000600);
+        Put(image, 0x509, Return);
+        Put(image, 0x600, SetVar, 0x01, 0x40, 0x02, 0x00, Return);
+
+        IReadOnlyList<OnTheWay> way = WhatItIsWaitingFor.PathTo(new Rom(image), 0x08000100, Opened)!;
+
+        Assert.False(way[^1].DecidedHere);
+    }
+
+    /// <summary>
     /// Who could put the right number in a variable, which is the mirror of who sets a flag.
     /// <para>
     /// What stands in front of SAFFRON is <c>0x4001 != 0 AND 0x4001 != 1</c> — a counter, not
