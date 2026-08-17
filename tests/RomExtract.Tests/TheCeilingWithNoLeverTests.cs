@@ -140,6 +140,136 @@ public sealed class TheCeilingWithNoLeverTests
         Assert.NotEmpty(played.Party);
     }
 
+    /// <summary>A place that asks for two different amounts inside one script.</summary>
+    private const uint AsksTwoPrices = 0x4000;
+
+    /// <summary>
+    /// Three asking places across two maps, one of which asks twice and one of which is the
+    /// SAME script address on both maps.
+    /// <para>
+    /// Kept apart from <see cref="ThreeShops"/> because the count those tests assert is the
+    /// thing this fixture deliberately changes. Two of whatever the key is made of, per 194:
+    /// two addresses on one map, and one address on two maps.
+    /// </para>
+    /// </summary>
+    private static WorldData FourCounters() =>
+        new(
+        [
+            Room("1.0") with
+            {
+                Warps = [new Warp(3, 1, 0, "2.0")],
+                Objects =
+                [
+                    new MapObject(1, 1, 1, 1, Direction.Down, 0, false)
+                    {
+                        ScriptAddress = AsksAndGivesNothing,
+                    },
+                    new MapObject(2, 1, 2, 1, Direction.Down, 0, false)
+                    {
+                        ScriptAddress = AsksTwoPrices,
+                    },
+                ],
+            },
+            Room("2.0") with
+            {
+                Warps = [new Warp(3, 1, 0, "1.0")],
+                Objects =
+                [
+                    new MapObject(1, 1, 1, 1, Direction.Down, 0, false)
+                    {
+                        ScriptAddress = AsksAndGivesNothing,
+                    },
+                ],
+            },
+        ]);
+
+    private static Attempt Counters() =>
+        Autoplayer.Play(
+            FourCounters(),
+            "1.0",
+            TestRules.All,
+            (address, _, _) => address switch
+            {
+                // The flag is what makes the fixpoint run a second pass — without something
+                // changing, the run settles after one and "places, not times" is untestable.
+                AsksTwoPrices => new PlayedScript([7], [], [], [], null, null)
+                {
+                    MoneyWalkedPast = [1000, 10000],
+                },
+                _ => Nothing with { MoneyWalkedPast = [350] },
+            });
+
+    /// <summary>
+    /// THE COUNT AND THE LIST ARE TWO CLAIMS AND THEY HAVE TO AGREE.
+    /// <para>
+    /// This ceiling was a number with no list for eight milestones. "8 places ask the run for
+    /// money" reads the same whether those eight are eight shopkeepers or one shopkeeper and
+    /// seven counters nobody has looked at — and 208 read a coin counter off the cartridge
+    /// without being able to say whether the run stands in front of one. A number with no list
+    /// cannot come back surprising.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TheListIsAsLongAsTheCountAndSaysWhichPlacesAsked()
+    {
+        Attempt played = Counters();
+
+        Assert.Equal(3, played.WalkedPastAMoneyCheck);
+        Assert.Equal(played.WalkedPastAMoneyCheck, played.MoneyChecks.Count);
+
+        Assert.Equal(
+            new[] { ("1.0", AsksAndGivesNothing), ("1.0", AsksTwoPrices), ("2.0", AsksAndGivesNothing) },
+            played.MoneyChecks.Select(m => (m.MapId, m.Address)).OrderBy(m => m.MapId).ThenBy(m => m.Address));
+    }
+
+    /// <summary>
+    /// The same script on two maps is two places, which is 196's key arriving somewhere new.
+    /// </summary>
+    [Fact]
+    public void TheSameScriptOnTwoMapsIsTwoPlacesThatAsked()
+    {
+        IReadOnlyList<AskedForMoney> asked =
+            [.. Counters().MoneyChecks.Where(m => m.Address == AsksAndGivesNothing)];
+
+        Assert.Equal(2, asked.Count);
+        Assert.Equal(new[] { "1.0", "2.0" }, asked.Select(a => a.MapId).Order());
+    }
+
+    /// <summary>
+    /// A place that asks two different amounts keeps both.
+    /// <para>
+    /// The cartridge has one: the coin counter offers fifty coins and five hundred inside one
+    /// person's script, at two different prices. Keeping only the first would say there is one
+    /// price where there are two, and would say it silently.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void APlaceThatAsksTwoDifferentAmountsKeepsBoth()
+    {
+        AskedForMoney twice = Assert.Single(Counters().MoneyChecks, m => m.Address == AsksTwoPrices);
+
+        Assert.Equal(new[] { 1000, 10000 }, twice.Prices.Order());
+    }
+
+    /// <summary>
+    /// PLACES AND NOT TIMES, which is 195's rule and the one a fixpoint breaks by default.
+    /// <para>
+    /// Every pass runs every script again, so a list that appended would grow with the number
+    /// of passes and the count beside it would stop being a count of places. The assertion on
+    /// the pass count is not decoration: with one pass this test cannot fail.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AskingOnEveryPassIsStillOnePlace()
+    {
+        Attempt played = Counters();
+
+        Assert.True(played.Passes > 1, $"the fixture has to run more than once; it ran {played.Passes} time(s)");
+
+        Assert.Equal(3, played.MoneyChecks.Count);
+        Assert.All(played.MoneyChecks, m => Assert.Equal(m.Prices.Distinct().Count(), m.Prices.Count));
+    }
+
     /// <summary>
     /// And the byte-level half: a real <c>0x92</c> in a real image is what produces this at all.
     /// <para>

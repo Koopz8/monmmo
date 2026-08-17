@@ -309,6 +309,24 @@ public sealed record CounterOutOfReach(
 /// <param name="What">What changed hands on the far side of the unanswered question.</param>
 public sealed record PaidForNothing(string MapId, uint Address, int Price, string What);
 
+/// <summary>
+/// One place the run was asked about money and answered neither way, and the amounts it was
+/// asked for there.
+/// <para>
+/// <b>The ceiling was a count with no list for eight milestones.</b> "8 places ask the run for
+/// money" reads the same whether those eight are eight shopkeepers or one shopkeeper and seven
+/// counters nobody has looked at, and 208 read a coin counter off the cartridge without being
+/// able to say whether the run stands in front of it. A number with no list cannot come back
+/// empty and cannot come back surprising.
+/// </para>
+/// <para>
+/// The prices are a list because one place can ask more than one: the coin counter asks two
+/// different amounts inside one person's script, and collapsing them to the first would say
+/// there is one price where the cartridge has two.
+/// </para>
+/// </summary>
+public sealed record AskedForMoney(string MapId, uint Address, IReadOnlyList<int> Prices);
+
 /// <summary>Something the playthrough bought, and what it cost.</summary>
 public sealed record Bought(int ItemId, int Count, int Price, string MapId);
 
@@ -559,6 +577,15 @@ public sealed record Attempt(
     /// </para>
     /// </summary>
     public IReadOnlyList<PaidForNothing> TookSomethingAnyway { get; init; } = [];
+
+    /// <summary>
+    /// The places behind <see cref="WalkedPastAMoneyCheck"/>, with what each one asked for.
+    /// <para>
+    /// The count says how wide the gap is and this says what is in it. They are different
+    /// claims and this project has been printing only the first.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<AskedForMoney> MoneyChecks { get; init; } = [];
 
     /// <summary>
     /// Shop counters on maps it reached, whether or not it got to one — the denominator above
@@ -1025,7 +1052,7 @@ public static class Autoplayer
         // Two numbers because they answer different questions. "It walked past 40 checks" is
         // the size of the gap; "and 3 of those handed something over" is the size of what the
         // gap is currently worth, and only the second is a claim about the party being wrong.
-        var walkedPastAMoneyCheck = new HashSet<(string MapId, uint Address)>();
+        var walkedPastAMoneyCheck = new Dictionary<(string MapId, uint Address), SortedSet<int>>();
         var tookSomethingAnyway = new Dictionary<(string MapId, uint Address), (int Price, string What)>();
 
         var purse = money;
@@ -1168,7 +1195,12 @@ public static class Autoplayer
                     // point: an unlevered gap that nobody counts reads exactly like a floor.
                     if (did.MoneyWalkedPast.Count > 0)
                     {
-                        walkedPastAMoneyCheck.Add((map.Id, what.Address));
+                        if (!walkedPastAMoneyCheck.TryGetValue((map.Id, what.Address), out SortedSet<int>? asked))
+                        {
+                            walkedPastAMoneyCheck[(map.Id, what.Address)] = asked = [];
+                        }
+
+                        foreach (int price in did.MoneyWalkedPast) asked.Add(price);
 
                         string? handed =
                             did.Gives is { } mon ? $"#{mon.Species} at level {mon.Level}"
@@ -1714,6 +1746,13 @@ public static class Autoplayer
             MoneyLeft = purse,
             CountersStoodAt = stoodAtACounter.Count,
             WalkedPastAMoneyCheck = walkedPastAMoneyCheck.Count,
+            MoneyChecks =
+            [
+                .. walkedPastAMoneyCheck
+                    .OrderBy(p => p.Key.MapId, StringComparer.Ordinal)
+                    .ThenBy(p => p.Key.Address)
+                    .Select(p => new AskedForMoney(p.Key.MapId, p.Key.Address, [.. p.Value])),
+            ],
             TookSomethingAnyway =
                 [.. tookSomethingAnyway.Select(e => new PaidForNothing(e.Key.MapId, e.Key.Address, e.Value.Price, e.Value.What))],
             CountersOnReachedGround = onReachedGround.Count,

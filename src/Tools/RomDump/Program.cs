@@ -6282,6 +6282,26 @@ public static class Program
             $"  {played.WalkedPastAMoneyCheck} place(s) asked it for money and it answered"
             + " neither way — a CEILING, and the only one with no lever");
 
+        // AND WHICH PLACES, which this printed a count of and never a list.
+        //
+        // "8 places ask the run for money" reads the same whether those eight are eight
+        // shopkeepers or one shopkeeper and seven counters nobody has looked at. 208 read a
+        // coin counter off the cartridge and could not say whether the run stands in front of
+        // it, because this line was a number with no list — the same shape as the flags that
+        // look moved and are not.
+        Dictionary<string, MapData> named = world.Maps.ToDictionary(m => m.Id);
+
+        foreach (AskedForMoney asked in played.MoneyChecks.Take(12))
+        {
+            Console.WriteLine(
+                $"    {asked.MapId,-8} {(named.TryGetValue(asked.MapId, out MapData? on) ? on.Name : ""),-16}"
+                + $" 0x{asked.Address:X8}  wants "
+                + string.Join(" or ", asked.Prices));
+        }
+
+        if (played.MoneyChecks.Count > 12)
+            Console.WriteLine($"    ... and {played.MoneyChecks.Count - 12} more");
+
         if (played.TookSomethingAnyway.Count == 0)
         {
             Console.WriteLine(
