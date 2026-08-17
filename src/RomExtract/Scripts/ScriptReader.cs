@@ -1111,6 +1111,29 @@ public static class ScriptCommands
         // pairing, and what any of them MEAN is still not claimed.
         [0xC2] = 2,
 
+        // Nothing, on five sites — and every one of them is followed by a comparison of
+        // the variable it must have just written.
+        //
+        //   43 | 18 0D 80 01 00 | 19 04 80 0D 80        0x081A8C27, 0x0816CD83
+        //   43 | 21 0D 80 06 00 | 06 01 <0x0816891F>    0x081688BA
+        //   43 | 21 0D 80 06 00 | 06 05 <0x081A77A9>    0x0816D462
+        //   43 | 18 0D 80 01 00 | 7F 00 0D 80           0x081BF500
+        //
+        // 0x18 and 0x21 both take four arguments and both are handed 0x800D — this game's
+        // standard result variable — and what comes after either reads 0x800D again or
+        // branches on it. That is 0xB3's shape: an argument column is a coincidence, an
+        // argument that reappears as the next command's operand is not, and here the
+        // command has no arguments at all and the DEPENDENCY is still visible.
+        //
+        // All five are block starts. Two are goto targets and one is the far side of the
+        // 0xC1 at 0x0816CD83 that milestone 199 read.
+        //
+        // One and two are the false column again: 0x0D at all five and then 0x80 at all
+        // five, which is not ten agreements but one — the two halves of 0x800D, read as if
+        // they were opcodes. Four is a nop slide. That makes three milestones running where
+        // the widest-looking agreement was the wrong answer.
+        [0x43] = 0,
+
         // One byte, and the column says so. Fifteen places in this game a read stops on
         // 0x97; at every one of them the byte after it is 1, 2 or 3 and nothing else,
         // which is an argument rather than an opcode — opcodes vary between sites and
