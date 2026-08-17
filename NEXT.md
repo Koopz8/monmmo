@@ -6,20 +6,20 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **`0x3F` is seven.** Twenty sites of one shape — a byte, a counter, `0xFF` (how
-  this cartridge writes *the player*), and two little-endian words. Six parses
-  too; what decides it is that at seven the next command is `compare` **20 of
-  20** and at six it is a nop 20 of 20. 80 → 65 stopped blocks, and **no world
-  number moved**.
-- **`--derive` cannot say so**, and I nearly made it lie. It throws out both
-  widths for resuming on a column — sound in general, backwards here, because
-  twenty sites of one idiom mean the *right* width resumes on a column too. I
-  wrote a suppression and removed it: tuning a scorer until it agrees with a
-  reading is decoration, not evidence.
-- **Kept the honest half**: the report says *which* rule threw a width out (it
-  named three at once before, and one of them was throwing out the right answer),
-  and prints how much of their run-up the sites share so the column test's worth
-  is visible. Measured, printed, not wired into any verdict.
-- Padding reads as an idiom — four sites in dead space score a perfect one. That
-  weakness is in the measure's own doc, and is the second reason it doesn't vote.
-- A test was renamed for what it actually asserts: it never told six from seven.
+- **The first width that was WRONG rather than missing.** `[0x1F]` was 5, from the
+  Ruby set; it is 2. Five consecutive blocks say so. A missing width stops a read
+  and says so; a wrong one stops nothing — it eats the commands after it and reads
+  whatever it lands on.
+- **It never failed.** It produced a phantom stop at `0xE6` twenty-four bytes
+  downstream, on a byte sitting *inside a `gotoif`'s pointer*.
+- **`--stops 0xNN`** is the new instrument: every stopped read of one command,
+  the run-up, what follows, what each width would resume on — and **where the read
+  started**, which is the half that mattered. A stop is only a command if the
+  reader was in step to begin with.
+- **`0xA7` = 2** (the block after it is named by something else, 4 of 4) and
+  **`0xC0` = 2** (3 of 5 sites one shape; the other 2 had already drifted).
+  65 → 58 stopped blocks, 3771 → 3806 reached, 258 → 259 flags.
+- **A zero-filled fixture is a nop slide** — one guard passed at the wrong width
+  because a drifting read walked through sixty 0x00s to the target. Third fixture
+  defect this session, all the same shape: the fixture was more forgiving than the
+  cartridge.

@@ -212,6 +212,7 @@ public static class Program
         if (options.InTheImage.Count > 0) WriteInTheImage(rom, options.InTheImage);
         if (options.ClimbFrom.Count > 0) WriteClimb(rom, options.ClimbFrom);
         if (options.WhoWrites.Count > 0) WriteWhoWrites(rom, options.WhoWrites);
+        if (options.Stops.Count > 0) WriteStops(rom, options.Stops);
 
         if (options.SequenceWidths) WriteSequenceWidths(rom);
 
@@ -6922,6 +6923,125 @@ public static class Program
     }
 
     /// <summary>
+    /// Every stopped read of one command, with the bytes around it.
+    /// <para>
+    /// <b>A width is settled by a column, and nothing here could show one.</b> <c>--scripts</c>
+    /// prints one example per command — enough to know a command is in the way, and not enough
+    /// to tell which width is right, because that is a question about what all its sites have
+    /// in common. Every width adopted in this project was read off a column pasted together by
+    /// hand from a script somewhere else.
+    /// </para>
+    /// </summary>
+    private static void WriteStops(Rom rom, IReadOnlyList<byte> codes)
+    {
+        Console.WriteLine();
+        Console.WriteLine("WHERE READS STOP");
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        var sites = new Dictionary<byte, List<int>>();
+        var from = new Dictionary<int, uint>();
+        var seen = new HashSet<uint>();
+
+        foreach (LoadedMap map in library.All())
+        {
+            foreach (SetsAFlag script in EveryScriptOn(map))
+            {
+                foreach (uint block in ScriptReader.Reachable(rom, script.Address))
+                {
+                    if (!seen.Add(block)) continue;
+                    if (ScriptReader.StoppedAt(rom, block) is not { } code) continue;
+                    if (!codes.Contains(code)) continue;
+                    if (ScriptReader.StoppedAtOffset(rom, block) is not { } at) continue;
+
+                    if (!sites.TryGetValue(code, out List<int>? where)) sites[code] = where = [];
+
+                    if (!where.Contains(at)) where.Add(at);
+
+                    // AND WHERE THE READ STARTED, WHICH IS THE HALF THAT MATTERS.
+                    //
+                    // A stop is reported at the byte the reader could not step over, and that
+                    // byte is only a command if the reader was in step to begin with. 0xE6's two
+                    // sites are both inside a `gotoif`'s pointer — the block they belong to
+                    // decodes perfectly from its own start — so what is wrong is the ADDRESS the
+                    // read began at, not the command it ended on. Without the start printed
+                    // beside the stop there is no way to tell those apart, and one of them is a
+                    // width to derive while the other is a bogus pointer to find.
+                    from[at] = block;
+                }
+            }
+        }
+
+        foreach (byte code in codes)
+        {
+            List<int> where = sites.GetValueOrDefault(code, []);
+
+            Console.WriteLine();
+            Console.WriteLine(
+                $"  0x{code:X2} — {where.Count} stopped read(s)"
+                + (where.Count > 1
+                    ? $", {WhatIsBehindAStop.AreOneIdiom(rom, where):P0} of them sharing their run-up"
+                    : ""));
+
+            if (where.Count == 0)
+            {
+                Console.WriteLine("    nothing stops at it — it is not in the way of anything");
+                continue;
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("    the run-up, the command, and what follows — the column is the answer:");
+
+            foreach (int at in where.Take(16))
+            {
+                string before = string.Join(" ", Enumerable.Range(0, 5)
+                    .Select(i => at - 5 + i >= 0 ? $"{rom.ReadU8(at - 5 + i):X2}" : ".."));
+
+                string after = string.Join(" ", Enumerable.Range(1, 10)
+                    .Select(i => at + i < rom.Length ? $"{rom.ReadU8(at + i):X2}" : ".."));
+
+                uint start = from.GetValueOrDefault(at);
+
+                Console.WriteLine(
+                    $"      0x{at:X6}  {before} | {rom.ReadU8(at):X2} | {after}"
+                    + $"   read from 0x{start:X8}"
+                    + (start != 0 && at - (int)(start - Rom.BaseAddress) is var into and > 0
+                        ? $" (+{into})"
+                        : ""));
+            }
+
+            if (where.Count > 16) Console.WriteLine($"      ... and {where.Count - 16} more");
+
+            // And what each width would resume on, across all of them at once. A width that
+            // lands on padding at every site has landed in the tail of an argument; one that
+            // lands on a real command at every site is the answer in plain sight.
+            Console.WriteLine();
+            Console.WriteLine("    what each width resumes on, across every site:");
+
+            for (var width = 0; width <= 8; width++)
+            {
+                var landing = new Dictionary<byte, int>();
+
+                foreach (int at in where)
+                {
+                    if (at + 1 + width >= rom.Length) continue;
+
+                    byte next = rom.ReadU8(at + 1 + width);
+
+                    landing[next] = landing.GetValueOrDefault(next) + 1;
+                }
+
+                if (landing.Count == 0) continue;
+
+                Console.WriteLine(
+                    $"      {width} bytes: "
+                    + string.Join(", ", landing.OrderByDescending(l => l.Value).Take(4)
+                        .Select(l => $"0x{l.Key:X2} ({ScriptCommands.NameOf(l.Key)}) x{l.Value}")));
+            }
+        }
+    }
+
+    /// <summary>
     /// Everywhere in the file a variable is written, and what opens it.
     /// <para>
     /// The mirror of <see cref="WriteInTheImage"/>, and it was missing for as long as that
@@ -10375,6 +10495,11 @@ public static class Program
                                     Then it climbs: what names this, what names that, until it
                                     reaches something a map opens, or a literal, which is the
                                     code boundary with an address on it.
+              --stops 0xNN[,0xNN]   every place a read stopped at this command, with the bytes
+                                    around each and what each candidate width would resume on.
+                                    --scripts prints ONE example per command, which is enough to
+                                    know a command is in the way and not enough to see a column
+                                    — and a column across the sites is what settles a width.
               --who-writes 0xNNNN   every place in the WHOLE FILE that puts a number in one of
                                     the story's own variables, and whether the map scan ever
                                     decoded that byte. The other half of --in-the-image: a gate
@@ -10596,6 +10721,9 @@ public static class Program
         /// <summary>Variables to hunt through the whole file, the way flags already are.</summary>
         public IReadOnlyList<int> WhoWrites { get; private init; } = [];
 
+        /// <summary>Commands to show every stopped read of, with the bytes around each.</summary>
+        public IReadOnlyList<byte> Stops { get; private init; } = [];
+
         /// <summary>Whether the playthrough may take the ferry, which makes its reach a ceiling.</summary>
         public bool Boat { get; private init; }
 
@@ -10756,6 +10884,7 @@ public static class Program
             var inTheImage = new List<int>();
             var climbFrom = new List<uint>();
             var whoWrites = new List<int>();
+            var stops = new List<byte>();
             bool boat = false;
             var surf = false;
             var inOrder = false;
@@ -11023,6 +11152,16 @@ public static class Program
 
                         break;
                     }
+                    case "--stops":
+                    {
+                        foreach (string named in Next(args, ref i, "--stops").Split(','))
+                        {
+                            if (TryNumber(named, out int code) && code is >= 0 and <= 0xFF)
+                                stops.Add((byte)code);
+                        }
+
+                        break;
+                    }
                     case "--who-writes":
                     {
                         foreach (string named in Next(args, ref i, "--who-writes").Split(','))
@@ -11276,6 +11415,7 @@ public static class Program
                 InTheImage = inTheImage,
                 ClimbFrom = climbFrom,
                 WhoWrites = whoWrites,
+                Stops = stops,
                 Boat = boat,
                 Surf = surf,
                 InOrder = inOrder,
