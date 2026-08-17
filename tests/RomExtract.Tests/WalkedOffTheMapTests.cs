@@ -108,6 +108,31 @@ public class WalkedOffTheMapTests
     }
 
     /// <summary>
+    /// AND THE DECOY. Once the walk stops at a wall, nothing the run does can put anybody off
+    /// the map — so the check would be one nothing can fail, which this project treats as no
+    /// check at all. It asks the other half too: does every person the CARTRIDGE places stand
+    /// on the map it places them on? On a real image the answer is yes, everywhere, and an
+    /// answer of yes is only worth having from something that could have said no.
+    /// </summary>
+    [Fact]
+    public void SomebodyTheWorldItselfPlacesOffTheMapIsReported()
+    {
+        MapData start = Room() with
+        {
+            Objects = [Person(1, 0, 0, 0x1000), Person(2, 9, 9, 0x2000)],
+        };
+
+        Attempt played = Autoplayer.Play(
+            new WorldData([start]), "1.0", TestRules.All, (_, _, _) => Nothing);
+
+        WalkedOffTheMap lost = Assert.Single(played.OffTheMap);
+
+        Assert.Equal(2, lost.LocalId);
+        Assert.Equal(9, lost.To.X);
+        Assert.Equal(4, lost.Width);
+    }
+
+    /// <summary>
     /// AND THE ANSWER THAT MEANS THE WALK HAPPENED. Somebody walked one square onto ground
     /// they can stand on has moved, and the run says so — a bound that stopped everybody
     /// would pass every test above and quietly delete the thing this models.
