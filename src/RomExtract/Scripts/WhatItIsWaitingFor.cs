@@ -1,4 +1,5 @@
 using PokeMmo.Core.Scripts;
+using PokeMmo.Core.World;
 
 namespace PokeMmo.RomExtract.Scripts;
 
@@ -497,6 +498,42 @@ public static class WhatItIsWaitingFor
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Every script attached to one map, by what it is attached to.
+    /// <para>
+    /// <b>Four kinds, and the fourth was missing.</b> People, triggers and signs were the
+    /// list; <c>OnEntry</c> — what a map runs on arrival — was not, and it is where this game
+    /// puts a great deal of its story bookkeeping. So "nothing in the world sets this flag"
+    /// was a sentence about three quarters of the world, and about to be believed.
+    /// </para>
+    /// <para>
+    /// Gathered here rather than in whoever is printing, because a list of what counts as
+    /// "every script" is exactly the kind of thing that is quietly incomplete for milestones.
+    /// </para>
+    /// </summary>
+    public static IEnumerable<SetsAFlag> EveryScriptOn(
+        string mapId,
+        IEnumerable<MapObject> people,
+        IEnumerable<MapTrigger> triggers,
+        IEnumerable<MapSign> signs,
+        IEnumerable<MapEntryScript> onEntry)
+    {
+        foreach (MapObject person in people.Where(o => o.HasScript))
+            yield return new SetsAFlag(mapId, $"person {person.LocalId}", person.ScriptAddress);
+
+        foreach (MapTrigger trigger in triggers.Where(t => t.HasScript))
+            yield return new SetsAFlag(mapId, $"trigger ({trigger.X},{trigger.Y})", trigger.ScriptAddress);
+
+        foreach (MapSign sign in signs.Where(s => s.HasScript))
+            yield return new SetsAFlag(mapId, $"sign ({sign.X},{sign.Y})", sign.ScriptAddress);
+
+        foreach (MapEntryScript entry in onEntry.Where(e => e.ScriptAddress != 0))
+        {
+            yield return new SetsAFlag(
+                mapId, $"on arrival (0x{entry.Variable:X4} == {entry.Value})", entry.ScriptAddress);
+        }
     }
 
     /// <summary>

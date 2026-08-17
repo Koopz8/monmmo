@@ -1,3 +1,4 @@
+using PokeMmo.Core.World;
 using PokeMmo.RomExtract.Scripts;
 using Xunit;
 
@@ -725,6 +726,49 @@ public class WhatItIsWaitingForTests
         Put(image, 0x200, SetFlag, Opened & 0xFF, Opened >> 8, Release, End);
 
         Assert.NotNull(WhatItIsWaitingFor.PathTo(new Rom(image), 0x08000100, Opened));
+    }
+
+    /// <summary>
+    /// Every script on a map is four kinds, and the fourth was missing.
+    /// <para>
+    /// People, triggers and signs were the list. <c>OnEntry</c> — what a map runs on arrival —
+    /// was not, and it is where this game keeps a great deal of its story bookkeeping. This
+    /// session came within one line of concluding <em>nothing in the world sets flag
+    /// 0x003E</em> from a scan of three of the four.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void EveryScriptOnAMapIncludesWhatItRunsOnArrival()
+    {
+        IEnumerable<SetsAFlag> found = WhatItIsWaitingFor.EveryScriptOn(
+            "1.57",
+            [new MapObject(1, 1, 1, 1, Direction.Down, 0, false) { ScriptAddress = 0x1000 }],
+            [new MapTrigger(5, 15, 0x4060, 0, 0x2000)],
+            [new MapSign(9, 43, 0, 0x3000)],
+            [new MapEntryScript(0x4050, 1, 0x4000)]);
+
+        Assert.Equal(
+            [
+                "1.57 person 1",
+                "1.57 trigger (5,15)",
+                "1.57 sign (9,43)",
+                "1.57 on arrival (0x4050 == 1)",
+            ],
+            found.Select(s => s.ToString()));
+    }
+
+    /// <summary>And nothing with no script attached is listed as one.</summary>
+    [Fact]
+    public void AndWhatHasNoScriptIsNotListed()
+    {
+        IEnumerable<SetsAFlag> found = WhatItIsWaitingFor.EveryScriptOn(
+            "1.57",
+            [new MapObject(1, 1, 1, 1, Direction.Down, 0, false)],
+            [new MapTrigger(5, 15, 0x4060, 0)],
+            [new MapSign(9, 43, 0, 0)],
+            [new MapEntryScript(0x4050, 1, 0)]);
+
+        Assert.Empty(found);
     }
 
     /// <summary>

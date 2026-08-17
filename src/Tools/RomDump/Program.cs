@@ -6245,17 +6245,13 @@ public static class Program
         var setters = new Lazy<IReadOnlyDictionary<int, IReadOnlyList<SetsAFlag>>>(
             () => WhatItIsWaitingFor.SetBy(
                 rom,
-                MapLibrary.Open(rom).All()
-                    .SelectMany(ScriptsOf)
-                    .Select(s => new SetsAFlag(s.MapId, s.What, s.Address))));
+                MapLibrary.Open(rom).All().SelectMany(EveryScriptOn)));
 
         // And who writes each variable, read the same way and only if something asks.
         var writers = new Lazy<IReadOnlyDictionary<int, IReadOnlyList<WritesAVariable>>>(
             () => WhatItIsWaitingFor.WritesTo(
                 rom,
-                MapLibrary.Open(rom).All()
-                    .SelectMany(ScriptsOf)
-                    .Select(s => new SetsAFlag(s.MapId, s.What, s.Address))));
+                MapLibrary.Open(rom).All().SelectMany(EveryScriptOn)));
 
         foreach (IGrouping<(string ToMapId, string Why), ShutDoor> shut in byTarget.Take(30))
         {
@@ -6709,6 +6705,17 @@ public static class Program
                     "           NOTHING IN THE WORLD SETS IT — it comes out of a routine, not a script");
             }
 
+            // How many of them a run could actually reach the setflag from. A plain read
+            // follows every branch including ones the script has already ruled out, so being
+            // named here is not the same as being a way through — and this thread spent two
+            // rounds in SILPH CO. on the difference.
+            var canReallySet = 0;
+
+            foreach (SetsAFlag sets in removes)
+            {
+                if (WhatItIsWaitingFor.PathTo(rom, sets.Address, who.HiddenBy) is not null) canReallySet++;
+            }
+
             foreach (SetsAFlag sets in removes.Take(3))
             {
                 Console.WriteLine(
@@ -6722,6 +6729,22 @@ public static class Program
             }
 
             if (removes.Count > 3) Console.WriteLine($"           ... and {removes.Count - 3} more that set it");
+
+            // The conclusion across all of them, which no single line above can draw.
+            if (canReallySet == 0)
+            {
+                Console.WriteLine(
+                    $"           SO NOTHING THAT CAN ACTUALLY RUN SETS 0x{who.HiddenBy:X4} — all "
+                    + $"{removes.Count} were named by a read that walks arms no run could take.");
+                Console.WriteLine(
+                    "           This door is behind the code boundary, not behind a walk.");
+            }
+            else if (canReallySet < removes.Count)
+            {
+                Console.WriteLine(
+                    $"           {canReallySet} of those {removes.Count} can really reach the setflag; "
+                    + "the rest are arms no run could take.");
+            }
         }
 
         if (world.Find(mapId)?.Objects.FirstOrDefault(o => o.LocalId == who.LocalId) is not { } person
@@ -6948,19 +6971,25 @@ public static class Program
     private const byte ClearFlagCode = 0x2A;
 
     /// <summary>Every script on one map, with where it came from.</summary>
-    private static IEnumerable<(string MapId, string What, uint Address)> ScriptsOf(LoadedMap map)
-    {
-        string mapId = WorldExporter.MapId(map.Bank, map.Number);
+    private static IEnumerable<(string MapId, string What, uint Address)> ScriptsOf(LoadedMap map) =>
+        EveryScriptOn(map).Select(s => (s.MapId, s.What, s.Address));
 
-        foreach (MapObject person in map.Objects.Where(o => o.HasScript))
-            yield return (mapId, $"person {person.LocalId}", person.ScriptAddress);
-
-        foreach (MapTrigger trigger in map.Triggers.Where(t => t.HasScript))
-            yield return (mapId, $"trigger ({trigger.X},{trigger.Y})", trigger.ScriptAddress);
-
-        foreach (MapSign sign in map.Signs.Where(s => s.HasScript))
-            yield return (mapId, $"sign ({sign.X},{sign.Y})", sign.ScriptAddress);
-    }
+    /// <summary>
+    /// Every script on one map, including what it runs on arrival.
+    /// <para>
+    /// On-entry scripts were missing from this list for as long as it has existed, and this
+    /// session very nearly concluded "nothing in the world sets flag 0x003E" from a scan of
+    /// three of the four kinds. A list of what counts as "every script" is exactly the sort of
+    /// thing that stays quietly incomplete, so it lives somewhere it can be tested now.
+    /// </para>
+    /// </summary>
+    private static IEnumerable<SetsAFlag> EveryScriptOn(LoadedMap map) =>
+        WhatItIsWaitingFor.EveryScriptOn(
+            WorldExporter.MapId(map.Bank, map.Number),
+            map.Objects,
+            map.Triggers,
+            map.Signs,
+            map.OnEntry);
 
     private static void WriteSound(Rom rom)
     {
