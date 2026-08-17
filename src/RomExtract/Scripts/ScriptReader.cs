@@ -997,6 +997,82 @@ public static class ScriptCommands
         // above that are read by hand stay unreachable until 0x92 has a width.
         [0xB4] = 2,
 
+        // Two, and 0xB3's family — the argument is a variable, 0x4002 at all three sites.
+        //
+        //   16 08 02 | B5 | 02 40 | C2 00 05 7D 00 01 40 31 01 01 67 ...
+        //
+        // WIDTH NOUGHT IS REFUTED BY A POINTER, which is the test that settled 0xD0.
+        // At nought the next byte is 0x02 and the block ENDS there — but seventeen bytes
+        // further on sits `0F 00 A7 56 1A 08 | 09 05 | 21 0D 80 01 00 | 06 01 83 CD 16 08
+        // | 05 10 CC 16 08 | 02`: a loadpointer carrying a real text address, a callstd, a
+        // compare, an if and a goto, ending properly. That is unmistakably script, and
+        // NOTHING IN THE FILE POINTS AT IT. Searched: 0x0816CDB3 has one pointer — it is a
+        // block start — and 0x0816CDB4, B6, B8, BD and C7 have none between them. You do
+        // not fall into a block that has its own pointer, and you do not reach one that has
+        // none except by falling in. So the read does not stop at 0x0816CDB4.
+        //
+        // Three and four are refuted too, and by the same kind of fact rather than by
+        // preference: both resume on 0x05, and the four bytes after it read 0x4001007D at
+        // two sites and 0x8001001A at the third. Neither is an address in a 16 MiB file.
+        //
+        // That leaves one and two, and two is what makes 0x4002 a variable — the same
+        // shape as 0xB3 five entries above, whose seven sites hand over 0x4001 and 0x800D.
+        // The block at 0x0816CF43 does both within a dozen bytes: 0xB3 hands over 0x800D
+        // and the 0x22 after it compares 0x800D against 0x4002.
+        //
+        // Adopting this does not unblock anything by itself: 0xC2 is immediately behind it
+        // and has no width. The stops are a queue.
+        [0xB5] = 2,
+
+        // Five, on nine sites, and every one of them is money.
+        //
+        //   92 | 32 00 00 00 00 | 21 0D 80 00 00 ...        50
+        //   92 | C8 00 00 00 00 | 05 CB C0 16 08            200
+        //   92 | 2C 01 00 00 00 | 05 CB C0 16 08            300
+        //   92 | 5E 01 00 00 00 | 05 CB C0 16 08            350
+        //   92 | E8 03 00 00 00 | 21 0D 80 00 00 ...        1000
+        //   92 | 10 27 00 00 00 | 21 0D 80 00 00 ...        10000
+        //   92 | 32 00 00 00 00 | 21 0D 80 00 00 ...        50
+        //   92 | F4 01 00 00 00 | 21 0D 80 00 00 ...        500
+        //   92 | F4 01 00 00 00 | 21 0D 80 00 00 ...        500
+        //
+        // A four-byte little-endian value and a byte. The values are 50, 200, 300, 350,
+        // 500, 500, 1000, 10000 and 50 — a column of prices, and the top three bytes of
+        // every one of them are zero, which is what a 32-bit money field looks like in a
+        // game whose largest number is 999999.
+        //
+        // Read five wide, all nine resume on a real command: six on `compare 0x800D 0` and
+        // three on a `goto` with a valid address. The 0x800D six are the idiom whole —
+        // check the money, compare the answer to nought, branch if it is not there.
+        //
+        // Two, three and four all resume on 0x00 at all nine sites, which is not nine
+        // agreements but one: they are landing in the middle of the same run of zero bytes
+        // in the same argument. A NOP SLIDE IS NOT A COLUMN, and this is what one looks
+        // like from inside — the widest agreement in the table and the least evidence.
+        [0x92] = 5,
+
+        // Five, on nine sites, and it is 0x92's twin — the same shape carrying the same
+        // nine values: 50, 200, 300, 350, 500, 500, 1000, 10000, 50.
+        //
+        // The clearest three are consecutive, and each is a one-line subroutine:
+        //
+        //   0x0816C0B6   91 | C8 00 00 00 00 | 03      two hundred, return
+        //   0x0816C0BD   91 | 2C 01 00 00 00 | 03      three hundred, return
+        //   0x0816C0C4   91 | 5E 01 00 00 00 | 03      three hundred and fifty, return
+        //
+        // Twenty-one bytes, three commands, three returns and three prices. A width that
+        // is wrong by one cannot produce that, and the three sites are their OWN column —
+        // each is jumped to separately, so the agreement is not one read repeated.
+        //
+        // Read five wide the other six resume on real work too: a goto with a valid
+        // address at two, a return at one, and 0x95 at four. Two, three and four resume
+        // on 0x00 at all nine, which is the nop slide inside the same argument rather
+        // than nine agreements — the same false column 0x92 shows.
+        //
+        // 0x91 and 0x92 are the pair the GAME CORNER is built out of: the one that asks
+        // and the one that takes. What each does is NOT claimed here; only how wide it is.
+        [0x91] = 5,
+
         // One byte, and the column says so. Fifteen places in this game a read stops on
         // 0x97; at every one of them the byte after it is 1, 2 or 3 and nothing else,
         // which is an argument rather than an opcode — opcodes vary between sites and
