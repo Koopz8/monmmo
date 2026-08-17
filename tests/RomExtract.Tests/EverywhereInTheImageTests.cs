@@ -21,6 +21,9 @@ namespace PokeMmo.RomExtract.Tests;
 public class EverywhereInTheImageTests
 {
     private const byte SetVar = 0x16;
+    private const byte AddVar = 0x17;
+    private const byte SubVar = 0x18;
+    private const byte CopyVarIfNotZero = 0x1A;
     private const byte Compare = 0x21;
     private const byte GotoIf = 0x06;
     private const byte Goto = 0x05;
@@ -59,6 +62,9 @@ public class EverywhereInTheImageTests
 
     /// <summary>A flag moved only where nothing looks, and jumped into.</summary>
     private const int OnlyOutOfSight = 0x0056;
+
+    /// <summary>A variable written all four ways, which is what a story counter looks like.</summary>
+    private const int Counter = 0x4055;
 
     private static void Put(byte[] image, int at, params byte[] bytes) => bytes.CopyTo(image, at);
 
@@ -126,6 +132,14 @@ public class EverywhereInTheImageTests
         // Without it the mismatch produces garbage that happens to read as "not a jump", and a
         // control that quietly under-reports its own noise floor is the failure that matters.
         Put(image, 0x3DF9, Goto);
+
+        // The four ways a number gets into a variable, all on one counter. A scan that looked
+        // only for setvar would find the number a story starts on and miss every step of it.
+        Put(image, 0xF00, SetVar, Counter & 0xFF, Counter >> 8, 2, 0x00);
+        Put(image, 0xF05, AddVar, Counter & 0xFF, Counter >> 8, 1, 0x00);
+        Put(image, 0xF0A, SubVar, Counter & 0xFF, Counter >> 8, 1, 0x00);
+        Put(image, 0xF0F, CopyVarIfNotZero, Counter & 0xFF, Counter >> 8, 0x02, 0x40);
+        Put(image, 0xF14, End);
 
         // A hit on the flag pattern that is not a setflag at all — three bytes in the middle
         // of something, with bytes after them that are not commands.
@@ -582,5 +596,62 @@ public class EverywhereInTheImageTests
 
         Assert.Equal(2, moved[Keeps].Count);
         Assert.All(moved[Keeps], s => Assert.False(s.Sets));
+    }
+
+    /// <summary>
+    /// <b>All four ways a number gets into a variable.</b> A gate is a flag or it is a variable,
+    /// and a scan that looked only for <c>setvar</c> would find the number a story starts on and
+    /// miss every step of it — which is the same fault as counting <c>setflag</c> and not
+    /// <c>clearflag</c>, and that one put the whole middle of the game on the boundary list.
+    /// </summary>
+    [Fact]
+    public void EveryWayANumberGetsIntoAVariableIsFound()
+    {
+        IReadOnlyList<VariableSite> sites = EverywhereInTheImage.Writes(Rom(), Counter);
+
+        Assert.Equal(4, sites.Count(s => s.ReadsAsAScript));
+        Assert.Equal(4, sites.Select(s => s.How).Distinct().Count());
+    }
+
+    /// <summary>
+    /// And the one whose second word is another variable says so rather than printing it as a
+    /// value. What is in it is not knowable from here, and a number that is really an address
+    /// reads as a perfectly ordinary answer.
+    /// </summary>
+    [Fact]
+    public void TheCopyingOneIsNotReadAsANumber()
+    {
+        IReadOnlyList<VariableSite> sites = EverywhereInTheImage.Writes(Rom(), Counter);
+
+        VariableSite copies = Assert.Single(sites, s => s.Copies);
+
+        Assert.Equal(0x4002, copies.Value);
+        Assert.DoesNotContain(sites.Where(s => !s.Copies), s => s.Value == 0x4002);
+    }
+
+    /// <summary>
+    /// The value is read, because the whole question about a counter is which scene puts which
+    /// number in it.
+    /// </summary>
+    [Fact]
+    public void WhatEachSitePutsInIsRead()
+    {
+        IReadOnlyList<VariableSite> sites = EverywhereInTheImage.Writes(Rom(), Counter);
+
+        Assert.Contains(sites, s => s.How == SetVar && s.Value == 2);
+    }
+
+    /// <summary>
+    /// And the survey across every variable at once, which is where the line between a story
+    /// counter and a scratch pad is visible: one is written a handful of times and the other
+    /// hundreds.
+    /// </summary>
+    [Fact]
+    public void TheSurveyCountsEachVariableAndDropsWhatIsNotScript()
+    {
+        IReadOnlyDictionary<int, int> written = EverywhereInTheImage.EveryVariableWritten(Rom());
+
+        Assert.Equal(4, written[Counter]);
+        Assert.False(written.ContainsKey(0x0BAD));
     }
 }
