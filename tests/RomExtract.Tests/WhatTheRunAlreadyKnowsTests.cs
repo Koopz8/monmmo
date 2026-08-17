@@ -44,6 +44,15 @@ public class WhatTheRunAlreadyKnowsTests
 
     private const int Bulbasaur = 1;
 
+    /// <summary>A counter the story keeps — above the scratch pads.</summary>
+    private const int Counter = 0x4055;
+
+    /// <summary>And one of the scratch pads, which it must not keep.</summary>
+    private const int Scratch = 0x4001;
+
+    /// <summary>Set by the second scene, if the first one is remembered.</summary>
+    private const int SecondScene = 0x0321;
+
     private static void Put(byte[] image, int at, params byte[] bytes) => bytes.CopyTo(image, at);
 
     private static void Pointer(byte[] image, int at, uint address)
@@ -83,6 +92,25 @@ public class WhatTheRunAlreadyKnowsTests
 
         Put(image, 0x230, GiveMon, SpeciesVariable & 0xFF, SpeciesVariable >> 8, 5);
         Put(image, 0x23F, End);
+
+        // Two scenes, the second reading what the first left behind — which is PALLET TOWN:
+        // a trigger north of the town puts one in a counter, and the lab's arrival script
+        // reads that one and acts on it.
+        Put(image, 0x300, SetVar, Counter & 0xFF, Counter >> 8, 1, 0x00);
+        Put(image, 0x305, SetVar, Scratch & 0xFF, Scratch >> 8, 1, 0x00);
+        Put(image, 0x30A, End);
+
+        Put(image, 0x320, Compare, Counter & 0xFF, Counter >> 8, 1, 0x00);
+        Put(image, 0x325, GotoIf, 0x01);
+        Pointer(image, 0x327, 0x08000340);
+        Put(image, 0x32B, End);
+
+        Put(image, 0x340, SetFlag, SecondScene & 0xFF, SecondScene >> 8, End);
+
+        Put(image, 0x360, Compare, Scratch & 0xFF, Scratch >> 8, 1, 0x00);
+        Put(image, 0x365, GotoIf, 0x01);
+        Pointer(image, 0x367, 0x08000340);
+        Put(image, 0x36B, End);
 
         return new Rom(image);
     }
@@ -152,5 +180,47 @@ public class WhatTheRunAlreadyKnowsTests
 
         Assert.True(played.StoppedAtAQuestion);
         Assert.Null(played.Gives);
+    }
+
+    /// <summary>
+    /// <b>Flags crossed from one script to the next and numbers did not.</b> Every variable was
+    /// rebuilt from nothing at every script, so a counter one scene set was zero by the time the
+    /// next scene read it — and PALLET TOWN, the whole opening of this game, is a counter.
+    /// </summary>
+    [Fact]
+    public void WhatOneSceneLeavesInACounterIsThereForTheNext()
+    {
+        var reader = new HowAScriptRuns(Image(), new Dictionary<int, int>());
+
+        Read(reader, 0x08000300);
+
+        Assert.Contains(SecondScene, Read(reader, 0x08000320).FlagsSet);
+    }
+
+    /// <summary>
+    /// And a scratch pad is not remembered. Three hundred scripts scribble on one of these; a
+    /// run that carried them would have every comparison in the game answered by whatever the
+    /// last person it spoke to happened to leave there.
+    /// </summary>
+    [Fact]
+    public void AScratchPadIsNotRemembered()
+    {
+        var reader = new HowAScriptRuns(Image(), new Dictionary<int, int>());
+
+        Read(reader, 0x08000300);
+
+        Assert.DoesNotContain(SecondScene, Read(reader, 0x08000360).FlagsSet);
+    }
+
+    /// <summary>
+    /// And nothing is remembered before anything has run, so an empty run is empty rather than
+    /// carrying whatever the fixture happened to hold.
+    /// </summary>
+    [Fact]
+    public void AFreshReaderRemembersNothing()
+    {
+        var reader = new HowAScriptRuns(Image(), new Dictionary<int, int>());
+
+        Assert.DoesNotContain(SecondScene, Read(reader, 0x08000320).FlagsSet);
     }
 }

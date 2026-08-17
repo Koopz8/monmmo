@@ -211,6 +211,7 @@ public static class Program
         if (options.WhereFrom.Count > 0) WriteWhereFrom(rom, options.WhereFrom);
         if (options.InTheImage.Count > 0) WriteInTheImage(rom, options.InTheImage);
         if (options.ClimbFrom.Count > 0) WriteClimb(rom, options.ClimbFrom);
+        if (options.WhoWrites.Count > 0) WriteWhoWrites(rom, options.WhoWrites);
 
         if (options.SequenceWidths) WriteSequenceWidths(rom);
 
@@ -6895,6 +6896,110 @@ public static class Program
     }
 
     /// <summary>
+    /// Everywhere in the file a variable is written, and what opens it.
+    /// <para>
+    /// The mirror of <see cref="WriteInTheImage"/>, and it was missing for as long as that
+    /// existed. The starter is behind <c>0x4055 == 2</c> — a variable, not a flag — and the
+    /// only way to ask who puts a two in it was to read bytes by eye.
+    /// </para>
+    /// </summary>
+    private static void WriteWhoWrites(Rom rom, IReadOnlyList<int> variables)
+    {
+        Console.WriteLine();
+        Console.WriteLine("WHO WRITES THESE");
+        Console.WriteLine();
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        List<SetsAFlag> scripts = [.. library.All().SelectMany(EveryScriptOn)];
+
+        int[] covered = EverywhereInTheImage.Opened(rom, scripts);
+
+        IReadOnlyDictionary<uint, IReadOnlyList<int>> index = EverywhereInTheImage.PointerIndex(rom);
+
+        Console.WriteLine(
+            $"  a three-byte pattern turns up by accident about {EverywhereInTheImage.ByChance(rom, 3):0.0} "
+            + "time(s) in an image this size, per command — which is the error bar below");
+
+        // THE SHAPE OF THE WHOLE SET, BEFORE ANY ONE OF THEM.
+        //
+        // A variable written by nine places holding nine different numbers is a story counter.
+        // One written by three hundred is a scratch pad — milestone 173 established that about
+        // 0x4001 by counting, and this is the same count taken across every variable at once,
+        // so the line between the two kinds can be looked at instead of assumed.
+        IReadOnlyDictionary<int, int> everything = EverywhereInTheImage.EveryVariableWritten(rom);
+
+        Console.WriteLine(
+            $"  {everything.Count} variable(s) are written somewhere in the file, "
+            + $"{everything.Values.Sum()} site(s) between them");
+        Console.WriteLine(
+            "    the busiest, which are the scratch pads: "
+            + string.Join(", ", everything.OrderByDescending(v => v.Value).Take(6)
+                .Select(v => $"0x{v.Key:X4} x{v.Value}")));
+
+        foreach (IGrouping<string, KeyValuePair<int, int>> band in everything
+                     .Where(v => v.Key is >= 0x4000 and < 0x8000)
+                     .GroupBy(v => $"0x{v.Key & 0xFFF0:X4}")
+                     .OrderBy(g => g.Key)
+                     .Take(8))
+        {
+            Console.WriteLine(
+                $"    {band.Key}s: {band.Count()} variable(s), busiest "
+                + $"x{band.Max(v => v.Value)}, quietest x{band.Min(v => v.Value)}");
+        }
+
+        foreach (int which in variables)
+        {
+            IReadOnlyList<VariableSite> sites = EverywhereInTheImage.Writes(rom, which, covered);
+
+            List<VariableSite> real = [.. sites.Where(s => s.ReadsAsAScript)];
+
+            Console.WriteLine();
+            Console.WriteLine(
+                $"  0x{which:X4} — {sites.Count} site(s) in the file, {real.Count} of which read as"
+                + $" script, {real.Count(s => s.Opened)} of which the map scan opened");
+
+            if (real.Count == 0)
+            {
+                Console.WriteLine(
+                    "    NOTHING IN THE FILE PUTS A NUMBER IN IT. Whatever moves this variable is");
+                Console.WriteLine(
+                    "    compiled code, and no reading of scripts will ever find it.");
+
+                continue;
+            }
+
+            foreach (IGrouping<int, VariableSite> value in real
+                         .GroupBy(s => s.Copies ? -1 : s.Value)
+                         .OrderBy(g => g.Key))
+            {
+                Console.WriteLine(
+                    $"    = {(value.Key < 0 ? "copied" : value.Key.ToString())}: {value.Count()} site(s)"
+                    + $", {value.Count(s => s.Opened)} opened — "
+                    + string.Join(", ", value.Take(3).Select(s => Where(s, scripts, covered))));
+            }
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("  and the ones nothing opens, climbed:");
+
+        foreach (int which in variables)
+        {
+            foreach (VariableSite site in EverywhereInTheImage.Writes(rom, which, covered)
+                         .Where(s => s.ReadsAsAScript && !s.Opened)
+                         .Take(6))
+            {
+                Climb(rom, index, covered, scripts, new FlagSite(site.Offset, 0, true, true, false));
+            }
+        }
+
+        static string Where(VariableSite site, IReadOnlyList<SetsAFlag> scripts, int[] covered) =>
+            site.Offset < covered.Length && covered[site.Offset] is var owner and not EverywhereInTheImage.Nobody
+                ? $"0x{site.Offset:X6} ({scripts[owner]})"
+                : $"0x{site.Offset:X6} (nothing opens it)";
+    }
+
+    /// <summary>
     /// The climb, on any address at all.
     /// <para>
     /// It was reachable only by naming a flag, and the question it answers is not about flags:
@@ -10221,6 +10326,11 @@ public static class Program
                                     Then it climbs: what names this, what names that, until it
                                     reaches something a map opens, or a literal, which is the
                                     code boundary with an address on it.
+              --who-writes 0xNNNN   every place in the WHOLE FILE that puts a number in one of
+                                    the story's own variables, and whether the map scan ever
+                                    decoded that byte. The other half of --in-the-image: a gate
+                                    is a flag or it is a variable, and only one of them could be
+                                    hunted through the image until now.
               --climb 0xNNNNNNNN    who names this address, who names them, until it reaches
                                     something a map opens or reaches a literal. The same walk
                                     --in-the-image does, off its leash: half the time the thing
@@ -10428,6 +10538,9 @@ public static class Program
         /// <summary>Addresses to climb from, for when the question is not about a flag.</summary>
         public IReadOnlyList<uint> ClimbFrom { get; private init; } = [];
 
+        /// <summary>Variables to hunt through the whole file, the way flags already are.</summary>
+        public IReadOnlyList<int> WhoWrites { get; private init; } = [];
+
         /// <summary>Whether the playthrough may take the ferry, which makes its reach a ceiling.</summary>
         public bool Boat { get; private init; }
 
@@ -10578,6 +10691,7 @@ public static class Program
             var whereFrom = new List<int>();
             var inTheImage = new List<int>();
             var climbFrom = new List<uint>();
+            var whoWrites = new List<int>();
             bool boat = false;
             var surf = false;
             var money = 0;
@@ -10841,6 +10955,15 @@ public static class Program
 
                         break;
                     }
+                    case "--who-writes":
+                    {
+                        foreach (string named in Next(args, ref i, "--who-writes").Split(','))
+                        {
+                            if (TryNumber(named, out int hunted)) whoWrites.Add(hunted);
+                        }
+
+                        break;
+                    }
                     case "--climb":
                     {
                         // Any address at all. The climb was reachable only through a flag,
@@ -11084,6 +11207,7 @@ public static class Program
                 WhereFrom = whereFrom,
                 InTheImage = inTheImage,
                 ClimbFrom = climbFrom,
+                WhoWrites = whoWrites,
                 Boat = boat,
                 Surf = surf,
                 Money = money,

@@ -28,6 +28,29 @@ public sealed record FlagSite(int Offset, int Flag, bool Sets, bool ReadsAsAScri
 }
 
 /// <summary>
+/// One place in the whole image where a number is put into one of the story's own variables.
+/// </summary>
+/// <param name="How">Which command — <c>setvar</c>, <c>addvar</c>, <c>subvar</c>, <c>copyvarifnotzero</c>.</param>
+/// <param name="Value">
+/// The second word. A number for everything but the copying one, where it names another
+/// variable and what is in it is not knowable from here — said out loud rather than printed as
+/// though it were a value.
+/// </param>
+public sealed record VariableSite(
+    int Offset, int Variable, byte How, int Value, bool ReadsAsAScript, bool Opened)
+{
+    public uint Address => Rom.BaseAddress + (uint)Offset;
+
+    /// <summary>True when this is the one command whose second word is not a number.</summary>
+    public bool Copies => How == 0x1A;
+
+    public override string ToString() =>
+        Copies
+            ? $"0x{Offset:X6} {ScriptCommands.NameOf(How)} 0x{Variable:X4} from 0x{Value:X4}"
+            : $"0x{Offset:X6} {ScriptCommands.NameOf(How)} 0x{Variable:X4}, {Value}";
+}
+
+/// <summary>
 /// One place in the image holding a pointer at, or just above, an address.
 /// </summary>
 /// <param name="Offset">Where the four bytes sit.</param>
@@ -177,6 +200,78 @@ public static class EverywhereInTheImage
 
         return [.. sites.OrderBy(s => s.Offset)];
     }
+
+    /// <summary>
+    /// Everywhere in the file a number is put into one of the story's own variables.
+    /// <para>
+    /// <b>The same question as <see cref="Moves"/>, for the other half of the story's memory.</b>
+    /// A gate is a flag or it is a variable, and this project has been able to hunt one of those
+    /// through the whole image and not the other since <c>--in-the-image</c> was written. The
+    /// starter — the only creature in the game a player chooses — is behind
+    /// <c>0x4055 == 2</c>, and the only way to say who puts a two in it has been to grep by eye.
+    /// </para>
+    /// <para>
+    /// All four commands that write one, because a variable set once and added to afterwards is
+    /// the commonest shape a counter has, and looking only for <c>setvar</c> would report the
+    /// count that starts a story and miss every step of it.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<VariableSite> Writes(Rom rom, int variable, int[]? covered = null)
+    {
+        var sites = new List<VariableSite>();
+
+        byte low = (byte)(variable & 0xFF);
+        byte high = (byte)(variable >> 8);
+
+        foreach (byte code in Writers)
+        {
+            foreach (int offset in rom.FindAll(new byte[] { code, low, high }))
+            {
+                if (offset + 5 > rom.Length) continue;
+
+                sites.Add(new VariableSite(
+                    offset,
+                    variable,
+                    code,
+                    rom.ReadU16(offset + 3),
+                    ReadsAsAScript(rom, Rom.BaseAddress + (uint)offset),
+                    covered is not null && offset < covered.Length && covered[offset] != Nobody));
+            }
+        }
+
+        return [.. sites.OrderBy(s => s.Offset)];
+    }
+
+    /// <summary>
+    /// Every variable written anywhere in the file, with how many places write it.
+    /// <para>
+    /// <b>The readable difference between a story counter and a scratch pad.</b> Milestone 173
+    /// established that <c>0x4001</c> is scratch by counting: 285 scripts write it, so a
+    /// comparison on it is a switch a script computes and reads back rather than a precondition.
+    /// The same count, taken across every variable at once, is the shape of the whole
+    /// distinction — and whether there is a clean line between the two kinds is a fact about
+    /// this cartridge that can be looked at rather than assumed.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyDictionary<int, int> EveryVariableWritten(Rom rom)
+    {
+        var found = new Dictionary<int, int>();
+
+        for (int offset = 0; offset + 5 <= rom.Length; offset++)
+        {
+            if (!Writers.Contains(rom.ReadU8(offset))) continue;
+            if (!ReadsAsAScript(rom, Rom.BaseAddress + (uint)offset)) continue;
+
+            int variable = rom.ReadU16(offset + 1);
+
+            found[variable] = found.GetValueOrDefault(variable) + 1;
+        }
+
+        return found;
+    }
+
+    /// <summary>The four commands that put a number in a variable, in the order they were derived.</summary>
+    private static readonly byte[] Writers = [0x16, 0x17, 0x18, 0x1A];
 
     /// <summary>
     /// Every flag moved anywhere in the file, by flag, in one pass.
