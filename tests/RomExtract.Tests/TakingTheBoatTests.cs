@@ -632,6 +632,39 @@ public class WhoIsInTheDoorwayTests
     }
 
     /// <summary>
+    /// Which scripts actually ran, which is not the same question as which maps were reached.
+    /// <para>
+    /// <b>The question that comes after a flag number.</b> "The flag that opens SAFFRON is set
+    /// by a trigger on <c>1.57</c>" is three different jobs wearing one sentence: a map never
+    /// reached, a square on a reached map the walk never stood on, or a script that ran and
+    /// stopped short of its own <c>setflag</c>. A trigger fires only for somebody standing
+    /// exactly on it, so the middle case is real and common — and it is a walking problem,
+    /// not a story one.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void OnlyTheScriptsItActuallyRanCountAsRun()
+    {
+        var world = new WorldData(
+        [
+            Room("1.0") with
+            {
+                Objects = [new MapObject(1, 1, 1, 1, Direction.Down, 0, false) { ScriptAddress = 0x1000 }],
+
+                // The decoy: a trigger on this very map, on a square nothing can stand on.
+                // Reached and never run are the two facts that must not collapse into one.
+                Triggers = [new MapTrigger(9, 9, 0, 0, 0x3000)],
+            },
+        ]);
+
+        Attempt played = Autoplayer.Play(world, "1.0", TestRules.All, (_, _, _) => Nothing);
+
+        Assert.Contains("1.0", played.Reached);
+        Assert.Contains(0x1000u, played.Ran);
+        Assert.DoesNotContain(0x3000u, played.Ran);
+    }
+
+    /// <summary>
     /// And a door nobody is standing in names nobody. The list is only worth having if it is
     /// empty when it should be.
     /// </summary>

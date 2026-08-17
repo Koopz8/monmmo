@@ -121,6 +121,20 @@ public sealed record WaitingOn(
 }
 
 /// <summary>
+/// One script that turns a flag on, and enough of where it is to go and look.
+/// <para>
+/// The address travels because the name does not answer the next question. <c>1.57 trigger
+/// (5,15)</c> is a place; whether the run <em>stood on that square and ran it</em> is the
+/// difference between a map to reach, a square the walk never touched, and a script that ran
+/// and stopped short of its own <c>setflag</c> — three different jobs behind one line.
+/// </para>
+/// </summary>
+public sealed record SetsAFlag(string MapId, string What, uint Address)
+{
+    public override string ToString() => $"{MapId} {What}";
+}
+
+/// <summary>
 /// What a person standing in a doorway is waiting for.
 /// <para>
 /// <b>The question a playthrough cannot ask.</b> A run takes one arm of each conditional —
@@ -257,25 +271,25 @@ public static class WhatItIsWaitingFor
     /// measurement that needs a whole map library to test is a measurement nobody tests.
     /// </para>
     /// </summary>
-    public static IReadOnlyDictionary<int, IReadOnlyList<string>> SetBy(
-        Rom rom, IEnumerable<(string What, uint Address)> scripts)
+    public static IReadOnlyDictionary<int, IReadOnlyList<SetsAFlag>> SetBy(
+        Rom rom, IEnumerable<SetsAFlag> scripts)
     {
-        var found = new Dictionary<int, List<string>>();
+        var found = new Dictionary<int, List<SetsAFlag>>();
 
-        foreach ((string what, uint address) in scripts)
+        foreach (SetsAFlag script in scripts)
         {
-            foreach (ScriptCommand command in ScriptReader.ReadAll(rom, address))
+            foreach (ScriptCommand command in ScriptReader.ReadAll(rom, script.Address))
             {
                 if (command.Code != SetFlag || command.Arguments.Length < 2) continue;
 
-                if (!found.TryGetValue(command.Word(), out List<string>? where))
+                if (!found.TryGetValue(command.Word(), out List<SetsAFlag>? where))
                     found[command.Word()] = where = [];
 
-                if (!where.Contains(what)) where.Add(what);
+                if (!where.Contains(script)) where.Add(script);
             }
         }
 
-        return found.ToDictionary(p => p.Key, p => (IReadOnlyList<string>)p.Value);
+        return found.ToDictionary(p => p.Key, p => (IReadOnlyList<SetsAFlag>)p.Value);
     }
 
     /// <summary>

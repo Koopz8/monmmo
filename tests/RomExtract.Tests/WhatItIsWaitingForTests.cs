@@ -371,16 +371,19 @@ public class WhatItIsWaitingForTests
         Pointer(image, 0x405, 0x08000300);
         Put(image, 0x409, Release, End);
 
-        IReadOnlyDictionary<int, IReadOnlyList<string>> setters = WhatItIsWaitingFor.SetBy(
+        IReadOnlyDictionary<int, IReadOnlyList<SetsAFlag>> setters = WhatItIsWaitingFor.SetBy(
             new Rom(image),
             [
-                ("3.10 person 1", 0x08000100),
-                ("5.3 trigger (4,7)", 0x08000200),
-                ("1.72 sign", 0x08000300),
-                ("14.0 person 1", 0x08000400),
+                new SetsAFlag("3.10", "person 1", 0x08000100),
+                new SetsAFlag("5.3", "trigger (4,7)", 0x08000200),
+                new SetsAFlag("1.72", "sign", 0x08000300),
+                new SetsAFlag("14.0", "person 1", 0x08000400),
             ]);
 
-        Assert.Equal(["3.10 person 1", "5.3 trigger (4,7)"], setters[Opened]);
+        Assert.Equal(["3.10 person 1", "5.3 trigger (4,7)"], setters[Opened].Select(s => s.ToString()));
         Assert.False(setters.ContainsKey(Waiting));
+
+        // And the address travels, because "which script" is the next question after "where".
+        Assert.Equal(0x08000100u, setters[Opened][0].Address);
     }
 }

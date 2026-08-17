@@ -376,6 +376,19 @@ public sealed record Attempt(
     /// </summary>
     public IReadOnlyDictionary<string, int> Questions { get; init; } = new Dictionary<string, int>();
 
+    /// <summary>
+    /// Every script this run actually ran, by where it starts.
+    /// <para>
+    /// <b>The question that comes after a flag number.</b> "The flag that opens SAFFRON is set
+    /// by a trigger on <c>1.57</c>" is three different jobs wearing one sentence: a map the run
+    /// never reached, a square on a map it did reach that the walk never stood on, or a script
+    /// it ran that stopped short of its own <c>setflag</c>. Reaching a map and running what is
+    /// on it are not the same thing — a trigger fires only for somebody standing exactly on
+    /// it — and nothing here could tell those apart.
+    /// </para>
+    /// </summary>
+    public IReadOnlyCollection<uint> Ran { get; init; } = [];
+
     /// <summary>People a script took off a map, which is how a doorway stops being blocked.</summary>
     public IReadOnlyCollection<(string MapId, int LocalId)> Removed { get; init; } = [];
 
@@ -536,6 +549,9 @@ public static class Autoplayer
         // this — `asIfGone` is its own parameter — and nothing has ever told it.
         var gone = new HashSet<(string MapId, int LocalId)>();
 
+        // Every script that actually ran, by where it starts.
+        var ran = new HashSet<uint>();
+
         // And people a script has walked somewhere else, which is the other half of the same
         // idea and had no parameter at all until now.
         var moved = new Dictionary<(string MapId, int LocalId), GridPosition>();
@@ -587,6 +603,10 @@ public static class Autoplayer
                 foreach (Runnable what in Reachable(map, stood, flags, gone))
                 {
                     PlayedScript did = runScript(what.Address, flags, bag);
+
+                    // That it ran at all, which is a different fact from the map being
+                    // reached. A trigger fires only for somebody standing exactly on it.
+                    ran.Add(what.Address);
 
                     foreach (int routine in did.Specials)
                         specials[routine] = specials.GetValueOrDefault(routine) + 1;
@@ -867,6 +887,7 @@ public static class Autoplayer
             last.Blocked)
         {
             Carried = bag.Entries,
+            Ran = ran,
             Removed = gone,
             Moved = [.. moved.Keys],
             RodeTheBoat = ridingTheBoat,

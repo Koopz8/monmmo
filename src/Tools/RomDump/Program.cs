@@ -6228,12 +6228,12 @@ public static class Program
         // Who turns each flag on, across every script on every map. Read once and only if
         // something asks — it is the same whole-world scan `--flags` does, and most runs of
         // this report have nobody standing in a doorway with a flag behind them.
-        var setters = new Lazy<IReadOnlyDictionary<int, IReadOnlyList<string>>>(
+        var setters = new Lazy<IReadOnlyDictionary<int, IReadOnlyList<SetsAFlag>>>(
             () => WhatItIsWaitingFor.SetBy(
                 rom,
                 MapLibrary.Open(rom).All()
                     .SelectMany(ScriptsOf)
-                    .Select(s => ($"{s.MapId} {s.What}", s.Address))));
+                    .Select(s => new SetsAFlag(s.MapId, s.What, s.Address))));
 
         foreach (IGrouping<(string ToMapId, string Why), ShutDoor> shut in byTarget.Take(30))
         {
@@ -6659,7 +6659,7 @@ public static class Program
         string mapId,
         Blocker who,
         Attempt played,
-        Lazy<IReadOnlyDictionary<int, IReadOnlyList<string>>> setters)
+        Lazy<IReadOnlyDictionary<int, IReadOnlyList<SetsAFlag>>> setters)
     {
         // The record first, because that is where this game keeps it. Only 7 of the 575
         // objects carrying a hide flag have a script that sets it — the flag that takes
@@ -6673,17 +6673,26 @@ public static class Program
         }
         else
         {
-            IReadOnlyList<string> removes = setters.Value.GetValueOrDefault(who.HiddenBy, []);
+            IReadOnlyList<SetsAFlag> removes = setters.Value.GetValueOrDefault(who.HiddenBy, []);
 
             Console.WriteLine(
                 $"         its record is hidden by flag 0x{who.HiddenBy:X4} — "
                 + (played.Flags.Contains(who.HiddenBy) ? "which the run HAS set" : "which the run never set"));
 
-            Console.WriteLine(
-                removes.Count == 0
-                    ? "           NOTHING IN THE WORLD SETS IT — it comes out of a routine, not a script"
-                    : $"           set by {removes.Count}: " + string.Join(", ", removes.Take(3))
-                        + (removes.Count > 3 ? $", +{removes.Count - 3} more" : string.Empty));
+            if (removes.Count == 0)
+            {
+                Console.WriteLine(
+                    "           NOTHING IN THE WORLD SETS IT — it comes out of a routine, not a script");
+            }
+
+            foreach (SetsAFlag sets in removes.Take(3))
+            {
+                Console.WriteLine(
+                    $"           set by {sets.MapId} {world.Find(sets.MapId)?.Name ?? "(not exported)"} "
+                    + $"{sets.What} — {Standing(sets)}");
+            }
+
+            if (removes.Count > 3) Console.WriteLine($"           ... and {removes.Count - 3} more that set it");
         }
 
         if (world.Find(mapId)?.Objects.FirstOrDefault(o => o.LocalId == who.LocalId) is not { } person
@@ -6738,7 +6747,7 @@ public static class Program
                 Console.WriteLine($"           if clear: {asked.IfClear}");
             }
 
-            IReadOnlyList<string> from = setters.Value.GetValueOrDefault(asked.Flag, []);
+            IReadOnlyList<SetsAFlag> from = setters.Value.GetValueOrDefault(asked.Flag, []);
 
             Console.WriteLine(
                 from.Count == 0
@@ -6748,6 +6757,13 @@ public static class Program
         }
 
         if (worst.Count > 3) Console.WriteLine($"         ... and {worst.Count - 3} more flag(s) it asks about");
+
+        string Standing(SetsAFlag sets) =>
+            !played.Reached.Contains(sets.MapId)
+                ? "ON A MAP IT NEVER REACHED — that map is the job"
+                : played.Ran.Contains(sets.Address)
+                    ? "IT RAN THIS SCRIPT AND THE FLAG IS STILL UNSET — the setflag is behind a branch inside it"
+                    : "on a map it reached, and it never ran this script — it never stood on the square";
 
         if (waiting.AskedWithoutABranch > 0)
         {
