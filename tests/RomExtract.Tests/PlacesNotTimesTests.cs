@@ -55,6 +55,12 @@ public class PlacesNotTimesTests
         Assert.True(
             played.AskedSpecials > 1,
             $"it asked {played.AskedSpecials} time(s), so the fixpoint only went round once and this proves nothing");
+
+        // AND NONE OF THAT FOLDING WAS A DOOR. This is the same script on a later pass, which
+        // is the ordinary case and by far the commonest — 5047 asks folding to 319 places, six
+        // of them doors. Without this the two kinds are one number and the finding cannot be
+        // stated at all, which is how the break came back green the first time.
+        Assert.Equal(0, played.FoldedByDoor);
     }
 
     /// <summary>
