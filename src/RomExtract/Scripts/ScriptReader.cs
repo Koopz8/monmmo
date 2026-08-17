@@ -260,6 +260,31 @@ public static class ScriptCommands
         //   39 | 08 02 | 00 | 04 00 | 07 00   -> 8.2  LAVENDER TOWN   at (4, 7)
         [0x39] = 7,
         [0x3A] = 0,
+
+        // Seven, and the argument reads as plainly as the width. Twenty sites, all one shape,
+        // and the only thing that varies is the numbers:
+        //
+        //   16 06 80 03 00 | 3F 01 2A FF 18 00 19 00 | 21 3A 40 03 00
+        //   16 06 80 02 00 | 3F 01 2B FF 1C 00 10 00 | 21 ...
+        //                    3F 01 2F FF 16 00 03 00 | 21 ...
+        //                    3F 01 34 FF 14 00 03 00 | 21 ...
+        //
+        // A byte, a byte that counts up across the sites, 0xFF — which is how this cartridge
+        // writes "the player" in every applymovement — and then two little-endian words whose
+        // high bytes are zero at all twenty sites, which is what a pair of coordinates on a map
+        // this size looks like.
+        //
+        // Six also parses, and the twenty sites say which: at seven the next command is
+        // `compare` at TWENTY OF TWENTY, and at six it is a nop at twenty of twenty. A width
+        // that lands on padding at every site has landed in the tail of an argument, which is
+        // this project's own rule and it decides this one outright.
+        //
+        // --derive cannot: it throws both widths out for resuming on a column, because these
+        // twenty sites are one idiom repeated and the correct width resumes on a column too.
+        // It says "read the bytes" and that is what this is. The report now prints how much of
+        // the run-up the sites share, so the next reader can see the test was worth nothing
+        // here rather than having to work it out.
+        [0x3F] = 7,
         // Eight bytes — four words — and the cleanest column this project has seen. The
         // command sits in a packed run of itself, so the evidence is that the byte eight
         // along is another one, at every one of eighty sites:
