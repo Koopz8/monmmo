@@ -6004,11 +6004,35 @@ public static class Program
         var reader = new HowAScriptRuns(
             rom, teaches, answers, variables, sayYes, beatenTrainers, remembered, watch);
 
+        // Which scripts are doors into a scene rather than scenes. Read here because this is
+        // where the cartridge is; the walk is handed the answer.
+        // Grouped, because one script address is attached to more than one thing: a person and
+        // a trigger can share one, and nineteen Pokémon Centres share a nurse. They all read
+        // the same bytes and so lead the same place, which is why taking the first is safe and
+        // building the dictionary without grouping is not — it threw.
+        Dictionary<uint, uint> doorsTo = EntriesToAScene
+            .In(rom, MapLibrary.Open(rom).All().SelectMany(EveryScriptOn), HowAScriptRuns.FirstRemembered)
+            .GroupBy(d => d.Where.Address)
+            .ToDictionary(g => g.Key, g => g.First().Leads);
+
         Attempt played = Autoplayer.Play(
             world, first.Id, rules, reader.Read, Console.WriteLine, boat, money, beatenTrainers, surf,
-            remembered, inOrder);
+            remembered, inOrder, doorsTo);
 
         int hanging = played.Questions.Values.Sum();
+
+        // AND HOW MUCH OF THE ABOVE WAS THE SAME SCENE TWICE.
+        //
+        // 193 and 194 established that one scene is written as several entry stubs and that
+        // this walk takes every door. The prediction was that every count below is inflated by
+        // the door count. It is not: the walking was, because a walk accumulates, and a count
+        // of how many times is not. Printed rather than removed, so it cannot quietly grow.
+        Console.WriteLine(
+            $"    the four counts below are PLACES and not times: the run asked"
+            + $" {played.AskedSpecials} / {played.AskedUnread} / {played.AskedQuestions} /"
+            + $" {played.AskedRefusals} times, and a fixpoint asks again on every pass."
+            + $" {played.FoldedByDoor} of the folding was a scene arriving by another DOOR rather"
+            + " than on another pass.");
 
         Console.WriteLine();
         Console.WriteLine(
@@ -6631,7 +6655,7 @@ public static class Program
 
         Console.WriteLine();
         Console.WriteLine(
-            $"  {played.Specials.Values.Sum()} calls to {played.Specials.Count} routines it could "
+            $"  {played.Specials.Values.Sum()} place(s) call {played.Specials.Count} routines it could "
             + "not answer — every one took the zero arm");
 
         foreach ((int routine, int times) in played.Specials.OrderByDescending(p => p.Value).Take(8))
@@ -6663,11 +6687,11 @@ public static class Program
         else
         {
             Console.WriteLine(
-                $"  {played.UnreadCommands.Values.Sum()} script run(s) stopped at "
+                $"  {played.UnreadCommands.Values.Sum()} place(s) stopped at "
                 + $"{played.UnreadCommands.Count} command(s) this project has no width for");
 
             foreach ((byte code, int times) in played.UnreadCommands.OrderByDescending(p => p.Value).Take(8))
-                Console.WriteLine($"    0x{code:X2} stopped {times} run(s)");
+                Console.WriteLine($"    0x{code:X2} stopped {times} place(s)");
 
             Console.WriteLine();
             Console.WriteLine(
