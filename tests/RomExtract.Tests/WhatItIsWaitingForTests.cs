@@ -552,6 +552,44 @@ public class WhatItIsWaitingForTests
     }
 
     /// <summary>
+    /// What one arm writes is not what another arm knows.
+    /// <para>
+    /// Two arms leaving the same block, one of which writes a variable and one of which reads
+    /// it. Sharing the record of what has been written between them makes the reader think it
+    /// wrote the number itself, so the one real gate in the script prints as <c>NOT A GATE</c>
+    /// — the new rule quietly deleting the finding it was built to protect.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void WhatOneArmWritesIsNotWhatAnotherArmKnows()
+    {
+        var image = new byte[0x2000];
+
+        Put(image, 0x100, CheckFlag, Waiting & 0xFF, Waiting >> 8);
+        Put(image, 0x103, GotoIf, IfEqual);
+        Pointer(image, 0x105, 0x08000200);
+        Put(image, 0x109, CheckFlag, Shared & 0xFF, Shared >> 8);
+        Put(image, 0x10C, GotoIf, IfEqual);
+        Pointer(image, 0x10E, 0x08000300);
+        Put(image, 0x112, Release, End);
+
+        // One arm writes it and goes nowhere near the flag.
+        Put(image, 0x200, SetVar, 0x01, 0x40, 0x02, 0x00, Release, End);
+
+        // The other reads it, having never written it, and that is the gate.
+        Put(image, 0x300, Compare, 0x01, 0x40, 0x02, 0x00);
+        Put(image, 0x305, GotoIf, IfEqual);
+        Pointer(image, 0x307, 0x08000400);
+        Put(image, 0x30B, Release, End);
+        Put(image, 0x400, SetFlag, Opened & 0xFF, Opened >> 8, Release, End);
+
+        IReadOnlyList<OnTheWay> way = WhatItIsWaitingFor.PathTo(new Rom(image), 0x08000100, Opened)!;
+
+        Assert.Equal("0x4001 == 2", way[^1].ToString());
+        Assert.False(way[^1].DecidedHere);
+    }
+
+    /// <summary>
     /// Who could put the right number in a variable, which is the mirror of who sets a flag.
     /// <para>
     /// What stands in front of SAFFRON is <c>0x4001 != 0 AND 0x4001 != 1</c> — a counter, not
