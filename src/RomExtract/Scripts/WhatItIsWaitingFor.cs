@@ -150,9 +150,36 @@ public sealed record SetsAFlag(string MapId, string What, uint Address)
 /// <param name="TookTheBranch">Whether getting here meant jumping rather than falling through.</param>
 public sealed record OnTheWay(byte AskedBy, int Word, int Against, byte Condition, bool TookTheBranch)
 {
+    /// <summary>
+    /// True when this script put the number there itself, earlier on this very path.
+    /// <para>
+    /// <b>The difference between a precondition and a switch</b>, and the fault this record
+    /// was corrected to carry. A comparison on a variable the script wrote two lines above is
+    /// not something that must be true before the door opens — it is the script deciding
+    /// something and then reading its own answer back. Reported as a gate, it sends the next
+    /// session hunting for whoever sets a number nobody outside this script ever sets.
+    /// </para>
+    /// </summary>
+    public bool DecidedHere { get; init; }
+
+    /// <summary>Which command put it there — <c>setvar</c>, or a routine, which is the boundary again.</summary>
+    public byte DecidedBy { get; init; }
+
+    /// <summary>What it put there.</summary>
+    public int Became { get; init; }
+
     /// <summary>What had to be true, in words.</summary>
     public override string ToString()
     {
+        if (DecidedHere)
+        {
+            string how = DecidedBy == SpecialCalls.SpecialVar
+                ? $"routine 0x{Became:X3} put it there"
+                : $"this script {ScriptCommands.NameOf(DecidedBy)} {Became} first";
+
+            return $"0x{Word:X4} {Operator()} {Against} — NOT A GATE, {how}";
+        }
+
         if (AskedBy == 0x2B)
         {
             bool jumpsWhenSet = ScriptState.Accepts(Condition, ScriptState.Compare(1, 1));
@@ -346,15 +373,16 @@ public static class WhatItIsWaitingFor
     public static IReadOnlyList<OnTheWay>? PathTo(Rom rom, uint address, int flag, int maxSteps = 8192)
     {
         var seen = new HashSet<(uint Block, int At)>();
-        var queue = new Queue<(uint Block, int At, List<OnTheWay> Chain)>();
+        var queue = new Queue<(uint Block, int At, List<OnTheWay> Chain, Dictionary<int, (byte How, int Value)> Put)>();
 
-        queue.Enqueue((address, 0, []));
+        queue.Enqueue((address, 0, [], []));
 
         var steps = 0;
 
         while (queue.Count > 0 && steps++ < maxSteps)
         {
-            (uint block, int at, List<OnTheWay> chain) = queue.Dequeue();
+            (uint block, int at, List<OnTheWay> chain, Dictionary<int, (byte How, int Value)> put) =
+                queue.Dequeue();
 
             if (!seen.Add((block, at))) continue;
             if (rom.ToOffsetOrNull(block) is null) continue;
@@ -375,18 +403,44 @@ public static class WhatItIsWaitingFor
 
                 if (command.Code is CheckFlag or 0x21 or 0x22 or 0x47) asked = command;
 
+                // What this script has already put in a variable before reading it back.
+                //
+                // THE FAULT THIS WAS WRITTEN TO FIX. A comparison on a variable the script
+                // itself wrote two lines earlier is not a precondition — it is a switch the
+                // script computes and then reads, and reporting it as something that must be
+                // true before the door opens sends the next session hunting for whoever sets
+                // a number that nobody outside this script ever sets. `0x4001 != 0 AND
+                // 0x4001 != 1` read exactly like a story gate and 285 scripts write 0x4001.
+                if (command.Code is SetVar or AddVar or SubVar or CopyVar or CopyVarIfNotZero
+                    && command.Arguments.Length >= 4)
+                {
+                    put[command.Word()] = (command.Code, command.Word(2));
+                }
+
+                // And a routine writing into one, which is the same thing with the answer on
+                // the far side of the code boundary.
+                if (command.Code == SpecialCalls.SpecialVar && command.Arguments.Length >= 4)
+                    put[command.Word()] = (SpecialCalls.SpecialVar, command.Word(2));
+
                 if (command.Code is ScriptCommands.GotoIf or ScriptCommands.CallIf
                     && command.Arguments.Length >= 5)
                 {
+                    int word = asked is { Arguments.Length: >= 2 } ? asked.Word() : 0;
+
                     var step = new OnTheWay(
                         asked?.Code ?? 0,
-                        asked is { Arguments.Length: >= 2 } ? asked.Word() : 0,
+                        word,
                         asked is { Arguments.Length: >= 4 } ? asked.Word(2) : 0,
                         command.Arguments[0],
-                        true);
+                        true)
+                    {
+                        DecidedHere = asked?.Code != CheckFlag && put.ContainsKey(word),
+                        DecidedBy = put.GetValueOrDefault(word).How,
+                        Became = put.GetValueOrDefault(word).Value,
+                    };
 
                     if (rom.IsRomAddress(command.Pointer(1)))
-                        queue.Enqueue((command.Pointer(1), 0, [.. chain, step]));
+                        queue.Enqueue((command.Pointer(1), 0, [.. chain, step], new(put)));
 
                     // And carrying on past it is the other answer, priced the same way.
                     chain = [.. chain, step with { TookTheBranch = false }];
@@ -399,7 +453,7 @@ public static class WhatItIsWaitingFor
                 if (command.Code is ScriptCommands.Goto or ScriptCommands.Call
                     && rom.IsRomAddress(command.Pointer()))
                 {
-                    queue.Enqueue((command.Pointer(), 0, chain));
+                    queue.Enqueue((command.Pointer(), 0, chain, new(put)));
 
                     if (command.Code == ScriptCommands.Goto) break;
                 }

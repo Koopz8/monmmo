@@ -37,6 +37,7 @@ public class WhatItIsWaitingForTests
     private const byte SetVar = 0x16;
     private const byte AddVar = 0x17;
     private const byte CopyVar = 0x19;
+    private const byte SpecialVar = 0x26;
 
     /// <summary>Jump when the comparison came out equal — a checkflag's "already done" arm.</summary>
     private const byte IfEqual = 1;
@@ -473,6 +474,81 @@ public class WhatItIsWaitingForTests
         Assert.Equal(
             [$"flag 0x{Waiting:X4} SET"],
             WhatItIsWaitingFor.PathTo(new Rom(image), 0x08000100, Opened)!.Select(w => w.ToString()));
+    }
+
+    /// <summary>
+    /// A comparison on a number the script put there itself is not a gate.
+    /// <para>
+    /// <b>The instrument's own fault, found by running it.</b> The chain to SAFFRON came back
+    /// <c>0x4001 != 0 AND 0x4001 != 1</c>, which reads exactly like a story counter to be
+    /// advanced — and 285 scripts across the cartridge write <c>0x4001</c>, because it is
+    /// scratch. A script that writes a variable and then reads it back is deciding something,
+    /// not waiting for something, and the two are the same line of output without this.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AComparisonOnANumberTheScriptPutThereItselfIsNotAGate()
+    {
+        var image = new byte[0x2000];
+
+        Put(image, 0x100, SetVar, 0x01, 0x40, 0x02, 0x00);
+        Put(image, 0x105, Compare, 0x01, 0x40, 0x02, 0x00);
+        Put(image, 0x10A, GotoIf, IfEqual);
+        Pointer(image, 0x10C, 0x08000200);
+        Put(image, 0x110, Release, End);
+        Put(image, 0x200, SetFlag, Opened & 0xFF, Opened >> 8, Release, End);
+
+        OnTheWay step = Assert.Single(WhatItIsWaitingFor.PathTo(new Rom(image), 0x08000100, Opened)!);
+
+        Assert.True(step.DecidedHere);
+        Assert.Equal(2, step.Became);
+        Assert.Contains("NOT A GATE", step.ToString());
+    }
+
+    /// <summary>
+    /// And one the script did <em>not</em> write is still a gate. The rule is only worth
+    /// having if it can tell the two apart, and every real script writes something.
+    /// </summary>
+    [Fact]
+    public void AndAComparisonOnSomethingItNeverWroteStillIs()
+    {
+        var image = new byte[0x2000];
+
+        // The decoy: it writes a different variable first, so "this script writes things"
+        // is true and must not be enough on its own.
+        Put(image, 0x100, SetVar, 0x60, 0x40, 0x02, 0x00);
+        Put(image, 0x105, Compare, 0x01, 0x40, 0x02, 0x00);
+        Put(image, 0x10A, GotoIf, IfEqual);
+        Pointer(image, 0x10C, 0x08000200);
+        Put(image, 0x110, Release, End);
+        Put(image, 0x200, SetFlag, Opened & 0xFF, Opened >> 8, Release, End);
+
+        OnTheWay step = Assert.Single(WhatItIsWaitingFor.PathTo(new Rom(image), 0x08000100, Opened)!);
+
+        Assert.False(step.DecidedHere);
+        Assert.Equal("0x4001 == 2", step.ToString());
+    }
+
+    /// <summary>
+    /// And a routine writing into it says so, because that is the code boundary wearing a
+    /// variable's clothes — a different job again from either of the other two.
+    /// </summary>
+    [Fact]
+    public void ANumberARoutinePutThereSaysWhichRoutine()
+    {
+        var image = new byte[0x2000];
+
+        Put(image, 0x100, SpecialVar, 0x01, 0x40, 0xB5, 0x01);
+        Put(image, 0x105, Compare, 0x01, 0x40, 0x02, 0x00);
+        Put(image, 0x10A, GotoIf, IfEqual);
+        Pointer(image, 0x10C, 0x08000200);
+        Put(image, 0x110, Release, End);
+        Put(image, 0x200, SetFlag, Opened & 0xFF, Opened >> 8, Release, End);
+
+        OnTheWay step = Assert.Single(WhatItIsWaitingFor.PathTo(new Rom(image), 0x08000100, Opened)!);
+
+        Assert.True(step.DecidedHere);
+        Assert.Contains($"routine 0x{Routine:X3} put it there", step.ToString());
     }
 
     /// <summary>

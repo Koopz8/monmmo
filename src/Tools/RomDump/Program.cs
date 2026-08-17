@@ -6876,16 +6876,36 @@ public static class Program
         // And who could put the right number in. A variable nothing writes is behind the code
         // boundary exactly as a flag nothing sets is — the same finding, and until now only
         // half of it could be reached, because "what gates what" only ever asked about flags.
-        foreach (int variable in way.Where(w => w.AskedBy != 0x2B).Select(w => w.Word).Distinct().Take(3))
+        // Only the ones that are actually gates. A variable this script wrote itself is a
+        // switch it computes and reads back, and asking who else writes it is asking the
+        // wrong question about the wrong number.
+        foreach (int variable in way
+                     .Where(w => w.AskedBy != 0x2B && !w.DecidedHere)
+                     .Select(w => w.Word)
+                     .Distinct()
+                     .Take(3))
         {
             IReadOnlyList<WritesAVariable> puts = writers.Value.GetValueOrDefault(variable, []);
 
+            if (puts.Count == 0)
+            {
+                Console.WriteLine(
+                    $"             NOTHING IN THE WORLD WRITES 0x{variable:X4} — it comes out of a routine");
+
+                continue;
+            }
+
+            // How many maps, not just how many scripts. A story counter is written in one
+            // place; a scratch variable is written everywhere, and the two are the same line
+            // of output until the spread is on it. 285 scripts sounds like thoroughness and
+            // means the opposite.
+            int maps = puts.Select(w => w.Where.MapId).Distinct().Count();
+
             Console.WriteLine(
-                puts.Count == 0
-                    ? $"             NOTHING IN THE WORLD WRITES 0x{variable:X4} — it comes out of a routine"
-                    : $"             0x{variable:X4} is written by {puts.Count}: "
-                        + string.Join("; ", puts.Take(3))
-                        + (puts.Count > 3 ? $", +{puts.Count - 3} more" : string.Empty));
+                $"             0x{variable:X4} is written by {puts.Count} script(s) across {maps} map(s)"
+                + (maps > 1 ? " — written in many places, so read it as scratch before story" : string.Empty));
+
+            Console.WriteLine("               e.g. " + string.Join("; ", puts.Take(3)));
         }
     }
 
