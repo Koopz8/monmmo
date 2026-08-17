@@ -78,6 +78,52 @@ public class OnePlaceOrManyTests
     }
 
     /// <summary>
+    /// And the FLOOR is asked the same question, which is the half a break came back green on.
+    /// <para>
+    /// Reversing a file preserves byte frequencies and it preserves SHAPE: a table reversed is
+    /// still a table and still clumps exactly as hard. So a control that counts the reversed
+    /// image's sites without asking how clumped they are is comparing a clump-aware number
+    /// against a clump-blind one, and milestone 206 shipped exactly that until the break for it
+    /// passed.
+    /// </para>
+    /// <para>
+    /// The pattern goes in backwards on purpose — <c>00 89 29</c> here becomes <c>29 89 00</c>
+    /// once the sweep reverses the image, which is how a fixture reaches the far side of a
+    /// function that does its own reversing.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TheReversedImageFloorIsCountedInPlacesToo()
+    {
+        var image = new byte[0x100000];
+
+        for (var i = 0; i < image.Length; i++) image[i] = 0x77;
+
+        // Six sites inside three hundred bytes, written backwards so that reversing the image
+        // turns them into setflags sitting on top of each other. The `end` goes in backwards
+        // too — without it the sweep's own "does this read as a script" test throws every site
+        // away and the fixture produces nothing, which is how this test first failed.
+        for (var n = 0; n < 6; n++)
+        {
+            int at = 0x40000 + (n * 48);
+
+            image[at] = 0x02;
+            image[at + 1] = 0x00;
+            image[at + 2] = (byte)(0x20 + n);
+            image[at + 3] = 0x29;
+        }
+
+        (int sites, int _, int places) = EverywhereInTheImage.NoiseFloor(new Rom(image));
+
+        Assert.True(sites >= 6, $"the fixture has to produce sites at all; got {sites}");
+
+        Assert.True(
+            places < sites,
+            $"the floor has to be counted in places like the thing it is a floor for;"
+            + $" got {places} place(s) from {sites} site(s)");
+    }
+
+    /// <summary>
     /// Entropy is the half that says WHY a clump is a clump, and it has to be able to
     /// disagree: a run of repeating table bytes and a run of varied ones are both clumps and
     /// only one of them is explained by being data.
