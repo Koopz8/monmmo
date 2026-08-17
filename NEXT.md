@@ -6,14 +6,15 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **Three script commands read, and the whole chain came from one square.** Letting
-  the robot talk across a shop counter exposed `0xC1`; reading that led to `0xB3`
-  (seven sites) and, once that was adopted, `0xB4` behind it.
-- `0xB3` is the clean one: two argument bytes that are a **variable**, and at all
-  seven sites the very next command reads that same variable back. An argument
-  column can happen by accident; one whose value reappears as the next command's
-  operand cannot.
-- **3783 → 3803 blocks now read to a proper end**, 53 → 49 stopped, and **+3 flags at
-  every one of the six lever settings** with reach unmoved. A consistent delta across
-  six independent runs is what a real width looks like.
-- The stops are a **queue, not a set**: adopting `0xB4` exposed `0xB5` behind it.
+- **Reading three more script commands put a Pokémon in the party.** `0x92` and
+  `0x91` — ask about money, take the money — nine sites each carrying the same nine
+  prices: 50, 200, 300, 350, 500, 500, 1000, 10000, 50.
+- 3803 → **3829 blocks read to a proper end**, 49 → 46 stopped, +1 flag and **+1 party
+  member at five of the six lever settings**. Reach unmoved.
+- **And the run did not pay for it.** Its purse is nought, it is refused four things at
+  a counter, and it comes away with a fifth Pokémon — because reading a command's
+  width is not the same as executing it. It steps over the money check and takes the
+  arm behind it. A ceiling, and unlike the boat and the yes-or-nos it has no lever.
+- The best evidence looked like the worst: read at three wrong widths, all nine sites
+  agree on `0x00`. That is one agreement, not nine — every site landing in the same
+  run of zeroes inside the same argument.
