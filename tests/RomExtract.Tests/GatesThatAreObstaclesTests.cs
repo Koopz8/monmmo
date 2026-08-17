@@ -38,6 +38,7 @@ public sealed class GatesThatAreObstaclesTests
     private const int APerson = 0x0014;
     private const int ATreeAndAPerson = 0x0015;
     private const int ATreeAndABoulder = 0x0016;
+    private const int ATreeAndSomethingSilent = 0x0017;
 
     private static Rom Image()
     {
@@ -94,6 +95,12 @@ public sealed class GatesThatAreObstaclesTests
                     Hidden(6, ATreeAndAPerson, NeitherOne),
                     Hidden(7, ATreeAndABoulder, AsksAndTakes),
                     Hidden(8, ATreeAndABoulder, AsksOnly),
+
+                    // Both are taken off the map and only one of them is asked anything. The
+                    // pair a break that weakened "every one of them is asked" slipped past:
+                    // with the other fixtures the removal check caught it by accident.
+                    Hidden(9, ATreeAndSomethingSilent, AsksAndTakes),
+                    Hidden(10, ATreeAndSomethingSilent, TakesOnly),
                 ],
             },
         ]);
@@ -180,6 +187,17 @@ public sealed class GatesThatAreObstaclesTests
     {
         Assert.DoesNotContain(ATreeAndABoulder, Removed());
         Assert.DoesNotContain(ATreeAndABoulder, Staying());
+    }
+
+    /// <summary>
+    /// EVERY ONE OF THEM HAS TO BE ASKED, not just one — and the fixture has to agree about
+    /// removal, or the removal rule catches this by accident and the asking rule is untested.
+    /// </summary>
+    [Fact]
+    public void AFlagHoldingATreeAndSomethingNobodyAsksAnythingIsNeitherKind()
+    {
+        Assert.DoesNotContain(ATreeAndSomethingSilent, Removed());
+        Assert.DoesNotContain(ATreeAndSomethingSilent, Staying());
     }
 
     /// <summary>
