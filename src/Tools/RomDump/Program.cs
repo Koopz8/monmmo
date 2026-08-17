@@ -6832,28 +6832,10 @@ public static class Program
 
         IReadOnlyDictionary<uint, IReadOnlyList<int>> index = EverywhereInTheImage.PointerIndex(rom);
 
-        List<int> unopened =
-        [
-            .. boundary.Where(f => moved.TryGetValue(f, out IReadOnlyList<FlagSite>? at) && at.Any(s => !s.Opened)),
-        ];
+        IReadOnlyList<EverywhereInTheImage.OutsideTheWorld> outside =
+            EverywhereInTheImage.PastTheBoundary(rom, index, boundary, moved);
 
-        // And which of those a script jumps into. "Reads as script" is a weak filter — the
-        // reversal below says how weak — but a site something jumps to on purpose is not a
-        // coincidence twice over, and that is the difference between a list to read and a list
-        // to work through.
-        var jumpedInto = new Dictionary<int, List<FlagSite>>();
-
-        foreach (int flag in unopened)
-        {
-            foreach (FlagSite site in moved[flag].Where(s => !s.Opened))
-            {
-                if (!EverywhereInTheImage.WhoNames(rom, index, site.Address, 192).Any(n => n.AJump)) continue;
-
-                if (!jumpedInto.TryGetValue(flag, out List<FlagSite>? at)) jumpedInto[flag] = at = [];
-
-                at.Add(site);
-            }
-        }
+        int jumpedInto = outside.Count(f => f.JumpedInto.Count > 0);
 
         Console.WriteLine();
         Console.WriteLine("  AND THE SAME QUESTION PUT TO THE WHOLE FILE");
@@ -6873,25 +6855,25 @@ public static class Program
         Console.WriteLine(
             $"    of the {boundary.Count} gating flags nothing in the world moves:");
         Console.WriteLine(
-            $"      {unopened.Count} are moved by something reading as script that the maps never open");
+            $"      {outside.Count} are moved by something reading as script that the maps never open");
         Console.WriteLine(
-            $"        {jumpedInto.Count} of those are jumped into by a script — an entry point to find");
+            $"        {jumpedInto} of those are jumped into by a script — an entry point to find");
         Console.WriteLine(
-            $"      {boundary.Count - unopened.Count} are moved by no script anywhere in the file — compiled code, and");
+            $"      {boundary.Count - outside.Count} are moved by no script anywhere in the file — compiled code, and");
         Console.WriteLine(
             "        unreachable by reading scripts however many are opened");
 
-        foreach ((int flag, List<FlagSite> hidden) in jumpedInto
-                     .OrderByDescending(p => p.Value.Count)
-                     .ThenBy(p => p.Key)
-                     .Take(20))
+        foreach (EverywhereInTheImage.OutsideTheWorld flag in outside.Take(20))
         {
+            IReadOnlyList<FlagSite> worst = flag.JumpedInto.Count > 0 ? flag.JumpedInto : flag.Unopened;
+
             Console.WriteLine(
-                $"      0x{flag:X4}  {hidden.Count} site(s) jumped into and never opened — "
-                + string.Join(", ", hidden.Take(3).Select(s => $"0x{s.Offset:X6} {(s.Sets ? "set" : "clear")}")));
+                $"      0x{flag.Flag:X4}  {flag.Unopened.Count} site(s) nothing opens, "
+                + $"{flag.JumpedInto.Count} of them jumped into — "
+                + string.Join(", ", worst.Take(3).Select(s => $"0x{s.Offset:X6} {(s.Sets ? "set" : "clear")}")));
         }
 
-        if (jumpedInto.Count > 20) Console.WriteLine($"      ... and {jumpedInto.Count - 20} more");
+        if (outside.Count > 20) Console.WriteLine($"      ... and {outside.Count - 20} more");
 
         Console.WriteLine();
         Console.WriteLine(

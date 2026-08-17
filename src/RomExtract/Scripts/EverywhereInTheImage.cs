@@ -208,6 +208,58 @@ public static class EverywhereInTheImage
     }
 
     /// <summary>
+    /// One gating flag nothing in the world moves, and what the rest of the file says about it.
+    /// </summary>
+    /// <param name="Unopened">Sites moving it that the map scan never decoded.</param>
+    /// <param name="JumpedInto">
+    /// The ones a script jumps to on purpose. <b>The promotion from candidate to job.</b>
+    /// "Reads as script" is a weak filter — the reversal control says how weak — and a site
+    /// something jumps into is not a coincidence twice over.
+    /// </param>
+    public sealed record OutsideTheWorld(
+        int Flag, IReadOnlyList<FlagSite> Unopened, IReadOnlyList<FlagSite> JumpedInto);
+
+    /// <summary>
+    /// Which flags on the code boundary the file has something to say about after all.
+    /// <para>
+    /// <b>Kept here rather than in whoever is printing.</b> The rule that decides which flags
+    /// are news — a site nothing opened, and a jump into it — is exactly the kind of rule this
+    /// project has three times written in the reporting layer, which has no tests, and three
+    /// times got wrong somewhere no fixture could reach.
+    /// </para>
+    /// <para>
+    /// A flag whose every site the map scan already opened is not on this list. It is a flag
+    /// <c>--flags</c> has been describing correctly all along, and putting it here would bury
+    /// the new ones under two hundred old ones.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<OutsideTheWorld> PastTheBoundary(
+        Rom rom,
+        IReadOnlyDictionary<uint, IReadOnlyList<int>> index,
+        IEnumerable<int> boundary,
+        IReadOnlyDictionary<int, IReadOnlyList<FlagSite>> moved,
+        int slack = 192)
+    {
+        var found = new List<OutsideTheWorld>();
+
+        foreach (int flag in boundary)
+        {
+            if (!moved.TryGetValue(flag, out IReadOnlyList<FlagSite>? sites)) continue;
+
+            List<FlagSite> unopened = [.. sites.Where(s => !s.Opened)];
+
+            if (unopened.Count == 0) continue;
+
+            found.Add(new OutsideTheWorld(
+                flag,
+                unopened,
+                [.. unopened.Where(s => WhoNames(rom, index, s.Address, slack).Any(n => n.AJump))]));
+        }
+
+        return [.. found.OrderByDescending(f => f.JumpedInto.Count).ThenBy(f => f.Flag)];
+    }
+
+    /// <summary>
     /// What the sweep finds in this same file with the bytes reversed — the noise floor.
     /// <para>
     /// <b>The control, and this instrument does not mean anything without it.</b> "Reads as

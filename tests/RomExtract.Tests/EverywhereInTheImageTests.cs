@@ -48,6 +48,18 @@ public class EverywhereInTheImageTests
     /// <summary>Four aligned bytes holding the orphan's address, with no command in front.</summary>
     private const int Literal = 0x900;
 
+    /// <summary>A second scene nothing opens — and this one a script really does jump into.</summary>
+    private const int Deep = 0xB00;
+
+    /// <summary>The goto that jumps into it, itself in a block nothing points at.</summary>
+    private const int TheWayIn = 0xC00;
+
+    /// <summary>A flag moved only inside the block a map reaches — not news, and not on the list.</summary>
+    private const int OnlyInTheOpen = 0x0055;
+
+    /// <summary>A flag moved only where nothing looks, and jumped into.</summary>
+    private const int OnlyOutOfSight = 0x0056;
+
     private static void Put(byte[] image, int at, params byte[] bytes) => bytes.CopyTo(image, at);
 
     private static void Pointer(byte[] image, int at, uint address)
@@ -72,7 +84,8 @@ public class EverywhereInTheImageTests
         Pointer(image, Shared + 7, 0x08000300);
         Put(image, InTheOpen, SetFlag, Holds & 0xFF, Holds >> 8);
         Put(image, InTheOpen + 3, ClearFlag, Keeps & 0xFF, Keeps >> 8);
-        Put(image, InTheOpen + 6, End);
+        Put(image, InTheOpen + 6, SetFlag, OnlyInTheOpen & 0xFF, OnlyInTheOpen >> 8);
+        Put(image, InTheOpen + 9, End);
 
         Put(image, 0x300, Release, End);
 
@@ -93,6 +106,12 @@ public class EverywhereInTheImageTests
         // And a decoy that is neither: four bytes holding the address, off any boundary, with
         // no command in front. Sixteen megabytes contain sixty thousand of these by accident.
         Pointer(image, 0x921, 0x08000000 + (uint)Orphan);
+
+        // A second scene nothing opens, and a goto into it from a block nothing points at
+        // either. Being jumped into on purpose is what separates a job from a coincidence.
+        Put(image, Deep, SetFlag, OnlyOutOfSight & 0xFF, OnlyOutOfSight >> 8, End);
+        Put(image, TheWayIn, Goto);
+        Pointer(image, TheWayIn + 1, 0x08000000 + (uint)Deep);
 
         // A hit on the flag pattern that is not a setflag at all — three bytes in the middle
         // of something, with bytes after them that are not commands.
@@ -412,7 +431,7 @@ public class EverywhereInTheImageTests
 
         int real = EverywhereInTheImage.EveryFlagMoved(rom).Values.Sum(s => s.Count);
 
-        Assert.Equal(4, real);
+        Assert.Equal(6, real);
         Assert.True(EverywhereInTheImage.NoiseFloor(rom) < real);
     }
 
@@ -429,6 +448,52 @@ public class EverywhereInTheImageTests
         new Random(20250817).NextBytes(bytes);
 
         Assert.True(EverywhereInTheImage.NoiseFloor(new Rom(bytes)) > 0);
+    }
+
+    /// <summary>
+    /// <b>The rule that decides which flags are news, kept where a fixture can hold it.</b>
+    /// Three times this project has written a classification like this into the reporting
+    /// layer, which has no tests, and three times it was wrong somewhere nothing could reach.
+    /// </summary>
+    [Fact]
+    public void PastTheBoundaryPromotesTheOneAScriptJumpsInto()
+    {
+        Rom rom = Rom();
+
+        IReadOnlyList<EverywhereInTheImage.OutsideTheWorld> outside = EverywhereInTheImage.PastTheBoundary(
+            rom,
+            EverywhereInTheImage.PointerIndex(rom),
+            [Holds, Keeps, OnlyInTheOpen, OnlyOutOfSight, 0x0BAD],
+            EverywhereInTheImage.EveryFlagMoved(rom, EverywhereInTheImage.Opened(rom, TheWorld())));
+
+        EverywhereInTheImage.OutsideTheWorld jumped = Assert.Single(outside, f => f.Flag == OnlyOutOfSight);
+
+        Assert.Contains(jumped.JumpedInto, s => s.Offset == Deep);
+
+        // And the orphan, which nothing jumps into: still news, still not promoted.
+        EverywhereInTheImage.OutsideTheWorld held = Assert.Single(outside, f => f.Flag == Holds);
+
+        Assert.Contains(held.Unopened, s => s.Offset == Orphan);
+        Assert.Empty(held.JumpedInto);
+    }
+
+    /// <summary>
+    /// A flag whose every site the map scan already opened is not news. Without that, this list
+    /// is every flag in the game and the two the file really is hiding are somewhere in it.
+    /// </summary>
+    [Fact]
+    public void AFlagTheMapScanAlreadyOpensIsNotOnTheList()
+    {
+        Rom rom = Rom();
+
+        IReadOnlyList<EverywhereInTheImage.OutsideTheWorld> outside = EverywhereInTheImage.PastTheBoundary(
+            rom,
+            EverywhereInTheImage.PointerIndex(rom),
+            [Holds, Keeps, OnlyInTheOpen, OnlyOutOfSight, 0x0BAD],
+            EverywhereInTheImage.EveryFlagMoved(rom, EverywhereInTheImage.Opened(rom, TheWorld())));
+
+        Assert.DoesNotContain(outside, f => f.Flag == OnlyInTheOpen);
+        Assert.DoesNotContain(outside, f => f.Flag == 0x0BAD);
     }
 
     /// <summary>And it finds a flag that is only ever cleared, for the same reason as above.</summary>
