@@ -408,7 +408,27 @@ public static class ScriptCommands
 
         [0x6D] = 0,
         [0x6E] = 1,
-        [0x6F] = 1,
+        // Four, and it was ONE — the second width in this project found wrong rather than
+        // missing, and found by following the drift the first one taught us to look for.
+        //
+        // Five sites, all after a `setvar 0x8004`, and at four the next command is the same one
+        // at every one of them:
+        //
+        //   16 04 80 0A 00 | 6F 14 08 3D 00 | 19 00 80 0D 80 | 21 00 80 ...
+        //   16 04 80 09 00 | 6F 14 08 3D 00 | 19 00 80 0D 80 | 21 00 80 ...
+        //   16 04 80 00 00 | 6F 13 05 39 00 | 19 00 80 0D 80 | 21 00 80 ...
+        //   16 04 80 04 00 | 6F 00 00 2B 00 | 19 00 80 0D 80 | 21 00 80 ...
+        //   16 04 80 00 00 | 6F 00 00 27 00 | 19 00 80 0D 80 | 21 00 80 ...
+        //
+        // `copyvar 0x8000, 0x800D` and then a `compare` on it: the cartridge's own idiom for
+        // reading an answer back and branching on it, at five of five. At three the next byte
+        // is a nop at five of five, which is the padding signature — a width that lands on
+        // nothing but padding has landed in the tail of an argument.
+        //
+        // At one, which is what it was, the read is out of step from here on. That is what put
+        // a phantom stop on 0xC0 thirty-seven bytes later, at a byte inside a `gotoif`'s
+        // pointer — the same shape 0x1F produced, one command along.
+        [0x6F] = 4,
         [0x70] = 1,
         [0x71] = 1,
         [0x72] = 1,

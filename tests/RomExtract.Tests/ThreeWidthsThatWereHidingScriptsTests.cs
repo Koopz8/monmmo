@@ -35,6 +35,11 @@ public class ThreeWidthsThatWereHidingScriptsTests
     private const byte FourByteBlock = 0xA7;
     private const byte BeforeATextBox = 0xC0;
     private const byte Counted = 0x70;
+
+    /// <summary>The second one found wrong rather than missing — and it invented a flag.</summary>
+    private const byte WasWrongToo = 0x6F;
+
+    private const byte CopyVar = 0x19;
     private const byte SetVar = 0x16;
     private const byte Call = 0x04;
     private const byte SetFlag = 0x29;
@@ -99,6 +104,23 @@ public class ThreeWidthsThatWereHidingScriptsTests
 
         Put(image, 0x740, SetFlag, 0x58, 0x00, End);
 
+        // The second wrong width, with a flag hidden inside its own arguments. Read at one, the
+        // arguments decode as a `setflag` that is not there; read at four they are arguments.
+        //
+        // Said plainly, because a test that claims a discrimination it does not make is worse
+        // than no test: this fixture separates FOUR from ONE and nothing else. At three the
+        // last argument byte is a 0x00, the reader calls it a nop, and the read rejoins at
+        // 0x78A — so three and four behave identically here and no assertion on this image can
+        // tell them apart. That is not an oversight, it is the shape of the command: on the
+        // cartridge the same nop absorbs the same difference, and the only thing separating
+        // three from four there is the column — five sites of five landing on padding at three
+        // and on `copyvar`/`compare` at four. That argument lives in the width table beside the
+        // bytes, because a fixture cannot hold it.
+        Put(image, 0x780, SetVar, 0x04, 0x80, 0x00, 0x00);
+        Put(image, 0x785, WasWrongToo, 0x00, SetFlag, 0x5A, 0x00);
+        Put(image, 0x78A, CopyVar, 0x00, 0x80, 0x0D, 0x80);
+        Put(image, 0x78F, End);
+
         // The pointer that makes 0x404 a script in its own right.
         Put(image, 0x500, Goto);
         Pointer(image, 0x501, 0x08000404);
@@ -133,6 +155,7 @@ public class ThreeWidthsThatWereHidingScriptsTests
     [InlineData(WasWrong, 2)]
     [InlineData(FourByteBlock, 2)]
     [InlineData(BeforeATextBox, 2)]
+    [InlineData(WasWrongToo, 4)]
     public void TheWidthsReadOffTheCartridge(byte code, int width) =>
         Assert.Equal(width, ScriptCommands.ArgumentLength(code));
 
@@ -247,5 +270,25 @@ public class ThreeWidthsThatWereHidingScriptsTests
             Rom(), [new SetsAFlag("1.1", "on load (kind 3)", 0x08000700)]);
 
         Assert.Contains(0x0058, on);
+    }
+
+    /// <summary>
+    /// <b>A wrong width does not only hide things — it invents them.</b> Read one byte short,
+    /// this command's own arguments decode as a <c>setflag</c>, and the run comes back holding
+    /// a flag no script on the cartridge ever set.
+    /// <para>
+    /// That is what fixing it did on the real image: flags touched went 259 to 258, and the
+    /// playthrough's own count 286 to 284. Every flag figure this project has published was
+    /// inflated by a misalignment, which is the opposite of the failure it has spent a session
+    /// chasing and reads exactly the same from outside.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AWrongWidthInventsAFlagOutOfItsOwnArguments()
+    {
+        (IReadOnlyCollection<int> on, IReadOnlyCollection<int> _) = WhatItIsWaitingFor.Touches(
+            Rom(), [new SetsAFlag("1.1", "person 1", 0x08000780)]);
+
+        Assert.DoesNotContain(0x005A, on);
     }
 }
