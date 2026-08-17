@@ -6225,6 +6225,16 @@ public static class Program
             .ThenBy(g => g.Key.ToMapId)
             .ToList();
 
+        // Who turns each flag on, across every script on every map. Read once and only if
+        // something asks — it is the same whole-world scan `--flags` does, and most runs of
+        // this report have nobody standing in a doorway with a flag behind them.
+        var setters = new Lazy<IReadOnlyDictionary<int, IReadOnlyList<string>>>(
+            () => WhatItIsWaitingFor.SetBy(
+                rom,
+                MapLibrary.Open(rom).All()
+                    .SelectMany(ScriptsOf)
+                    .Select(s => ($"{s.MapId} {s.What}", s.Address))));
+
         foreach (IGrouping<(string ToMapId, string Why), ShutDoor> shut in byTarget.Take(30))
         {
             Console.WriteLine(
@@ -6237,7 +6247,15 @@ public static class Program
             // And who, when somebody is. "Somebody is standing in the way" was true for eight
             // measurements running and named nobody; which person and what talking to them
             // came to are the two things that make it a job rather than an observation.
-            foreach (Blocker who in shut.SelectMany(d => d.Who).DistinctBy(w => w.LocalId).Take(4))
+            //
+            // Which map they are on comes with them now. It was dropped here — the doors are
+            // grouped by where they *lead*, and one group can gather doors out of several
+            // maps — and without it the person's own script cannot be found again, which is
+            // the one thing left to ask about the four who do nothing.
+            foreach ((string fromMapId, Blocker who) in shut
+                         .SelectMany(d => d.Who.Select(w => (d.FromMapId, Who: w)))
+                         .DistinctBy(p => (p.FromMapId, p.Who.LocalId))
+                         .Take(4))
             {
                 string[] did =
                 [
@@ -6266,6 +6284,15 @@ public static class Program
                         : did.Length == 0
                             ? "talked to, and nothing it did opens anything"
                             : "talked to — " + string.Join(", ", did)));
+
+                // And, for the ones that did nothing, the arm the run could not take.
+                //
+                // A run reports what it ran. A script whose whole part in the story is behind
+                // a flag it has not got reports as a person with nothing to say — which is
+                // the same output as a person with nothing to say, and four of those are
+                // standing in the last four doorways. Reading both arms is the one thing
+                // `ReadAll` has always been able to do and nothing has ever asked it for.
+                if (did.Length == 0 && who.Talked) WriteWhatItIsWaitingFor(rom, world, fromMapId, who, played, setters);
             }
         }
 
@@ -6610,6 +6637,124 @@ public static class Program
             FlagGate.TheBoat => "the boat",
             _ => "nothing this build can see",
         };
+    }
+
+    /// <summary>
+    /// What a person who does nothing is waiting for, and who could give it to them.
+    /// <para>
+    /// The last thing left to ask about a blocker. The playthrough already says this script
+    /// sets no flag, asks for nothing, walks nobody and calls no routine — and every one of
+    /// those is a statement about <em>the arm the run took</em>. The other arm is right there
+    /// in the image and has been readable the whole time.
+    /// </para>
+    /// <para>
+    /// Three flags at most, worst first: a flag the run has not got, whose other arm actually
+    /// does something, is a job. A flag the run already has is not a wall, and saying so is
+    /// how this instrument gets to be wrong out loud.
+    /// </para>
+    /// </summary>
+    private static void WriteWhatItIsWaitingFor(
+        Rom rom,
+        WorldData world,
+        string mapId,
+        Blocker who,
+        Attempt played,
+        Lazy<IReadOnlyDictionary<int, IReadOnlyList<string>>> setters)
+    {
+        if (world.Find(mapId)?.Objects.FirstOrDefault(o => o.LocalId == who.LocalId) is not { } person
+            || person.ScriptAddress == 0)
+        {
+            Console.WriteLine("         and has no script at all — nobody is standing here on purpose");
+            return;
+        }
+
+        WaitingOn waiting = WhatItIsWaitingFor.Asks(rom, person.ScriptAddress);
+
+        if (waiting.Flags.Count == 0)
+        {
+            // The finding that kills the whole idea, and the reason this was built rather
+            // than written down. A script with no conditional in it is not waiting; the run
+            // read all of it, and the door is shut for some other reason entirely.
+            Console.WriteLine(
+                "         its script asks about no flag at all — it is not waiting on one"
+                + (waiting.AskedWithoutABranch > 0
+                    ? $" ({waiting.AskedWithoutABranch} checkflag(s) this could not pair with a branch)"
+                    : string.Empty)
+                + (waiting.Truncated ? " — and the read hit its own limit, so there may be more" : string.Empty));
+
+            WriteWhatElseItAsks(waiting);
+
+            return;
+        }
+
+        var has = played.Flags.ToHashSet();
+
+        List<FlagAsked> worst =
+        [
+            .. waiting.Flags
+                .OrderBy(f => has.Contains(f.Flag))
+                .ThenBy(f => f.IfSet.Nothing && f.IfClear.Nothing)
+                .ThenByDescending(f => Math.Max(f.IfSet.Commands, f.IfClear.Commands)),
+        ];
+
+        foreach (FlagAsked asked in worst.Take(3))
+        {
+            Console.WriteLine(
+                $"         waiting on flag 0x{asked.Flag:X4} — "
+                + (has.Contains(asked.Flag) ? "which the run HAS set" : "which the run never set"));
+
+            if (asked.NeitherAnswerChangesAnything)
+            {
+                Console.WriteLine("           and neither answer changes anything — it only picks a line of text");
+            }
+            else
+            {
+                Console.WriteLine($"           if set:   {asked.IfSet}");
+                Console.WriteLine($"           if clear: {asked.IfClear}");
+            }
+
+            IReadOnlyList<string> from = setters.Value.GetValueOrDefault(asked.Flag, []);
+
+            Console.WriteLine(
+                from.Count == 0
+                    ? "           NOTHING IN THE WORLD SETS IT — it comes out of a routine, not a script"
+                    : $"           set by {from.Count}: " + string.Join(", ", from.Take(3))
+                        + (from.Count > 3 ? $", +{from.Count - 3} more" : string.Empty));
+        }
+
+        if (worst.Count > 3) Console.WriteLine($"         ... and {worst.Count - 3} more flag(s) it asks about");
+
+        if (waiting.AskedWithoutABranch > 0)
+        {
+            Console.WriteLine(
+                $"         ({waiting.AskedWithoutABranch} checkflag(s) this could not pair with a branch — "
+                + "the size of what it cannot see)");
+        }
+
+        WriteWhatElseItAsks(waiting);
+    }
+
+    /// <summary>
+    /// What else the script branches on, which is how this instrument gets to say the question
+    /// was wrong.
+    /// <para>
+    /// A door gated on <c>0x47</c> is a shopping list; one gated on a <c>compare</c> after a
+    /// <c>special</c> is behind the code boundary; one gated on a plain variable is a story
+    /// counter. Three different jobs, and a flag-shaped instrument reports all three as "asks
+    /// about no flag at all" unless it is made to count them.
+    /// </para>
+    /// </summary>
+    private static void WriteWhatElseItAsks(WaitingOn waiting)
+    {
+        if (waiting.OtherQuestions.Count == 0) return;
+
+        Console.WriteLine(
+            "         it also branches on "
+            + string.Join(
+                ", ",
+                waiting.OtherQuestions
+                    .Take(4)
+                    .Select(q => $"{q.Times} x {(q.Code == 0 ? "nothing this could see" : ScriptCommands.NameOf(q.Code))}")));
     }
 
     /// <summary>setflag and clearflag, both two bytes wide and both long since derived.</summary>
