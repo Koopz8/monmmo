@@ -215,6 +215,7 @@ public static class Program
         if (options.Stops.Count > 0) WriteStops(rom, options.Stops);
         if (options.Fights) WriteFights(rom);
         if (options.WhoKnows) WriteWhoKnows(rom);
+        if (options.Entries) WriteEntries(rom);
 
         if (options.SequenceWidths) WriteSequenceWidths(rom);
 
@@ -6385,9 +6386,10 @@ public static class Program
                 "    one square at a time, stopping at a wall — a scene's steps applied as one"
                 + " jump put 364 of 426 of these off the edge of the map");
             Console.WriteLine(
-                $"    {played.WalkSites} applymovement command(s), asked for {played.WalksAsked}"
-                + " time(s) — a scene is commonly several entry stubs into one block, and every"
-                + " entry runs the same commands. Each command applies once.");
+                $"    {played.WalkSites} applymovement command(s) ON A MAP, asked for"
+                + $" {played.WalksAsked} time(s) — a scene is commonly several entry stubs into one"
+                + " block, and every entry runs the same commands. Each applies once per map,"
+                + " because nineteen Centres share one nurse and that is nineteen scenes.");
         }
 
         // AND WHETHER ANYBODY IN THIS WORLD IS STANDING SOMEWHERE THAT IS NOT ON IT.
@@ -7157,6 +7159,107 @@ public static class Program
     /// only way to ask who puts a two in it was to read bytes by eye.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// The scenes written as several doors into one room, and what that costs every count.
+    /// </summary>
+    private static void WriteEntries(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("DOORS INTO ONE ROOM");
+        Console.WriteLine();
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        List<SetsAFlag> scripts = [.. library.All().SelectMany(EveryScriptOn)];
+
+        IReadOnlyList<AnEntry> doors =
+            EntriesToAScene.In(rom, scripts, HowAScriptRuns.FirstRemembered);
+
+        IReadOnlyList<IGrouping<(string MapId, uint Leads), AnEntry>> rooms =
+            EntriesToAScene.Rooms(doors);
+
+        IReadOnlyList<IGrouping<uint, AnEntry>> shared = EntriesToAScene.SharedAcrossMaps(doors);
+
+        Console.WriteLine(
+            $"  {scripts.Count} script(s) the map scan opens, {doors.Count} of which do nothing but"
+            + " hand over to another block");
+
+        if (rooms.Count == 0)
+        {
+            Console.WriteLine(
+                "  NO BLOCK IS ENTERED TWICE. Every handover in this cartridge goes somewhere of"
+                + " its own, so nothing here is one scene written more than once.");
+
+            return;
+        }
+
+        List<IGrouping<(string MapId, uint Leads), AnEntry>> oneScene =
+            [.. rooms.Where(EntriesToAScene.IsOneSceneEnteredSeveralWays)];
+
+        List<IGrouping<(string MapId, uint Leads), AnEntry>> aCrowd =
+            [.. rooms.Where(r => !EntriesToAScene.IsOneSceneEnteredSeveralWays(r))];
+
+        int extra = oneScene.Sum(r => r.Count() - 1);
+
+        Console.WriteLine(
+            $"  {rooms.Count} block(s) are entered by more than one door ON THE SAME MAP, by"
+            + $" {rooms.Sum(r => r.Count())} doors between them");
+        Console.WriteLine(
+            $"    {oneScene.Count} of those are ONE SCENE ENTERED SEVERAL WAYS — every door says a"
+            + $" different number, so it is announcing which one it is. {extra} of those runs are a"
+            + " scene already played.");
+        Console.WriteLine(
+            $"    {aCrowd.Count} are several scripts that happen to share a block — the doors all say"
+            + " the same thing, or say nothing, which is not announcing anything. A player takes"
+            + " all of those.");
+        Console.WriteLine(
+            $"  the scratch variables they announce themselves in: "
+            + string.Join(", ", doors.Where(d => d.Says >= 0).GroupBy(d => d.Into)
+                .OrderByDescending(g => g.Count()).Take(4)
+                .Select(g => $"0x{g.Key:X4} x{g.Count()}")));
+        Console.WriteLine();
+
+        foreach (IGrouping<(string MapId, uint Leads), AnEntry> room in oneScene.Take(10))
+        {
+            Console.WriteLine(
+                $"    {room.Key.MapId} -> 0x{room.Key.Leads:X8} — {room.Count()} door(s), saying "
+                + string.Join(", ", room.Select(d => d.Says).Order()));
+
+            foreach (AnEntry door in room.OrderBy(d => d.Where.Address)) Console.WriteLine($"      {door}");
+        }
+
+        if (oneScene.Count > 10) Console.WriteLine($"    ... and {oneScene.Count - 10} more");
+
+        // AND THE SHAPE THAT LOOKS IDENTICAL AND IS NOT.
+        //
+        // One nurse's script is attached to person 1 on nineteen Pokémon Centres. Grouped by
+        // address alone the biggest room in this cartridge has twenty doors, and it is twenty
+        // different people in twenty different towns that a player talks to one by one.
+        // Printed here because anything keyed on a script address alone is wrong about it —
+        // milestone 193's first version was, and it dropped seven walks in every eight.
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  and {shared.Count} block(s) are reached from more than one MAP — shared routines,"
+            + " not repeated scenes, and a different thing entirely");
+
+        foreach (IGrouping<uint, AnEntry> one in shared.Take(4))
+        {
+            Console.WriteLine(
+                $"    0x{one.Key:X8} on {one.Select(d => d.Where.MapId).Distinct().Count()} map(s)"
+                + $": {string.Join(", ", one.Select(d => d.Where.MapId).Distinct().Take(6))}, ...");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine(
+            "  A player takes ONE door. Every walk here is a fixpoint that stands on every square");
+        Console.WriteLine(
+            "  and talks to everybody, so it takes all of them — and every number it reports per");
+        Console.WriteLine(
+            "  script is multiplied by however many doors that scene has. 193 found this in the");
+        Console.WriteLine(
+            "  walking, because people ended up in the wrong place. Nothing else had been asked.");
+    }
+
     /// <summary>
     /// Every place in the file that asks who knows a move, with the floor under it.
     /// <para>
@@ -10840,6 +10943,11 @@ public static class Program
                                     are 0.6% of the file — so the move that crosses water has
                                     been invisible in exactly the way a move nothing asks about
                                     is invisible.
+              --entries             the scenes this cartridge writes as several doors into one
+                                    room: a script whose whole content is a handover, grouped by
+                                    where it leads. A player takes one door; every walk this
+                                    project has takes all of them, so every per-script number it
+                                    reports is multiplied by however many doors a scene has.
               --routines            what every routine this project cannot execute is
                                     asked: how many arguments, what its answer is compared
                                     against, how many sites branch on it.
@@ -11050,6 +11158,9 @@ public static class Program
         /// <summary>Whether to hunt every place in the file that asks who knows a move.</summary>
         public bool WhoKnows { get; private init; }
 
+        /// <summary>Whether to count the scenes written as several doors into one room.</summary>
+        public bool Entries { get; private init; }
+
         /// <summary>Whether the playthrough may take the ferry, which makes its reach a ceiling.</summary>
         public bool Boat { get; private init; }
 
@@ -11216,6 +11327,7 @@ public static class Program
             bool specialContracts = false;
             bool fights = false;
             bool whoKnows = false;
+            bool entries = false;
             bool play = false;
             var whereFrom = new List<int>();
             var inTheImage = new List<int>();
@@ -11465,6 +11577,9 @@ public static class Program
                         break;
                     case "--who-knows":
                         whoKnows = true;
+                        break;
+                    case "--entries":
+                        entries = true;
                         break;
                     case "--play":
                         play = true;
@@ -11766,6 +11881,7 @@ public static class Program
                 Stops = stops,
                 Fights = fights,
                 WhoKnows = whoKnows,
+                Entries = entries,
                 Boat = boat,
                 Surf = surf,
                 InOrder = inOrder,

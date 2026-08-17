@@ -551,8 +551,8 @@ public sealed record Attempt(
     public IReadOnlyList<WalkedOffTheMap> OffTheMap { get; init; } = [];
 
     /// <summary>
-    /// How many distinct <c>applymovement</c> commands the run reached, and how many times it
-    /// asked for one.
+    /// How many distinct <c>applymovement</c> commands ON A MAP the run reached, and how many
+    /// times it asked for one.
     /// <para>
     /// <b>The two are wildly different and the difference is what a fixpoint is.</b> A scene in
     /// this cartridge is commonly written as several tiny entry stubs — <c>lockall; setvar
@@ -564,6 +564,13 @@ public sealed record Attempt(
     /// <para>
     /// So the same command is the same movement, and it applies once. That is identity rather
     /// than a decision, which is why it is not marked MODELLED.
+    /// </para>
+    /// <para>
+    /// <b>Once per map, and the difference is nineteen Pokémon Centres.</b> One nurse's script
+    /// is attached to person 1 on nineteen maps and one gym guide's to person 3 on eight, so a
+    /// block reached from eight maps is eight scenes. Keyed on the address alone this dropped
+    /// seven of every eight — found by asking how many walk sites the run reached from more
+    /// than one map, which was three of eighty-three and had gone straight past every test.
     /// </para>
     /// </summary>
     public int WalkSites { get; init; }
@@ -787,7 +794,12 @@ public static class Autoplayer
         // How many scene-walks were applied at all, so the count below has a denominator.
         var walksApplied = 0;
         var walksAsked = 0;
-        var walkedFrom = new HashSet<uint>();
+        // The same command on the same map. NOT the same command anywhere: nineteen Pokémon
+        // Centres share one nurse's script and eight gym guides share one guide's, so a block
+        // reached from eight maps is eight scenes and keying on the address alone silently
+        // dropped seven of them. Found by asking how many walk sites the run reached from more
+        // than one map — three of eighty-three, and every one of them cost seven walks.
+        var walkedFrom = new HashSet<(string MapId, uint At)>();
 
         // Where something changed hands, by the script that did it. Kept by script rather
         // than by what it hands over: five shopkeepers selling the same potion is not one
@@ -877,7 +889,7 @@ public static class Autoplayer
                         walksAsked++;
 
                         // The same command is the same movement. See Attempt.WalkSites.
-                        if (!walkedFrom.Add(at2)) continue;
+                        if (!walkedFrom.Add((map.Id, at2))) continue;
                         if (map.Objects.FirstOrDefault(o => o.LocalId == who) is not { } walker) continue;
 
                         GridPosition at = moved.GetValueOrDefault((map.Id, who), walker.Square);

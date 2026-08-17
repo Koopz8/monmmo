@@ -6,20 +6,18 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **It was never a flag. There was only ever one scene.** PEWTER CITY writes one
-  cutscene as four twelve-byte stubs — `lockall; 0x4001 <- N; goto the scene` —
-  one per square you can cross to start it, each saying which door it came in by.
-  A player crosses one. A fixpoint stands on all four and plays the scene four
-  times.
-- **61 movement commands, asked for 416 times** on the floor run. Every entry runs
-  the same commands at the same addresses, so the same command is the same
-  movement and it applies once. Identity, not a decision — nothing here is
-  modelled.
-- The boat runs go **390 → 381**, and down is the honest direction: the extra nine
-  were reached by walking people repeatedly out of their own doorways.
-- It also closed the thing the last milestone couldn't. The run reported 390 while
-  its own last pass reached 381, because the settle test compares counts. Now the
-  final walk and the last pass agree **exactly** — two designs costed for that
-  problem turned out not to be needed.
-- The break came back green first time: the test read the counter the milestone
-  added instead of the world it changed.
+- **Nineteen Pokémon Centres share one nurse.** The previous milestone keyed a
+  cutscene's movement on the address of its command — *the same command is the same
+  movement* — which is true on one map and false across the cartridge. A block
+  reached from eight maps is eight scenes. Three of the boat run's 83 walk sites
+  were shared that way, each losing seven of its eight, and every test shipped with
+  it used one map so none of them could see it.
+- **`--entries` is what found it**, and its own first answer was wrong the same
+  way: grouped by target alone, the biggest "scene" in the game has twenty doors
+  and is twenty different nurses in twenty different towns.
+- Grouped properly: 227 of 2915 scripts do nothing but hand over; **24 blocks are
+  entered by more than one door on one map, 22 of them one scene entered several
+  ways.** Told apart by the number each door says — different per door for a scene,
+  the same for six people sharing a script.
+- Still owed: **38 script runs are a scene already played**, and the routines,
+  questions, stopped reads and refusals are all still counted once per door.
