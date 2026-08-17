@@ -413,6 +413,17 @@ public sealed record Attempt(
     IReadOnlyList<ShutDoor> ShutDoors,
     IReadOnlyList<Frontier> Blocked)
 {
+    /// <summary>
+    /// How many attempts at a fight failed, which is more than the number of trainers that beat
+    /// it.
+    /// <para>
+    /// A run goes back to a trainer it lost to on every later pass, because the party is
+    /// stronger each time. Counting the attempts as losses makes a party closing the gap look
+    /// like one losing more and more fights.
+    /// </para>
+    /// </summary>
+    public int FightAttemptsLost { get; init; }
+
     /// <summary>The highest level anything in the party reached, which is the shape of a run.</summary>
     public int HighestLevel => Party.Count == 0 ? 0 : Party.Max(m => m.Level);
 
@@ -601,7 +612,8 @@ public static class Autoplayer
         Func<uint, IReadOnlyCollection<int>, Bag, PlayedScript> runScript,
         Action<string>? log = null,
         bool ridingTheBoat = false,
-        int money = 0)
+        int money = 0,
+        ISet<int>? beaten = null)
     {
         var battles = new BattleFactory(rules);
         var progress = new Progression(rules);
@@ -620,7 +632,26 @@ public static class Autoplayer
         var moves = new HashSet<int>();
         var specials = new Dictionary<int, int>();
         var party = new List<SavedMon>();
-        var fought = new HashSet<int>();
+        // WHO IT HAS BEATEN, SHARED WITH WHOEVER RUNS THE SCRIPTS.
+        //
+        // <b>The run knew and the reader did not.</b> A trainerbattle is its own conditional:
+        // beaten, the fight does nothing and the script carries on into whatever the victory
+        // was for. Nothing ever told the reader, so `HasBeaten` was false at every site on
+        // every pass, and every script containing a fight stopped at the fight FOREVER —
+        // however many the run won.
+        //
+        // That is the ROCKET HIDEOUT's LIFT KEY, and it is SILPH CO.'s `setflag 0x003E` sitting
+        // eleven commands past GIOVANNI. Two sessions were spent on that flag.
+        //
+        // Passed in rather than handed back so the caller's reader can see a win the moment it
+        // happens, which is what the cartridge does.
+        ISet<int> fought = beaten ?? new HashSet<int>();
+        var lostTo = new HashSet<int>();
+
+        // And the ones it could not fight at all. Counted by trainer rather than by attempt for
+        // the same reason as the losses: a run with nothing to send out comes back next pass
+        // with a party, and one wall met seven times is one wall.
+        var couldNot = new HashSet<int>();
 
         // What it is carrying. One bag for the whole run, written as it goes — the point
         // of it is that something picked up on ROUTE 2 is in hand at a door in SAFFRON.
@@ -775,10 +806,23 @@ public static class Autoplayer
 
                     // And whoever it picks a fight with. Once each: a trainer beaten stays
                     // beaten, which is what the flag they set means.
-                    if (did.Fights is not { } trainerId || !fought.Add(trainerId)) continue;
+                    // A TRAINER BEATEN STAYS BEATEN. A TRAINER LOST TO DOES NOT.
+                    //
+                    // This marked one fought before the fight happened, so a loss was final:
+                    // the run met GIOVANNI on its first pass with whatever it had, lost, and
+                    // never went back — while every pass after that made the party stronger.
+                    // A player who loses wakes up in a centre and walks in again; that is what
+                    // the healing above is already modelling, one step too late.
+                    //
+                    // Forty-nine of these were sitting behind a party that had since doubled in
+                    // level. Nothing said so: a fight lost once and a fight lost forever are
+                    // the same line in the report.
+                    if (did.Fights is not { } trainerId || fought.Contains(trainerId)) continue;
 
+                    // Nothing to send out — but there may be next pass, so this is not final.
                     if (party.Count == 0)
                     {
+                        couldNot.Add(trainerId);
                         skipped++;
 
                         continue;
@@ -802,14 +846,28 @@ public static class Autoplayer
                     switch (Fight(battles, progress, party, trainerId))
                     {
                         case true:
+                            fought.Add(trainerId);
                             won++;
                             break;
 
                         case false:
+                            // Counted two ways on purpose, and reported apart. A trainer this
+                            // run goes back to every pass is ONE wall; counting the attempts
+                            // makes a party closing the gap look like one losing more and more
+                            // fights, which is the opposite of what is happening.
+                            lostTo.Add(trainerId);
                             lost++;
                             break;
 
+                        // Nothing to send out, or a trainer this build could not assemble.
+                        // Neither is a fight that happened, and neither is worth coming back
+                        // to on the next pass with a bigger party — the first will be the same
+                        // and the second is an export fault.
+                        // A trainer whose party this build could not assemble. That is an
+                        // export fault and it will be the same on every pass, so it is final.
                         default:
+                            fought.Add(trainerId);
+                            couldNot.Add(trainerId);
                             skipped++;
                             break;
                     }
@@ -973,13 +1031,13 @@ public static class Autoplayer
             moves,
             party,
             won,
-            lost,
-            skipped,
-            healed,
+            lostTo.Count,
+            couldNot.Count,            healed,
             specials,
             shut,
             last.Blocked)
         {
+            FightAttemptsLost = lost,
             Carried = bag.Entries,
             Ran = ran,
             Removed = gone,
