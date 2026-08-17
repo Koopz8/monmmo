@@ -26,7 +26,14 @@ public sealed record AFight(
     /// <summary>What the fall-through turned out to be.</summary>
     public required WhatFollows Follows { get; init; }
 
-    /// <summary>How many places in the whole image hold the fall-through address as a pointer.</summary>
+    /// <summary>
+    /// How many places in the whole image hold the fall-through address as a pointer, or
+    /// -1 when nobody asked.
+    /// <para>
+    /// Zero is the interesting answer and it has to be distinguishable from "not looked for",
+    /// which is why this is not a nullable dressed up as a count.
+    /// </para>
+    /// </summary>
     public required int NamedBy { get; init; }
 
     /// <summary>Whether the jump's own block comes back to the fall-through.</summary>
@@ -112,7 +119,7 @@ public static class WhatAFightLeadsTo
                     jump)
                 {
                     Follows = Reads(rom, after),
-                    NamedBy = names?.GetValueOrDefault(after)?.Count ?? -1,
+                    NamedBy = names is null ? -1 : names.GetValueOrDefault(after)?.Count ?? 0,
                     JumpRejoins = jump != 0 && Reaches(rom, jump, after),
                 });
             }
