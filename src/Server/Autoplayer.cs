@@ -337,6 +337,31 @@ public sealed record HandedOver(
         + $"  {What}  on pass(es) {string.Join(",", Passes)}";
 }
 
+/// <summary>
+/// Somebody a scene walked to a square that is not on the map they are on.
+/// <para>
+/// <b>Reported and not repaired, on purpose.</b> A scene that walks somebody aside is applied
+/// as a displacement from wherever they already are — so a scene the fixpoint plays six times
+/// walks them six times, and the sixth time is off the edge. That much is arithmetic. What the
+/// cartridge does instead is guarded by a flag this project has not read yet, and clamping the
+/// number would turn a wrong position into a plausible one, which is the harder fault to find.
+/// </para>
+/// <para>
+/// It matters beyond tidiness: <c>somebody is standing in the way</c> and <c>a person removed
+/// is a person not in a doorway</c> are both computed against these positions.
+/// </para>
+/// </summary>
+/// <param name="MapId">Which map.</param>
+/// <param name="LocalId">Which person.</param>
+/// <param name="To">Where the walk put them.</param>
+/// <param name="Width">How wide the map is.</param>
+/// <param name="Height">And how tall.</param>
+public sealed record WalkedOffTheMap(string MapId, int LocalId, GridPosition To, int Width, int Height)
+{
+    public override string ToString() =>
+        $"{MapId} person {LocalId} at ({To.X},{To.Y}) on a {Width}x{Height} map";
+}
+
 /// <summary>Why the playthrough stopped.</summary>
 public enum StoppedBecause
 {
@@ -521,6 +546,9 @@ public sealed record Attempt(
 
     /// <summary>Whether it swam because it was told to rather than because it knew how.</summary>
     public bool SwamAnyway { get; init; }
+
+    /// <summary>People a scene walked to a square that is not on their map.</summary>
+    public IReadOnlyList<WalkedOffTheMap> OffTheMap { get; init; } = [];
 
     /// <summary>
     /// The ones that did it more than once, which is the ceiling.
@@ -1143,6 +1171,18 @@ public static class Autoplayer
             SurfMove = rules.SurfMove,
             LearnedToCrossOnPass = learnedToCross,
             SwamAnyway = surfing,
+            OffTheMap =
+            [
+                .. moved
+                    .Select(m => (m.Key, m.Value, Map: world.Find(m.Key.MapId)))
+                    .Where(m => m.Map is not null
+                                && (m.Value.X < 0 || m.Value.Y < 0
+                                    || m.Value.X >= m.Map.Width || m.Value.Y >= m.Map.Height))
+                    .Select(m => new WalkedOffTheMap(
+                        m.Key.MapId, m.Key.LocalId, m.Value, m.Map!.Width, m.Map.Height))
+                    .OrderBy(w => w.MapId, StringComparer.Ordinal)
+                    .ThenBy(w => w.LocalId),
+            ],
             Handovers =
             [
                 .. handovers

@@ -6380,6 +6380,22 @@ public static class Program
             Console.WriteLine(
                 $"  {played.Moved.Count} people were walked out of where they stood by a script it ran"
                 + " — the other way a doorway opens");
+
+            // AND WHERE THAT PUT THEM, WHICH NOTHING HAS EVER ASKED.
+            //
+            // A scene that walks somebody aside is applied as a displacement from wherever
+            // they already are, and the fixpoint plays the scene again on every pass. Six
+            // passes, six walks, and the sixth is over the edge. Reported rather than
+            // clamped: a wrong position that looks plausible is the harder fault to find, and
+            // "somebody is standing in the way" is computed against these.
+            Console.WriteLine(
+                $"    {played.OffTheMap.Count} of them ended up on a square THAT IS NOT ON THE MAP");
+
+            foreach (WalkedOffTheMap lost in played.OffTheMap.Take(6))
+                Console.WriteLine($"      {lost}");
+
+            if (played.OffTheMap.Count > 6)
+                Console.WriteLine($"      ... and {played.OffTheMap.Count - 6} more");
         }
 
         // A fact about the world file rather than about the run, printed here because this is
