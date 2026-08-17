@@ -120,6 +120,13 @@ public class EverywhereInTheImageTests
         // is the one thing the control must not do.
         Put(image, 0x3CFC, End, 0x00, 0x58, SetFlag);
 
+        // And the byte that makes the wrong index visible rather than merely wrong: read
+        // backwards this one sits in front of the four bytes at 0x207, so if a control looked
+        // up offsets in the real image and opcodes in the reversal it would find a goto there.
+        // Without it the mismatch produces garbage that happens to read as "not a jump", and a
+        // control that quietly under-reports its own noise floor is the failure that matters.
+        Put(image, 0x3FF9, Goto);
+
         // A hit on the flag pattern that is not a setflag at all — three bytes in the middle
         // of something, with bytes after them that are not commands.
         Put(image, 0xA03, SetFlag, Holds & 0xFF, Holds >> 8, 0xFF, 0xFF, 0xFF);
