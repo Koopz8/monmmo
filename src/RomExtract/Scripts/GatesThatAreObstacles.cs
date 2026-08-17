@@ -5,11 +5,11 @@ namespace PokeMmo.RomExtract.Scripts;
 /// <summary>
 /// The gating flags whose people are not people: a tree, a rock, a boulder.
 /// <para>
-/// <b>Twenty-two of the sixty-two gates no walk can open hold a hundred and fifty-three of
-/// the two hundred and forty people behind them, and every one of those is an obstacle.</b>
-/// Fifteen flags in one family — <c>0x0011</c> to <c>0x001F</c> — hold one obstacle per map
-/// across thirty-odd maps, and the whole family runs two scripts between them. Seven more
-/// hold one boulder each.
+/// <b>Fifteen gating flags in this cartridge hold nothing but things asked about a move and
+/// then taken off the map</b>, and between them they run TWO scripts — one asking about move
+/// 15 and one about move 249. They are one family, <c>0x0011</c> to <c>0x001F</c>, holding one
+/// obstacle per map across thirty-odd maps: a hundred and forty-six objects behind fifteen
+/// flags. A further twelve gates hold something asked about a move and never removed.
 /// </para>
 /// <para>
 /// They read as the code boundary because nothing sets their flags, and that is true and

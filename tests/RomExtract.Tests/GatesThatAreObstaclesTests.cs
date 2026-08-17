@@ -6,7 +6,7 @@ using Xunit;
 namespace PokeMmo.RomExtract.Tests;
 
 /// <summary>
-/// Twenty-two of the sixty-two gates no walk can open turned out to hold trees and rocks.
+/// Fifteen of the gates no walk can open turned out to hold trees and rocks rather than people.
 /// <para>
 /// They read as the code boundary because nothing sets their flags, and that is true and
 /// misleading in exactly the way the pickups were: the script asks who knows the move, takes the
@@ -15,9 +15,9 @@ namespace PokeMmo.RomExtract.Tests;
 /// under "the true boundary" until this.
 /// </para>
 /// <para>
-/// <b>Found by shape and not by address.</b> The three addresses this cartridge happens to use
-/// are printed by the instrument, not written down here — and the fixture below is built out of
-/// the shape rather than out of them.
+/// <b>Found by shape and not by address.</b> The two addresses this cartridge happens to use are
+/// printed by the instrument, not written down here — and the fixture below is built out of the
+/// shape rather than out of them.
 /// </para>
 /// </summary>
 public sealed class GatesThatAreObstaclesTests
@@ -112,7 +112,7 @@ public sealed class GatesThatAreObstaclesTests
     /// <summary>
     /// AND THE ONE THAT IS ASKED AND STAYS IS KEPT APART, not folded in.
     /// <para>
-    /// Seven of this cartridge's gates hold something whose script asks who knows move 70 and
+    /// Twelve of this cartridge's gates hold something whose script asks who knows a move and
     /// never removes anything. Whatever clears those is a different mechanism from the one that
     /// clears a tree, and widening the rule to catch them would be picking a shape to fit an
     /// answer.

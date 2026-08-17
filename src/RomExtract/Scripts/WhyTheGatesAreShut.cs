@@ -44,7 +44,7 @@ public enum ShutBecause
     /// the routine rather than by any <c>setflag</c>.
     /// <para>
     /// <b>The same mechanism as <see cref="TakenOffTheFloor"/>, one class further out</b>, and
-    /// the first version of this classifier filed all twenty-two of them under the boundary.
+    /// the first version of this classifier filed all fifteen of them under the boundary.
     /// </para>
     /// </summary>
     AnObstacle,
@@ -80,8 +80,8 @@ public sealed record ShutGate(int Flag, FlagGate Gates, ShutBecause Why, int Sit
 /// </para>
 /// <para>
 /// <b>It has now shrunk twice.</b> Three buckets became four when the numbers showed that
-/// picking a thing up sets its hide flag; four became five when twenty-two of the remaining
-/// gates turned out to hold trees, rocks and boulders rather than people. Both times the
+/// picking a thing up sets its hide flag; four became five when fifteen of the remaining
+/// gates turned out to hold trees and rocks rather than people. Both times the
 /// mechanism was the same — a standard routine setting a flag no <c>setflag</c> names — and both
 /// times a bucket called "the boundary" was holding things that open.
 /// </para>

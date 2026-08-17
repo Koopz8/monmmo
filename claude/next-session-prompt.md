@@ -1,7 +1,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-247`, 2841 tests green.
+`claude-249`, 2848 tests green.
 
 Standing rules — do not break these:
 
@@ -101,8 +101,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-211-the-number-that-should-not-have-moved.md` first, then
-`210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
+Read `claude/milestone-212-fifteen-gates-that-are-trees.md` first, then
+`211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
 **Twenty faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
@@ -221,8 +221,10 @@ sets. CERULEAN CAVE is closed: the run now reaches it, off the SAPPHIRE thread.
 2 places sell coins for money at 20 each — READ; 3 price lists, 15 rows, all READ
 the floor is asked for money in ONE place and it is the coin counter; 8 at --say-yes and above
 the widest run sets 212 of the 322 gating flags — 110 gates it never opens; 201 at the floor
-those 110 are 44 with no opener at all, 31 never run, 18 past the boundary, 17 never picked up
-the 44 is the same at every lever setting, which is how a property of the FILE has to behave
+those 110 are 35 with no opener, 31 never run, 17 never picked up, 15 obstacles, 12 past the boundary
+35 and 15 are the same at every lever setting, which is how a property of the FILE has to behave
+62 gates no walk opens hold 240 people; 146 of them are CUT trees and ROCK SMASH rocks
+2 of those gates hold NOBODY — 0x084A and 0x084B, the ferry, with no setter anywhere
 ```
 
 ## The next task, precisely
@@ -239,13 +241,16 @@ the 44 is the same at every lever setting, which is how a property of the FILE h
    anyway, which is the `#130` at 71 the party ends with. **The floor is clean**: 1 place asks,
    nothing comes of it, so the floor's party of six is entirely earned. Whether that deserves a
    `--pay` lever or a located payout table is a DECISION and it is deliberately not made.
-3. **The 44 gates with no readable opener at all have not been looked at one by one.** 211 cut
-   the 110 into four and this is the bucket nothing can open by walking: no `setflag` anywhere
-   in sixteen megabytes names them and nothing on the floor hides behind them. It is 44 at
-   EVERY lever setting, which is how a property of the file has to behave and is the reason to
-   believe the cut. `--in-the-image` will climb any of them. **The 17 things the widest run
-   never picks up are a shorter and more concrete list and nobody has printed which items they
-   are** — that is the cheaper half of the same job.
+3. **The 35, and the twelve inside them that are asked about a move.** 212 cut the boundary
+   bucket from 44 to 35 by finding that fifteen of the gates hold CUT trees and ROCK SMASH
+   rocks. Twelve of the remaining 35 hold something whose script asks who knows a move and
+   NEVER removes it — the STRENGTH boulders among them. **They were deliberately not folded in**,
+   because whatever clears a boulder is a different mechanism from whatever clears a tree, and
+   widening the rule to catch them would be picking a shape to fit an answer. Reading those
+   twelve is the job, and `--in-the-image` will climb any of them.
+   Also cheap and unread: `0x0053` holds **31** people across the SILPH CO. floors with no
+   setter anywhere — the doors are open (176, 181) and the people are still held, which are two
+   different facts.
 4. **Money, for real this time — and the prices are READ now.** Three drinks at 200/300/350 and
    a POKé DOLL at 1000, plus 208's ¥20 a coin and fifteen coin prices, all READ, all at counters
    the run reaches, against a purse of nought. `--money N` is the lever and it is MODELLED; **the
@@ -416,6 +421,9 @@ the other, and nothing about a single green run says which. 207 writes the 2x2 d
   the union equals the final reach at every lever setting, even where a pass dips. And since 193
   the final walk agrees with the last pass's own walk too. Closed.
 * **CERULEAN CAVE is not a SAFFRON problem.** `0x005C`, set by `32.0` ONE ISLAND person 3.
+* **The fifteen gating flags 0x0011-0x001F.** They hold CUT trees and ROCK SMASH rocks, one per
+  map across thirty-odd maps, running two scripts between them (`0x081BDF13`, `0x081BE00C`).
+  Their flags are set by the routine that removes the object. Do not file them as the boundary.
 * **What sets a flag with no setflag anywhere in the file.** Picking the thing up. The routine
   that hands something over sets the object's own hide flag in compiled code, and only 7 of the
   575 objects carrying a hide flag have a script that sets it — it is written in `Autoplayer`

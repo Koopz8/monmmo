@@ -6,15 +6,15 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **"110 gating flags it never set" turned out to be four findings added together.** Sorted:
-  44 have no opener anywhere in the file, 31 are scripts the run never ran, 18 are set only
-  where the map scan cannot see, and 17 are things it never picked up. **48 a longer walk
-  would open; 62 it would not.**
-- The first sort had three buckets and **its own output caught the mistake**: "nothing in the
-  file sets it" read 134 at the floor and 56 with the levers on. That cannot happen — whether
-  anything in the file sets a flag is a property of the file, not of the run.
-- The cause: the run sets sixty-five flags that **no `setflag` in the cartridge names**.
-  Picking a thing up sets the flag that hides it, inside compiled code — written down in this
-  repo years ago and rediscovered the hard way.
-- Fixed, the boundary bucket reads **44 at every lever setting**, which is how a fact about
-  the cartridge has to behave. Five breaks, five catches.
+- **Fifteen of the gates nothing can open turned out to be trees.** The sixty-two flags no
+  walk opens hold 240 people between them — and 146 of those "people" are CUT trees and
+  ROCK SMASH rocks, one per map across thirty-odd maps, running **two scripts** between them.
+- They looked like the code boundary because nothing sets their flags. True, and misleading
+  in exactly the way the item pickups were last milestone: the script asks who knows the
+  move, removes the object, and the routine sets the flag. **Two milestones running, a bucket
+  called "the boundary" was holding things that open.**
+- Twelve more gates hold something asked about a move that is **never** removed — the
+  STRENGTH boulders. Deliberately not folded in: whatever clears a boulder is a different
+  mechanism, and widening the rule to catch them would be picking a shape to fit an answer.
+- So the honest boundary is **35 flags**, not 110 and not 44. And two of the gates hold
+  nobody at all — the ferry, with no setter anywhere in sixteen megabytes.
