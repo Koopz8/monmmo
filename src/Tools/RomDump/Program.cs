@@ -7732,7 +7732,7 @@ public static class Program
 
         IReadOnlyList<MoveSite> sites = EverywhereInTheImage.AsksWhoKnows(rom, moves.Count, covered);
 
-        (int floor, int floorReads, int floorJumped) =
+        (int floor, int floorReads, int floorJumped, int floorPlaces) =
             EverywhereInTheImage.MoveNoiseFloor(rom, moves.Count);
 
         List<MoveSite> real = [.. sites.Where(s => s.ReadsAsAScript)];
@@ -7758,6 +7758,31 @@ public static class Program
         Console.WriteLine(
             "    if those two are the same number the list below is noise and the only honest"
             + " thing to do with it is throw it away");
+
+        // AND HOW MUCH OF EITHER NUMBER IS ONE PLACE.
+        //
+        // 205 found this instrument's floor is a whole-image average computed as though every
+        // byte were independent, and that a run of table data makes clumps all by itself —
+        // 0x0089 showed nine sites against a floor of one and seven of them were inside 791
+        // bytes of a table. The reversed-image control catches noise that has the same
+        // FREQUENCIES; it cannot catch noise that has the same SHAPE, because reversing the
+        // file leaves a table looking exactly as clumped as it was.
+        //
+        // So both halves get the same question asked of them, and the comparison that matters
+        // is between the two clump counts rather than between the two totals.
+        WriteHowClustered(rom, sites.Select(s => s.Offset));
+
+        int clumped = HowClustered.Clumped(rom, sites.Select(s => s.Offset));
+        int places = sites.Count - clumped + HowClustered.In(rom, sites.Select(s => s.Offset)).Count;
+
+        Console.WriteLine(
+            $"    SO THE COMPARISON IS {places} place(s) against the reversed image's"
+            + $" {floorPlaces} — not {sites.Count} against {floor}."
+            + (places > floorPlaces
+                ? " Above the floor, and by less than the raw counts said."
+                : " AT OR BELOW THE FLOOR: the raw counts said otherwise and they were counting"
+                    + " clumps twice."));
+
         Console.WriteLine();
 
         Console.WriteLine($"  {real.Count(s => s.Opened)} of the {real.Count} the map scan opened; the rest it never did");
@@ -8194,7 +8219,7 @@ public static class Program
         int decoded = covered.Count(b => b != EverywhereInTheImage.Nobody);
 
         int sites = moved.Values.Sum(s => s.Count);
-        (int noiseSites, int noiseJumped) = EverywhereInTheImage.NoiseFloor(rom);
+        (int noiseSites, int noiseJumped, int noisePlaces) = EverywhereInTheImage.NoiseFloor(rom);
 
         IReadOnlyDictionary<uint, IReadOnlyList<int>> index = EverywhereInTheImage.PointerIndex(rom);
 
@@ -8217,6 +8242,35 @@ public static class Program
             "    same bytes, same frequencies, no commands. That is what these two filters find when");
         Console.WriteLine(
             "    there is nothing there, and it is what the counts below have to be read against.");
+
+        // AND BOTH SIDES ASKED HOW CLUMPED THEY ARE.
+        //
+        // Reversing the file preserves frequencies AND shape: a table reversed is still a
+        // table and still clumps exactly as hard. So this control has never been able to see
+        // the failure mode 205 found, and the raw comparison counts clumps twice on both
+        // sides. The place-level comparison is the one that means anything.
+        List<int> allAt = [.. moved.Values.SelectMany(v => v).Select(f => f.Offset)];
+
+        WriteHowClustered(rom, allAt);
+
+        int clumpedHere = HowClustered.Clumped(rom, allAt);
+
+        int placesHere =
+            allAt.Count - clumpedHere + HowClustered.In(rom, allAt).Count;
+
+        Console.WriteLine(
+            $"    SO THE COMPARISON IS {placesHere} place(s) against the reversed image's"
+            + $" {noisePlaces} — not {sites} against {noiseSites}."
+            + (placesHere > noisePlaces
+                ? $" The real image is ahead by {100.0 * (placesHere - noisePlaces) / noisePlaces:0.0}%."
+                : $" The real image is BEHIND by {100.0 * (noisePlaces - placesHere) / noisePlaces:0.0}%."));
+
+        Console.WriteLine(
+            "    NOTE THAT THE TWO COMPARISONS DISAGREE ABOUT THE SIGN, and neither margin is"
+            + " large. Counting sites, this file is behind its own reversal; counting places, it"
+            + " is ahead. Both are ways of saying the same thing — the raw sweep is not a"
+            + " finding — and the jumped-into rates below are still the only part clearly above"
+            + " anything.");
 
         int unopenedSites = outside.Sum(f => f.Unopened.Count);
         int jumpedSites = outside.Sum(f => f.JumpedInto.Count);

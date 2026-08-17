@@ -586,7 +586,7 @@ public class EverywhereInTheImageTests
 
         new Random(20260817).NextBytes(bytes);
 
-        (int sites, int jumpedInto) = EverywhereInTheImage.NoiseFloor(new Rom(bytes));
+        (int sites, int jumpedInto, _) = EverywhereInTheImage.NoiseFloor(new Rom(bytes));
 
         Assert.True(sites > 0);
         Assert.True(jumpedInto < sites);

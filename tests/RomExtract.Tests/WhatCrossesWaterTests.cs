@@ -115,7 +115,7 @@ public class WhatCrossesWaterTests
     [Fact]
     public void TheReversedImageIsSweptTheSameWay()
     {
-        (int sites, _, int jumped) = EverywhereInTheImage.MoveNoiseFloor(new Rom(Image()), 355);
+        (int sites, _, int jumped, _) = EverywhereInTheImage.MoveNoiseFloor(new Rom(Image()), 355);
 
         Assert.True(sites >= 0);
         Assert.Equal(0, jumped);

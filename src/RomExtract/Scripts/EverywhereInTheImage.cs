@@ -391,7 +391,7 @@ public static class EverywhereInTheImage
     /// floor under it is the finding this project has thrown away twice.
     /// </para>
     /// </summary>
-    public static (int Sites, int ReadsAsScript, int JumpedInto) MoveNoiseFloor(
+    public static (int Sites, int ReadsAsScript, int JumpedInto, int Places) MoveNoiseFloor(
         Rom rom, int mostMoves, int slack = 192)
     {
         byte[] backwards = rom.Span.ToArray();
@@ -404,11 +404,21 @@ public static class EverywhereInTheImage
 
         IReadOnlyDictionary<uint, IReadOnlyList<int>> index = PointerIndex(nowhere);
 
+        // AND THE FLOOR'S OWN CLUMPING, which is the half milestone 205 showed was missing.
+        //
+        // Reversing the file preserves every byte frequency, so this control catches noise
+        // that has the same frequencies as signal. It cannot catch noise that has the same
+        // SHAPE — a table reversed is still a table and still clumps exactly as hard. So the
+        // comparison "600 against 787" is between two numbers that both contain clumps, and
+        // the honest comparison is between the two PLACE counts.
+        int clumped = HowClustered.Clumped(nowhere, found.Select(f => f.Offset));
+
         return (
             found.Count,
             found.Count(s => s.ReadsAsAScript),
             found.Count(s => s.ReadsAsAScript
-                             && WhoNames(nowhere, index, s.Address, slack).Any(n => n.AJump)));
+                             && WhoNames(nowhere, index, s.Address, slack).Any(n => n.AJump)),
+            found.Count - clumped + HowClustered.In(nowhere, found.Select(f => f.Offset)).Count);
     }
 
     /// <summary>
@@ -527,7 +537,7 @@ public static class EverywhereInTheImage
     /// <b>Both, because both are printed.</b> A control on the raw count and none on the
     /// filtered one leaves the filtered one looking rigorous by association.
     /// </returns>
-    public static (int Sites, int JumpedInto) NoiseFloor(Rom rom, int slack = 192)
+    public static (int Sites, int JumpedInto, int Places) NoiseFloor(Rom rom, int slack = 192)
     {
         byte[] backwards = rom.Span.ToArray();
 
@@ -539,9 +549,15 @@ public static class EverywhereInTheImage
 
         IReadOnlyDictionary<uint, IReadOnlyList<int>> index = PointerIndex(nowhere);
 
+        // The floor's own clumping, for the reason 205 gave: reversing the file preserves
+        // frequencies and preserves SHAPE, so both halves of this comparison contain clumps
+        // and the honest comparison is between the two place counts.
+        int clumped = HowClustered.Clumped(nowhere, found.Select(f => f.Offset));
+
         return (
             found.Count,
-            found.Count(s => WhoNames(nowhere, index, s.Address, slack).Any(n => n.AJump)));
+            found.Count(s => WhoNames(nowhere, index, s.Address, slack).Any(n => n.AJump)),
+            found.Count - clumped + HowClustered.In(nowhere, found.Select(f => f.Offset)).Count);
     }
 
     /// <summary>
