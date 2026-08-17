@@ -176,6 +176,23 @@ public sealed record Blocker(
     /// </para>
     /// </summary>
     public IReadOnlyList<int> Routines { get; init; } = [];
+
+    /// <summary>
+    /// The flag on this one's <em>own record</em> that takes them off the map, or nought.
+    /// <para>
+    /// <b>Where the answer turned out to be.</b> The four people in the last four doorways
+    /// have scripts with no conditional in them at all — nothing to wait on, nothing to ask
+    /// for, no arm not taken. They are not moved by anything they do; they are moved by a
+    /// flag written on the map's own object record, set by a script somewhere else entirely.
+    /// </para>
+    /// <para>
+    /// Which is already the known shape of this cartridge: only 7 of the 575 objects carrying
+    /// a hide flag have a script that sets it. Everything else is set by the game's own code,
+    /// or by somebody two maps away. Reading the script for a gate that was never in the
+    /// script is the ninth wall in a row that moved when something finally printed.
+    /// </para>
+    /// </summary>
+    public int HiddenBy { get; init; }
 }
 
 /// <summary>
@@ -821,6 +838,12 @@ public static class Autoplayer
                                         .. spokenTo.GetValueOrDefault((m.Id, p.LocalId))?.Specials
                                             .Distinct() ?? [],
                                     ],
+
+                                    // Off this one's own record, by their number on this map.
+                                    // Not the first object with a hide flag on it and not any
+                                    // flag on the map — the person in the doorway's own.
+                                    HiddenBy = m.Objects
+                                        .FirstOrDefault(o => o.LocalId == p.LocalId)?.HiddenBy ?? 0,
                                 }),
                         ],
                     }))

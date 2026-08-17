@@ -6661,6 +6661,31 @@ public static class Program
         Attempt played,
         Lazy<IReadOnlyDictionary<int, IReadOnlyList<string>>> setters)
     {
+        // The record first, because that is where this game keeps it. Only 7 of the 575
+        // objects carrying a hide flag have a script that sets it — the flag that takes
+        // somebody off a map is written on the map's own object record and set by something
+        // else entirely, so reading the script for it is reading the wrong half of the file.
+        if (who.HiddenBy == 0)
+        {
+            Console.WriteLine(
+                "         NO FLAG TAKES IT OFF THE MAP — its record is not hidden by anything, "
+                + "so nothing removes it");
+        }
+        else
+        {
+            IReadOnlyList<string> removes = setters.Value.GetValueOrDefault(who.HiddenBy, []);
+
+            Console.WriteLine(
+                $"         its record is hidden by flag 0x{who.HiddenBy:X4} — "
+                + (played.Flags.Contains(who.HiddenBy) ? "which the run HAS set" : "which the run never set"));
+
+            Console.WriteLine(
+                removes.Count == 0
+                    ? "           NOTHING IN THE WORLD SETS IT — it comes out of a routine, not a script"
+                    : $"           set by {removes.Count}: " + string.Join(", ", removes.Take(3))
+                        + (removes.Count > 3 ? $", +{removes.Count - 3} more" : string.Empty));
+        }
+
         if (world.Find(mapId)?.Objects.FirstOrDefault(o => o.LocalId == who.LocalId) is not { } person
             || person.ScriptAddress == 0)
         {

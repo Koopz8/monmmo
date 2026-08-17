@@ -571,6 +571,67 @@ public class WhoIsInTheDoorwayTests
     }
 
     /// <summary>
+    /// What takes the blocker off the map, which is on their own record and not in anything
+    /// they do.
+    /// <para>
+    /// The four in the last four doorways have scripts with <b>no conditional in them at
+    /// all</b> — nothing to wait on, no arm not taken, no routine asked. They are not moved by
+    /// talking to them and they are not waiting on a question their script asks. They are
+    /// moved by a flag written on the map's own object record and set somewhere else entirely,
+    /// which is this cartridge's usual shape: only 7 of the 575 objects carrying a hide flag
+    /// have a script that sets it.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void WhatTakesTheBlockerOffTheMapComesOffTheirOwnRecord()
+    {
+        var world = new WorldData(
+        [
+            Room("1.0") with
+            {
+                Warps = [new Warp(3, 1, 0, "1.1")],
+                Objects =
+                [
+                    // The decoy, and the shape of every real map: somebody else on the map
+                    // carrying a hide flag of their own. A blocker handed the first hide flag
+                    // anybody on the map happens to carry is a flag number that reads clean
+                    // and sends the next session to the wrong script.
+                    new MapObject(1, 1, 1, 1, Direction.Down, 0, false)
+                    {
+                        ScriptAddress = 0x1000,
+                        HiddenBy = 0x0035,
+                    },
+                    new MapObject(2, 1, 3, 1, Direction.Down, 7, false)
+                    {
+                        ScriptAddress = 0x2000,
+                        HiddenBy = 0x0825,
+                    },
+                ],
+            },
+            Room("1.1") with { Warps = [new Warp(1, 1, 0, "1.0")] },
+        ]);
+
+        Attempt played = Autoplayer.Play(world, "1.0", TestRules.All, (_, _, _) => Nothing);
+
+        Blocker who = Assert.Single(Assert.Single(played.ShutDoors, d => d.ToMapId == "1.1").Who);
+
+        Assert.Equal(0x0825, who.HiddenBy);
+    }
+
+    /// <summary>
+    /// And somebody nothing hides claims nothing. "No flag takes this person off the map" is
+    /// a different and much worse finding than "this flag does" — it means the door opens some
+    /// way nothing here has read — and a nought that means both is no answer at all.
+    /// </summary>
+    [Fact]
+    public void AndSomebodyNoFlagHidesClaimsNoFlag()
+    {
+        Attempt played = Autoplayer.Play(Gate(), "1.0", TestRules.All, (_, _, _) => Nothing);
+
+        Assert.Equal(0, Assert.Single(Assert.Single(played.ShutDoors, d => d.ToMapId == "1.1").Who).HiddenBy);
+    }
+
+    /// <summary>
     /// And a door nobody is standing in names nobody. The list is only worth having if it is
     /// empty when it should be.
     /// </summary>
