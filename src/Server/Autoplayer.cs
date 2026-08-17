@@ -63,6 +63,43 @@ public sealed record WhatRan
 }
 
 /// <summary>
+/// What a run has to say about one script on one map, when that script sets a flag the run
+/// never set.
+/// <para>
+/// Four answers where <c>--flags</c> printed three. The missing one is
+/// <see cref="ItRanTheSameBlockOnAnotherMap"/>, and it was missing because the run's record of
+/// what it ran was keyed on the script's address with no map beside it — so a nurse's script
+/// run in one town read as run in all nineteen, and the first case swallowed the third.
+/// </para>
+/// </summary>
+public enum WhereItStands
+{
+    /// <summary>The setter is somewhere the walk never got to. That map is the job.</summary>
+    OnAMapItNeverReached,
+
+    /// <summary>
+    /// It reached the map, stood on the square and ran this very script, and the flag is
+    /// still unset. The only one of the four that licenses a reason.
+    /// </summary>
+    ItRanTheScriptHere,
+
+    /// <summary>
+    /// It reached the map and never ran the script THERE — but the same block hangs off
+    /// another map and the run ran it on that one.
+    /// <para>
+    /// Not a weaker version of <see cref="ItRanTheScriptHere"/>: a different scene entirely,
+    /// with its own square nobody stood on. The block having run somewhere is still a real
+    /// fact and worth printing, which is why this is its own answer rather than folded into
+    /// <see cref="ItNeverRanTheScript"/>.
+    /// </para>
+    /// </summary>
+    ItRanTheSameBlockOnAnotherMap,
+
+    /// <summary>It reached the map and never ran this block anywhere at all.</summary>
+    ItNeverRanTheScript,
+}
+
+/// <summary>
 /// A door out of somewhere it reached, into somewhere it never did.
 /// <para>
 /// The number that matters when a run stops. "246 maps it never got to" is a list nobody can
@@ -460,7 +497,7 @@ public sealed record Attempt(
     public IReadOnlyDictionary<string, int> Questions { get; init; } = new Dictionary<string, int>();
 
     /// <summary>
-    /// Every script this run actually ran, by where it starts.
+    /// Every script this run actually ran, by the map it ran on and where it starts.
     /// <para>
     /// <b>The question that comes after a flag number.</b> "The flag that opens SAFFRON is set
     /// by a trigger on <c>1.57</c>" is three different jobs wearing one sentence: a map the run
@@ -469,8 +506,66 @@ public sealed record Attempt(
     /// on it are not the same thing — a trigger fires only for somebody standing exactly on
     /// it — and nothing here could tell those apart.
     /// </para>
+    /// <para>
+    /// <b>The map is half the key.</b> This was keyed on the address alone, which is the fault
+    /// 193 shipped in the walking and 194 fixed there — still live here. One nurse's script is
+    /// attached to person 1 on nineteen Pokémon Centres, one shopkeeper's on nineteen marts,
+    /// one gym guide's on eight. Running such a block once made it read as run on every map it
+    /// hangs off — and <c>--flags</c> asks this dictionary whether a script ran before it
+    /// prints WHY that script did not set its flag. A setter on a map the walk never stood on
+    /// therefore got a confident diagnosis borrowed from a different town.
+    /// </para>
+    /// <para>
+    /// A fallback that names a cause is worse than one that says nothing, and this is that
+    /// shape a second time.
+    /// </para>
     /// </summary>
-    public IReadOnlyDictionary<uint, WhatRan> Ran { get; init; } = new Dictionary<uint, WhatRan>();
+    public IReadOnlyDictionary<(string MapId, uint Address), WhatRan> Ran { get; init; }
+        = new Dictionary<(string MapId, uint Address), WhatRan>();
+
+    /// <summary>
+    /// The blocks this run ran <em>somewhere</em>, without the map beside them.
+    /// <para>
+    /// The denominator for <see cref="Ran"/>. "12 blocks are reached from more than one map"
+    /// is a fact about the cartridge; how many of them this run ran on one map and not on
+    /// another is a fact about the run, and the two read identically until both are printed. A
+    /// number with no denominator cannot come back empty, which is the trap this project has
+    /// now fallen into three times.
+    /// </para>
+    /// <para>
+    /// <b>Derived rather than kept beside it, deliberately.</b> Two fields carrying the same
+    /// fact can drift, and a guard on a field that cannot drift is a guard nothing can fail —
+    /// which is already on this project's owed list once, under
+    /// <c>SpecialContracts.ComparedAfter</c>. The only claim here is a projection, and a
+    /// projection is not a claim about the world.
+    /// </para>
+    /// </summary>
+    public IReadOnlySet<uint> RanAnywhere => Ran.Keys.Select(k => k.Address).ToHashSet();
+
+    /// <summary>
+    /// Where a script named as setting a flag stands with respect to this run.
+    /// <para>
+    /// Here rather than in whoever prints it, for the reason <see cref="HandedOverTwice"/>
+    /// gives: a rule about the world living in a printer is a rule no test can reach, and this
+    /// project has moved the same kind of line out of the same file six times now. This one
+    /// was a three-way conditional inside <c>--flags</c>, and the three ways were four.
+    /// </para>
+    /// <para>
+    /// The fourth is <see cref="WhereItStands.ItRanTheSameBlockOnAnotherMap"/> and it did not exist
+    /// while <c>Ran</c> was keyed on the address alone — it was silently the first case,
+    /// complete with a reason it stopped that had been merged in from a different town.
+    /// </para>
+    /// </summary>
+    /// <param name="mapId">The map the setter is on — half the key.</param>
+    /// <param name="address">Where the script it names starts.</param>
+    public WhereItStands HowItStands(string mapId, uint address) =>
+        !Reached.Contains(mapId)
+            ? WhereItStands.OnAMapItNeverReached
+            : Ran.ContainsKey((mapId, address))
+                ? WhereItStands.ItRanTheScriptHere
+                : RanAnywhere.Contains(address)
+                    ? WhereItStands.ItRanTheSameBlockOnAnotherMap
+                    : WhereItStands.ItNeverRanTheScript;
 
     /// <summary>
     /// Every look at and change to the watched variable, in the order the run did them.
@@ -802,8 +897,12 @@ public static class Autoplayer
         // this — `asIfGone` is its own parameter — and nothing has ever told it.
         var gone = new HashSet<(string MapId, int LocalId)>();
 
-        // Every script that actually ran, by where it starts, and what running it came to.
-        var ran = new Dictionary<uint, WhatRan>();
+        // Every script that actually ran, by the map it ran on and where it starts, and what
+        // running it came to. Keyed on the map as well as the address for the same reason the
+        // walk is: one nurse's script hangs off nineteen Pokémon Centres, and running it in
+        // one town is not running it in the other eighteen.
+        var ran = new Dictionary<(string MapId, uint Address), WhatRan>();
+
 
         // And people a script has walked somewhere else, which is the other half of the same
         // idea and had no parameter at all until now.
@@ -933,8 +1032,12 @@ public static class Autoplayer
                     // Merged across passes rather than overwritten: the same script runs on
                     // every pass with a different bag and different flags, and the pass that
                     // got furthest is the one worth reporting.
-                    ran[what.Address] = (ran.GetValueOrDefault(what.Address) ?? new WhatRan())
-                        .And(did);
+                    //
+                    // Merged across passes ON THIS MAP. Merging across maps as well is what
+                    // this was doing, and it is how a script that ran in CERULEAN reported
+                    // the reason it stopped as the reason a run stopped in PEWTER.
+                    ran[(map.Id, what.Address)] =
+                        (ran.GetValueOrDefault((map.Id, what.Address)) ?? new WhatRan()).And(did);
 
                     foreach (int routine in did.Specials)
                     {

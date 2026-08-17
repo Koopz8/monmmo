@@ -667,8 +667,8 @@ public class WhoIsInTheDoorwayTests
         Attempt played = Autoplayer.Play(world, "1.0", TestRules.All, (_, _, _) => Nothing);
 
         Assert.Contains("1.0", played.Reached);
-        Assert.Contains(0x1000u, played.Ran);
-        Assert.DoesNotContain(0x3000u, played.Ran);
+        Assert.Contains(("1.0", 0x1000u), played.Ran.Keys);
+        Assert.DoesNotContain(("1.0", 0x3000u), played.Ran.Keys);
     }
 
     /// <summary>
@@ -717,7 +717,7 @@ public class WhoIsInTheDoorwayTests
 
         Assert.True(times > 1, "the script has to run more than once for folding to mean anything");
 
-        WhatRan did = played.Ran[0x1000];
+        WhatRan did = played.Ran[("1.0", 0x1000u)];
 
         Assert.True(did.StoppedAtAQuestion);
         Assert.Equal([0x0AB], did.Routines);

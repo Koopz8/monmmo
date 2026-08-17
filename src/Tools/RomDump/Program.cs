@@ -6416,6 +6416,26 @@ public static class Program
                 + " because nineteen Centres share one nurse and that is nineteen scenes.");
         }
 
+        // WHAT RAN, AS PLACES AND AS BLOCKS.
+        //
+        // Two numbers, for the reason 195 gave: a count with no denominator cannot come back
+        // empty. "N scripts ran" and "N places ran a script" read identically and only one of
+        // them is about this cartridge's shape. The second line is the size of the fault this
+        // milestone fixed, measured rather than argued — if no shared block ever ran on more
+        // than one map, it says nought and the key never mattered.
+        int onSeveralMaps = played.Ran.Keys.GroupBy(k => k.Address).Count(g => g.Count() > 1);
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  {played.Ran.Count} (map, script) place(s) ran, which is {played.RanAnywhere.Count}"
+            + " distinct block(s) — one nurse's script hangs off nineteen Pokémon Centres, and"
+            + " running it in one town is not running it in the other eighteen");
+        Console.WriteLine(
+            onSeveralMaps == 0
+                ? "    and none of them ran on more than one map, so the map in the key cost nothing here"
+                : $"    {onSeveralMaps} block(s) ran on more than one map — each was ONE entry"
+                    + " until now, carrying one merged reason it stopped for all of them");
+
         // AND WHETHER ANYBODY IN THIS WORLD IS STANDING SOMEWHERE THAT IS NOT ON IT.
         //
         // Asked of every person the cartridge places, not only the ones a scene walked. Once
@@ -8042,9 +8062,11 @@ public static class Program
                     $"           set by {sets.MapId} {world.Find(sets.MapId)?.Name ?? "(not exported)"} "
                     + $"{sets.What} — {Standing(sets)}");
 
-                // And, when the run got into the script and still did not set it, what it
-                // would have had to be true to get to the setflag.
-                if (played.Ran.ContainsKey(sets.Address))
+                // And, when the run got into the script ON THIS MAP and still did not set it,
+                // what it would have had to be true to get to the setflag. On this map: the
+                // same block hangs off up to nineteen of them, and having run it in one town
+                // says nothing whatever about the square in this one.
+                if (played.Ran.ContainsKey((sets.MapId, sets.Address)))
                     WriteTheWayIn(rom, world, sets, who.HiddenBy, writers);
             }
 
@@ -8130,12 +8152,27 @@ public static class Program
 
         if (worst.Count > 3) Console.WriteLine($"         ... and {worst.Count - 3} more flag(s) it asks about");
 
-        string Standing(SetsAFlag sets) =>
-            !played.Reached.Contains(sets.MapId)
-                ? "ON A MAP IT NEVER REACHED — that map is the job"
-                : played.Ran.TryGetValue(sets.Address, out WhatRan? did)
-                    ? "IT RAN THIS SCRIPT AND THE FLAG IS STILL UNSET — " + WhyItStopped(did)
-                    : "on a map it reached, and it never ran this script — it never stood on the square";
+        // Which of the four this is, is a rule about the world and lives on the run. Only the
+        // wording is this file's business — a conditional here is a conditional no test can
+        // reach, which is the fault this project has now moved out of this file six times.
+        string Standing(SetsAFlag sets) => played.HowItStands(sets.MapId, sets.Address) switch
+        {
+            PokeMmo.Server.WhereItStands.OnAMapItNeverReached =>
+                "ON A MAP IT NEVER REACHED — that map is the job",
+
+            PokeMmo.Server.WhereItStands.ItRanTheScriptHere =>
+                "IT RAN THIS SCRIPT AND THE FLAG IS STILL UNSET — "
+                    + WhyItStopped(played.Ran[(sets.MapId, sets.Address)]),
+
+            // The fourth answer, which had been collapsed into the first. Saying "IT RAN THIS
+            // SCRIPT" here — with a reason merged in from another town — is a fallback that
+            // names a cause, which is worse than one that says nothing.
+            PokeMmo.Server.WhereItStands.ItRanTheSameBlockOnAnotherMap =>
+                "on a map it reached, and it never ran this script HERE — the same block hangs "
+                    + "off another map and the run ran it there, which is a different scene",
+
+            _ => "on a map it reached, and it never ran this script — it never stood on the square",
+        };
 
         if (waiting.AskedWithoutABranch > 0)
         {
