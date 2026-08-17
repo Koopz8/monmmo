@@ -31,8 +31,26 @@ namespace PokeMmo.RomExtract.Tests;
 /// </summary>
 public class FourDoorsIntoOneRoomTests
 {
-    /// <summary>Four squares of ground, so a walk has somewhere to go.</summary>
-    private static MapData Room() => new("1.0", "1.0", 4, 4, new byte[16]);
+    /// <summary>
+    /// A room with two doors one above the other, and ground on every side of them.
+    /// <para>
+    /// Two doors and not one, because the question is <em>how far</em> somebody was walked and
+    /// one door cannot tell one step from two. Somebody standing on a door blocks it: walked
+    /// down once he clears the first and stands on the second, walked twice he clears both.
+    /// The counter this milestone adds cannot make that distinction and neither can a test
+    /// that only reads it — which is how the first version of this file passed with the rule
+    /// broken and the break came back green.
+    /// </para>
+    /// <para>
+    /// He steps out of the line of the doors rather than along it, so a walk never cuts the
+    /// route to the door it just cleared.
+    /// </para>
+    /// </summary>
+    private static MapData Corridor() =>
+        new MapData("1.0", "1.0", 4, 3, new byte[12])
+        {
+            Warps = [new Warp(2, 0, 0, "1.1"), new Warp(2, 1, 0, "1.2")],
+        };
 
     private static MapObject Person(int localId, int x, int y, uint script) =>
         new(localId, 1, x, y, Direction.Down, 0, false) { ScriptAddress = script };
@@ -41,17 +59,26 @@ public class FourDoorsIntoOneRoomTests
 
     /// <summary>
     /// Two people whose scripts are two entry stubs into one scene: different script
-    /// addresses, and the same <c>applymovement</c> command inside.
+    /// addresses, and a movement command inside that may or may not be the same one.
+    /// <para>
+    /// Person 3 starts on the upper door. Walked once he clears it and stands on the lower
+    /// one; walked twice he clears both.
+    /// </para>
     /// </summary>
     private static Attempt TwoDoors(uint firstSite, uint secondSite)
     {
-        MapData start = Room() with
-        {
-            Objects = [Person(1, 0, 0, 0x1000), Person(2, 1, 0, 0x2000), Person(3, 1, 1, 0)],
-        };
+        var world = new WorldData(
+        [
+            Corridor() with
+            {
+                Objects = [Person(1, 0, 2, 0x1000), Person(2, 1, 2, 0x2000), Person(3, 2, 0, 0)],
+            },
+            new MapData("1.1", "1.1", 2, 2, new byte[4]) { Warps = [new Warp(0, 0, 0, "1.0")] },
+            new MapData("1.2", "1.2", 2, 2, new byte[4]) { Warps = [new Warp(0, 0, 0, "1.0")] },
+        ]);
 
         return Autoplayer.Play(
-            new WorldData([start]),
+            world,
             "1.0",
             TestRules.All,
             (address, _, _) => address switch
@@ -63,8 +90,9 @@ public class FourDoorsIntoOneRoomTests
     }
 
     /// <summary>
-    /// Two doors into one scene move somebody once. Both entries execute the command at
-    /// <c>0x08165DC0</c>; there is one movement in the cartridge and there is one here.
+    /// Two doors into one scene move somebody ONE square: the upper door opens and the lower
+    /// one does not, because he is standing on it. Both entries execute the command at the same
+    /// address; there is one movement in the cartridge and there is one here.
     /// </summary>
     [Fact]
     public void TwoEntriesIntoOneSceneMoveSomebodyOnce()
@@ -74,13 +102,16 @@ public class FourDoorsIntoOneRoomTests
         Assert.Equal(1, played.WalkSites);
         Assert.True(
             played.WalksAsked > played.WalkSites,
-            $"it was asked {played.WalksAsked} time(s) for {played.WalkSites} command(s), so nothing was doubled up");
+            $"asked {played.WalksAsked} time(s) for {played.WalkSites} command(s) — nothing was doubled up");
+
+        Assert.Contains("1.1", played.Reached);
+        Assert.DoesNotContain("1.2", played.Reached);
     }
 
     /// <summary>
-    /// AND THE DISCRIMINATION. Two different commands are two movements, and both happen —
-    /// otherwise this rule would quietly delete the second half of every scene that walks
-    /// somebody twice, and every test above would still pass.
+    /// AND THE DISCRIMINATION. Two different commands are two movements and both happen, so he
+    /// clears both doors — otherwise this rule would quietly delete the second half of every
+    /// scene that walks somebody twice, and the test above would still pass.
     /// </summary>
     [Fact]
     public void TwoDifferentCommandsAreTwoMovements()
@@ -88,6 +119,8 @@ public class FourDoorsIntoOneRoomTests
         Attempt played = TwoDoors(0x08165DC0, 0x08165DC7);
 
         Assert.Equal(2, played.WalkSites);
+        Assert.Contains("1.1", played.Reached);
+        Assert.Contains("1.2", played.Reached);
     }
 
     /// <summary>
@@ -98,7 +131,7 @@ public class FourDoorsIntoOneRoomTests
     public void ARunThatWalksNobodyReportsNeitherRatherThanZeroOfNothing()
     {
         Attempt played = Autoplayer.Play(
-            new WorldData([Room() with { Objects = [Person(1, 0, 0, 0x1000)] }]),
+            new WorldData([Corridor() with { Objects = [Person(1, 0, 2, 0x1000)] }]),
             "1.0",
             TestRules.All,
             (_, _, _) => Nothing);
