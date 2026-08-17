@@ -16,7 +16,17 @@ public abstract record SceneBeat
     public sealed record Say(string Page) : SceneBeat;
 
     /// <summary>Somebody walks. The steps are the cartridge's own bytes.</summary>
-    public sealed record Walk(int PersonId, IReadOnlyList<byte> Steps) : SceneBeat
+    /// <summary>
+    /// One <c>applymovement</c>, with <b>where the command is</b>.
+    /// <para>
+    /// The address is not decoration. A scene in this cartridge is commonly written as several
+    /// tiny entry stubs — <c>lockall; setvar 0x4001, N; goto &lt;the scene&gt;</c> — one per
+    /// square you can cross to start it, each announcing which door it came in by. A player
+    /// takes one. A fixpoint that stands on every square takes all of them, and every entry
+    /// executes THE SAME <c>applymovement</c> command at the same address.
+    /// </para>
+    /// </summary>
+    public sealed record Walk(int PersonId, IReadOnlyList<byte> Steps, uint At = 0) : SceneBeat
     {
         public bool IsPlayer => PersonId == MovementList.Player;
     }
@@ -678,7 +688,8 @@ public static class ScriptRunner
                     // the command; what the individual step bytes mean was derived by
                     // walking them across every map and asking who ends up inside a wall.
                     if (MovementLists.Read(rom, command.Pointer(2)) is { Length: > 0 } steps)
-                        beats.Add(new SceneBeat.Walk(command.Word(), steps));
+                        beats.Add(new SceneBeat.Walk(
+                            command.Word(), steps, Rom.BaseAddress + (uint)command.Offset));
 
                     break;
 

@@ -551,6 +551,26 @@ public sealed record Attempt(
     public IReadOnlyList<WalkedOffTheMap> OffTheMap { get; init; } = [];
 
     /// <summary>
+    /// How many distinct <c>applymovement</c> commands the run reached, and how many times it
+    /// asked for one.
+    /// <para>
+    /// <b>The two are wildly different and the difference is what a fixpoint is.</b> A scene in
+    /// this cartridge is commonly written as several tiny entry stubs — <c>lockall; setvar
+    /// 0x4001, N; goto &lt;the scene&gt;</c>, one per square you can cross to start it, each
+    /// announcing which door it came in by — and all of them run the same block. A player takes
+    /// one door. A run that stands on every square takes all of them, and every one executes
+    /// the same commands at the same addresses.
+    /// </para>
+    /// <para>
+    /// So the same command is the same movement, and it applies once. That is identity rather
+    /// than a decision, which is why it is not marked MODELLED.
+    /// </para>
+    /// </summary>
+    public int WalkSites { get; init; }
+
+    public int WalksAsked { get; init; }
+
+    /// <summary>
     /// The ones that did it more than once, which is the ceiling.
     /// <para>
     /// Here rather than in whoever prints, because a <c>Where</c> in a printer is a rule
@@ -766,6 +786,8 @@ public static class Autoplayer
 
         // How many scene-walks were applied at all, so the count below has a denominator.
         var walksApplied = 0;
+        var walksAsked = 0;
+        var walkedFrom = new HashSet<uint>();
 
         // Where something changed hands, by the script that did it. Kept by script rather
         // than by what it hands over: five shopkeepers selling the same potion is not one
@@ -850,8 +872,12 @@ public static class Autoplayer
                     // map on the floor run — and a person at x = -29 on a map 48 wide is not
                     // in a doorway or out of one, which is what the walk goes on to ask about
                     // them. The grid is the same oracle the step bytes were derived against.
-                    foreach ((int who, IReadOnlyList<Direction> going) in did.Walked)
+                    foreach ((int who, IReadOnlyList<Direction> going, uint at2) in did.Walked)
                     {
+                        walksAsked++;
+
+                        // The same command is the same movement. See Attempt.WalkSites.
+                        if (!walkedFrom.Add(at2)) continue;
                         if (map.Objects.FirstOrDefault(o => o.LocalId == who) is not { } walker) continue;
 
                         GridPosition at = moved.GetValueOrDefault((map.Id, who), walker.Square);
@@ -1115,6 +1141,8 @@ public static class Autoplayer
         Dictionary<string, List<Hop>> anyWayIn = WaysIn(world);
 
         var reached = last.Maps.ToHashSet();
+
+
         var stoodAtTheEnd = last.Stood.ToHashSet();
 
         // How much of each map was actually walked, which is the number that tells a door
@@ -1198,6 +1226,8 @@ public static class Autoplayer
             SurfMove = rules.SurfMove,
             LearnedToCrossOnPass = learnedToCross,
             SwamAnyway = surfing,
+            WalkSites = walkedFrom.Count,
+            WalksAsked = walksAsked,
             OffTheMap =
             [
                 // EVERYBODY, not only the ones a scene walked. Once the walk stops at a wall

@@ -61,7 +61,7 @@ public class WalkedOffTheMapTests
             (address, _, _) => address == 0x1000
                 ? new PlayedScript(asked++ < 4 ? [opened++] : [], [], [], [], null, null)
                 : everyPass || walked++ == 0
-                    ? Nothing with { Walked = [(2, going)] }
+                    ? Nothing with { Walked = [(2, going, 0x1234u)] }
                     : Nothing);
     }
 

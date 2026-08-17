@@ -123,7 +123,7 @@ public sealed record PlayedScript(
     /// wall, and the collision grid is already here to say where that is — so the steps travel
     /// and whoever holds the map does the walking.
     /// </remarks>
-    public IReadOnlyList<(int PersonId, IReadOnlyList<Direction> Steps)> Walked { get; init; } = [];
+    public IReadOnlyList<(int PersonId, IReadOnlyList<Direction> Steps, uint At)> Walked { get; init; } = [];
 
     /// <summary>
     /// True when the script stopped at a yes-or-no and nobody answered it.

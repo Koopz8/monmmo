@@ -133,7 +133,7 @@ public sealed class HowAScriptRuns(
         var flagsCleared = new List<int>(run.FlagsCleared);
         var specials = new List<int>(run.SpecialsCalled);
         var hides = new List<int>(run.Hides);
-        var walked = new List<(int PersonId, IReadOnlyList<Direction> Steps)>();
+        var walked = new List<(int PersonId, IReadOnlyList<Direction> Steps, uint At)>();
 
         // How far a scene walks somebody, as a displacement. The steps are the cartridge's
         // own bytes and what they mean was derived by walking every list across every map
@@ -154,7 +154,7 @@ public sealed class HowAScriptRuns(
                 // still through, which is DirectionOf's own honest reading.
                 List<Direction> going = [.. step.Steps.Select(MovementLists.DirectionOf).OfType<Direction>()];
 
-                if (going.Count > 0) walked.Add((step.PersonId, going));
+                if (going.Count > 0) walked.Add((step.PersonId, going, step.At));
             }
         }
 

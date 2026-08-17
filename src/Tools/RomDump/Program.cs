@@ -6384,6 +6384,10 @@ public static class Program
             Console.WriteLine(
                 "    one square at a time, stopping at a wall — a scene's steps applied as one"
                 + " jump put 364 of 426 of these off the edge of the map");
+            Console.WriteLine(
+                $"    {played.WalkSites} applymovement command(s), asked for {played.WalksAsked}"
+                + " time(s) — a scene is commonly several entry stubs into one block, and every"
+                + " entry runs the same commands. Each command applies once.");
         }
 
         // AND WHETHER ANYBODY IN THIS WORLD IS STANDING SOMEWHERE THAT IS NOT ON IT.

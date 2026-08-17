@@ -315,7 +315,7 @@ public class SteppingAsideTests
         Assert.DoesNotContain("1.1", Play(_ => Nothing).Reached);
 
         Attempt aside = Play(address => address == 0x1000
-            ? Nothing with { Walked = [(2, (IReadOnlyList<Direction>)[Direction.Left])] }
+            ? Nothing with { Walked = [(2, (IReadOnlyList<Direction>)[Direction.Left], 0x1234u)] }
             : Nothing);
 
         Assert.Contains("1.1", aside.Reached);
@@ -350,7 +350,7 @@ public class SteppingAsideTests
             "1.0",
             TestRules.All,
             (address, _, _) => address == 0x1000
-                ? Nothing with { Walked = [(2, (IReadOnlyList<Direction>)[Direction.Left])] }
+                ? Nothing with { Walked = [(2, (IReadOnlyList<Direction>)[Direction.Left], 0x1234u)] }
                 : Nothing);
 
         Assert.Contains(("1.0", 2), played.Moved);
@@ -365,6 +365,12 @@ public class SteppingAsideTests
     /// clear of both, and starting from his original square each time parks him on the second.
     /// The first version of this test walked him twice in the same direction past a single
     /// door, which opens whether the walks compound or not and proved nothing.
+    /// </para>
+    /// <para>
+    /// <b>Two <c>applymovement</c> sites and not one twice.</b> A sequence is written as two
+    /// commands in the cartridge, and the same command executed again is the same movement —
+    /// which is what milestone 193 is about. Giving both walks one address would make this a
+    /// test of that rule wearing this one's name.
     /// </para>
     /// </summary>
     [Fact]
@@ -391,8 +397,8 @@ public class SteppingAsideTests
             world,
             "1.0",
             TestRules.All,
-            (address, _, _) => address == 0x1000 && steps++ < 2
-                ? Nothing with { Walked = [(2, (IReadOnlyList<Direction>)[Direction.Down])] }
+            (address, _, _) => address == 0x1000 && steps < 2
+                ? Nothing with { Walked = [(2, (IReadOnlyList<Direction>)[Direction.Down], (uint)(0x1234 + (steps++ * 4)))] }
                 : Nothing);
 
         Assert.True(steps >= 2, "the second walk has to happen for this to mean anything");
@@ -411,7 +417,7 @@ public class SteppingAsideTests
     public void AWalkForSomebodyNotOnThisMapMovesNobody()
     {
         Attempt played = Play(address => address == 0x1000
-            ? Nothing with { Walked = [(99, (IReadOnlyList<Direction>)[Direction.Left])] }
+            ? Nothing with { Walked = [(99, (IReadOnlyList<Direction>)[Direction.Left], 0x1234u)] }
             : Nothing);
 
         Assert.Empty(played.Moved);
