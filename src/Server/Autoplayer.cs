@@ -362,6 +362,18 @@ public sealed record Attempt(
     /// </summary>
     public IReadOnlyDictionary<byte, int> UnreadCommands { get; init; } = new Dictionary<byte, int>();
 
+    /// <summary>
+    /// Water squares the walk turned back from, by map — the shore it stopped at.
+    /// <para>
+    /// The walker has always been able to swim and the playthrough has never asked it to, so
+    /// every water square was dropped as solid — which reads exactly like there being nothing
+    /// there. Seventeen of the doors this run calls shut are on maps it landed on and could not
+    /// cross. Counted whether or not it is swimming, so the line means the same thing either
+    /// way: how much of the world is on the far side of the water.
+    /// </para>
+    /// </summary>
+    public IReadOnlyDictionary<string, int> Shore { get; init; } = new Dictionary<string, int>();
+
     /// <summary>What it bought, and what each one cost.</summary>
     public IReadOnlyList<Bought> Bought { get; init; } = [];
 
@@ -525,7 +537,8 @@ public static class Autoplayer
         Action<string>? log = null,
         bool ridingTheBoat = false,
         int money = 0,
-        ISet<int>? beaten = null)
+        ISet<int>? beaten = null,
+        bool surfing = false)
     {
         var battles = new BattleFactory(rules);
         var progress = new Progression(rules);
@@ -607,7 +620,7 @@ public static class Autoplayer
             passes = pass;
 
             Reach reach = WorldWalker.Walk(
-                world, startMapId, moves, flagsSet: flags, asIfGone: gone,
+                world, startMapId, moves, surfing: surfing, flagsSet: flags, asIfGone: gone,
                 ridingTheBoat: ridingTheBoat, movedTo: moved);
 
             var stood = reach.Stood.ToHashSet();
@@ -863,7 +876,7 @@ public static class Autoplayer
         }
 
         Reach last = WorldWalker.Walk(
-            world, startMapId, moves, flagsSet: flags, asIfGone: gone,
+            world, startMapId, moves, surfing: surfing, flagsSet: flags, asIfGone: gone,
             ridingTheBoat: ridingTheBoat, movedTo: moved);
 
         // Built once. Inside the query below it would be rebuilt for every map in the world,
@@ -958,6 +971,9 @@ public static class Autoplayer
             Bought = bought,
             MoneyLeft = purse,
             Questions = questions,
+            Shore = last.Shore
+                .GroupBy(w => w.MapId)
+                .ToDictionary(g => g.Key, g => g.Count()),
             UnreadCommands = unread,
             CouldNotBuy = [.. refusedAtTheCounter.Select(r => new NotBought(r.Key.ItemId, r.Key.MapId, r.Value))],
             Tickets =

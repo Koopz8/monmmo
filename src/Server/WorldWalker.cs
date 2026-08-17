@@ -35,6 +35,22 @@ public sealed record Reach(
     /// </summary>
     public IReadOnlyList<Standing> People { get; init; } = [];
 
+    /// <summary>
+    /// Squares the walk turned back from that are water.
+    /// <para>
+    /// <b>The size of what is behind the <c>surfing</c> lever, which nothing was printing.</b>
+    /// This walker has been able to swim since it was written; a walk that is not swimming
+    /// drops every water square as solid, alongside every wall, so "there is nothing there" and
+    /// "there is a sea there and this walk was told not to cross it" have been the same
+    /// silence.
+    /// </para>
+    /// <para>
+    /// Counted whether or not it swims, so the number is the same question either way: how much
+    /// of the world is on the far side of the water.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<(string MapId, GridPosition Square)> Shore { get; init; } = [];
+
 
     /// <summary>
     /// Every square actually stood on, not just every map arrived at.
@@ -104,6 +120,7 @@ public static class WorldWalker
 
         var reached = new HashSet<string>();
         var blocked = new List<Frontier>();
+        var shore = new List<(string MapId, GridPosition Square)>();
         var standing = new List<Standing>();
         var beyond = new HashSet<string>();
 
@@ -293,7 +310,13 @@ public static class WorldWalker
                     continue;
                 }
 
-                if (!grid.IsWalkable(next)) continue;
+                if (!grid.IsWalkable(next))
+                {
+                    // And say so when it is a sea rather than a wall. See Reach.Shore.
+                    if (map.IsWater(next)) shore.Add((map.Id, next));
+
+                    continue;
+                }
 
                 if (ObjectOn(map, next) is { } person)
                 {
@@ -358,6 +381,7 @@ public static class WorldWalker
             // another route is not a gate, and reporting them as one would bury the
             // handful that are in a list of six hundred that are not.
             People = [.. standing.Where(s => !seen.Contains((s.MapId, s.Square)))],
+            Shore = [.. shore.DistinctBy(w => (w.MapId, w.Square))],
         };
     }
 

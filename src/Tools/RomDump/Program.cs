@@ -207,7 +207,7 @@ public static class Program
         if (options.Play)
             WritePlaythrough(
                 rom, options.RoutineAnswers, options.StartAt, options.Boat, options.Money, options.SayYes,
-                options.Variables);
+                options.Variables, options.Surf);
         if (options.WhereFrom.Count > 0) WriteWhereFrom(rom, options.WhereFrom);
         if (options.InTheImage.Count > 0) WriteInTheImage(rom, options.InTheImage);
         if (options.ClimbFrom.Count > 0) WriteClimb(rom, options.ClimbFrom);
@@ -5901,7 +5901,7 @@ public static class Program
 
     private static void WritePlaythrough(
         Rom rom, IReadOnlyDictionary<int, int> answers, string startAt, bool boat = false, int money = 0,
-        bool sayYes = false, IReadOnlyDictionary<int, int>? variables = null)
+        bool sayYes = false, IReadOnlyDictionary<int, int>? variables = null, bool surf = false)
     {
         Console.WriteLine();
         Console.WriteLine("A PLAYTHROUGH");
@@ -5949,7 +5949,7 @@ public static class Program
         var reader = new HowAScriptRuns(rom, teaches, answers, variables, sayYes, beatenTrainers);
 
         Attempt played = Autoplayer.Play(
-            world, first.Id, rules, reader.Read, Console.WriteLine, boat, money, beatenTrainers);
+            world, first.Id, rules, reader.Read, Console.WriteLine, boat, money, beatenTrainers, surf);
 
         int hanging = played.Questions.Values.Sum();
 
@@ -6314,6 +6314,26 @@ public static class Program
                 $"    ({dynamic} of them are 127.127 sentinels, filled in by a script when used — not walls)");
         }
 
+        // WHY, COUNTED, BEFORE THE LIST.
+        //
+        // The list below stops at twenty and this number is sixty-four, so for as long as it
+        // has existed the shape of the frontier has been whatever the first twenty happened to
+        // be. They are not one kind of problem: a door somebody is standing in front of is a
+        // flag to find, a door never reached is a walk that stopped short, and an island the
+        // run landed on and could not cross is this project's own collision export. Three
+        // different jobs, and reading twenty lines was the only way to tell how much of each.
+        Console.WriteLine();
+
+        foreach ((string why, int count) in real
+                     .GroupBy(WhyShut)
+                     .Select(g => (g.Key, g.Count()))
+                     .OrderByDescending(p => p.Item2))
+        {
+            Console.WriteLine($"    {count,4}  {why}");
+        }
+
+        Console.WriteLine();
+
         // Grouped by where they lead and why, rather than one line per door.
         //
         // Ungrouped this list was useless and had been for a while: seventeen Pokémon Centres
@@ -6433,6 +6453,34 @@ public static class Program
                     + string.Join(", ", wanting.Take(3).Select(b => $"{b.MapId} {b.Square}")));
             }
         }
+
+        // AND THE SEA, WHICH THIS WALK HAS NEVER MENTIONED.
+        //
+        // A frontier of squares wanting a move reads as the whole of what is in the way. It is
+        // not: this walk has no notion of water at all, so every water square is dropped as
+        // solid alongside every wall, and "there is nothing there" and "there is a sea there
+        // and this cannot swim" have been the same silence for as long as the walk has existed.
+        //
+        // Not crossed — counted. Which move crosses water is something to READ off the
+        // cartridge, and a walk that started swimming on a guess would open half the Sevii
+        // islands and be unable to say why.
+        if (played.Shore.Count > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine(
+                $"  and the shore: {played.Shore.Values.Sum()} water square(s) it turned back from, "
+                + $"across {played.Shore.Count} map(s)");
+
+            foreach ((string mapId, int squares) in played.Shore.OrderByDescending(w => w.Value).Take(8))
+                Console.WriteLine($"    {mapId,-8} {squares,5} — {world.Find(mapId)?.Name ?? ""}");
+
+            Console.WriteLine();
+            Console.WriteLine(
+                "    this walk cannot swim, and every one of those was dropped as though it were a");
+            Console.WriteLine(
+                "    wall. Which move crosses water is the next thing to read.");
+        }
+
 
         Console.WriteLine();
         Console.WriteLine($"  {played.Unreached.Count} maps it never got to");
@@ -10177,6 +10225,11 @@ public static class Program
                                     something a map opens or reaches a literal. The same walk
                                     --in-the-image does, off its leash: half the time the thing
                                     worth asking about is a block rather than a flag.
+              --surf                let the walk cross water. MODELLED, and a ceiling exactly as
+                                    --boat is: the walker has always been able to swim and the
+                                    playthrough has never told it to, so every sea in the game
+                                    has been indistinguishable from a wall. --play prints how
+                                    many squares that is either way.
               --routines            what every routine this project cannot execute is
                                     asked: how many arguments, what its answer is compared
                                     against, how many sites branch on it.
@@ -10378,6 +10431,13 @@ public static class Program
         /// <summary>Whether the playthrough may take the ferry, which makes its reach a ceiling.</summary>
         public bool Boat { get; private init; }
 
+        /// <summary>
+        /// Whether the walk may cross water. MODELLED, and a ceiling in the same way the boat
+        /// is: the walker has always been able to swim and nothing has ever told it to, so the
+        /// sea has been indistinguishable from a wall in every number this project prints.
+        /// </summary>
+        public bool Surf { get; private init; }
+
         /// <summary>What the playthrough has to spend. Modelled, and nothing supplies it.</summary>
         public int Money { get; private init; }
 
@@ -10519,6 +10579,7 @@ public static class Program
             var inTheImage = new List<int>();
             var climbFrom = new List<uint>();
             bool boat = false;
+            var surf = false;
             var money = 0;
             bool sayYes = false;
             string startAt = Beginning.MapId;
@@ -10755,6 +10816,9 @@ public static class Program
                         break;
                     case "--play":
                         play = true;
+                        break;
+                    case "--surf":
+                        surf = true;
                         break;
                     case "--boat":
                         boat = true;
@@ -11021,6 +11085,7 @@ public static class Program
                 InTheImage = inTheImage,
                 ClimbFrom = climbFrom,
                 Boat = boat,
+                Surf = surf,
                 Money = money,
                 SayYes = sayYes,
                 StartAt = startAt,
