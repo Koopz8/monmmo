@@ -122,7 +122,7 @@ public class OnePlaceOrManyTests
             $"the floor has to be counted in places like the thing it is a floor for;"
             + $" got {places} place(s) from {sites} site(s)");
 
-        // AND WHAT THIS DOES NOT GUARD, said out loud.
+        // AND WHICH OF THE TWO FLOORS THIS WATCHES, said out loud.
         //
         // There are TWO reversed-image floors eleven lines apart with near-identical returns —
         // this one for the flag sweep and MoveNoiseFloor for the move sweep. The first break
@@ -130,10 +130,132 @@ public class OnePlaceOrManyTests
         // fourth time in this project a break has passed because it pointed somewhere the test
         // was not watching.
         //
-        // MoveNoiseFloor's place count is NOT guarded here. Its sweep matches a different
-        // pattern and this fixture produces no clumped sites for it; making the assertion
-        // anyway would give a test that cannot fail, which is worse than no test. It is on the
-        // owed list instead.
+        // This test watches NoiseFloor and only NoiseFloor. MoveNoiseFloor has its own two
+        // below, on a fixture in its own sweep's pattern, and the break for each was run
+        // against both to check that neither catches the other's.
+    }
+
+    /// <summary>
+    /// And the ordinary case for the flag floor: sites spread across the file are as many
+    /// places as there are sites.
+    /// <para>
+    /// Without this, "the floor is one place, always" passes the test above and the control is
+    /// a constant. The pair is the discrimination — <c>places &lt; sites</c> when they clump and
+    /// <c>places == sites</c> when they do not — and neither half alone makes it.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AndTheFlagFloorSaysAsManyPlacesAsSitesWhenTheyAreSpreadOut()
+    {
+        (int sites, int _, int places) =
+            EverywhereInTheImage.NoiseFloor(FlagSitesBackwards(0x10000, 0x60000, 0xC0000));
+
+        Assert.Equal(3, sites);
+        Assert.Equal(3, places);
+    }
+
+    /// <summary>
+    /// A <c>setflag</c> and an <c>end</c>, written backwards so that the sweep's own reversal
+    /// turns them the right way round.
+    /// <para>
+    /// <c>02 00 xx 29</c> here is <c>29 xx 00 02</c> once reversed, which is
+    /// <c>setflag &lt;xx&gt;; end</c>. The <c>end</c> is not decoration: without it the sweep's
+    /// "does this read as a script" filter throws every site away and the fixture produces
+    /// nothing.
+    /// </para>
+    /// </summary>
+    private static Rom FlagSitesBackwards(params int[] at)
+    {
+        var image = new byte[0x100000];
+
+        for (var i = 0; i < image.Length; i++) image[i] = 0x77;
+
+        for (var n = 0; n < at.Length; n++)
+        {
+            image[at[n]] = 0x02;
+            image[at[n] + 1] = 0x00;
+            image[at[n] + 2] = (byte)(0x20 + n);
+            image[at[n] + 3] = 0x29;
+        }
+
+        return new Rom(image);
+    }
+
+    /// <summary>
+    /// THE OTHER FLOOR, which milestone 206 shipped unguarded and said so.
+    /// <para>
+    /// <see cref="EverywhereInTheImage.MoveNoiseFloor"/> is the move sweep's reversed-image
+    /// control and it got the same clump-awareness as the flag one at 206, on no evidence: the
+    /// break written for it was aimed at <see cref="EverywhereInTheImage.NoiseFloor"/> by
+    /// mistake and came back green, and the fixture that caught the flag one produces no sites
+    /// at all for this sweep — it matches <c>0x7C &lt;u16 move&gt;</c> and the flag fixture has
+    /// no <c>0x7C</c> in it.
+    /// </para>
+    /// <para>
+    /// So this needs its own fixture in its own pattern, written backwards for the same reason.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TheMoveSweepsFloorIsCountedInPlacesToo()
+    {
+        int[] at = [0x40000, 0x40030, 0x40060, 0x40090, 0x400C0, 0x400F0];
+
+        (int sites, int _, int _, int places) =
+            EverywhereInTheImage.MoveNoiseFloor(MoveSitesBackwards(at), MostMoves);
+
+        Assert.Equal(6, sites);
+
+        Assert.True(
+            places < sites,
+            $"the move sweep's floor has to be counted in places like the thing it is a floor"
+            + $" for; got {places} place(s) from {sites} site(s)");
+    }
+
+    /// <summary>
+    /// And its ordinary case, which is the half that stops "always one place" passing.
+    /// </summary>
+    [Fact]
+    public void AndTheMoveFloorSaysAsManyPlacesAsSitesWhenTheyAreSpreadOut()
+    {
+        (int sites, int _, int _, int places) =
+            EverywhereInTheImage.MoveNoiseFloor(
+                MoveSitesBackwards([0x10000, 0x60000, 0xC0000]), MostMoves);
+
+        Assert.Equal(3, sites);
+        Assert.Equal(3, places);
+    }
+
+    /// <summary>
+    /// How many moves the cartridge's own table holds, which is what the real sweep is handed.
+    /// A number here rather than read, because the fixture is not the cartridge — the point is
+    /// only that the id in it is inside whatever range it is asked against.
+    /// </summary>
+    private const int MostMoves = 355;
+
+    /// <summary>
+    /// <c>findmove &lt;move 1&gt;</c>, written backwards.
+    /// <para>
+    /// <c>00 01 7C</c> here is <c>7C 01 00</c> once the sweep reverses the image, and that reads
+    /// as move 1 — inside <see cref="MostMoves"/>, which is the only thing the sweep checks.
+    /// Unlike the flag sweep this one does not require its sites to read on to an end, so there
+    /// is no backwards <c>end</c> to write; if that filter is ever added the fixture stops
+    /// producing sites and says so loudly through the <c>Assert.Equal</c> on the count.
+    /// </para>
+    /// </summary>
+    private static Rom MoveSitesBackwards(params int[] at)
+    {
+        var image = new byte[0x100000];
+
+        for (var i = 0; i < image.Length; i++) image[i] = 0x77;
+
+        foreach (int o in at)
+        {
+            image[o] = 0x00;
+            image[o + 1] = 0x01;
+            image[o + 2] = ObstacleMoves.FindMove;
+        }
+
+        return new Rom(image);
     }
 
     /// <summary>
