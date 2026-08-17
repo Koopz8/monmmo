@@ -6249,6 +6249,13 @@ public static class Program
                         who.Walked ? "walks somebody" : null,
                         who.Hid ? "hides somebody" : null,
                         who.FlagsSet > 0 ? $"sets {who.FlagsSet} flag(s)" : null,
+
+                        // The number to hand to --answer. "Talking to him does nothing" and
+                        // "talking to him asks the game something this cannot ask" are a
+                        // person with no part in the story and a wall with a number on it.
+                        who.Routines.Count > 0
+                            ? "asks routine(s) " + string.Join(", ", who.Routines.Select(r => $"0x{r:X3}"))
+                            : null,
                     }.OfType<string>(),
                 ];
 
