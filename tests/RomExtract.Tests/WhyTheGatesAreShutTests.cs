@@ -71,8 +71,11 @@ public sealed class WhyTheGatesAreShutTests
     private static readonly int[] TheFloor =
         [LyingOnTheFloor, OnTheFloorAndSetOutOfSight, OnTheFloorAndSetOnAMap];
 
+    /// <summary>No obstacles in this fixture — that discrimination has its own file.</summary>
+    private static readonly int[] NoObstacles = [];
+
     private static IReadOnlyList<ShutGate> Shut(params int[] setByTheRun) =>
-        WhyTheGatesAreShut.Of(SixGates(), setByTheRun, Sites(), TheFloor);
+        WhyTheGatesAreShut.Of(SixGates(), setByTheRun, Sites(), TheFloor, NoObstacles);
 
     private static ShutBecause Why(int flag) => Assert.Single(Shut(), g => g.Flag == flag).Why;
 
@@ -103,6 +106,37 @@ public sealed class WhyTheGatesAreShutTests
     {
         Assert.Equal(ShutBecause.NeverRan, Why(OnTheFloorAndSetOnAMap));
         Assert.Equal(ShutBecause.TakenOffTheFloor, Why(OnTheFloorAndSetOutOfSight));
+    }
+
+    /// <summary>
+    /// An obstacle beats an unopened setter and beats being on the floor, and loses to an
+    /// opened one — the same order, extended.
+    /// <para>
+    /// Both are opened by a routine rather than by a script, so both belong ahead of "past the
+    /// boundary"; and an opened setter still wins, because that is the one a walk can prove.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AnObstacleBeatsAnUnopenedSetterAndTheFloorAndLosesToAnOpenedSetter()
+    {
+        IReadOnlyList<ShutGate> shut = WhyTheGatesAreShut.Of(
+            SixGates(),
+            [],
+            Sites(),
+            TheFloor,
+            [OnlyUnopenedScriptSetsIt, OnTheFloorAndSetOutOfSight, AScriptOnAMapSetsIt]);
+
+        Assert.Equal(
+            ShutBecause.AnObstacle,
+            Assert.Single(shut, g => g.Flag == OnlyUnopenedScriptSetsIt).Why);
+
+        Assert.Equal(
+            ShutBecause.AnObstacle,
+            Assert.Single(shut, g => g.Flag == OnTheFloorAndSetOutOfSight).Why);
+
+        Assert.Equal(
+            ShutBecause.NeverRan,
+            Assert.Single(shut, g => g.Flag == AScriptOnAMapSetsIt).Why);
     }
 
     /// <summary>
@@ -148,7 +182,7 @@ public sealed class WhyTheGatesAreShutTests
             };
 
         ShutGate gate = Assert.Single(
-            WhyTheGatesAreShut.Of(SixGates(), [], clearing, TheFloor),
+            WhyTheGatesAreShut.Of(SixGates(), [], clearing, TheFloor, NoObstacles),
             g => g.Flag == NothingSetsIt);
 
         Assert.Equal(ShutBecause.NothingSetsIt, gate.Why);

@@ -7787,12 +7787,26 @@ public static class Program
             .. world.Maps.SelectMany(m => m.Objects).Where(o => o.CanBeTakenAway).Select(o => o.HiddenBy),
         ];
 
+        (IReadOnlyList<int> obstacles, IReadOnlyList<uint> obstacleScripts, IReadOnlyList<int> staying) =
+            GatesThatAreObstacles.In(rom, world);
+
         IReadOnlyList<ShutGate> shut = WhyTheGatesAreShut.Of(
-            gates, set, EverywhereInTheImage.EveryFlagMoved(rom, covered), onTheFloor);
+            gates, set, EverywhereInTheImage.EveryFlagMoved(rom, covered), onTheFloor, obstacles);
 
         if (shut.Count == 0) return;
 
         Console.WriteLine("      and why each of those is shut, asked of the WHOLE file:");
+
+        if (obstacles.Count > 0)
+        {
+            Console.WriteLine(
+                $"        (obstacles: {obstacles.Count} gating flag(s) in the world hold nothing but"
+                + $" things asked about a move and then taken off the map, between them running"
+                + $" {obstacleScripts.Count} script(s)"
+                + $" — {string.Join(", ", obstacleScripts.Take(4).Select(a3 => $"0x{a3:X8}"))};"
+                + $" a further {staying.Count} hold something asked about a move and NEVER taken"
+                + " off it, which is a different mechanism and is left where it fell)");
+        }
 
         foreach ((ShutBecause why, int count) in WhyTheGatesAreShut.Counted(shut))
         {
@@ -7821,6 +7835,7 @@ public static class Program
         ShutBecause.NothingSetsIt => "no setflag names it and nothing on the floor hides behind it — the boundary",
         ShutBecause.OnlyPastTheBoundary => "set only where the map scan cannot see — past the code boundary",
         ShutBecause.TakenOffTheFloor => "set by PICKING SOMETHING UP — the object's record says so, no script does",
+        ShutBecause.AnObstacle => "holds a TREE, A ROCK OR A BOULDER — cleared by knowing the move, not by a script",
         _ => "set by a script on a map, and the run never ran it — a REACH problem",
     };
 

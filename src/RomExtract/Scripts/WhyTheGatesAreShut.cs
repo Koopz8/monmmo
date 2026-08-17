@@ -37,6 +37,17 @@ public enum ShutBecause
     /// </para>
     /// </summary>
     TakenOffTheFloor,
+
+    /// <summary>
+    /// The people it holds are not people: a tree, a rock, a boulder. Their script asks who
+    /// knows a move and takes the object off the map, and the flag that keeps it off is set by
+    /// the routine rather than by any <c>setflag</c>.
+    /// <para>
+    /// <b>The same mechanism as <see cref="TakenOffTheFloor"/>, one class further out</b>, and
+    /// the first version of this classifier filed all twenty-two of them under the boundary.
+    /// </para>
+    /// </summary>
+    AnObstacle,
 }
 
 /// <summary>One gate the run never opened, and why.</summary>
@@ -68,7 +79,14 @@ public sealed record ShutGate(int Flag, FlagGate Gates, ShutBecause Why, int Sit
 /// object's own hide flag inside compiled code. A bucket named for a cause was wrong again.
 /// </para>
 /// <para>
-/// Every bucket can be empty, including all four at once.
+/// <b>It has now shrunk twice.</b> Three buckets became four when the numbers showed that
+/// picking a thing up sets its hide flag; four became five when twenty-two of the remaining
+/// gates turned out to hold trees, rocks and boulders rather than people. Both times the
+/// mechanism was the same — a standard routine setting a flag no <c>setflag</c> names — and both
+/// times a bucket called "the boundary" was holding things that open.
+/// </para>
+/// <para>
+/// Every bucket can be empty, including all five at once.
 /// </para>
 /// </summary>
 public static class WhyTheGatesAreShut
@@ -89,11 +107,18 @@ public static class WhyTheGatesAreShut
     /// <b>Read off the world file rather than off any script</b>, because the routine that does
     /// it is compiled code.
     /// </param>
+    /// <param name="obstacles">
+    /// The hide flags whose objects are a tree, a rock or a boulder, from
+    /// <see cref="GatesThatAreObstacles"/>. The same kind of thing as
+    /// <paramref name="onTheFloor"/> and found the same way — off what the object is, not off
+    /// any <c>setflag</c>.
+    /// </param>
     public static IReadOnlyList<ShutGate> Of(
         FlagGates gates,
         IEnumerable<int> setByTheRun,
         IReadOnlyDictionary<int, IReadOnlyList<FlagSite>> movedInTheImage,
-        IReadOnlyCollection<int> onTheFloor)
+        IReadOnlyCollection<int> onTheFloor,
+        IReadOnlyCollection<int> obstacles)
     {
         var shut = new List<ShutGate>();
 
@@ -109,13 +134,15 @@ public static class WhyTheGatesAreShut
             // THE ORDER IS A DECISION AND IT IS SAID OUT LOUD.
             //
             // A flag can be several of these at once. An opened setter comes first because it
-            // is the one a walk can reach and prove. Being a thing on the floor comes next,
-            // ahead of an unopened setter, because the run demonstrably opens those and calling
-            // one "past the boundary" would be false about a gate that is already opening.
+            // is the one a walk can reach and prove. Being an obstacle or a thing on the floor
+            // comes next, ahead of an unopened setter, because both are opened by a routine
+            // rather than by a script and calling either "past the boundary" would be false
+            // about a gate whose opener is simply not written as script.
             shut.Add(new ShutGate(
                 flag,
                 gates.Of(flag),
                 opened > 0 ? ShutBecause.NeverRan
+                : obstacles.Contains(flag) ? ShutBecause.AnObstacle
                 : onTheFloor.Contains(flag) ? ShutBecause.TakenOffTheFloor
                 : sets.Count > 0 ? ShutBecause.OnlyPastTheBoundary
                 : ShutBecause.NothingSetsIt,

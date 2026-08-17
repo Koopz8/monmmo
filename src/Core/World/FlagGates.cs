@@ -47,9 +47,21 @@ public enum FlagGate
 /// not visible at all until much later.
 /// </para>
 /// </summary>
+/// <summary>
+/// One person a flag holds off a map.
+/// </summary>
+/// <param name="OnTheFloor">Whether they hand something over, which is what picking up sets.</param>
+/// <param name="Script">
+/// Their own script, or nought. <b>Several people behind one flag can share one</b> — the
+/// question <c>--entries</c> asks of scenes, asked of the people a gate holds.
+/// </param>
+public sealed record HeldBack(string MapId, int LocalId, bool OnTheFloor, uint Script);
+
 public sealed class FlagGates
 {
     private readonly Dictionary<int, FlagGate> _gates = [];
+
+    private readonly Dictionary<int, List<HeldBack>> _behind = [];
 
     public FlagGates(WorldData world)
     {
@@ -60,7 +72,22 @@ public sealed class FlagGates
         {
             foreach (MapObject person in map.Objects)
             {
-                if (person.HiddenBy != 0) _gates[person.HiddenBy] = FlagGate.APerson;
+                if (person.HiddenBy == 0) continue;
+
+                _gates[person.HiddenBy] = FlagGate.APerson;
+
+                // WHO IS BEHIND IT, kept here rather than rebuilt by whoever prints.
+                //
+                // `--flags` builds this dictionary inline in Program.cs, which is the shape
+                // this project has moved out of there seven times. A flag's count is a number
+                // and the people behind it are the thing the number is about.
+                if (!_behind.TryGetValue(person.HiddenBy, out List<HeldBack>? held))
+                {
+                    _behind[person.HiddenBy] = held = [];
+                }
+
+                held.Add(new HeldBack(
+                    map.Id, person.LocalId, person.CanBeTakenAway, person.ScriptAddress));
             }
         }
 
@@ -75,6 +102,17 @@ public sealed class FlagGates
 
     /// <summary>What this flag gates, which is nothing unless the world file says otherwise.</summary>
     public FlagGate Of(int flag) => _gates.GetValueOrDefault(flag, FlagGate.Nothing);
+
+    /// <summary>
+    /// Everybody this flag holds off a map, in the order the file places them.
+    /// <para>
+    /// <b>Empty is an answer.</b> A flag that gates the boat holds nobody, and so does a flag
+    /// that gates nothing — those are different facts and <see cref="Of"/> is what tells them
+    /// apart. This says who, and a count of gates has never said who.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<HeldBack> Behind(int flag) =>
+        _behind.TryGetValue(flag, out List<HeldBack>? held) ? held : [];
 
     /// <summary>
     /// True when this flag is a fact about the world rather than a mark on a character.
