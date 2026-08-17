@@ -923,6 +923,71 @@ public class WhatItIsWaitingForTests
     }
 
     /// <summary>
+    /// A flag only set on an arm no run can take is not a flag anything sets.
+    /// <para>
+    /// <b>The two halves of this tool disagreed for a whole session, and both were mine.</b>
+    /// The playthrough walked SILPH CO. honouring the script's own decisions and said nothing
+    /// can set <c>0x003E</c>; the flag report read the same script walking both arms of every
+    /// branch and counted it as moved — so the wall list left out the one door ten measurements
+    /// had been spent on. Making them the same walk is worth more than either being right by
+    /// luck.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AFlagSetOnlyOnAnArmNoRunCanTakeIsNotSetAtAll()
+    {
+        var image = new byte[0x2000];
+
+        // The SILPH shape: decide the switch, then branch on it, with the flag behind the
+        // answer it just ruled out.
+        Put(image, 0x100, SetVar, 0x01, 0x40, 0x00, 0x00);
+        Put(image, 0x105, Compare, 0x01, 0x40, 0x00, 0x00);
+        Put(image, 0x10A, GotoIf, IfNotEqual);
+        Pointer(image, 0x10C, 0x08000200);
+        Put(image, 0x110, SetFlag, Shared & 0xFF, Shared >> 8, Release, End);
+        Put(image, 0x200, SetFlag, Opened & 0xFF, Opened >> 8, Release, End);
+
+        SetsAFlag[] scripts = [new SetsAFlag("1.57", "trigger (5,15)", 0x08000100)];
+
+        // The plain reading walks the arm anyway, which is how this went unnoticed.
+        Assert.Contains(Opened, WhatItIsWaitingFor.Touches(new Rom(image), scripts).TurnedOn);
+
+        (IReadOnlyCollection<int> on, IReadOnlyCollection<int> _) =
+            WhatItIsWaitingFor.ReallyTouches(new Rom(image), scripts, out int ranOut);
+
+        Assert.DoesNotContain(Opened, on);
+        Assert.Contains(Shared, on);
+        Assert.Equal(0, ranOut);
+    }
+
+    /// <summary>
+    /// And a walk that ran out of steps says so. Under-reading here does not lose a flag
+    /// quietly — it invents a wall, and somebody goes looking for a routine that does not
+    /// exist. This session did that twice.
+    /// </summary>
+    [Fact]
+    public void AndAWalkThatRanOutOfStepsIsCounted()
+    {
+        var image = new byte[0x2000];
+
+        for (var block = 0; block < 6; block++)
+        {
+            Put(image, 0x100 + (block * 0x10), Goto);
+            Pointer(image, 0x101 + (block * 0x10), (uint)(0x08000110 + (block * 0x10)));
+        }
+
+        Put(image, 0x160, SetFlag, Opened & 0xFF, Opened >> 8, Release, End);
+
+        SetsAFlag[] scripts = [new SetsAFlag("1.57", "person 4", 0x08000100)];
+
+        WhatItIsWaitingFor.ReallyTouches(new Rom(image), scripts, out int stopped, maxSteps: 3);
+        WhatItIsWaitingFor.ReallyTouches(new Rom(image), scripts, out int finished);
+
+        Assert.Equal(1, stopped);
+        Assert.Equal(0, finished);
+    }
+
+    /// <summary>
     /// Who could put the right number in a variable, which is the mirror of who sets a flag.
     /// <para>
     /// What stands in front of SAFFRON is <c>0x4001 != 0 AND 0x4001 != 1</c> — a counter, not

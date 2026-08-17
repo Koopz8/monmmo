@@ -6626,10 +6626,18 @@ public static class Program
         // And the other half, which is the half that decides the rule: how many flags the
         // scripts touch that gate nothing here. Those are the marks on a character — a badge,
         // which starter was taken — and they are the ones that must NOT travel.
-        (IReadOnlyCollection<int> turnedOn, IReadOnlyCollection<int> turnedOff) =
+        // Read twice on purpose. The plain reading walks both arms of every branch, including
+        // ones the script has already decided against; the second honours them, which is what
+        // running means. The difference between the two is a list of flags that look moved and
+        // are not — and it is exactly where SAFFRON was hiding.
+        (IReadOnlyCollection<int> looksMoved, IReadOnlyCollection<int> looksCleared) =
             WhatItIsWaitingFor.Touches(rom, library.All().SelectMany(EveryScriptOn));
 
+        (IReadOnlyCollection<int> turnedOn, IReadOnlyCollection<int> turnedOff) =
+            WhatItIsWaitingFor.ReallyTouches(rom, library.All().SelectMany(EveryScriptOn), out int ranOut);
+
         var touched = new HashSet<int>(turnedOn.Concat(turnedOff));
+        var looksTouched = new HashSet<int>(looksMoved.Concat(looksCleared));
 
         // What this scan actually opened, by kind.
         //
@@ -6662,7 +6670,19 @@ public static class Program
         Console.WriteLine(
             "    a kind with nothing in it — and that has been true of this output all along");
         Console.WriteLine();
-        Console.WriteLine($"  {touched.Count} flags are set or cleared by a script somewhere");
+        Console.WriteLine(
+            $"  {looksTouched.Count} flags are set or cleared by a script somewhere, reading every branch");
+        Console.WriteLine(
+            $"  {touched.Count} of them on an arm a run could actually take — the other "
+            + $"{looksTouched.Count - touched.Count} are behind a switch the script itself decides");
+
+        if (ranOut > 0)
+        {
+            Console.WriteLine(
+                $"    ({ranOut} script(s) hit the step limit before finishing — a short read "
+                + "invents walls, so it is counted)");
+        }
+
         Console.WriteLine($"    {touched.Count - marks} of those gate something — they travel between people playing together");
         Console.WriteLine($"    {marks} gate nothing this build can see — they stay with whoever earned them");
         Console.WriteLine();

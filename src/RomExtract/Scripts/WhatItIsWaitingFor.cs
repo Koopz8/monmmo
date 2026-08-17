@@ -373,6 +373,75 @@ public static class WhatItIsWaitingFor
     /// </summary>
     public static IReadOnlyList<OnTheWay>? PathTo(Rom rom, uint address, int flag, int maxSteps = 8192)
     {
+        foreach ((ScriptCommand command, IReadOnlyList<OnTheWay> chain) in WalkItCouldTake(rom, address, maxSteps))
+        {
+            if (command.Code == SetFlag && command.Arguments.Length >= 2 && command.Word() == flag)
+                return chain;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Which flags these scripts turn on and off <em>on arms a run could actually take</em>.
+    /// <para>
+    /// <b>The two halves of this tool disagreed, and this is why.</b> <c>Touches</c> read every
+    /// script with a plain traversal that walks both arms of every branch, including ones the
+    /// script has already decided against — so `0x003E` counted as a flag something sets, and
+    /// the wall list left out the one door this session spent ten measurements on. The
+    /// playthrough, walking the same script with its own decisions honoured, had already said
+    /// nothing can set it.
+    /// </para>
+    /// <para>
+    /// Both readings were mine and both were written this session. Making them agree by
+    /// construction is worth more than either of them being right by luck.
+    /// </para>
+    /// </summary>
+    /// <param name="ranOut">
+    /// How many scripts hit the step limit before finishing. A truncated walk under-reports,
+    /// and under-reporting here invents walls — so it is counted and handed back rather than
+    /// swallowed.
+    /// </param>
+    public static (IReadOnlyCollection<int> TurnedOn, IReadOnlyCollection<int> TurnedOff) ReallyTouches(
+        Rom rom, IEnumerable<SetsAFlag> scripts, out int ranOut, int maxSteps = 2048)
+    {
+        var on = new HashSet<int>();
+        var off = new HashSet<int>();
+
+        ranOut = 0;
+
+        foreach (SetsAFlag script in scripts)
+        {
+            var steps = 0;
+
+            foreach ((ScriptCommand command, IReadOnlyList<OnTheWay> _) in
+                     WalkItCouldTake(rom, script.Address, maxSteps))
+            {
+                steps++;
+
+                if (command.Arguments.Length < 2) continue;
+
+                if (command.Code == SetFlag) on.Add(command.Word());
+                else if (command.Code == ClearFlag) off.Add(command.Word());
+            }
+
+            if (steps >= maxSteps) ranOut++;
+        }
+
+        return (on, off);
+    }
+
+    /// <summary>
+    /// Every command a run could reach from here, with what had to be true to get to it.
+    /// <para>
+    /// The traversal <see cref="PathTo"/> was, lifted out so that asking "can this script set
+    /// that flag" and asking "which flags can this script set" are the same walk. They were
+    /// two different walks for one session and they disagreed.
+    /// </para>
+    /// </summary>
+    private static IEnumerable<(ScriptCommand Command, IReadOnlyList<OnTheWay> Chain)> WalkItCouldTake(
+        Rom rom, uint address, int maxSteps)
+    {
         // Where we are AND what we know when we get there.
         //
         // THE SECOND FAULT. Keyed on the block alone, a block reachable two ways is walked
@@ -405,8 +474,7 @@ public static class WhatItIsWaitingFor
             {
                 ScriptCommand command = commands[i];
 
-                if (command.Code == SetFlag && command.Arguments.Length >= 2 && command.Word() == flag)
-                    return chain;
+                yield return (command, chain);
 
                 if (command.Code is CheckFlag or 0x21 or 0x22 or 0x47) asked = command;
 
@@ -519,7 +587,7 @@ public static class WhatItIsWaitingFor
             }
         }
 
-        return null;
+
     }
 
     /// <summary>
