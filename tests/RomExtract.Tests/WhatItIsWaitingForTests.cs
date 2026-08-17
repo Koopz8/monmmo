@@ -31,6 +31,9 @@ public class WhatItIsWaitingForTests
     private const byte Return = 0x03;
     private const byte End = 0x02;
     private const byte Compare = 0x21;
+    private const byte HideObject = 0x53;
+    private const byte GiveItem = 0x46;
+    private const byte Special = 0x25;
 
     /// <summary>Jump when the comparison came out equal — a checkflag's "already done" arm.</summary>
     private const byte IfEqual = 1;
@@ -43,6 +46,9 @@ public class WhatItIsWaitingForTests
 
     /// <summary>A flag set on the tail both arms run through, and therefore neither one's.</summary>
     private const int Shared = 0x0827;
+
+    /// <summary>A routine on the far arm — the code boundary, waiting behind the flag.</summary>
+    private const int Routine = 0x01B5;
 
     private static void Put(byte[] image, int at, params byte[] bytes) => bytes.CopyTo(image, at);
 
@@ -228,6 +234,38 @@ public class WhatItIsWaitingForTests
 
         Assert.Empty(waiting.Flags);
         Assert.Equal(1, waiting.AskedWithoutABranch);
+    }
+
+    /// <summary>
+    /// Every way an arm can change the world, priced.
+    /// <para>
+    /// Walking somebody was the one that got tested, because it is what a guard in a doorway
+    /// does — and the other three are the ones the report leans on hardest. <b>A routine on
+    /// the arm behind the flag is the whole difference between "go and set this flag" and
+    /// "setting this flag leads straight back to the code boundary"</b>, which is the finding
+    /// that decides whether the door is worth walking to at all.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AnArmIsPricedOnEveryWayItCanChangeTheWorld()
+    {
+        var image = new byte[0x2000];
+
+        Put(image, 0x100, CheckFlag, Waiting & 0xFF, Waiting >> 8);
+        Put(image, 0x103, GotoIf, IfEqual);
+        Pointer(image, 0x105, 0x08000200);
+        Put(image, 0x109, Release, End);
+
+        Put(image, 0x200, HideObject, 0x03, 0x00);
+        Put(image, 0x203, GiveItem, 0x1A, 0x00, 0x01, 0x00);
+        Put(image, 0x208, Special, Routine & 0xFF, Routine >> 8);
+        Put(image, 0x20B, Release, End);
+
+        FlagAsked asked = Assert.Single(WhatItIsWaitingFor.Asks(new Rom(image), 0x08000100).Flags);
+
+        Assert.True(asked.IfSet.Hides);
+        Assert.True(asked.IfSet.HandsSomethingOver);
+        Assert.Contains(Routine, asked.IfSet.Routines);
     }
 
     /// <summary>
