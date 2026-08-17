@@ -778,7 +778,17 @@ public class WhatItIsWaitingForTests
             [],
             [],
             [],
-            [new MapScriptEntry(1, 0x08001000), new MapScriptEntry(3, 0x08002000)]);
+            [
+                new MapScriptEntry(1, 0x08001000),
+                new MapScriptEntry(3, 0x08002000),
+
+                // The decoy, and it is not merely a duplicate: a kind-2 pointer is not a
+                // script at all. It points at a table of variable, value and script — which
+                // arrives through onEntry already — and reading a condition table as commands
+                // is a misread that parses cleanly and reports whatever the bytes happen to be.
+                new MapScriptEntry(2, 0x08003000),
+                new MapScriptEntry(4, 0x08004000),
+            ]);
 
         Assert.Equal(["1.57 on load (kind 1)", "1.57 on load (kind 3)"], found.Select(s => s.ToString()));
     }

@@ -106,7 +106,7 @@ public sealed record LoadedMap(
     public IReadOnlyList<MapEntryScript> OnEntry { get; init; } = [];
 
     /// <summary>
-    /// The entries in this map's own script list that carry no condition.
+    /// This map's own script list, every entry of it, unfiltered.
     /// <para>
     /// <b>Read, counted, and left alone since the fifth list was found</b> — because running
     /// one means knowing <em>when</em> the cartridge runs it, which is not written down

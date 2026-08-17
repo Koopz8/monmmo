@@ -558,13 +558,19 @@ public static class WhatItIsWaitingFor
                 mapId, $"on arrival (0x{entry.Variable:X4} == {entry.Value})", entry.ScriptAddress);
         }
 
-        // And the fifth kind: the entries in the map's own script list that carry no
-        // condition. When the cartridge runs one is not written down anywhere in the data,
-        // which is a good reason not to run them and no reason at all not to read them — and
-        // for three rounds "nothing in the world sets this flag" was a sentence about a scan
-        // that had never opened one.
-        foreach (Maps.MapScriptEntry entry in (onLoad ?? []).Where(e => e.Pointer != 0))
+        // And the fifth kind: the entries in the map's own script list. When the cartridge
+        // runs one is not written down anywhere in the data, which is a good reason not to run
+        // them and no reason at all not to read them — and for three rounds "nothing in the
+        // world sets this flag" was a sentence about a scan that had never opened one.
+        //
+        // The conditional kinds are skipped because their pointer is not a script at all: it
+        // is a table of variable, value and script, and those scripts arrive through onEntry
+        // already. Reading a condition table as commands is a misread that would parse.
+        foreach (Maps.MapScriptEntry entry in (onLoad ?? [])
+                     .Where(e => e.Pointer != 0 && !Maps.MapScripts.IsConditional(e.Kind)))
+        {
             yield return new SetsAFlag(mapId, $"on load (kind {entry.Kind})", entry.Pointer);
+        }
     }
 
     /// <summary>

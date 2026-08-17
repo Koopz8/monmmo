@@ -104,7 +104,7 @@ public sealed class MapLibrary
             Triggers = MapLinkExtractor.ReadTriggers(_rom, entry.Header, collision.Width, collision.Height),
             Warps = warps,
             OnEntry = MapScripts.OnEntry(_rom, entry.Header),
-            OnLoad = [.. MapScripts.Read(_rom, entry.Header).Where(e => !MapScripts.IsConditional(e.Kind))],
+            OnLoad = MapScripts.Read(_rom, entry.Header),
         };
     }
 
