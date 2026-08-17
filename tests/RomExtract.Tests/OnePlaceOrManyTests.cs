@@ -121,6 +121,19 @@ public class OnePlaceOrManyTests
             places < sites,
             $"the floor has to be counted in places like the thing it is a floor for;"
             + $" got {places} place(s) from {sites} site(s)");
+
+        // AND WHAT THIS DOES NOT GUARD, said out loud.
+        //
+        // There are TWO reversed-image floors eleven lines apart with near-identical returns —
+        // this one for the flag sweep and MoveNoiseFloor for the move sweep. The first break
+        // written for this test was aimed at the other one and came back green, which is the
+        // fourth time in this project a break has passed because it pointed somewhere the test
+        // was not watching.
+        //
+        // MoveNoiseFloor's place count is NOT guarded here. Its sweep matches a different
+        // pattern and this fixture produces no clumped sites for it; making the assertion
+        // anyway would give a test that cannot fail, which is worse than no test. It is on the
+        // owed list instead.
     }
 
     /// <summary>

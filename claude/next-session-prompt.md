@@ -1,7 +1,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-241`, 2807 tests green.
+`claude-242`, 2808 tests green.
 
 Standing rules — do not break these:
 
@@ -84,7 +84,7 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-205-nine-sites-one-place.md` first, then `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
+Read `claude/milestone-206-the-floor-had-the-same-shape.md` first, then `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
 **Nineteen faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
@@ -188,21 +188,14 @@ sets. CERULEAN CAVE is closed: the run now reaches it, off the SAPPHIRE thread.
 
 ## The next task, precisely
 
-1. **Re-read every count this project has quoted against the uniform floor.** 205 found that
-   `--in-the-image`'s error bar is a whole-image average computed as though bytes were
-   independent, and the image is nothing of the sort: `0x0089` shows NINE sites against a floor
-   of 1.0, and seven of them are inside 791 bytes of a table at 4.70 bits/byte. Nine sites
-   spread over 16 MiB and nine inside a kilobyte are the same number and different findings, and
-   they printed identically for the whole life of the instrument. `HowClustered` says which now.
-   **Nothing else has been re-read**: `--who-knows`'s 600 against 787, the raw whole-file sweep's
-   3762 against 3675. The instrument exists; the numbers do not.
-1. **Six stops left, and two new ones.** 204 read `0xD3`. What remains: `0x9B` (four sites),
-   `0xCA`, `0xC4`, `0xC3` (three each), `0xA4` (two), `0x36` and `0xC6` (new, appeared behind
-   `0x43` and `0xD3`), and `0x73` which is ruled dead. **Use a control.** Three milestones
-   running the decisive-feeling evidence needed one: 204's "the same pointer twice" is 30.1%
-   against a 0.2% control measured over the whole image, and without that number it was just a
-   nice-looking pair of lines. **`0xE6` is load-bearing in EIGHT fixtures across six milestones**
-   and has never been read.
+1. **`MoveNoiseFloor`'s place count has no test, and the break that should have caught it went
+   green twice.** 206 made both reversed-image floors clump-aware. There are TWO of them eleven
+   lines apart with near-identical returns — `NoiseFloor` (flags) and `MoveNoiseFloor` (moves) —
+   and the first break edited one while the test watched the other. `NoiseFloor` is guarded now;
+   `MoveNoiseFloor` is not, because this fixture produces no clumped sites for its pattern and
+   asserting anyway would be a test that cannot fail. **A fixture for a function that reverses
+   its input has to be written backwards** — `02 00 xx 29` becomes `29 xx 00 02` after the
+   reversal, and omitting the `end` gives zero sites.
 2. **The money ceiling is MEASURED and unlevered — decide against the number, not the worry.** 201
    counted it: **8 places** ask the run for money at five of the six lever settings and **1 of
    them hands something over** — `16.0 0x0816F75F` wants 500 and gives `#129` at level 5

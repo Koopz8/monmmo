@@ -6,15 +6,16 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **A count of nine turned out to be a finding of one.** The flag holding MT. EMBER
-  shut shows nine sites in the file against an error bar of about one — which reads
-  as signal. Seven of the nine sit inside **791 bytes**, in a table with the same
-  record repeating and names beside it: 4.70 bits per byte, where this game's script
-  runs 5.70.
-- **The error bar was a whole-image average and the image is not uniform.** Nothing in
-  a model that assumes independent bytes predicts seven hits in eight hundred; the
-  uniform expectation for that span is 0.00005.
-- So `0x0089` is closed harder than before — it is behind compiled code, not a script —
-  and the instrument now prints how clumped a count is beside the count.
-- **Nothing else has been re-read.** Every number this project has quoted against that
-  floor carries the same error.
+- **The noise floor had the same shape as the thing it was measuring.** Every whole-file
+  sweep here is read against the same bytes swept backwards. Reversing preserves byte
+  frequencies — and it preserves SHAPE, so a table reversed still clumps exactly as
+  hard, and both sides have been counting clumps twice.
+- Re-read: `--who-knows` goes from 600 sites against 787 to **415 places against 444**;
+  `--flags` from 4109 against 4167 to **1445 against 1329**.
+- **The flag sweep changes sign.** By site it is behind its own reversal; by place it is
+  ahead by 8.7%. That is not a rescue — two ways of counting that disagree about which
+  side of a floor a number falls on are two ways of saying the raw sweep is not a
+  finding. The output now says exactly that instead of quoting whichever flatters.
+- The break for this came back **green twice**: nothing guarded the floor's own place
+  count, and then the re-break edited one of two near-identical functions while the
+  test watched the other.
