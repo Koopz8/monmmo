@@ -7749,6 +7749,13 @@ public static class Program
         Console.WriteLine(
             "    place(s) and not site(s) on both sides, because reversing a file preserves"
             + " clumping as well as frequency (206)");
+        Console.WriteLine(
+            realPlaces > floorPlaces && real.Count < floorReads
+                ? "    THE TWO COMPARISONS DISAGREE ABOUT THE SIGN — behind the floor by site,"
+                  + " ahead by place. Both are ways of saying the RAW SWEEP IS NOT A FINDING;"
+                  + " the chains below are."
+                : "    the raw sweep is a weak filter either way — what is worth reading below is"
+                  + " the chain, not this count.");
         Console.WriteLine();
 
         foreach ((byte code, string what) in new[]
