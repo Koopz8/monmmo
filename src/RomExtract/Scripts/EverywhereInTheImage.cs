@@ -1,0 +1,353 @@
+namespace PokeMmo.RomExtract.Scripts;
+
+/// <summary>
+/// One place in the whole image where a flag is turned on or off.
+/// </summary>
+/// <param name="Offset">Where the command byte sits in the file.</param>
+/// <param name="Flag">The flag it moves.</param>
+/// <param name="Sets">True for <c>setflag</c>, false for <c>clearflag</c>.</param>
+/// <param name="ReadsAsAScript">
+/// True when the bytes from here decode as commands and reach an end, a return or a goto.
+/// <para>
+/// The discriminator, and the reason a raw byte scan is usable at all. Three bytes recur in
+/// sixteen megabytes by accident about once, and an accident lands in the middle of somebody
+/// else's argument where the bytes after it are not commands.
+/// </para>
+/// </param>
+/// <param name="Opened">
+/// True when the map scan's own reading of the world decoded this very byte as a command.
+/// <b>This is the measurement.</b> A site the map scan never opened is a site every "nothing
+/// in the world sets this flag" in this project has been silent about.
+/// </param>
+public sealed record FlagSite(int Offset, int Flag, bool Sets, bool ReadsAsAScript, bool Opened)
+{
+    public uint Address => Rom.BaseAddress + (uint)Offset;
+
+    public override string ToString() =>
+        $"0x{Offset:X6} {(Sets ? "setflag" : "clearflag")} 0x{Flag:X4}";
+}
+
+/// <summary>
+/// One place in the image holding a pointer at, or just above, an address.
+/// </summary>
+/// <param name="Offset">Where the four bytes sit.</param>
+/// <param name="Points">What they point at.</param>
+/// <param name="Opcode">
+/// The script command this pointer is the argument of, or zero when it is not one. Read from
+/// the byte before it for <c>call</c> and <c>goto</c>, and from two bytes before it for the
+/// conditional pair and <c>loadpointer</c>, because that is where each of them puts its
+/// pointer.
+/// </param>
+public sealed record NamesIt(int Offset, uint Points, byte Opcode)
+{
+    /// <summary>True when a script jumps here — the only kind that is a way in.</summary>
+    public bool AJump => Opcode is ScriptCommands.Call or ScriptCommands.Goto
+        or ScriptCommands.GotoIf or ScriptCommands.CallIf;
+
+    /// <summary>
+    /// True when this is four aligned bytes that no command owns.
+    /// <para>
+    /// <b>A finding rather than a miss.</b> Script pointers in this cartridge sit at whatever
+    /// offset the command before them left; a pointer on a four-byte boundary with no opcode in
+    /// front of it is a table entry or a literal in the game's own code — which is to say the
+    /// thing on the far side of the code boundary, with an address on it.
+    /// </para>
+    /// </summary>
+    public bool ALiteral => Opcode == 0 && Offset % 4 == 0;
+
+    public override string ToString() =>
+        AJump ? $"0x{Offset:X6}  {ScriptCommands.NameOf(Opcode)} 0x{Points:X8}"
+        : ALiteral ? $"0x{Offset:X6}  a literal holding 0x{Points:X8}"
+        : $"0x{Offset:X6}  four loose bytes holding 0x{Points:X8}";
+}
+
+/// <summary>
+/// Reading the file rather than the world.
+/// <para>
+/// <b>Every instrument in this project so far starts at a map.</b> It gathers the scripts the
+/// maps point at, follows the calls and gotos out of them, and reports on what it found —
+/// which is the right shape for almost every question and is silently the wrong shape for one:
+/// <em>is there anything here the maps do not point at?</em> A scan that begins at the maps
+/// cannot answer that, and it does not fail when asked. It comes back the same as a scan that
+/// looked everywhere and found nothing.
+/// </para>
+/// <para>
+/// Three times last session the answer was in a part of the file the scan does not open. So
+/// this one does not start anywhere. It scans all sixteen megabytes for the three bytes that
+/// turn a flag on, and then asks of every hit the only question that matters: <b>did the map
+/// scan ever decode this byte?</b>
+/// </para>
+/// <para>
+/// <b>It can come back empty, and it says how empty empty is.</b> Three bytes recur by chance
+/// about once in an image this size, so a lone hit that does not decode as a script is
+/// probably noise and <see cref="ByChance"/> prints the number rather than leaving the reader
+/// to feel confident.
+/// </para>
+/// </summary>
+public static class EverywhereInTheImage
+{
+    private const byte SetFlag = 0x29;
+    private const byte ClearFlag = 0x2A;
+
+    /// <summary>
+    /// How many hits a pattern this long would be expected to have in this image by accident.
+    /// <para>
+    /// The error bar on a byte scan, and the difference between a finding and a coincidence.
+    /// Printed rather than reasoned about, because "three bytes is surely specific enough" is
+    /// the kind of sentence that is right until the image is sixteen megabytes.
+    /// </para>
+    /// </summary>
+    public static double ByChance(Rom rom, int patternBytes) =>
+        rom.Length / Math.Pow(256, patternBytes);
+
+    /// <summary>
+    /// Every byte of the image that a reading of these scripts actually decodes as a command.
+    /// <para>
+    /// <b>The blind spot, with a size on it.</b> Not how many scripts were opened — that number
+    /// has been printed for a session and it cannot be compared with anything. This is which
+    /// bytes, so that any address at all can be asked whether it was inside or outside, and
+    /// "the scan never looked here" stops being a suspicion.
+    /// </para>
+    /// </summary>
+    public static bool[] Opened(Rom rom, IEnumerable<SetsAFlag> scripts, int maxScripts = 96)
+    {
+        var covered = new bool[rom.Length];
+        var seen = new HashSet<uint>();
+
+        foreach (SetsAFlag script in scripts)
+        {
+            foreach (uint block in ScriptReader.Reachable(rom, script.Address, maxScripts))
+            {
+                if (!seen.Add(block)) continue;
+
+                foreach (ScriptCommand command in ScriptReader.Read(rom, block))
+                {
+                    for (int i = command.Offset; i < command.Offset + 1 + command.Arguments.Length; i++)
+                    {
+                        if (i >= 0 && i < covered.Length) covered[i] = true;
+                    }
+                }
+            }
+        }
+
+        return covered;
+    }
+
+    /// <summary>
+    /// Everywhere in the file a flag is turned on or off, whether or not any map leads there.
+    /// </summary>
+    /// <param name="covered">
+    /// What the map scan decoded, from <see cref="Opened"/>. Null when the caller has not
+    /// worked it out, in which case every site reports as unopened — which is honest about the
+    /// caller rather than about the file, and is why it is a parameter and not a default.
+    /// </param>
+    public static IReadOnlyList<FlagSite> Moves(Rom rom, int flag, bool[]? covered = null)
+    {
+        var sites = new List<FlagSite>();
+
+        byte low = (byte)(flag & 0xFF);
+        byte high = (byte)(flag >> 8);
+
+        foreach ((byte code, bool sets) in new[] { (SetFlag, true), (ClearFlag, false) })
+        {
+            foreach (int offset in rom.FindAll(new byte[] { code, low, high }))
+            {
+                sites.Add(new FlagSite(
+                    offset,
+                    flag,
+                    sets,
+                    ReadsAsAScript(rom, Rom.BaseAddress + (uint)offset),
+                    covered is not null && offset < covered.Length && covered[offset]));
+            }
+        }
+
+        return [.. sites.OrderBy(s => s.Offset)];
+    }
+
+    /// <summary>
+    /// Every flag moved anywhere in the file, by flag, in one pass.
+    /// <para>
+    /// <b>The whole code boundary, re-asked of the file instead of the world.</b> Two hundred
+    /// and forty-eight flags gate somebody and are moved by no script any map leads to; that
+    /// sentence has been the boundary for two sessions and it is a sentence about the scripts
+    /// the maps reach. Asking it of every byte instead is one pass, and it turns "nothing
+    /// moves this" into two very different findings: moved by script somewhere nothing leads
+    /// to, or not moved by any script that exists.
+    /// </para>
+    /// <para>
+    /// Only hits that read as script are kept, because a whole-file sweep is otherwise mostly
+    /// noise: a hundred and thirty thousand raw hits in a sixteen-megabyte image, of which
+    /// almost all land in the middle of somebody else's argument.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyDictionary<int, IReadOnlyList<FlagSite>> EveryFlagMoved(
+        Rom rom, bool[]? covered = null)
+    {
+        var found = new Dictionary<int, List<FlagSite>>();
+
+        for (int offset = 0; offset + 3 <= rom.Length; offset++)
+        {
+            byte code = rom.ReadU8(offset);
+
+            if (code is not (SetFlag or ClearFlag)) continue;
+            if (!ReadsAsAScript(rom, Rom.BaseAddress + (uint)offset)) continue;
+
+            int flag = rom.ReadU16(offset + 1);
+
+            if (!found.TryGetValue(flag, out List<FlagSite>? sites)) found[flag] = sites = [];
+
+            sites.Add(new FlagSite(
+                offset,
+                flag,
+                code == SetFlag,
+                true,
+                covered is not null && offset < covered.Length && covered[offset]));
+        }
+
+        return found.ToDictionary(p => p.Key, p => (IReadOnlyList<FlagSite>)p.Value);
+    }
+
+    /// <summary>
+    /// What the sweep finds in this same file with the bytes reversed — the noise floor.
+    /// <para>
+    /// <b>The control, and this instrument does not mean anything without it.</b> "Reads as
+    /// script" sounds like a strong filter and is not: on sixteen megabytes of random bytes the
+    /// sweep still comes back with thousands of sites, because a <c>setflag</c> followed by
+    /// something that happens to decode and end is three or four bytes of luck.
+    /// </para>
+    /// <para>
+    /// Reversing the image keeps every byte and every byte's frequency exactly as it is and
+    /// destroys every command boundary in it. So whatever the sweep finds in the reversal is
+    /// what it would find in a file with these statistics and no scripts at all — which is the
+    /// only honest thing to put next to the real count.
+    /// </para>
+    /// </summary>
+    public static int NoiseFloor(Rom rom)
+    {
+        byte[] backwards = rom.Span.ToArray();
+
+        Array.Reverse(backwards);
+
+        return EveryFlagMoved(new Rom(backwards)).Values.Sum(sites => sites.Count);
+    }
+
+    /// <summary>
+    /// Where two flags are moved close enough together to be one piece of script.
+    /// <para>
+    /// <b>The question this was built for.</b> One flag holds eight people in place on SAFFRON
+    /// and another keeps seven off the same map; one scene does both halves and only one half
+    /// has ever been visible, because being invisible looks exactly like nothing at all.
+    /// Two lists of sites do not say that. Sites within a few dozen bytes of each other do.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<(FlagSite First, FlagSite Second)> Together(
+        IEnumerable<FlagSite> left, IEnumerable<FlagSite> right, int within = 128)
+    {
+        List<FlagSite> theirs = [.. right];
+
+        return
+        [
+            .. from a in left
+               from b in theirs
+               where a.Offset != b.Offset && Math.Abs(a.Offset - b.Offset) <= within
+               orderby Math.Abs(a.Offset - b.Offset)
+               select (a, b),
+        ];
+    }
+
+    /// <summary>
+    /// Every four bytes in the file holding a pointer to an address, indexed once.
+    /// <para>
+    /// Built whole rather than searched per question, because a climb asks it a few dozen
+    /// times and each pass is sixteen million reads. Only values that land inside this image
+    /// are kept, which on a sixteen-megabyte cartridge is one byte in two hundred and
+    /// fifty-six by accident — so the index is mostly noise by count and the classification on
+    /// each hit is what separates them.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyDictionary<uint, IReadOnlyList<int>> PointerIndex(Rom rom)
+    {
+        var index = new Dictionary<uint, List<int>>();
+
+        for (int offset = 0; offset + 4 <= rom.Length; offset++)
+        {
+            // The top byte first: it rules out two hundred and fifty-five in every two
+            // hundred and fifty-six without a read, and this loop runs sixteen million times.
+            if (rom.ReadU8(offset + 3) != 0x08) continue;
+
+            uint value = rom.ReadU32(offset);
+
+            if (!rom.IsRomAddress(value)) continue;
+
+            if (!index.TryGetValue(value, out List<int>? at)) index[value] = at = [];
+
+            at.Add(offset);
+        }
+
+        return index.ToDictionary(p => p.Key, p => (IReadOnlyList<int>)p.Value);
+    }
+
+    /// <summary>
+    /// Everything that names this address, or any address in the bytes just above it.
+    /// <para>
+    /// The slack is the point. A script jumped into at its first command is named exactly; a
+    /// command in the middle of a block is named by nothing at all, and the block that contains
+    /// it is named a few dozen bytes above. Asking only for the exact address answers "no"
+    /// correctly and uselessly.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<NamesIt> WhoNames(
+        Rom rom, IReadOnlyDictionary<uint, IReadOnlyList<int>> index, uint address, int slack = 0)
+    {
+        var found = new List<NamesIt>();
+
+        for (uint target = address - (uint)slack; target <= address; target++)
+        {
+            if (!index.TryGetValue(target, out IReadOnlyList<int>? offsets)) continue;
+
+            foreach (int offset in offsets) found.Add(new NamesIt(offset, target, OpcodeFor(rom, offset)));
+        }
+
+        return [.. found.OrderBy(n => n.Offset)];
+    }
+
+    /// <summary>
+    /// Which command owns a pointer sitting at this offset, or zero when none does.
+    /// <para>
+    /// Read from the bytes in front of it rather than guessed. <c>call</c> and <c>goto</c> put
+    /// their pointer immediately after the opcode; the conditional pair put a condition byte in
+    /// between; <c>loadpointer</c> puts a bank byte there and its pointer is text rather than
+    /// script, which is worth telling apart rather than counting as a way in.
+    /// </para>
+    /// </summary>
+    private static byte OpcodeFor(Rom rom, int offset)
+    {
+        if (offset >= 1 && rom.ReadU8(offset - 1) is ScriptCommands.Call or ScriptCommands.Goto)
+            return rom.ReadU8(offset - 1);
+
+        if (offset >= 2
+            && rom.ReadU8(offset - 2) is ScriptCommands.GotoIf or ScriptCommands.CallIf
+                or ScriptCommands.LoadPointer)
+        {
+            return rom.ReadU8(offset - 2);
+        }
+
+        return 0;
+    }
+
+    /// <summary>
+    /// True when the bytes from here decode as commands and finish like a script.
+    /// <para>
+    /// The same test <see cref="ScriptReader"/> uses to decide whether a pointer out of a fight
+    /// leads to a script, applied to a byte scan's hits for the same reason: a hit in the
+    /// middle of somebody's argument does not carry on into commands.
+    /// </para>
+    /// </summary>
+    private static bool ReadsAsAScript(Rom rom, uint address)
+    {
+        List<ScriptCommand> commands = ScriptReader.Read(rom, address);
+
+        return commands.Count > 0
+            && commands[^1].Code is ScriptCommands.End or ScriptCommands.Return or ScriptCommands.Goto;
+    }
+}

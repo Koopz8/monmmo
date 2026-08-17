@@ -209,6 +209,7 @@ public static class Program
                 rom, options.RoutineAnswers, options.StartAt, options.Boat, options.Money, options.SayYes,
                 options.Variables);
         if (options.WhereFrom.Count > 0) WriteWhereFrom(rom, options.WhereFrom);
+        if (options.InTheImage.Count > 0) WriteInTheImage(rom, options.InTheImage);
 
         if (options.SequenceWidths) WriteSequenceWidths(rom);
 
@@ -6575,6 +6576,330 @@ public static class Program
             "    real world is never smaller than it.");
     }
 
+    /// <summary>
+    /// Every place in the whole file that moves these flags, and what names each one.
+    /// <para>
+    /// <b>The instrument that does not start at a map.</b> Everything else here gathers the
+    /// scripts the maps point at and follows the jumps out of them — which is the right shape
+    /// for almost every question and is silently the wrong shape for "is there anything here
+    /// the maps do not point at?". Asked that, a map-first scan comes back identical to one
+    /// that looked everywhere and found nothing.
+    /// </para>
+    /// <para>
+    /// So this scans the file for the three bytes that move a flag, and asks of every hit
+    /// whether the map scan ever decoded that byte. Then it climbs: what names this address,
+    /// what names that, until it reaches something the map scan opens — a way in — or reaches
+    /// a literal, which is the code boundary with an address on it.
+    /// </para>
+    /// </summary>
+    private static void WriteInTheImage(Rom rom, IReadOnlyList<int> flags)
+    {
+        Console.WriteLine();
+        Console.WriteLine("EVERYWHERE IN THE IMAGE");
+        Console.WriteLine();
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        List<SetsAFlag> scripts = [.. library.All().SelectMany(EveryScriptOn)];
+
+        bool[] covered = EverywhereInTheImage.Opened(rom, scripts);
+
+        int decoded = covered.Count(b => b);
+
+        Console.WriteLine(
+            $"  the map scan opens {scripts.Count} script(s), and what they decode to is "
+            + $"{decoded} of the {rom.Length} bytes in this file — {100.0 * decoded / rom.Length:0.0}%");
+        Console.WriteLine(
+            "    so every \"nothing in the world does X\" this project has ever printed was a");
+        Console.WriteLine(
+            $"    sentence about that {100.0 * decoded / rom.Length:0.0}%. Everything below reads the whole file.");
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  a three-byte pattern turns up by accident about {EverywhereInTheImage.ByChance(rom, 3):0.0} "
+            + "time(s) in an image this size — which is the error bar on every count below");
+
+        IReadOnlyDictionary<uint, IReadOnlyList<int>> index = EverywhereInTheImage.PointerIndex(rom);
+
+        var sites = new Dictionary<int, IReadOnlyList<FlagSite>>();
+
+        foreach (int flag in flags)
+        {
+            IReadOnlyList<FlagSite> found = EverywhereInTheImage.Moves(rom, flag, covered);
+
+            sites[flag] = found;
+
+            Console.WriteLine();
+            Console.WriteLine(
+                $"  0x{flag:X4} — {found.Count} site(s) in the file, "
+                + $"{found.Count(s => s.ReadsAsAScript)} of which read as script, "
+                + $"{found.Count(s => s.Opened)} of which the map scan opened");
+
+            if (found.Count == 0)
+            {
+                Console.WriteLine(
+                    "    NOT ONE SETFLAG OR CLEARFLAG OF IT EXISTS IN THE FILE. Whatever moves it");
+                Console.WriteLine(
+                    "    is compiled code writing the flag array directly, and no reading of scripts");
+                Console.WriteLine(
+                    "    anywhere will ever find it.");
+
+                continue;
+            }
+
+            foreach (FlagSite site in found)
+            {
+                Console.WriteLine(
+                    $"    0x{site.Offset:X6}  {(site.Sets ? "setflag  " : "clearflag")}  "
+                    + (site.ReadsAsAScript ? "reads as script" : "DOES NOT READ AS SCRIPT — probably noise")
+                    + "  "
+                    + (site.Opened ? "the map scan opened this" : "NEVER OPENED BY THE MAP SCAN"));
+            }
+        }
+
+        // The two halves of one scene. Two lists of sites cannot say "one piece of script does
+        // both"; sites a few dozen bytes apart can, and that is the whole question about
+        // SAFFRON — a flag holding people in place and a flag keeping people off, failing in
+        // opposite directions with only one direction ever visible.
+        for (int a = 0; a < flags.Count; a++)
+        {
+            for (int b = a + 1; b < flags.Count; b++)
+            {
+                IReadOnlyList<(FlagSite First, FlagSite Second)> pairs =
+                    EverywhereInTheImage.Together(sites[flags[a]], sites[flags[b]]);
+
+                Console.WriteLine();
+                Console.WriteLine(
+                    $"  0x{flags[a]:X4} AND 0x{flags[b]:X4} within 128 bytes of each other: "
+                    + $"{pairs.Count} place(s)");
+
+                if (pairs.Count == 0)
+                {
+                    Console.WriteLine(
+                        "    NOWHERE IN THE FILE DOES ONE PIECE OF SCRIPT MOVE BOTH — so they are two");
+                    Console.WriteLine(
+                        "    scenes after all, or the one that does it is not a script at all.");
+
+                    continue;
+                }
+
+                foreach ((FlagSite first, FlagSite second) in pairs.Take(8))
+                {
+                    Console.WriteLine(
+                        $"    {first} and {second} — {Math.Abs(first.Offset - second.Offset)} bytes apart");
+                }
+            }
+        }
+
+        // And the climb. Only for sites the map scan never opened, because a site it opened is
+        // already answered by --flags and printing the two the same way is how a new finding
+        // gets buried in a list of old ones.
+        List<FlagSite> unopened =
+        [
+            .. sites.Values.SelectMany(s => s).Where(s => s.ReadsAsAScript && !s.Opened).DistinctBy(s => s.Offset),
+        ];
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  {unopened.Count} site(s) read as script and were never opened — climbing each one");
+
+        foreach (FlagSite site in unopened.Take(12)) Climb(rom, index, covered, site);
+
+        if (unopened.Count > 12)
+            Console.WriteLine($"    ... and {unopened.Count - 12} more not climbed");
+    }
+
+    /// <summary>
+    /// What names this address, and what names that, until it reaches the world or nothing.
+    /// <para>
+    /// A block is jumped into at its first command, and the flag being hunted is usually some
+    /// way inside it — so the search is for anything naming an address in the bytes just above,
+    /// not for the address itself. Asking for the exact address answers "nothing" correctly and
+    /// uselessly.
+    /// </para>
+    /// </summary>
+    private static void Climb(
+        Rom rom,
+        IReadOnlyDictionary<uint, IReadOnlyList<int>> index,
+        bool[] covered,
+        FlagSite site,
+        int slack = 192,
+        int maxSteps = 24)
+    {
+        Console.WriteLine();
+        Console.WriteLine($"    climbing from {site} at 0x{site.Address:X8}");
+
+        var seen = new HashSet<uint>();
+        var queue = new Queue<(uint Address, int Depth)>();
+
+        queue.Enqueue((site.Address, 0));
+
+        var steps = 0;
+        var reachedTheWorld = false;
+        var literals = 0;
+
+        while (queue.Count > 0 && steps++ < maxSteps)
+        {
+            (uint address, int depth) = queue.Dequeue();
+
+            if (!seen.Add(address)) continue;
+
+            IReadOnlyList<NamesIt> names = EverywhereInTheImage.WhoNames(rom, index, address, slack);
+
+            string pad = new(' ', 6 + (depth * 2));
+
+            if (names.Count == 0)
+            {
+                Console.WriteLine(
+                    $"{pad}NOTHING IN THE FILE NAMES 0x{address:X8} or the {slack} bytes above it");
+
+                continue;
+            }
+
+            foreach (NamesIt named in names.Take(6))
+            {
+                bool opened = named.Offset < covered.Length && covered[named.Offset];
+
+                Console.WriteLine(
+                    $"{pad}{named}"
+                    + (named.AJump
+                        ? opened ? "  <- THE MAP SCAN OPENS THIS — here is the way in" : "  <- a jump nothing opens"
+                        : named.ALiteral ? "  <- a literal: only code reads one" : "  <- loose bytes, probably noise"));
+
+                if (named.AJump && opened) reachedTheWorld = true;
+                if (named.ALiteral) literals++;
+
+                // Climb on from the command that carries the pointer, not from the pointer:
+                // what names this block is what names the command that jumps out of it.
+                if (named.AJump && !opened && depth + 1 < 6)
+                {
+                    uint command = Rom.BaseAddress + (uint)named.Offset;
+
+                    queue.Enqueue((command, depth + 1));
+                }
+            }
+
+            if (names.Count > 6) Console.WriteLine($"{pad}... and {names.Count - 6} more naming it");
+        }
+
+        Console.WriteLine(
+            reachedTheWorld
+                ? "      SO A MAP LEADS HERE after all — the map scan opens something that jumps in."
+                : literals > 0
+                    ? "      NO MAP LEADS HERE. What names it is a literal, which only compiled code "
+                        + "reads — so this scene is run from the far side of the code boundary, and "
+                        + "the offset above is where to look."
+                    : "      NO MAP LEADS HERE, and nothing names it at all.");
+    }
+
+    /// <summary>
+    /// The code boundary, asked of the file instead of of the world.
+    /// <para>
+    /// <b>The boundary has always been a sentence about the scripts the maps reach.</b> "Two
+    /// hundred and forty-eight flags gate somebody and no script moves them" is measured by
+    /// gathering every script a map points at, following the jumps, and finding no
+    /// <c>setflag</c>. That reading cannot tell a flag moved by nothing from a flag moved by a
+    /// piece of script nothing leads to, and it does not fail when asked — it prints the same
+    /// line either way, which is how this thread lost three rounds in one session.
+    /// </para>
+    /// <para>
+    /// So the same question, put to all sixteen megabytes: is there a <c>setflag</c> or a
+    /// <c>clearflag</c> for this flag <em>anywhere</em>, in bytes any map opens or not? The
+    /// split it produces is two different jobs. A flag moved in unopened script is an entry
+    /// point to find. A flag moved nowhere in the file is compiled code writing the array, and
+    /// no amount of reading scripts will ever reach it.
+    /// </para>
+    /// </summary>
+    private static void WriteTheBoundaryAgainstTheFile(
+        Rom rom,
+        MapLibrary library,
+        FlagGates gates,
+        IReadOnlyCollection<int> turnedOn,
+        IReadOnlyCollection<int> turnedOff)
+    {
+        bool[] covered = EverywhereInTheImage.Opened(rom, library.All().SelectMany(EveryScriptOn));
+
+        IReadOnlyDictionary<int, IReadOnlyList<FlagSite>> moved =
+            EverywhereInTheImage.EveryFlagMoved(rom, covered);
+
+        var world = new HashSet<int>(turnedOn.Concat(turnedOff));
+
+        List<int> boundary = [.. gates.All.Select(g => g.Flag).Where(f => !world.Contains(f))];
+
+        int decoded = covered.Count(b => b);
+
+        int sites = moved.Values.Sum(s => s.Count);
+        int noise = EverywhereInTheImage.NoiseFloor(rom);
+
+        IReadOnlyDictionary<uint, IReadOnlyList<int>> index = EverywhereInTheImage.PointerIndex(rom);
+
+        List<int> unopened =
+        [
+            .. boundary.Where(f => moved.TryGetValue(f, out IReadOnlyList<FlagSite>? at) && at.Any(s => !s.Opened)),
+        ];
+
+        // And which of those a script jumps into. "Reads as script" is a weak filter — the
+        // reversal below says how weak — but a site something jumps to on purpose is not a
+        // coincidence twice over, and that is the difference between a list to read and a list
+        // to work through.
+        var jumpedInto = new Dictionary<int, List<FlagSite>>();
+
+        foreach (int flag in unopened)
+        {
+            foreach (FlagSite site in moved[flag].Where(s => !s.Opened))
+            {
+                if (!EverywhereInTheImage.WhoNames(rom, index, site.Address, 192).Any(n => n.AJump)) continue;
+
+                if (!jumpedInto.TryGetValue(flag, out List<FlagSite>? at)) jumpedInto[flag] = at = [];
+
+                at.Add(site);
+            }
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("  AND THE SAME QUESTION PUT TO THE WHOLE FILE");
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    the scripts above decode {decoded} of this file's {rom.Length} bytes "
+            + $"({100.0 * decoded / rom.Length:0.0}%) — every line before this one is about that much of it");
+        Console.WriteLine(
+            $"    {sites} site(s) in the file read as a setflag or clearflag, moving {moved.Count} flag(s)");
+        Console.WriteLine(
+            $"    the same sweep on this file REVERSED finds {noise} — same bytes, same frequencies, no");
+        Console.WriteLine(
+            "    commands. That is what this filter finds when there is nothing there, and it is the");
+        Console.WriteLine(
+            "    number the counts below have to be read against.");
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    of the {boundary.Count} gating flags nothing in the world moves:");
+        Console.WriteLine(
+            $"      {unopened.Count} are moved by something reading as script that the maps never open");
+        Console.WriteLine(
+            $"        {jumpedInto.Count} of those are jumped into by a script — an entry point to find");
+        Console.WriteLine(
+            $"      {boundary.Count - unopened.Count} are moved by no script anywhere in the file — compiled code, and");
+        Console.WriteLine(
+            "        unreachable by reading scripts however many are opened");
+
+        foreach ((int flag, List<FlagSite> hidden) in jumpedInto
+                     .OrderByDescending(p => p.Value.Count)
+                     .ThenBy(p => p.Key)
+                     .Take(20))
+        {
+            Console.WriteLine(
+                $"      0x{flag:X4}  {hidden.Count} site(s) jumped into and never opened — "
+                + string.Join(", ", hidden.Take(3).Select(s => $"0x{s.Offset:X6} {(s.Sets ? "set" : "clear")}")));
+        }
+
+        if (jumpedInto.Count > 20) Console.WriteLine($"      ... and {jumpedInto.Count - 20} more");
+
+        Console.WriteLine();
+        Console.WriteLine(
+            "    --in-the-image 0xNNNN[,0xNNNN] climbs any of them: what names the site, what");
+        Console.WriteLine(
+            "    names that, until it reaches something a map opens or reaches a literal.");
+    }
+
     private static void WriteFlagGates(Rom rom)
     {
         Console.WriteLine();
@@ -6694,6 +7019,8 @@ public static class Program
             "    somebody notices. The opposite error hands over a badge, which nobody notices.");
 
         WriteWhatNothingMoves(world, turnedOn, turnedOff);
+
+        WriteTheBoundaryAgainstTheFile(rom, library, gates, turnedOn, turnedOff);
 
         static string Describe(FlagGate kind) => kind switch
         {
@@ -9558,6 +9885,15 @@ public static class Program
                                     what it does with them: handed over, asked for, taken
                                     away, sold, or loaded for a routine. Reads rather than
                                     runs, so a gift on a branch nobody can take still shows.
+              --in-the-image F[,F]  every place in the WHOLE FILE that turns these flags on or
+                                    off, and whether the map scan ever decoded that byte.
+                                    Every other reading here starts at a map and follows the
+                                    jumps, which cannot answer "is there anything the maps do
+                                    not point at" and does not fail when asked. Two flags at
+                                    once looks for one piece of script moving both — a scene.
+                                    Then it climbs: what names this, what names that, until it
+                                    reaches something a map opens, or a literal, which is the
+                                    code boundary with an address on it.
               --routines            what every routine this project cannot execute is
                                     asked: how many arguments, what its answer is compared
                                     against, how many sites branch on it.
@@ -9748,6 +10084,11 @@ public static class Program
         /// <summary>Items to hunt through every script in the image, or nothing.</summary>
         public IReadOnlyList<int> WhereFrom { get; private init; } = [];
 
+        /// <summary>
+        /// Flags to hunt through the whole file rather than through the scripts maps reach.
+        /// </summary>
+        public IReadOnlyList<int> InTheImage { get; private init; } = [];
+
         /// <summary>Whether the playthrough may take the ferry, which makes its reach a ceiling.</summary>
         public bool Boat { get; private init; }
 
@@ -9889,6 +10230,7 @@ public static class Program
             bool specialContracts = false;
             bool play = false;
             var whereFrom = new List<int>();
+            var inTheImage = new List<int>();
             bool boat = false;
             var money = 0;
             bool sayYes = false;
@@ -10148,6 +10490,18 @@ public static class Program
 
                         break;
                     }
+                    case "--in-the-image":
+                    {
+                        // One or more flag numbers. Two of them is the interesting case: a
+                        // scene that sets one and clears another is one piece of script, and
+                        // nothing here has ever been able to look for that.
+                        foreach (string named in Next(args, ref i, "--in-the-image").Split(','))
+                        {
+                            if (TryNumber(named, out int flag)) inTheImage.Add(flag);
+                        }
+
+                        break;
+                    }
                     case "--from":
                         startAt = Next(args, ref i, "--from");
                         break;
@@ -10365,6 +10719,7 @@ public static class Program
                 SpecialContracts = specialContracts,
                 Play = play,
                 WhereFrom = whereFrom,
+                InTheImage = inTheImage,
                 Boat = boat,
                 Money = money,
                 SayYes = sayYes,
