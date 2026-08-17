@@ -6,14 +6,15 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **Two numbers that had no list now have one, and both changed what they meant.**
-- "8 places asked it for money" finally says which eight. At the floor there is exactly
-  **one**, and it is the GAME CORNER coin counter. The counter offers two prices and the run
-  only ever sees one: which arm runs is picked by `0x8009`, twenty-two scripts write that
-  variable and **none is on that map**, so the other arm is chosen past the code boundary.
-- "294 flags" now reads **212 of the 322 that gate something — 110 gates it never opens**. A
-  run that set a hundred and fifty marks on a character and one that opened a hundred and
-  fifty doors printed the same line until now. The wall flags are in that column.
-- Seven breaks across the two, seven catches. The fixture shape worth keeping: **a script
-  that answers differently on the second pass** — without one, a run that overwrote instead
-  of merging looked identical to one that did it right.
+- **"110 gating flags it never set" turned out to be four findings added together.** Sorted:
+  44 have no opener anywhere in the file, 31 are scripts the run never ran, 18 are set only
+  where the map scan cannot see, and 17 are things it never picked up. **48 a longer walk
+  would open; 62 it would not.**
+- The first sort had three buckets and **its own output caught the mistake**: "nothing in the
+  file sets it" read 134 at the floor and 56 with the levers on. That cannot happen — whether
+  anything in the file sets a flag is a property of the file, not of the run.
+- The cause: the run sets sixty-five flags that **no `setflag` in the cartridge names**.
+  Picking a thing up sets the flag that hides it, inside compiled code — written down in this
+  repo years ago and rediscovered the hard way.
+- Fixed, the boundary bucket reads **44 at every lever setting**, which is how a fact about
+  the cartridge has to behave. Five breaks, five catches.

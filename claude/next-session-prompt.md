@@ -1,7 +1,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-246`, 2835 tests green.
+`claude-247`, 2841 tests green.
 
 Standing rules — do not break these:
 
@@ -90,10 +90,19 @@ Traps worth carrying:
     block, which is why the prompt says to start with `--play` — and 207 is the first session
     that read the output against the table instead of past it.
 
+13. **A number that cannot depend on the lever is the one that catches a wrong label** (211).
+    A three-bucket sort of the run's shut gates put 134 in "nothing in the file sets it" at the
+    floor and 56 with the levers on. Whether anything in the file sets a flag is a property of
+    the FILE; it cannot move with a lever, so the label was wrong — the run sets sixty-five
+    flags no `setflag` names, because picking a thing up sets its hide flag in compiled code.
+    **When a classification has a bucket that is about the cartridge rather than about the run,
+    print it at two lever settings and check it does not move.** The fixed version reads 44 at
+    all three.
+
 ## Where things are
 
-Read `claude/milestone-210-a-hundred-and-ten-gates-it-never-opens.md` first, then
-`209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
+Read `claude/milestone-211-the-number-that-should-not-have-moved.md` first, then
+`210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
 **Twenty faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
@@ -212,6 +221,8 @@ sets. CERULEAN CAVE is closed: the run now reaches it, off the SAPPHIRE thread.
 2 places sell coins for money at 20 each — READ; 3 price lists, 15 rows, all READ
 the floor is asked for money in ONE place and it is the coin counter; 8 at --say-yes and above
 the widest run sets 212 of the 322 gating flags — 110 gates it never opens; 201 at the floor
+those 110 are 44 with no opener at all, 31 never run, 18 past the boundary, 17 never picked up
+the 44 is the same at every lever setting, which is how a property of the FILE has to behave
 ```
 
 ## The next task, precisely
@@ -228,12 +239,13 @@ the widest run sets 212 of the 322 gating flags — 110 gates it never opens; 20
    anyway, which is the `#130` at 71 the party ends with. **The floor is clean**: 1 place asks,
    nothing comes of it, so the floor's party of six is entirely earned. Whether that deserves a
    `--pay` lever or a located payout table is a DECISION and it is deliberately not made.
-3. **110 gating flags the widest run never sets, and nobody has looked at what they are.** 210
-   put a denominator on the flag count: 212 of 322 at the widest lever setting, 121 of 322 at
-   the floor. The wall flags are in that column and so are 107 others. **The difference between
-   201 unset at the floor and 110 unset at the top is a list nobody has read**, and it is a
-   wider question than the shut-door list — that list names doors, and most of what a flag holds
-   up in this game is a person.
+3. **The 44 gates with no readable opener at all have not been looked at one by one.** 211 cut
+   the 110 into four and this is the bucket nothing can open by walking: no `setflag` anywhere
+   in sixteen megabytes names them and nothing on the floor hides behind them. It is 44 at
+   EVERY lever setting, which is how a property of the file has to behave and is the reason to
+   believe the cut. `--in-the-image` will climb any of them. **The 17 things the widest run
+   never picks up are a shorter and more concrete list and nobody has printed which items they
+   are** — that is the cheaper half of the same job.
 4. **Money, for real this time — and the prices are READ now.** Three drinks at 200/300/350 and
    a POKé DOLL at 1000, plus 208's ¥20 a coin and fifteen coin prices, all READ, all at counters
    the run reaches, against a purse of nought. `--money N` is the lever and it is MODELLED; **the
@@ -404,6 +416,11 @@ the other, and nothing about a single green run says which. 207 writes the 2x2 d
   the union equals the final reach at every lever setting, even where a pass dips. And since 193
   the final walk agrees with the last pass's own walk too. Closed.
 * **CERULEAN CAVE is not a SAFFRON problem.** `0x005C`, set by `32.0` ONE ISLAND person 3.
+* **What sets a flag with no setflag anywhere in the file.** Picking the thing up. The routine
+  that hands something over sets the object's own hide flag in compiled code, and only 7 of the
+  575 objects carrying a hide flag have a script that sets it — it is written in `Autoplayer`
+  beside `what.TakenAway` and was rediscovered the hard way at 211. Do not file those flags as
+  the boundary.
 * **What the coin commands count and how much fits.** Ten thousand, off five sites and four
   distinct (bound, gift) pairs, with nought chains in the reversal (208). And what a coin costs:
   ¥20, off two sites that ask, give and pay. Do not re-derive either; do look for the payout
