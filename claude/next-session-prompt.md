@@ -1,7 +1,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-242`, 2808 tests green.
+`claude-243`, 2811 tests green.
 
 Standing rules — do not break these:
 
@@ -81,12 +81,21 @@ Traps worth carrying:
    once per door wrecked the walking, because a walk ACCUMULATES. 194 predicted the same for
    every count the run keeps. Measured, it is six in five thousand — a counter accumulates
    nothing. The prediction was mine and reasonable and wrong, and only measuring said so.
+12. **A number that is only ever copied is never wrong out loud.** The floor table above was
+    stale in five of its six rows for thirteen milestones and nothing anybody wrote about it was
+    false: every *difference* it is quoted for — `--surf` costs two, `--in-order` adds two and
+    one and a party member — was still exactly right, because each milestone re-ran the pair it
+    cared about and pasted the delta onto a base nobody re-ran. **A table maintained by deltas
+    drifts and stays self-consistent.** The only thing that catches it is running the whole
+    block, which is why the prompt says to start with `--play` — and 207 is the first session
+    that read the output against the table instead of past it.
 
 ## Where things are
 
-Read `claude/milestone-206-the-floor-had-the-same-shape.md` first, then `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
+Read `claude/milestone-207-the-other-floor-and-the-table-nobody-re-ran.md` first, then
+`206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
-**Nineteen faults closed and every one was in this project, not on the cartridge.** A walk that
+**Twenty faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
 script" list; a list ranked by a count instead of by what it costs; a party that could not gain
 a level; a roadmap line that called a fix a cost; a continuation that carried flags and not
@@ -94,7 +103,9 @@ variables; a trainer marked fought before the fight; a reader that was never tol
 beaten; a walker never told it could swim; two argument widths that were wrong rather than
 missing (`0x1F`, `0x6F`); a map's arrival script running after every person on that map; and
 **a beaten trainer resuming inside the fight's own script instead of the bytes after it**,
-which skipped a `checkflag` at all eight gyms.
+which skipped a `checkflag` at all eight gyms; and the floor table at the top of this file,
+stale in five of six rows for thirteen milestones while every sentence written about it stayed
+true (207).
 
 `175-reading-the-file-not-the-world` is the instrument set (`--in-the-image`, `--climb`, the
 reversal control). `184` adds `--who-writes`. `187`/`188` are the two wrong widths and
@@ -152,14 +163,23 @@ hands over. **Two levers are MODELLED — `--say-yes` and `--boat`.** `--surf` i
 override: the walk crosses water on its own when the party knows the move, which is READ.
 `--in-order` is the one lever that makes it stricter. Say which every time.
 
+**RE-MEASURED AT 207, all six rows, and five of them had drifted.** The map counts were right;
+every flag count was wrong, four party sizes were wrong and one row had the wrong number of
+passes. `--play --say-yes` had been carrying **milestone 193's** reading for thirteen milestones.
+Every *difference* the table is quoted for survived — `--surf` still costs two, `--in-order`
+still adds two and one and a party member — which is why nobody noticed. See `milestone-207`.
+If you change anything the run touches, re-run these six and rewrite this block; do not apply a
+delta to it.
+
 ```
---play                                      183 / 150 in 6, party of 6 at 52, 11 of 103 handed twice
+--play                                      183 / 153 in 6, party of 6 at 52, 11 of 103 handed twice
                                             crossing water: nobody ever knew move 57 — a wall
---play --say-yes                            243 / 225 in 6, party of 3 at 67
---play --say-yes --in-order                 243 / 227 in 5, party of FOUR at 67, 0 of 150 handed twice
---play --say-yes --boat                     381 / 287 in 6, party of 3 at 77
---play --say-yes --boat --in-order          381 / 288 in 6, party of FOUR at 77, 0 of 198
---play --say-yes --boat --surf --in-order   381 / 286 in 4  <- --surf now COSTS two flags
+--play --say-yes                            243 / 231 in 5, party of 4 at 67, 10 of 155 handed twice
+--play --say-yes --in-order                 243 / 233 in 5, party of FIVE at 67, 0 of 152 handed twice
+--play --say-yes --boat                     381 / 293 in 6, party of 4 at 77, 11 of 204
+--play --say-yes --boat --in-order          381 / 294 in 6, party of FIVE at 77, 0 of 200
+--play --say-yes --boat --surf --in-order   381 / 292 in 4, party of five at 75, 0 of 200
+                                            <- --surf still COSTS two flags
 ```
 
 **381 of 425 no longer needs `--surf`** — and it was 390 until 193 stopped the run playing each
@@ -188,14 +208,12 @@ sets. CERULEAN CAVE is closed: the run now reaches it, off the SAPPHIRE thread.
 
 ## The next task, precisely
 
-1. **`MoveNoiseFloor`'s place count has no test, and the break that should have caught it went
-   green twice.** 206 made both reversed-image floors clump-aware. There are TWO of them eleven
-   lines apart with near-identical returns — `NoiseFloor` (flags) and `MoveNoiseFloor` (moves) —
-   and the first break edited one while the test watched the other. `NoiseFloor` is guarded now;
-   `MoveNoiseFloor` is not, because this fixture produces no clumped sites for its pattern and
-   asserting anyway would be a test that cannot fail. **A fixture for a function that reverses
-   its input has to be written backwards** — `02 00 xx 29` becomes `29 xx 00 02` after the
-   reversal, and omitting the `end` gives zero sites.
+1. **The other five rows of the floor table have never been chased back.** 207 re-ran all six and
+   five had drifted; only `--play --say-yes` was bisected, and it turned out to be milestone
+   **193's** reading, moved at 198, 199 and 200 and copied forward through all three. Where the
+   floor row went 150 → 153 is the same bisect and it has not been done. **This is a small job
+   and it is first on the list because the number a session reads before anything else was wrong
+   for thirteen milestones and every sentence written about it stayed true.**
 2. **The money ceiling is MEASURED and unlevered — decide against the number, not the worry.** 201
    counted it: **8 places** ask the run for money at five of the six lever settings and **1 of
    them hands something over** — `16.0 0x0816F75F` wants 500 and gives `#129` at level 5
@@ -263,6 +281,14 @@ Guards have come back green because **the fixture was more forgiving than the ca
    none of them said what happens in the common one — the same script on a later pass — so the
    break that conflated it with the rare one came back green.
 
+9. **A break run against one test says nothing about which test caught it** (207). 206's break
+   edited `MoveNoiseFloor` while the test watched `NoiseFloor` and came back green; the fix is
+   not a second test, it is running **each break against both tests** and writing down the 2×2.
+   A guard that goes red for somebody else's break is not a guard on the thing it is named for.
+   207's matrix: break the move floor → the flag test stays green, the move tests go red; break
+   the flag floor → the reverse. Six break runs, one red each time, and the greens are the
+   result.
+
 Check for these shapes directly rather than waiting for a break to find them. And the same nop
 that makes a slide can make a width **undiscriminable**: the `0x6F` fixture separates four from
 one and cannot separate four from three. That limitation is written into the fixture rather
@@ -283,6 +309,10 @@ the rule being broken was a `Where` inside `Program.cs`, which no test can reach
 `Attempt.HandedOverTwice` and was caught on the second attempt. **That is the sixth time the
 same structural fault has been fixed by moving a rule about the world out of the printer.** If
 a break passes, suspect the fixture — or where the rule lives — before the code.
+
+And run the break against **every** test that could plausibly catch it, not just the one it was
+written for. 206's break was aimed at one of two near-identical functions while the test watched
+the other, and nothing about a single green run says which. 207 writes the 2x2 down instead.
 
 ## Things already ruled out — don't re-chase these
 

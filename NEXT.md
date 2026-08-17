@@ -6,16 +6,17 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **The noise floor had the same shape as the thing it was measuring.** Every whole-file
-  sweep here is read against the same bytes swept backwards. Reversing preserves byte
-  frequencies — and it preserves SHAPE, so a table reversed still clumps exactly as
-  hard, and both sides have been counting clumps twice.
-- Re-read: `--who-knows` goes from 600 sites against 787 to **415 places against 444**;
-  `--flags` from 4109 against 4167 to **1445 against 1329**.
-- **The flag sweep changes sign.** By site it is behind its own reversal; by place it is
-  ahead by 8.7%. That is not a rescue — two ways of counting that disagree about which
-  side of a floor a number falls on are two ways of saying the raw sweep is not a
-  finding. The output now says exactly that instead of quoting whichever flatters.
-- The break for this came back **green twice**: nothing guarded the floor's own place
-  count, and then the re-break edited one of two near-identical functions while the
-  test watched the other.
+- **The number every session reads first was wrong for thirteen milestones.** The floor
+  table — six rows of "how far a playthrough gets at each lever setting" — was re-run in
+  full for the first time. The map counts were right. **Every flag count was wrong**, four
+  party sizes were wrong, one row had the wrong number of passes.
+- Nothing written *about* it was false: `--surf` still costs two flags, `--in-order` still
+  adds two and a party member. Each milestone re-ran the pair it cared about and pasted the
+  delta onto a base nobody re-ran. **A table maintained by deltas drifts and stays
+  self-consistent.**
+- `--play --say-yes` turned out to be milestone **193's** reading. It moved at 198, at 199
+  and at 200 — "the money commands", which is not a milestone anybody would expect to move
+  the walk.
+- Also: the second reversed-image noise floor is guarded now, and each break was run against
+  **both** tests. Break the move floor, the flag test stays green; break the flag floor, the
+  reverse. That 2×2 is the guard — a single green run never said which test was watching.
