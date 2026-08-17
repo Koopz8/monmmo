@@ -58,11 +58,15 @@ public class TakingTheSameGiftTwiceTests
     [Fact]
     public void SomethingHandedOverOnEveryPassIsSaidSo()
     {
-        HandedOver again = Assert.Single(Walk(everyPass: true).Handovers);
+        Attempt played = Walk(everyPass: true);
+
+        HandedOver again = Assert.Single(played.Handovers);
 
         Assert.True(
             again.Passes.Count > 1,
             $"it was handed over on pass(es) {string.Join(",", again.Passes)}, so nothing repeated");
+
+        Assert.Single(played.HandedOverTwice);
     }
 
     /// <summary>
@@ -74,9 +78,12 @@ public class TakingTheSameGiftTwiceTests
     [Fact]
     public void SomethingHandedOverOnceIsCountedAndNotRepeated()
     {
-        HandedOver once = Assert.Single(Walk(everyPass: false).Handovers);
+        Attempt played = Walk(everyPass: false);
+
+        HandedOver once = Assert.Single(played.Handovers);
 
         Assert.Single(once.Passes);
+        Assert.Empty(played.HandedOverTwice);
         Assert.Contains($"0x{Present:X3}", once.What);
     }
 }

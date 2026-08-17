@@ -6083,7 +6083,7 @@ public static class Program
         // two exits were told apart the run jumped over eight of those guards — one per gym,
         // once per pass, for ever. Printed with its denominator, because "none of them twice"
         // and "nothing hands anything over" are different findings.
-        List<HandedOver> twice = [.. played.Handovers.Where(h => h.Passes.Count > 1)];
+        IReadOnlyList<HandedOver> twice = played.HandedOverTwice;
 
         Console.WriteLine(
             $"    {played.Handovers.Count} place(s) handed something over; {twice.Count} of them"

@@ -508,6 +508,16 @@ public sealed record Attempt(
     public IReadOnlyList<HandedOver> Handovers { get; init; } = [];
 
     /// <summary>
+    /// The ones that did it more than once, which is the ceiling.
+    /// <para>
+    /// Here rather than in whoever prints, because a <c>Where</c> in a printer is a rule
+    /// about the world in a file no test can reach — and this project has moved the same
+    /// kind of line out of the same file five times for the same reason.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<HandedOver> HandedOverTwice => [.. Handovers.Where(h => h.Passes.Count > 1)];
+
+    /// <summary>
     /// Maps that no door, map edge or scripted door anywhere in the world leads to.
     /// <para>
     /// A fact about the world file rather than about this run, and it belongs beside the run
