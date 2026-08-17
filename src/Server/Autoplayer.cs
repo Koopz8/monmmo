@@ -314,6 +314,29 @@ public sealed record Hop(string MapId, string How)
     public override string ToString() => $"{MapId} ({How})";
 }
 
+/// <summary>
+/// One place that handed something over, and which passes it did so on.
+/// <para>
+/// <b>A run that takes the same gift twice is a ceiling, and nothing said so.</b> The party
+/// has said it for a while — <em>a second copy of something already in it</em> — and the bag
+/// never has, because an item picked up off the floor is kept from refilling by the flag on
+/// the object's own record and an item handed over by a person is kept from refilling by a
+/// guard inside the script. Only one of those two was ever read.
+/// </para>
+/// </summary>
+/// <param name="MapId">Where.</param>
+/// <param name="LocalId">Which person, or zero for an arrival script or a trigger.</param>
+/// <param name="Address">Which script.</param>
+/// <param name="What">What it hands over, said plainly.</param>
+/// <param name="Passes">The passes it happened on.</param>
+public sealed record HandedOver(
+    string MapId, int LocalId, uint Address, string What, IReadOnlyList<int> Passes)
+{
+    public override string ToString() =>
+        $"{MapId,-8} {(LocalId == 0 ? "on arrival" : $"person {LocalId}"),-12} 0x{Address:X8}"
+        + $"  {What}  on pass(es) {string.Join(",", Passes)}";
+}
+
 /// <summary>Why the playthrough stopped.</summary>
 public enum StoppedBecause
 {
@@ -473,6 +496,16 @@ public sealed record Attempt(
     /// </para>
     /// </summary>
     public IReadOnlyList<FerryTicket> Tickets { get; init; } = [];
+
+    /// <summary>
+    /// Every place that handed something over, and the passes it did so on.
+    /// <para>
+    /// The whole list rather than only the repeats, so the denominator is visible: "none of
+    /// them twice" and "nothing handed anything over" are different findings and they printed
+    /// the same as each other before this.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<HandedOver> Handovers { get; init; } = [];
 
     /// <summary>
     /// Maps that no door, map edge or scripted door anywhere in the world leads to.
@@ -673,6 +706,12 @@ public static class Autoplayer
 
         StoppedBecause stopped = StoppedBecause.ItNeverSettled;
 
+        // Where something changed hands, by the script that did it. Kept by script rather
+        // than by what it hands over: five shopkeepers selling the same potion is not one
+        // place handing it over five times, and the question here is about the second.
+        var handovers =
+            new Dictionary<(string MapId, int LocalId, uint Address), (string What, List<int> Passes)>();
+
         for (int pass = 1; pass <= MostPasses; pass++)
         {
             passes = pass;
@@ -774,6 +813,22 @@ public static class Autoplayer
                     }
 
                     if (did.Takes is { } handedOver) bag.Remove(handedOver.ItemId, handedOver.Count);
+
+                    if (did.Gets is not null || did.Gives is not null)
+                    {
+                        var where = (map.Id, what.LocalId, what.Address);
+
+                        if (!handovers.TryGetValue(where, out (string What, List<int> Passes) already))
+                        {
+                            handovers[where] = already = (
+                                did.Gives is { } creature
+                                    ? $"#{creature.Species} at {creature.Level}"
+                                    : $"item 0x{did.Gets!.Value.ItemId:X3} x{did.Gets!.Value.Count}",
+                                []);
+                        }
+
+                        already.Passes.Add(pass);
+                    }
 
                     if (did.Gets is { } got)
                     {
@@ -1053,6 +1108,13 @@ public static class Autoplayer
         {
             FightAttemptsLost = lost,
             Carried = bag.Entries,
+            Handovers =
+            [
+                .. handovers
+                    .Select(h => new HandedOver(h.Key.MapId, h.Key.LocalId, h.Key.Address, h.Value.What, h.Value.Passes))
+                    .OrderByDescending(h => h.Passes.Count)
+                    .ThenBy(h => h.MapId, StringComparer.Ordinal),
+            ],
             Trace = trace,
             TraceDropped = dropped,
             Ran = ran,

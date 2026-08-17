@@ -6075,6 +6075,24 @@ public static class Program
                 "    assembles this party, and whatever it wins with it is a ceiling.");
         }
 
+        // AND THE SAME QUESTION ABOUT EVERYTHING ELSE THAT CHANGES HANDS.
+        //
+        // The party has said this for a while and the bag never has. An item off the floor is
+        // kept from refilling by the flag on the object's own record; an item somebody hands
+        // over is kept from refilling by a guard inside their script, and until the fight's
+        // two exits were told apart the run jumped over eight of those guards — one per gym,
+        // once per pass, for ever. Printed with its denominator, because "none of them twice"
+        // and "nothing hands anything over" are different findings.
+        List<HandedOver> twice = [.. played.Handovers.Where(h => h.Passes.Count > 1)];
+
+        Console.WriteLine(
+            $"    {played.Handovers.Count} place(s) handed something over; {twice.Count} of them"
+            + " did it on more than one pass");
+
+        foreach (HandedOver again in twice.Take(8)) Console.WriteLine($"      {again}");
+
+        if (twice.Count > 8) Console.WriteLine($"      ... and {twice.Count - 8} more");
+
         if (played.FightsSkipped > 0)
         {
             Console.WriteLine(
