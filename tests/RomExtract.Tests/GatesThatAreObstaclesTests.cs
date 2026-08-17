@@ -37,6 +37,7 @@ public sealed class GatesThatAreObstaclesTests
     private const int SomethingRemovedWithNoQuestion = 0x0013;
     private const int APerson = 0x0014;
     private const int ATreeAndAPerson = 0x0015;
+    private const int ATreeAndABoulder = 0x0016;
 
     private static Rom Image()
     {
@@ -91,6 +92,8 @@ public sealed class GatesThatAreObstaclesTests
                     Hidden(4, APerson, NeitherOne),
                     Hidden(5, ATreeAndAPerson, AsksAndTakes),
                     Hidden(6, ATreeAndAPerson, NeitherOne),
+                    Hidden(7, ATreeAndABoulder, AsksAndTakes),
+                    Hidden(8, ATreeAndABoulder, AsksOnly),
                 ],
             },
         ]);
@@ -150,6 +153,26 @@ public sealed class GatesThatAreObstaclesTests
 
         Assert.DoesNotContain(ATreeAndAPerson, flags);
         Assert.DoesNotContain(ATreeAndAPerson, staying);
+    }
+
+    /// <summary>
+    /// ALL RATHER THAN ANY ON THE OTHER HALF TOO: a flag holding a tree and a boulder is
+    /// neither kind.
+    /// <para>
+    /// Both objects here are asked about a move, so a rule that only checked the asking would
+    /// put this flag in the second list — and it belongs in neither, because the two things
+    /// behind it are cleared by different mechanisms. A break that dropped the
+    /// <c>Takes: false</c> half came back green against a fixture without this.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AFlagHoldingATreeAndABoulderIsNeitherKind()
+    {
+        (IReadOnlyList<int> flags, _, IReadOnlyList<int> staying) =
+            GatesThatAreObstacles.In(Image(), World());
+
+        Assert.DoesNotContain(ATreeAndABoulder, flags);
+        Assert.DoesNotContain(ATreeAndABoulder, staying);
     }
 
     /// <summary>
