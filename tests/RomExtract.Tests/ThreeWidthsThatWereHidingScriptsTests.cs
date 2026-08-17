@@ -28,6 +28,13 @@ public class ThreeWidthsThatWereHidingScriptsTests
 
     /// <summary>Twenty sites of one shape, and the width the column test could not choose.</summary>
     private const byte Placed = 0x3F;
+
+    /// <summary>The one that was WRONG rather than missing, and drifted instead of stopping.</summary>
+    private const byte WasWrong = 0x1F;
+
+    private const byte FourByteBlock = 0xA7;
+    private const byte BeforeATextBox = 0xC0;
+    private const byte Counted = 0x70;
     private const byte SetVar = 0x16;
     private const byte Call = 0x04;
     private const byte SetFlag = 0x29;
@@ -75,6 +82,17 @@ public class ThreeWidthsThatWereHidingScriptsTests
         Put(image, 0x600, Placed, 0x01, 0x2A, 0xFF, 0x18, 0x00, 0x19, 0x00);
         Put(image, 0x608, SetFlag, 0x57, 0x00, End);
 
+        // The wrong width's shape: a counter, the command, and a goto to somewhere that does
+        // something. At two the goto is the next command; at five it is swallowed whole, and
+        // the read carries on into the middle of the block it points at.
+        Put(image, 0x700, Counted, 0x00, 0x00);
+        Put(image, 0x703, WasWrong, 0x00, 0x00);
+        Put(image, 0x706, Goto);
+        Pointer(image, 0x707, 0x08000740);
+        Put(image, 0x70B, End);
+
+        Put(image, 0x740, SetFlag, 0x58, 0x00, End);
+
         // The pointer that makes 0x404 a script in its own right.
         Put(image, 0x500, Goto);
         Pointer(image, 0x501, 0x08000404);
@@ -106,6 +124,9 @@ public class ThreeWidthsThatWereHidingScriptsTests
     [InlineData(Seventeen, 4)]
     [InlineData(Partner, 2)]
     [InlineData(Placed, 7)]
+    [InlineData(WasWrong, 2)]
+    [InlineData(FourByteBlock, 2)]
+    [InlineData(BeforeATextBox, 2)]
     public void TheWidthsReadOffTheCartridge(byte code, int width) =>
         Assert.Equal(width, ScriptCommands.ArgumentLength(code));
 
@@ -203,4 +224,22 @@ public class ThreeWidthsThatWereHidingScriptsTests
     [Fact]
     public void OneSiteIsNotAnIdiom() =>
         Assert.Equal(0, WhatIsBehindAStop.AreOneIdiom(Rom(), [0x100]));
+
+    /// <summary>
+    /// <b>A wrong width does not stop anything.</b> It eats the commands after it and reads
+    /// whatever it lands on, so the block comes back full of instructions that are not there —
+    /// and the read never follows the <c>goto</c> it swallowed.
+    /// <para>
+    /// This one was found by a phantom stop twenty-four bytes downstream, at a byte sitting
+    /// inside a <c>gotoif</c>'s pointer. The width itself never failed at all.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AWrongWidthSwallowsTheGotoAndEverythingBehindIt()
+    {
+        (IReadOnlyCollection<int> on, IReadOnlyCollection<int> _) = WhatItIsWaitingFor.Touches(
+            Rom(), [new SetsAFlag("1.1", "on load (kind 3)", 0x08000700)]);
+
+        Assert.Contains(0x0058, on);
+    }
 }

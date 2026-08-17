@@ -142,7 +142,32 @@ public static class ScriptCommands
         [0x1C] = 3,     // comparebanktobyte
         [0x1D] = 6,     // comparebanktofarbyte
         [0x1E] = 6,     // comparefarbytetobank
-        [0x1F] = 5,     // comparefarbytetobyte
+        // Two, and this entry was WRONG rather than missing — the first of those in this
+        // project, and a different animal. A missing width stops a read and says so. A wrong one
+        // does not stop anything: it consumes the bytes of the commands after it and reads
+        // whatever it lands on, so the block comes back full of instructions that are not there.
+        //
+        // Five consecutive blocks, byte for byte:
+        //
+        //   70 00 00 | 1F 00 00 | 05 F3 C1 16 08 | 02
+        //   70 00 00 | 1F 01 00 | 05 F3 C1 16 08 | 02
+        //   70 00 00 | 1F 02 00 | 05 F3 C1 16 08 | 02
+        //   70 00 00 | 1F 03 00 | 05 F3 C1 16 08 | 02
+        //   70 00 00 | 1F 04 00 | 05 F3 C1 16 08 | 02
+        //
+        // A counter and a `goto` to the same shared block, five times. At two the next command
+        // is that goto at five of five; at five it swallows the goto's opcode and its pointer,
+        // and the read carries on into the middle of the block the goto points at.
+        //
+        // Which is how it was found. It never stopped anything itself — it produced a phantom
+        // stop at 0xE6, twenty-four bytes downstream, at a byte sitting INSIDE a gotoif's
+        // pointer. `--stops` printing where each read STARTED, beside where it stopped, is what
+        // made that visible: a stop is only a command if the reader was in step to begin with.
+        //
+        // Five was the width of Ruby's comparefarbytetobyte, and the note at the top of this
+        // table has warned since milestone 14 that these lengths were written from memory of
+        // that set and that a real FireRed image says they are not good enough.
+        [0x1F] = 2,
         [0x20] = 8,     // comparefarbytes
         // Four: a variable and a value, both two bytes. `21 60 40 01 00` is
         // compare(0x4060, 1), and the `06 04 ...` that follows it is a well-formed
@@ -260,6 +285,29 @@ public static class ScriptCommands
         //   39 | 08 02 | 00 | 04 00 | 07 00   -> 8.2  LAVENDER TOWN   at (4, 7)
         [0x39] = 7,
         [0x3A] = 0,
+
+        // Two, on four sites, and the block after it is what settles the width. At two the
+        // third byte is a `return` and the block is four bytes long:
+        //
+        //   A7 16 01 | 03      <- return
+        //   A7 17 01 | 03
+        //   A7 3F 01 | 03
+        //   A7 08 01 | 03
+        //
+        // A constant 0x03 could be an argument. It is not: at all four sites the byte after it
+        // begins a block that something else in the image points at, and you do not fall into a
+        // block that has its own pointer. Same test that settled 0xD0, and unanimous here.
+        [0xA7] = 2,
+
+        // Two. Three of its five sites are one shape, and the two that are not are a read that
+        // had already drifted — both sit inside a gotoif's pointer, which is what a stop looks
+        // like when the fault is upstream:
+        //
+        //   ... E0 7A 1A 08 | C0 00 00 | 0F 00 57 70 19 08 | 09 04
+        //
+        // At two the next command is `loadpointer` and the one after it `callstd`, which is how
+        // every text box in this game opens, at three of three.
+        [0xC0] = 2,
 
         // Seven, and the argument reads as plainly as the width. Twenty sites, all one shape,
         // and the only thing that varies is the numbers:
