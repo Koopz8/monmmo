@@ -6,20 +6,20 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **`--in-order`** runs a trigger or an arrival script only when its own
-  condition is met — 215 maps / 193 flags, against 215 / 195 without. A ceiling
-  without it, a floor with it. That closes the "should `Reachable` honour a
-  trigger's own condition" question by making it askable both ways.
-- **`--play` prints the story's memory now** — the other half of "N flags", never
-  printed before. `0x4055=5` at the end.
-- **And it says why the starter still doesn't arrive, and it isn't the lever.**
-  The counter reaches 5 but is never **2 at the moment the balls read it**. OAK
-  writes 6 and 8 and he is person 4; the balls are people 5, 6 and 7; a pass
-  talks to everybody in map order. The scene that advances the story runs before
-  the scene it should follow, every pass, for ever.
-- **A run of this kind is a fixpoint, and a counter is what a fixpoint cannot
-  hold** — the ordering *is* the information and a fixpoint has only convergence.
-  **Next: an ordered playthrough.** That is a new instrument, not a lever.
-- A clause in the new lever came back green when broken and turned out to be
-  dead, not unguarded: `(0,0)` passes the comparison anyway. Removed, after
-  checking the cartridge prints the same numbers without it.
+- **`0x3F` is seven.** Twenty sites of one shape — a byte, a counter, `0xFF` (how
+  this cartridge writes *the player*), and two little-endian words. Six parses
+  too; what decides it is that at seven the next command is `compare` **20 of
+  20** and at six it is a nop 20 of 20. 80 → 65 stopped blocks, and **no world
+  number moved**.
+- **`--derive` cannot say so**, and I nearly made it lie. It throws out both
+  widths for resuming on a column — sound in general, backwards here, because
+  twenty sites of one idiom mean the *right* width resumes on a column too. I
+  wrote a suppression and removed it: tuning a scorer until it agrees with a
+  reading is decoration, not evidence.
+- **Kept the honest half**: the report says *which* rule threw a width out (it
+  named three at once before, and one of them was throwing out the right answer),
+  and prints how much of their run-up the sites share so the column test's worth
+  is visible. Measured, printed, not wired into any verdict.
+- Padding reads as an idiom — four sites in dead space score a perfect one. That
+  weakness is in the measure's own doc, and is the second reason it doesn't vote.
+- A test was renamed for what it actually asserts: it never told six from seven.

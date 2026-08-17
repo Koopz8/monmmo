@@ -8719,6 +8719,9 @@ public static class Program
         foreach ((byte code, List<int> where) in sites.OrderByDescending(e => e.Value.Count))
         {
             var scores = new List<(int Width, double Clean, double Pointers, double Depth, double Speech, bool Ruled)>();
+            var reasons = new Dictionary<int, string?>();
+
+            string? Ruled(int width) => reasons.GetValueOrDefault(width);
 
             for (int width = 0; width <= maxWidth; width++)
             {
@@ -8761,9 +8764,16 @@ public static class Program
                 // only thing in the file that says "the script stops HERE" out loud.
                 double intoSomebodyElses = EverywhereInTheImage.ReadsOnIntoSomebodyElses(index, where, width);
 
-                bool ruled = column >= 0.9
-                    || ResumesOnWork(rom, where, width) <= 0.1
-                    || intoSomebodyElses >= 0.5;
+                // WHICH rule, not THAT one did. This printed "it eats a page, an instruction,
+                // or resumes on a column" for three different rules, so a width thrown out
+                // could not be argued with — and one of them was throwing out the right answer.
+                string? why =
+                    intoSomebodyElses >= 0.5 ? "it reads on into a block something else points at"
+                    : ResumesOnWork(rom, where, width) <= 0.1 ? "it resumes on nothing but nops and ends"
+                    : column >= 0.9 ? "it resumes on the same byte at nearly every site"
+                    : null;
+
+                bool ruled = why is not null;
 
                 foreach (int at in where)
                 {
@@ -8790,6 +8800,8 @@ public static class Program
                 // No pointers at all is not evidence of anything, and scoring it as
                 // perfect would hand the answer to whichever width happened to avoid
                 // them. It counts as nothing either way.
+                reasons[width] = why;
+
                 scores.Add((
                     width,
                     clean / (double)where.Count,
@@ -8846,15 +8858,26 @@ public static class Program
                         .Select(s => s.Width)]
                     : [.. standing.Where(s => s.Clean + s.Pointers >= standing.Max(x => x.Clean + x.Pointers) - 0.1).Select(s => s.Width)];
 
+            // HOW MUCH THESE SITES ARE ONE PIECE OF SCRIPT WRITTEN OUT AGAIN AND AGAIN.
+            //
+            // Printed, not acted on. "Resumes on the same byte at nearly every site" means a
+            // width landed inside an argument — unless the sites are duplicates of one idiom,
+            // in which case the RIGHT width resumes on a column too and the test is worth
+            // nothing here. 0x3F is twenty sites of one shape.
+            //
+            // Deliberately not wired into the verdict: suppressing a rule until it agrees with
+            // an answer already obtained by reading the bytes is not evidence, it is
+            // decoration. The verdict already says "read the bytes"; this says how loudly.
             Console.WriteLine();
-            Console.WriteLine($"  0x{code:X2}  stops {where.Count} scripts");
+            Console.WriteLine(
+                $"  0x{code:X2}  stops {where.Count} scripts"
+                + $" — {WhatIsBehindAStop.AreOneIdiom(rom, where):P0} of them share their run-up,"
+                + " so the column test is worth that much less here");
 
             foreach ((int width, double cleanly, double pointing, double deep, double speech, bool ruled) in scores)
             {
                 string mark = ruled
-                    ? EverywhereInTheImage.ReadsOnIntoSomebodyElses(index, where, width) >= 0.5
-                        ? "  ruled out: it reads on into a block something else points at"
-                        : "  ruled out: it eats a page, an instruction, or resumes on a column"
+                    ? "  ruled out: " + (Ruled(width) ?? "it eats a page or an instruction")
                     : (top > 0 || spoken > 0) && shortlist.Contains(width) ? " <-" : "";
 
                 Console.WriteLine(

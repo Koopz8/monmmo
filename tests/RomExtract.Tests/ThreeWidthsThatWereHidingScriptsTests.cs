@@ -25,6 +25,9 @@ public class ThreeWidthsThatWereHidingScriptsTests
     private const byte Partner = 0x9E;
     private const byte Fifty = 0xD0;
     private const byte Seventeen = 0x78;
+
+    /// <summary>Twenty sites of one shape, and the width the column test could not choose.</summary>
+    private const byte Placed = 0x3F;
     private const byte SetVar = 0x16;
     private const byte Call = 0x04;
     private const byte SetFlag = 0x29;
@@ -66,6 +69,12 @@ public class ThreeWidthsThatWereHidingScriptsTests
         Put(image, 0x403, End);
         Put(image, 0x404, SetFlag, 0x55, 0x00, End);
 
+        // The one whose twenty sites are all the same idiom: a byte, a counter, 0xFF — how this
+        // cartridge writes "the player" — and two little-endian words. At seven the next
+        // command is real; at six it is the high byte of the second word, read as a nop.
+        Put(image, 0x600, Placed, 0x01, 0x2A, 0xFF, 0x18, 0x00, 0x19, 0x00);
+        Put(image, 0x608, SetFlag, 0x57, 0x00, End);
+
         // The pointer that makes 0x404 a script in its own right.
         Put(image, 0x500, Goto);
         Pointer(image, 0x501, 0x08000404);
@@ -96,6 +105,7 @@ public class ThreeWidthsThatWereHidingScriptsTests
     [InlineData(Fifty, 2)]
     [InlineData(Seventeen, 4)]
     [InlineData(Partner, 2)]
+    [InlineData(Placed, 7)]
     public void TheWidthsReadOffTheCartridge(byte code, int width) =>
         Assert.Equal(width, ScriptCommands.ArgumentLength(code));
 
@@ -131,4 +141,66 @@ public class ThreeWidthsThatWereHidingScriptsTests
         Assert.Equal(0.0, EverywhereInTheImage.ReadsOnIntoSomebodyElses(
             EverywhereInTheImage.PointerIndex(rom), [], 3));
     }
+
+    /// <summary>
+    /// And the block reads through it rather than stopping dead — which is what having any
+    /// width at all buys.
+    /// <para>
+    /// <b>This does not tell six from seven and is not claimed to.</b> At six the read lands on
+    /// the high byte of the second coordinate, calls it a nop, and carries on to the same place;
+    /// the two widths only separate across the twenty sites on the cartridge, where one lands on
+    /// <c>compare</c> every time and the other on a nop every time. The width itself is held by
+    /// the table above. Said out loud because a test named for a discrimination it does not make
+    /// is worse than no test.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TheBlockBehindItReadsThroughRatherThanStoppingDead()
+    {
+        (IReadOnlyCollection<int> on, IReadOnlyCollection<int> _) = WhatItIsWaitingFor.Touches(
+            Rom(), [new SetsAFlag("1.1", "trigger (2,2)", 0x08000600)]);
+
+        Assert.Contains(0x0057, on);
+    }
+
+    /// <summary>
+    /// <b>How much a population of sites is one idiom repeated.</b> The scorer throws out any
+    /// width that resumes on the same byte at nearly every site, which is right when a width has
+    /// landed inside an argument and exactly backwards when the sites are duplicates — there,
+    /// the correct width resumes on a column too.
+    /// <para>
+    /// Printed rather than wired into the verdict. Suppressing a rule until it agrees with an
+    /// answer already obtained by reading the bytes is decoration, not evidence.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void SitesThatShareTheirRunUpAreOneIdiom()
+    {
+        Rom rom = Rom();
+
+        // Three copies of the same run-up, planted where nothing else reads.
+        var image = new byte[0x2000];
+
+        for (var i = 0; i < 3; i++)
+        {
+            Put(image, 0x100 + (i * 0x20), 0x16, 0x06, 0x80, 0x03, 0x00, Placed);
+        }
+
+        Assert.Equal(1.0, WhatIsBehindAStop.AreOneIdiom(new Rom(image), [0x105, 0x125, 0x145]));
+
+        // And sites with genuinely different run-ups do not read as one. The first attempt at
+        // this used four offsets in the zero-filled part of the fixture, which share the run-up
+        // "00 00 00 00 00" and score a perfect one — correctly, and uselessly. Padding looks
+        // exactly like an idiom to this measure, which is a real weakness of it and the reason
+        // it is printed rather than acted on.
+        Assert.True(WhatIsBehindAStop.AreOneIdiom(rom, [0x103, 0x403, 0x608, 0x110]) < 0.9);
+    }
+
+    /// <summary>
+    /// And one site is not a population. A figure of "all of them" from a single site would rule
+    /// the column test out everywhere it matters least.
+    /// </summary>
+    [Fact]
+    public void OneSiteIsNotAnIdiom() =>
+        Assert.Equal(0, WhatIsBehindAStop.AreOneIdiom(Rom(), [0x100]));
 }

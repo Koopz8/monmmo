@@ -87,6 +87,51 @@ public static class WhatIsBehindAStop
     ];
 
     /// <summary>
+    /// How much these sites are the same piece of script written out again and again.
+    /// <para>
+    /// <b>A signal that means the opposite in a population of duplicates.</b> The width scorer
+    /// rules out any width that resumes on the same byte at nearly every site, on the sound
+    /// theory that a width landing inside an argument keeps hitting whatever recurs there.
+    /// </para>
+    /// <para>
+    /// That is exactly backwards when the sites themselves are one idiom repeated. <c>0x3F</c>
+    /// stops fifteen blocks and has twenty sites that are byte-for-byte the same shape — a
+    /// <c>setvar</c>, the command, and a <c>compare</c> — so the <em>correct</em> width resumes
+    /// on the same byte twenty times out of twenty, and the rule threw it out for doing so.
+    /// </para>
+    /// <para>
+    /// Measured from what comes <em>before</em> each site, which the width cannot change. When
+    /// the sites are duplicates the column test carries no information and must abstain rather
+    /// than vote.
+    /// </para>
+    /// </summary>
+    /// <para>
+    /// <b>Padding reads as an idiom.</b> Sites in a stretch of zeroes all share the run-up
+    /// "00 00 00 00 00" and score a perfect one, correctly and uselessly. That is a real
+    /// weakness and it is why this is printed beside the column test rather than allowed to
+    /// switch it off: a reader can see both numbers and weigh them, and a rule that suppressed
+    /// another rule on this evidence would be wrong wherever a scan stopped in dead space.
+    /// </para>
+    /// <param name="before">How many bytes of run-up to compare.</param>
+    public static double AreOneIdiom(Rom rom, IReadOnlyList<int> sites, int before = 5)
+    {
+        if (sites.Count < 2) return 0;
+
+        var shapes = new Dictionary<string, int>();
+
+        foreach (int at in sites)
+        {
+            if (at - before < 0) continue;
+
+            string shape = Convert.ToHexString(rom.Slice(at - before, before));
+
+            shapes[shape] = shapes.GetValueOrDefault(shape) + 1;
+        }
+
+        return shapes.Count == 0 ? 0 : shapes.Values.Max() / (double)sites.Count;
+    }
+
+    /// <summary>
     /// What lies behind a stop, across every width that reads on from it cleanly.
     /// </summary>
     /// <param name="at">Where the command this project cannot read begins.</param>
