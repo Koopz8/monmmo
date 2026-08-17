@@ -6225,6 +6225,25 @@ public static class Program
                 $"  {hanging} reachable script(s) across {played.Questions.Count} map(s) stopped at a"
                 + " yes-or-no and were never answered");
 
+            // AND THIS IS NOT ONLY LOST GROUND. IT IS THE SAME GROUND TAKEN AGAIN.
+            //
+            // A script that stops at a question never reaches its own setflag, so the next pass
+            // finds the flag clear and runs the whole thing from the top. SILPH CO.'s LAPRAS is
+            // handed over, the run is asked whether to name it, and the `setflag` that would
+            // stop it happening twice sits on the far side of that question. Five LAPRAS.
+            //
+            // So a hanging question is a floor in one direction and a CEILING in the other, and
+            // this line was missing for as long as the number has been printed. The roadmap has
+            // carried "--say-yes costs party members: 6 on the floor, 2 with it on" for
+            // milestones, as though answering were the expensive choice. It is backwards: six
+            // was the fault and two is the game.
+            Console.WriteLine(
+                "    every one of those runs again from the top on the next pass, because the");
+            Console.WriteLine(
+                "    flag that would stop it is past the question — so whatever they hand over is");
+            Console.WriteLine(
+                "    handed over once per pass. THAT IS A CEILING INSIDE THIS FLOOR.");
+
             foreach ((string mapId, int times) in played.Questions.OrderByDescending(q => q.Value).Take(10))
                 Console.WriteLine($"    {mapId,-8} {times} time(s)");
 
