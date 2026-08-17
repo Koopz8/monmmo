@@ -315,7 +315,7 @@ public class SteppingAsideTests
         Assert.DoesNotContain("1.1", Play(_ => Nothing).Reached);
 
         Attempt aside = Play(address => address == 0x1000
-            ? Nothing with { Walked = [(2, -1, 0)] }
+            ? Nothing with { Walked = [(2, (IReadOnlyList<Direction>)[Direction.Left])] }
             : Nothing);
 
         Assert.Contains("1.1", aside.Reached);
@@ -350,7 +350,7 @@ public class SteppingAsideTests
             "1.0",
             TestRules.All,
             (address, _, _) => address == 0x1000
-                ? Nothing with { Walked = [(2, -1, 0)] }
+                ? Nothing with { Walked = [(2, (IReadOnlyList<Direction>)[Direction.Left])] }
                 : Nothing);
 
         Assert.Contains(("1.0", 2), played.Moved);
@@ -392,7 +392,7 @@ public class SteppingAsideTests
             "1.0",
             TestRules.All,
             (address, _, _) => address == 0x1000 && steps++ < 2
-                ? Nothing with { Walked = [(2, 0, 1)] }
+                ? Nothing with { Walked = [(2, (IReadOnlyList<Direction>)[Direction.Down])] }
                 : Nothing);
 
         Assert.True(steps >= 2, "the second walk has to happen for this to mean anything");
@@ -411,7 +411,7 @@ public class SteppingAsideTests
     public void AWalkForSomebodyNotOnThisMapMovesNobody()
     {
         Attempt played = Play(address => address == 0x1000
-            ? Nothing with { Walked = [(99, -1, 0)] }
+            ? Nothing with { Walked = [(99, (IReadOnlyList<Direction>)[Direction.Left])] }
             : Nothing);
 
         Assert.Empty(played.Moved);

@@ -764,6 +764,9 @@ public static class Autoplayer
         // are different claims and only one of them is about a run.
         var learnedToCross = 0;
 
+        // How many scene-walks were applied at all, so the count below has a denominator.
+        var walksApplied = 0;
+
         // Where something changed hands, by the script that did it. Kept by script rather
         // than by what it hands over: five shopkeepers selling the same potion is not one
         // place handing it over five times, and the question here is about the second.
@@ -839,15 +842,39 @@ public static class Autoplayer
                     // the conversation had gone.
                     foreach (int who in did.Hides) gone.Add((map.Id, who));
 
-                    // And whoever it walked. The script says who and how far; where they
+                    // And whoever it walked. The script says who and which way; where they
                     // started is the map's own record, or wherever a previous scene left them.
-                    foreach ((int who, int dx, int dy) in did.Walked)
+                    //
+                    // ONE SQUARE AT A TIME, AND THEY STOP AT A WALL. Summing the steps and
+                    // applying the total in one jump put 364 of 426 walks off the edge of the
+                    // map on the floor run — and a person at x = -29 on a map 48 wide is not
+                    // in a doorway or out of one, which is what the walk goes on to ask about
+                    // them. The grid is the same oracle the step bytes were derived against.
+                    foreach ((int who, IReadOnlyList<Direction> going) in did.Walked)
                     {
                         if (map.Objects.FirstOrDefault(o => o.LocalId == who) is not { } walker) continue;
 
-                        GridPosition from = moved.GetValueOrDefault((map.Id, who), walker.Square);
+                        GridPosition at = moved.GetValueOrDefault((map.Id, who), walker.Square);
 
-                        moved[(map.Id, who)] = new GridPosition(from.X + dx, from.Y + dy);
+                        CollisionGrid grid = map.ToGrid();
+
+                        foreach (Direction way in going)
+                        {
+                            GridPosition next = Step(at, way);
+
+                            // Off the map, or into something. The cartridge stops them here
+                            // and so does this — and the steps after it do not happen either,
+                            // because a walker stopped at a wall does not carry on past it.
+                            if (next.X < 0 || next.Y < 0 || next.X >= map.Width || next.Y >= map.Height) break;
+                            if (!grid.IsWalkable(next)) break;
+
+                            at = next;
+                        }
+
+                        if (at != walker.Square) moved[(map.Id, who)] = at;
+                        else moved.Remove((map.Id, who));
+
+                        walksApplied++;
                     }
 
                     if (did.StoppedAtAQuestion) questions[map.Id] = questions.GetValueOrDefault(map.Id) + 1;
@@ -1173,13 +1200,17 @@ public static class Autoplayer
             SwamAnyway = surfing,
             OffTheMap =
             [
-                .. moved
-                    .Select(m => (m.Key, m.Value, Map: world.Find(m.Key.MapId)))
-                    .Where(m => m.Map is not null
-                                && (m.Value.X < 0 || m.Value.Y < 0
-                                    || m.Value.X >= m.Map.Width || m.Value.Y >= m.Map.Height))
-                    .Select(m => new WalkedOffTheMap(
-                        m.Key.MapId, m.Key.LocalId, m.Value, m.Map!.Width, m.Map.Height))
+                // EVERYBODY, not only the ones a scene walked. Once the walk stops at a wall
+                // nothing this loop does can put somebody off the map, and a check that
+                // nothing can fail is not a check — so it asks the other half as well: does
+                // every person the cartridge places stand on the map it places them on? That
+                // one is about the export and it can come back with a number.
+                .. world.Maps
+                    .SelectMany(m => m.Objects.Select(o => (Map: m, Who: o.LocalId,
+                        At: moved.GetValueOrDefault((m.Id, o.LocalId), o.Square))))
+                    .Where(p => p.At.X < 0 || p.At.Y < 0
+                                || p.At.X >= p.Map.Width || p.At.Y >= p.Map.Height)
+                    .Select(p => new WalkedOffTheMap(p.Map.Id, p.Who, p.At, p.Map.Width, p.Map.Height))
                     .OrderBy(w => w.MapId, StringComparer.Ordinal)
                     .ThenBy(w => w.LocalId),
             ],
@@ -1715,6 +1746,15 @@ public static class Autoplayer
     /// </para>
     /// </summary>
     private sealed record Runnable(uint Address, int TakenAway, int LocalId = 0);
+
+    /// <summary>One square that way.</summary>
+    private static GridPosition Step(GridPosition from, Direction way) => way switch
+    {
+        Direction.Left => new GridPosition(from.X - 1, from.Y),
+        Direction.Right => new GridPosition(from.X + 1, from.Y),
+        Direction.Up => new GridPosition(from.X, from.Y - 1),
+        _ => new GridPosition(from.X, from.Y + 1),
+    };
 
     /// <summary>
     /// Whether anything in the party knows the move that crosses water.

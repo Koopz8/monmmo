@@ -1,7 +1,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-227`, 2753 tests green.
+`claude-228`, 2756 tests green.
 
 Standing rules — do not break these:
 
@@ -65,9 +65,9 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-191-the-sea-was-a-question-not-a-lever.md` first, then `190`, `189`,
+Read `claude/milestone-192-one-square-at-a-time.md` first, then `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
-**Fifteen faults closed and every one was in this project, not on the cartridge.** A walk that
+**Sixteen faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
 script" list; a list ranked by a count instead of by what it costs; a party that could not gain
 a level; a roadmap line that called a fix a cost; a continuation that carried flags and not
@@ -80,7 +80,8 @@ which skipped a `checkflag` at all eight gyms.
 `175-reading-the-file-not-the-world` is the instrument set (`--in-the-image`, `--climb`, the
 reversal control). `184` adds `--who-writes`. `187`/`188` are the two wrong widths and
 `--stops`. `189` is `--trace` and the ordering. `190` is `--fights` and the handover count. `191` is
-`--who-knows` and the sea. `173-reading-the-other-arm` still has the best table of wrong turns.
+`--who-knows` and the sea. `192` is the walk, and it carries the measurements for a coupled pair
+it deliberately did not ship. `173-reading-the-other-arm` still has the best table of wrong turns.
 
 **The pattern, thirteen times over: right at every step and quietly wrong at the end.** Nothing
 in this project fails when it is wrong. Assume the number in front of you is distorted until an
@@ -126,13 +127,13 @@ override: the walk crosses water on its own when the party knows the move, which
 `--in-order` is the one lever that makes it stricter. Say which every time.
 
 ```
---play                                      183 / 150, party of 6 at 52, 11 of 103 handed twice
+--play                                      183 / 150 in 6, party of 6 at 52, 11 of 103 handed twice
                                             crossing water: nobody ever knew move 57 — a wall
---play --say-yes                            243 / 225, party of 3 at 67
---play --say-yes --in-order                 243 / 227, party of FOUR at 67, 0 of 150 handed twice
---play --say-yes --boat                     390 / 287, party of 3 at 77
---play --say-yes --boat --in-order          390 / 288, party of FOUR at 77, 0 of 198
---play --say-yes --boat --surf --in-order   390 / 286  <- --surf now COSTS two flags
+--play --say-yes                            243 / 225 in 6, party of 3 at 67
+--play --say-yes --in-order                 243 / 227 in 5, party of FOUR at 67, 0 of 150 handed twice
+--play --say-yes --boat                     390 / 287 in 6, party of 3 at 77
+--play --say-yes --boat --in-order          390 / 288 in 6, party of FOUR at 77, 0 of 198
+--play --say-yes --boat --surf --in-order   390 / 286 in 4  <- --surf now COSTS two flags
 ```
 
 **390 of 425 no longer needs `--surf`.** The party learns move 57 on pass 3 and swims. The
@@ -158,27 +159,33 @@ sets. CERULEAN CAVE is closed: the run now reaches it, off the SAPPHIRE thread.
 
 ## The next task, precisely
 
-1. **The scene that walks somebody aside, re-applied every pass.** `--play` now prints it: 55
-   people walked, **21 of them ending on a square that is not on the map** — `3.2 person 5` at
-   `x = -29` on a map 48 wide, `3.2 person 7` walked thirty times to `y = 95` on a map 40 tall.
-   The displacement is applied from wherever they already are and the fixpoint replays the
-   scene. *Somebody is standing in the way* and *a person removed is a person not in a doorway*
-   are computed against these positions.
+1. **Which flag stops a scene running twice — and then the coupled pair 192 measured and left.**
+   The settle test compares **counts**. `moved` is keyed by person, so a pass that walks
+   somebody another square changes a value and not the count and the loop reads it as "nothing
+   opened". The boat run stops at pass 6 with its own reach at **381** and reports **390** — the
+   reach of a state one pass past the last one it played. Four squares of one person's position,
+   worth nine maps. The probe: `movedsum 1343` at the top of pass 6 against `1347` at the final
+   walk.
 
-   **Do not clamp it.** Applying each scene's walk once takes the boat run 390 -> 381, and the
-   honest direction is down; what stops the scene running twice on the cartridge is a flag
-   nobody has read. Read that first. `--who-writes` and `--in-the-image` are the instruments,
-   and `0x3.2` is the map to start on.
-2. **The fixpoint stops on counts, not membership.** `flags.Count == flagsWere` and
-   `moved.Count == movedWere`: a pass that swaps one flag for another, or walks somebody
-   further without adding a key, reads as "nothing opened". That is how the boat run stops with
-   its top-of-pass reach at 381 and its final reach at 390. Comparing sets risks never
-   terminating — the comment in `Autoplayer` says why — so this needs a reading rather than a
-   swap.
-3. **The 39 doors never reached** at 390 of 425, and `1.103` MT. EMBER behind `0x0089` —
+   Both halves were built and measured at 192 and neither shipped:
+
+   | | boat run | passes | tests |
+   |---|---|---|---|
+   | today | 390 / 288 | 6 | green |
+   | positions in the settle test | 390 / 288 | **22** (backstop 24) | breaks `AndTheSquareHeStepsOntoIsBlockedInstead` |
+   | + a scene walks people once | **381** / 288 | 6 | breaks `TwoWalksCompound` |
+
+   Positions alone makes it worse — the loop replays the scene until the person hits a wall, so
+   one talk becomes a walk across the room. The pair together is stable and takes the headline
+   **down** nine maps, because 390 was partly people walked repeatedly out of their own
+   doorways. **Down is the honest direction and it is not enough to ship on.** Read the flag
+   first: `3.2` PEWTER CITY has **sixteen** `applymovement person 5` sites — the same scene once
+   per story state — and which one is live is decided by a routine the run answers zero to.
+   `--who-writes`, `--in-the-image` and `--script-map 3.2`.
+2. **The 39 doors never reached** at 390 of 425, and `1.103` MT. EMBER behind `0x0089` —
    nothing in the world sets it, so it is the code boundary with an address on it. The RUBY is
-   behind it (`1.102` person 1), and `32.0` person 3 wants both the RUBY and the SAPPHIRE.
-4. **The 53 blocks that still stop.** Two entries turned out to be symptoms of a wrong width
+   behind it (`1.102` person 1), and `32.0` person 3 wants the RUBY and the SAPPHIRE both.
+3. **The 53 blocks that still stop.** Two entries turned out to be symptoms of a wrong width
    upstream rather than commands, so **check alignment before adopting a width**: `--stops
    0xNN` prints where each read started. The remaining named stops are `0xB3`, `0xCA`, `0xC3`,
    `0xC4`, `0x43`, `0x73`, `0xE6` — 17 of 24 have something behind them at every width that
@@ -186,9 +193,9 @@ sets. CERULEAN CAVE is closed: the run now reaches it, off the SAPPHIRE thread.
 
    **`--derive`'s verdict is advisory — READ THE BYTES.** It is wrong about `0xD0` and it threw
    out both plausible widths for `0x3F`.
-5. **The four that no width reads on from** — `0x92`, `0x9B`, `0xD3`, `0x62`. Misreads, so those
+4. **The four that no width reads on from** — `0x92`, `0x9B`, `0xD3`, `0x62`. Misreads, so those
    blocks are wrong earlier; finding where is the job that found `0x1F` and `0x6F`.
-6. **The five wall flags** — `0x0013`, `0x0012`, `0x0089`, `0x0053`, `0x0017` — and the ~28
+5. **The five wall flags** — `0x0013`, `0x0012`, `0x0089`, `0x0053`, `0x0017` — and the ~28
    hand-rolled map walks left in `Program.cs`.
 
 ## Fixtures lie in one direction
@@ -267,6 +274,12 @@ a break passes, suspect the fixture — or where the rule lives — before the c
   only. Do not put the lever back in front of the fact.
 * **CERULEAN CAVE.** Reached. The SAPPHIRE comes off `1.114` person 6's fight and `32.0` person
   3 takes it.
+* **A cutscene's displacement.** The steps travel now and the walk stops at the first square
+  nobody can stand on. **Nobody is off the map at any lever setting**, and the export check says
+  every person the cartridge places stands on the map it places them on. Do not put the sum back.
+* **The run's reach being the last pass rather than the union.** Re-measured at 191 and 192: the
+  union equals the final reach at every lever setting, even where a pass dips. What is NOT equal
+  is the final walk and the last pass's own walk — see task 1.
 * **CERULEAN CAVE is not a SAFFRON problem.** `0x005C`, set by `32.0` ONE ISLAND person 3.
 * **The drink, the vending machine, CELADON DEPT, the ferry tickets, the badge-count routine** —
   all dead, see `claude/the-drink-and-the-boat.md`.

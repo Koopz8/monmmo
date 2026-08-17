@@ -116,11 +116,14 @@ public sealed record PlayedScript(
     /// </para>
     /// </summary>
     /// <remarks>
-    /// A displacement rather than a square. The script says who and how far; where they were
-    /// standing to begin with is the map's record, or wherever an earlier scene left them, and
-    /// only this side of the split knows that.
+    /// <b>The steps rather than the sum, and that is the whole of milestone 192.</b> A
+    /// displacement is applied in one go and lands wherever the arithmetic says: on a real
+    /// cartridge 426 of these landed OFF THE MAP on the floor run and 41 on a square somebody
+    /// could stand on. A person walking a cutscene walks one square at a time and stops at a
+    /// wall, and the collision grid is already here to say where that is — so the steps travel
+    /// and whoever holds the map does the walking.
     /// </remarks>
-    public IReadOnlyList<(int PersonId, int Dx, int Dy)> Walked { get; init; } = [];
+    public IReadOnlyList<(int PersonId, IReadOnlyList<Direction> Steps)> Walked { get; init; } = [];
 
     /// <summary>
     /// True when the script stopped at a yes-or-no and nobody answered it.
