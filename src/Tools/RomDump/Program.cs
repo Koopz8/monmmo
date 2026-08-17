@@ -6544,6 +6544,14 @@ public static class Program
                 rom,
                 MapLibrary.Open(rom).All().SelectMany(EveryScriptOn)));
 
+        // Which of the four answers the wall list actually gave, tallied so the fourth one has
+        // a denominator. "A block reached from more than one map is a different scene" is a
+        // claim about this cartridge; whether any of those blocks is ever named as the setter
+        // of a flag holding a door shut is a claim about this REPORT, and the two read exactly
+        // alike until both are printed. If the fourth answer is nought, the fix moved nothing
+        // here and that is the finding rather than an absence of one.
+        var standings = new Dictionary<WhereItStands, int>();
+
         foreach (IGrouping<(string ToMapId, string Why), ShutDoor> shut in byTarget.Take(30))
         {
             Console.WriteLine(
@@ -6602,7 +6610,7 @@ public static class Program
                 // standing in the last four doorways. Reading both arms is the one thing
                 // `ReadAll` has always been able to do and nothing has ever asked it for.
                 if (did.Length == 0 && who.Talked)
-                    WriteWhatItIsWaitingFor(rom, world, fromMapId, who, played, setters, writers);
+                    WriteWhatItIsWaitingFor(rom, world, fromMapId, who, played, setters, writers, standings);
             }
         }
 
@@ -6610,6 +6618,32 @@ public static class Program
 
         if (played.ShutDoors.Count > 30)
             Console.WriteLine($"    ... and {played.ShutDoors.Count - 30} more");
+
+        // What the wall list above actually said, by kind, with its own total beside it.
+        //
+        // The fourth kind is the one this milestone added, and it is here so that "the run
+        // ran that block in another town" cannot be quietly nought and read as "the fix
+        // mattered". Printed whenever anything was asked at all — an empty tally means the
+        // wall list asked nothing, which is a different fact again from asking and finding
+        // none, and the two look identical from outside.
+        if (standings.Count > 0)
+        {
+            int asked = standings.Values.Sum();
+
+            Console.WriteLine();
+            Console.WriteLine($"    of {asked} setter(s) the list above asked about:");
+
+            foreach (WhereItStands stands in Enum.GetValues<WhereItStands>())
+            {
+                Console.WriteLine(
+                    $"      {standings.GetValueOrDefault(stands),4}  {stands}"
+                    + (stands == WhereItStands.ItRanTheSameBlockOnAnotherMap
+                        && standings.GetValueOrDefault(stands) == 0
+                        ? "   <- nought, so no verdict here moved: the shared blocks this run"
+                            + " reached from two maps are not the ones holding a door shut"
+                        : string.Empty));
+            }
+        }
 
         int standable = played.ShutDoors.Count(d => d.CouldStandOnIt);
 
@@ -8019,7 +8053,8 @@ public static class Program
         Blocker who,
         Attempt played,
         Lazy<IReadOnlyDictionary<int, IReadOnlyList<SetsAFlag>>> setters,
-        Lazy<IReadOnlyDictionary<int, IReadOnlyList<WritesAVariable>>> writers)
+        Lazy<IReadOnlyDictionary<int, IReadOnlyList<WritesAVariable>>> writers,
+        Dictionary<WhereItStands, int> standings)
     {
         // The record first, because that is where this game keeps it. Only 7 of the 575
         // objects carrying a hide flag have a script that sets it — the flag that takes
@@ -8155,24 +8190,33 @@ public static class Program
         // Which of the four this is, is a rule about the world and lives on the run. Only the
         // wording is this file's business — a conditional here is a conditional no test can
         // reach, which is the fault this project has now moved out of this file six times.
-        string Standing(SetsAFlag sets) => played.HowItStands(sets.MapId, sets.Address) switch
+        string Standing(SetsAFlag sets) => Say(
+            played.HowItStands(sets.MapId, sets.Address),
+            played.Ran.GetValueOrDefault((sets.MapId, sets.Address)));
+
+        string Say(WhereItStands stands, WhatRan? here)
         {
-            PokeMmo.Server.WhereItStands.OnAMapItNeverReached =>
-                "ON A MAP IT NEVER REACHED — that map is the job",
+            standings[stands] = standings.GetValueOrDefault(stands) + 1;
 
-            PokeMmo.Server.WhereItStands.ItRanTheScriptHere =>
-                "IT RAN THIS SCRIPT AND THE FLAG IS STILL UNSET — "
-                    + WhyItStopped(played.Ran[(sets.MapId, sets.Address)]),
+            return stands switch
+            {
+                WhereItStands.OnAMapItNeverReached =>
+                    "ON A MAP IT NEVER REACHED — that map is the job",
 
-            // The fourth answer, which had been collapsed into the first. Saying "IT RAN THIS
-            // SCRIPT" here — with a reason merged in from another town — is a fallback that
-            // names a cause, which is worse than one that says nothing.
-            PokeMmo.Server.WhereItStands.ItRanTheSameBlockOnAnotherMap =>
-                "on a map it reached, and it never ran this script HERE — the same block hangs "
-                    + "off another map and the run ran it there, which is a different scene",
+                WhereItStands.ItRanTheScriptHere =>
+                    "IT RAN THIS SCRIPT AND THE FLAG IS STILL UNSET — " + WhyItStopped(here!),
 
-            _ => "on a map it reached, and it never ran this script — it never stood on the square",
-        };
+                // The fourth answer, which had been collapsed into the first. Saying "IT RAN
+                // THIS SCRIPT" here — with a reason merged in from another town — is a
+                // fallback that names a cause, which is worse than one that says nothing.
+                WhereItStands.ItRanTheSameBlockOnAnotherMap =>
+                    "on a map it reached, and it never ran this script HERE — the same block "
+                        + "hangs off another map and the run ran it there, a different scene",
+
+                _ => "on a map it reached, and it never ran this script — it never stood on the "
+                    + "square",
+            };
+        }
 
         if (waiting.AskedWithoutABranch > 0)
         {
