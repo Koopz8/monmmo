@@ -1463,11 +1463,18 @@ public static class Autoplayer
         // always run them regardless — which makes the run a CEILING in that respect: it takes
         // arms of the story no single playthrough could take in one pass.
         //
-        // PALLET TOWN is the case. Its counter goes to 1 at the trigger north of town, 2 at the
-        // lab's arrival script, and then 3 to 9 across the lab's own scripts — so a pass that
-        // runs all of them ratchets it to 9 before the three balls read it, and the balls answer
-        // "you already have one". The starter is the only creature in this game a player
-        // chooses, and the run has never held one.
+        // PALLET TOWN is the case, and this comment described it WRONGLY for three milestones
+        // because it was read off --who-writes, which answers the same question of the image
+        // rather than of the run: statically, down every arm of every branch. It said the
+        // counter ratcheted to nine before the three balls read it and the balls answered "you
+        // already have one". Traced through an actual run, the balls read ONE, every pass, for
+        // seven passes — the counter was too LOW, not too high, and the cause was the ordering
+        // fixed below rather than this lever.
+        //
+        // What is true here, measured with the order corrected: the map has several arrival
+        // scripts and running all of them takes the counter past two in one pass, so the ceiling
+        // still does not hold a starter and the floor now does. That is a real cost of the
+        // ceiling, and it is the one this paragraph was reaching for.
         //
         // Honoured, the same walk is a floor: it runs what a save in this state would run.
         // Both are worth having and neither is the truth on its own, so it is a lever.
