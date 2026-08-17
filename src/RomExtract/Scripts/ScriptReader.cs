@@ -1134,6 +1134,29 @@ public static class ScriptCommands
         // the widest-looking agreement was the wrong answer.
         [0x43] = 0,
 
+        // Four — a POINTER, and the same one the command in front of it was just handed.
+        //
+        //   16 06 80 00 00 | 78 C5 92 1A 08 | D3 C5 92 1A 08 | 04 6C 92 1A 08
+        //   16 06 80 00 00 | 78 D0 92 1A 08 | D3 D0 92 1A 08 | 04 6C 92 1A 08
+        //   16 06 80 00 00 | 78 DC 92 1A 08 | D3 DC 92 1A 08 | 04 6C 92 1A 08
+        //
+        // Three times in thirty-three bytes at 0x08163BBB, three more at 0x0816442F, and the
+        // 0x78 beside it is already known to take four. The same address twice within ten
+        // bytes does not line up at any other width.
+        //
+        // MEASURED AGAINST A CONTROL, because "the same value twice" is exactly the kind of
+        // claim that feels decisive and is not. Across the whole 16 MiB:
+        //
+        //   78 <4 bytes> D3 <4 bytes>   73 occurrences, 22 with the two values IDENTICAL  30.1%
+        //   78 <4 bytes> 77 <4 bytes>  507 occurrences,  1 identical                       0.2%
+        //   78 <4 bytes> 79 <4 bytes>  148 occurrences,  0 identical                       0.0%
+        //   78 <4 bytes> 04 <4 bytes>  462 occurrences,  0 identical                       0.0%
+        //   78 <4 bytes> 05 <4 bytes>  283 occurrences,  0 identical                       0.0%
+        //
+        // Thirty per cent against nought, nought, nought and a fifth of a per cent. The
+        // pairing is real and it is this byte's.
+        [0xD3] = 4,
+
         // One byte, and the column says so. Fifteen places in this game a read stops on
         // 0x97; at every one of them the byte after it is 1, 2 or 3 and nothing else,
         // which is an argument rather than an opcode — opcodes vary between sites and
