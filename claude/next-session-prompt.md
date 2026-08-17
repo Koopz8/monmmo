@@ -1,7 +1,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-237`, 2796 tests green.
+`claude-238`, 2799 tests green.
 
 Standing rules — do not break these:
 
@@ -81,7 +81,7 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-201-eight-places-wide-and-worth-one-magikarp.md` first, then `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
+Read `claude/milestone-202-the-false-column-and-the-long-chain.md` first, then `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
 **Nineteen faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
@@ -185,13 +185,14 @@ sets. CERULEAN CAVE is closed: the run now reaches it, off the SAPPHIRE thread.
 
 ## The next task, precisely
 
-1. **`0x95` at `0x0816A43E` and `0xC2` at `0x0816CDB6`.** The next two in the queue. The pairs
-   keep pairing: `0x95` sits immediately after `0x91` at four of its nine sites and after `0x94`
-   at the GAME CORNER; `0xC2` sits immediately after `0xB5` at all three of its. Remaining:
-   `0x95`, `0x9B`, `0x73`, `0xCA`, `0x43`, `0xC4`, `0xC3`, `0xC2`. **`0xE6` is the wall SIX
-   fixtures lean on** — whoever gives it a width rebuilds all six, and two tests fail the moment
-   they forget.
-2. **The money ceiling is MEASURED now — decide against the number, not the worry.** 201
+1. **Eight stops with NO CHAIN INTO THEM.** Four milestones of pairs pairing ended at 202:
+   `0xB3`->`0xB4`->`0xB5`->`0xC2` and `0x92`->`0x91`->`0x95` are all read, and nothing new
+   appeared behind the last two. What remains has to be found one at a time: `0x43`, `0x9B`,
+   `0xCA`, `0xC4`, `0xC3`, `0xD3`, `0xA4` — and `0x73`, which is already ruled dead (it stops
+   runs and is worth nothing; the block ends two bytes later at all four sites). **`0xE6` is the
+   wall SIX fixtures across four milestones lean on** and has never been read — whoever gives it
+   a width rebuilds all six, and there are tests that fail the moment they forget.
+2. **The money ceiling is MEASURED and unlevered — decide against the number, not the worry.** 201
    counted it: **8 places** ask the run for money at five of the six lever settings and **1 of
    them hands something over** — `16.0 0x0816F75F` wants 500 and gives `#129` at level 5
    anyway, which is the `#130` at 71 the party ends with. **The floor is clean**: 1 place asks,

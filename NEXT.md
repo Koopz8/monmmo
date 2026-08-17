@@ -6,14 +6,15 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **The unpaid-for Pokémon has a name and a number.** The ceiling 200 found is
-  **eight places wide and worth exactly one MAGIKARP**: `16.0 0x0816F75F` asks for
-  500 and hands over `#129` at level 5 regardless, which is the `#130` at 71 the
-  party ends with.
-- **The floor is clean.** One place asks it for money and nothing comes of it — so the
-  floor run's party of six is entirely earned, and only the five `--say-yes` settings
-  carry something unpaid for.
-- Two numbers rather than one, because they are two claims: how WIDE the gap is and
-  what it is currently WORTH. Either can be nought and they mean opposite things.
-- No lever was added. The gap is measured; whether to model a purse is a decision, and
-  it should be made against the number rather than against the worry.
+- **Two more script commands read, and they are the two opposite kinds of evidence.**
+  `0x95` has seven sites and three WRONG widths that each agree with themselves seven
+  times over — every site landing in the same run of zero bytes inside the same
+  argument. One agreement, not seven. Read correctly they resume on seven *different*
+  bytes, and the disagreement is the evidence.
+- `0xC2` is the opposite: eight commands each parsing into the next, two carrying real
+  addresses.
+- **3829 → 3848 blocks read to a proper end, 46 → 38 stopped — and not one number in
+  the run moved.** Reach, flags, party, all six lever settings, identical. What moved
+  is the error bars: 40 places at 3 commands → 37 at 2 on the floor.
+- The reading and the run are different denominators, and a width can improve one and
+  leave the other alone. This one did.
