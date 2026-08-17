@@ -113,6 +113,13 @@ public class EverywhereInTheImageTests
         Put(image, TheWayIn, Goto);
         Pointer(image, TheWayIn + 1, 0x08000000 + (uint)Deep);
 
+        // Read backwards, the four bytes at the top of this image are `29 58 00 02` — a
+        // setflag that ends, sitting at reversed offset 0x300. And 0x08000300 is an address
+        // this image really does jump to. So a control that indexed the real image instead of
+        // the reversal would find a way in to a scene that only exists in the reversal, which
+        // is the one thing the control must not do.
+        Put(image, 0x3CFC, End, 0x00, 0x58, SetFlag);
+
         // A hit on the flag pattern that is not a setflag at all — three bytes in the middle
         // of something, with bytes after them that are not commands.
         Put(image, 0xA03, SetFlag, Holds & 0xFF, Holds >> 8, 0xFF, 0xFF, 0xFF);
@@ -122,8 +129,20 @@ public class EverywhereInTheImageTests
 
     private static Rom Rom() => new(Image());
 
-    /// <summary>The one script a map points at, which is the whole of the map-first reading.</summary>
-    private static SetsAFlag[] TheWorld() => [new SetsAFlag("1.1", "trigger (0,0)", 0x08000000 + Trigger)];
+    /// <summary>
+    /// What the maps point at — and it is two scripts, on purpose.
+    /// <para>
+    /// The second starts <em>inside</em> the block the first already walked, which is ordinary
+    /// in this cartridge and is the only shape that can tell "the first script to decode a byte
+    /// owns it" from "whichever ran last owns it". With one script in the fixture both rules
+    /// give the same answer and neither can be broken.
+    /// </para>
+    /// </summary>
+    private static SetsAFlag[] TheWorld() =>
+    [
+        new SetsAFlag("1.1", "trigger (0,0)", 0x08000000 + Trigger),
+        new SetsAFlag("1.1", "person 1", 0x08000000 + InTheOpen),
+    ];
 
     /// <summary>
     /// The finding, stated as plainly as it can be: the file moves this flag somewhere the
@@ -433,6 +452,18 @@ public class EverywhereInTheImageTests
 
         Assert.Equal(6, real);
         Assert.True(EverywhereInTheImage.NoiseFloor(rom).Sites < real);
+    }
+
+    /// <summary>
+    /// <b>And the control has to read the reversal, not the image it is a control for.</b>
+    /// This image jumps to 0x08000300, and reversed it has a scene there. A control that
+    /// indexed the real image would call that scene reachable and report a noise floor made of
+    /// the very signal it exists to measure.
+    /// </summary>
+    [Fact]
+    public void TheControlLooksForWaysInInTheReversalNotInTheImage()
+    {
+        Assert.Equal(0, EverywhereInTheImage.NoiseFloor(Rom()).JumpedInto);
     }
 
     /// <summary>

@@ -6906,13 +6906,31 @@ public static class Program
             "    same bytes, same frequencies, no commands. That is what these two filters find when");
         Console.WriteLine(
             "    there is nothing there, and it is what the counts below have to be read against.");
+
+        int unopenedSites = outside.Sum(f => f.Unopened.Count);
+        int jumpedSites = outside.Sum(f => f.JumpedInto.Count);
+
+        // AND IT HAS TO BE THE SAME UNIT ON BOTH SIDES.
+        //
+        // This printed a count of flags beside a count of sites and invited them to be compared.
+        // They cannot be: one flag can hold a dozen sites, and the first run of this put "20"
+        // next to "47" as though 20 were the smaller number.
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    a site something jumps into is {Rate(jumpedSites, unopenedSites)} of the unopened sites "
+            + $"here, against {Rate(noiseJumped, noiseSites)} in the reversal");
+        Console.WriteLine(
+            "    — and if those two are the same number, the jumped-into list below is noise and");
+        Console.WriteLine(
+            "    the only honest thing to do with it is throw it away.");
         Console.WriteLine();
         Console.WriteLine(
             $"    of the {boundary.Count} gating flags nothing in the world moves:");
         Console.WriteLine(
-            $"      {outside.Count} are moved by something reading as script that the maps never open");
+            $"      {outside.Count} are moved by something reading as script that the maps never open "
+            + $"({unopenedSites} site(s))");
         Console.WriteLine(
-            $"        {jumpedInto} of those are jumped into by a script — an entry point to find");
+            $"        {jumpedInto} of those are jumped into by a script ({jumpedSites} site(s)) — an entry point to find");
         Console.WriteLine(
             $"      {boundary.Count - outside.Count} are moved by no script anywhere in the file — compiled code, and");
         Console.WriteLine(
@@ -6929,6 +6947,8 @@ public static class Program
         }
 
         if (outside.Count > 20) Console.WriteLine($"      ... and {outside.Count - 20} more");
+
+        static string Rate(int some, int all) => all == 0 ? "none" : $"{100.0 * some / all:0.0}%";
 
         Console.WriteLine();
         Console.WriteLine(
@@ -7248,10 +7268,14 @@ public static class Program
     private static string WhyItStopped(WhatRan did) =>
         did.StoppedAtAQuestion
             ? "it stopped at a yes-or-no nobody answered — try --say-yes"
-            : did.Routines.Count > 0
-                ? $"it asked routine(s) {string.Join(", ", did.Routines.Take(3).Select(r => $"0x{r:X3}"))} "
-                    + "and took the zero arm — try --answer"
-                : "it ran to the end, so the setflag is on an ordinary branch it had no reason to take";
+            : did.Fought.Count > 0
+                ? $"IT STOPPED AT A FIGHT it did not win (trainer(s) "
+                    + string.Join(", ", did.Fought.Take(3)) + ") — everything after the fight is "
+                    + "unreached, and the setflag may be sitting there unconditionally"
+                : did.Routines.Count > 0
+                    ? $"it asked routine(s) {string.Join(", ", did.Routines.Take(3).Select(r => $"0x{r:X3}"))} "
+                        + "and took the zero arm — try --answer"
+                    : "it ran to the end, so the setflag is on an ordinary branch it had no reason to take";
 
     /// <summary>
     /// The answers that had to go a particular way to reach a <c>setflag</c>, in order.

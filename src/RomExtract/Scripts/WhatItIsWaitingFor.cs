@@ -536,10 +536,46 @@ public static class WhatItIsWaitingFor
                     }
 
                     if ((!certain || takesIt) && rom.IsRomAddress(command.Pointer(1)))
-                        queue.Enqueue((command.Pointer(1), 0, [.. chain, step], new(put)));
+                    {
+                        // A conditional call that certainly runs leaves its writes behind, the
+                        // same way a plain call does. Only when it certainly runs: folding in a
+                        // write that may not have happened lets a later comparison read as
+                        // something this script decided, which prunes an arm — and deleting a
+                        // real path is the expensive direction.
+                        if (command.Code == ScriptCommands.CallIf && certain && takesIt)
+                            StraightLineWrites(rom, command.Pointer(1), put, 8);
 
-                    // And carrying on past it is the other answer, priced the same way —
-                    // unless this script has already decided that it goes the other way.
+                        queue.Enqueue((command.Pointer(1), 0, [.. chain, step], new(put)));
+                    }
+
+                    // A CONDITIONAL CALL COMES BACK, SO THERE IS NO OTHER ARM.
+                    //
+                    // THE FAULT THAT INVENTED A WALL. What follows a conditional `goto` is the
+                    // condition inverted, and a `goto` that is certainly taken never returns —
+                    // so stopping the walk there is right. Neither of those is true of a
+                    // conditional `call`. It goes, it comes back, and the rest of the block runs
+                    // whichever way the answer went.
+                    //
+                    // SILPH CO.'s GIOVANNI trigger is `compare 0x4001, 0 / callif`, twice, and
+                    // then — unconditionally — the fight, three hideobjects, `setflag 0x003E`
+                    // and `clearflag 0x003F`. Breaking out at the first taken call threw all of
+                    // it away, and this walk reported that nothing in the world could set the
+                    // flag holding eight people on SAFFRON, four of them in doorways. Two
+                    // sessions were spent on the wall that produced.
+                    //
+                    // `Asks` was corrected for exactly this in milestone 173 and this walk was
+                    // not, so the two halves of one tool disagreed again — and again the
+                    // stricter one was believed because strictness sounds like rigour.
+                    if (command.Code == ScriptCommands.CallIf)
+                    {
+                        asked = null;
+
+                        continue;
+                    }
+
+                    // And carrying on past a conditional goto is the other answer, priced the
+                    // same way — unless this script has already decided that it goes the other
+                    // way, in which case there is nothing after it.
                     if (certain && takesIt) break;
 
                     chain = [.. chain, step with { TookTheBranch = false }];

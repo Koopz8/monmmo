@@ -97,6 +97,23 @@ public sealed record WhatRan
     /// <summary>Routines it asked and could not be answered, so it took the zero arm.</summary>
     public IReadOnlyList<int> Routines { get; init; } = [];
 
+    /// <summary>
+    /// Fights it stopped at and never got past.
+    /// <para>
+    /// <b>The third way a script stops, and it was not on the list.</b> A run that stopped at a
+    /// fight it could not win was reported as "it ran to the end, so the setflag is on an
+    /// ordinary branch it had no reason to take" — the fallback, printed because nothing else
+    /// matched. Two sessions were spent hunting for that branch. There is no branch: SILPH
+    /// CO.'s trigger sets the flag holding eight people on SAFFRON immediately after
+    /// GIOVANNI, and the run loses to GIOVANNI.
+    /// </para>
+    /// <para>
+    /// A fallback that names a cause is worse than one that says nothing, because it is
+    /// actionable and wrong.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<int> Fought { get; init; } = [];
+
     /// <summary>Flags it turned on, on the best pass it had.</summary>
     public IReadOnlyList<int> Set { get; init; } = [];
 
@@ -113,6 +130,7 @@ public sealed record WhatRan
         StoppedAtAQuestion = StoppedAtAQuestion || did.StoppedAtAQuestion,
         Routines = [.. Routines.Union(did.Specials)],
         Set = [.. Set.Union(did.FlagsSet)],
+        Fought = [.. did.Fights is { } trainer ? Fought.Union([trainer]) : Fought],
     };
 }
 
