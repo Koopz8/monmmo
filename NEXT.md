@@ -6,18 +6,18 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **Nineteen Pokémon Centres share one nurse.** The previous milestone keyed a
-  cutscene's movement on the address of its command — *the same command is the same
-  movement* — which is true on one map and false across the cartridge. A block
-  reached from eight maps is eight scenes. Three of the boat run's 83 walk sites
-  were shared that way, each losing seven of its eight, and every test shipped with
-  it used one map so none of them could see it.
-- **`--entries` is what found it**, and its own first answer was wrong the same
-  way: grouped by target alone, the biggest "scene" in the game has twenty doors
-  and is twenty different nurses in twenty different towns.
-- Grouped properly: 227 of 2915 scripts do nothing but hand over; **24 blocks are
-  entered by more than one door on one map, 22 of them one scene entered several
-  ways.** Told apart by the number each door says — different per door for a scene,
-  the same for six people sharing a script.
-- Still owed: **38 script runs are a scene already played**, and the routines,
-  questions, stopped reads and refusals are all still counted once per door.
+- **The error bars were counting the fixpoint's own passes.** *5051 calls to 28
+  routines it could not answer* and *399 script runs stopped at 3 commands* both
+  counted every run of every script on every pass — and the run talks to everybody
+  again each time round. The floor run asks **5047 times at 319 places**, and stops
+  399 times at **40**.
+- Both numbers are true and they answer different questions. Only one of them is
+  about the cartridge; the other is about how many times the loop went round.
+- **And the prediction was wrong.** The last two milestones found that one scene is
+  written as several doors and that this walk takes all of them, and it followed
+  that every count would be inflated by the door count. It is **six** out of 5047.
+  The door shape matters where an effect *accumulates* — a person walked once per
+  door ends up four squares out, and that was worth nine maps — and not where
+  something is merely counted.
+- The break for that came back green: nothing asserted what happens in the ordinary
+  case, which is 5041 of the 5047.
