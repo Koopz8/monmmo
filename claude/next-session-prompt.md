@@ -1,7 +1,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-230`, 2767 tests green.
+`claude-231`, 2771 tests green.
 
 Standing rules — do not break these:
 
@@ -62,12 +62,18 @@ Traps worth carrying:
    moving the wrong way is not a regression until you have read why.
 8. **A number printed with no denominator cannot come back empty.** "Nothing was handed over
    twice" and "nothing hands anything over" read identically until 190 printed both halves.
+   195 is the same trap a third time: "5051 calls to 28 routines" was the fixpoint's own passes,
+   and the number about the cartridge is 319 places.
+9. **A shape that matters somewhere does not matter everywhere.** 193 found that a scene played
+   once per door wrecked the walking, because a walk ACCUMULATES. 194 predicted the same for
+   every count the run keeps. Measured, it is six in five thousand — a counter accumulates
+   nothing. The prediction was mine and reasonable and wrong, and only measuring said so.
 
 ## Where things are
 
-Read `claude/milestone-194-the-map-is-half-the-key.md` first, then `193`, `192`, `191`, `190`, `189`,
+Read `claude/milestone-195-places-not-times.md` first, then `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
-**Eighteen faults closed and every one was in this project, not on the cartridge.** A walk that
+**Nineteen faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
 script" list; a list ranked by a count instead of by what it costs; a party that could not gain
 a level; a roadmap line that called a fix a cost; a continuation that carried flags and not
@@ -82,7 +88,8 @@ reversal control). `184` adds `--who-writes`. `187`/`188` are the two wrong widt
 `--stops`. `189` is `--trace` and the ordering. `190` is `--fights` and the handover count. `191` is
 `--who-knows` and the sea. `192` is the walk. `193` is the one that
 retired both of 192's proposed designs by reading the bytes instead, and `194` is `--entries`
-and the fault 193 shipped. `173-reading-the-other-arm` still has the best table of wrong turns.
+and the fault 193 shipped. `195` is places against times, and a prediction of 193's that turned
+out to be wrong. `173-reading-the-other-arm` still has the best table of wrong turns.
 
 **The pattern, thirteen times over: right at every step and quietly wrong at the end.** Nothing
 in this project fails when it is wrong. Assume the number in front of you is distorted until an
@@ -155,6 +162,7 @@ sets. CERULEAN CAVE is closed: the run now reaches it, off the SAPPHIRE thread.
 
 ```
 2915 scripts on 425 maps, reaching 3836 blocks
+227 of them do nothing but hand over; 22 scenes are one scene entered several ways
 3783 read to a proper end, 53 stopped
 729 trainerbattle sites on 104 maps; 27 carry a second exit, 10 of those skipped a guard
 7 places in the file ask who knows a move and are jumped into; 0 in the reversal; 4 offer
@@ -166,15 +174,15 @@ sets. CERULEAN CAVE is closed: the run now reaches it, off the SAPPHIRE thread.
 
 ## The next task, precisely
 
-1. **38 of the run's script executions are a scene it has already played** — `--entries` says
-   so. The walking is handled (193, 194). Everything else the run counts is still counted per
-   script: the routines it could not answer, the questions it stopped at, the commands with no
-   width, the items it was refused. Each of those numbers is inflated by however many doors the
-   scene has, and nobody has looked at what that does to the error bars this project quotes.
-   `--play` prints all four.
-2. **12 blocks are reached from more than one MAP.** Anything in this repository keyed on a
-   script address alone is wrong about them, the way 193 was about three walk sites. That is a
-   grep worth doing rather than a guess: `ran`, `spokenTo`, `refused`, `unread`, `specials`.
+1. **`ran` is still keyed on a script address alone**, and 12 blocks are reached from more than
+   one MAP — nineteen Pokémon Centres share a nurse. `--flags` uses `played.Ran.ContainsKey` to
+   decide whether a script ran at all, so a nurse run on one map reads as run on nineteen. That
+   is the same fault 193 shipped and 194 fixed for the walking, still live somewhere else, and
+   it is a grep rather than a hunt: `ran`, and anything else in this repository keyed on
+   `what.Address` without the map beside it.
+2. **The refusals and the yes-or-nos are corrected but unread.** 195 made all four counts places
+   rather than times; nobody has looked at what the shopping list and the hanging-question list
+   now say. `--play` prints both.
 3. **`--entries` reads only the scripts the map scan opens**, which is 0.6% of the file. The
    same sweep asked of the whole image is `--in-the-image`'s question and has never been asked
    of this shape.
@@ -217,6 +225,10 @@ Guards have come back green because **the fixture was more forgiving than the ca
    map, so none of them could see that a script attached to nineteen Pokémon Centres is
    nineteen scenes. If the rule has a key, the fixture needs two of whatever the key is made
    of — two maps, two numbers, two addresses.
+
+8. **The ordinary case, unasserted** (195). Every fixture covered the interesting halves and
+   none of them said what happens in the common one — the same script on a later pass — so the
+   break that conflated it with the rare one came back green.
 
 Check for these shapes directly rather than waiting for a break to find them. And the same nop
 that makes a slide can make a width **undiscriminable**: the `0x6F` fixture separates four from

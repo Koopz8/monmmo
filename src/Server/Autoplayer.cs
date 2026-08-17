@@ -578,6 +578,43 @@ public sealed record Attempt(
     public int WalksAsked { get; init; }
 
     /// <summary>
+    /// How many times the run asked, as opposed to how many places ask.
+    /// <para>
+    /// <b>The denominator these four numbers never had.</b> <c>N calls to M routines it could
+    /// not answer</c> counted every run of every script on every pass, so a fixpoint that
+    /// settles in six passes quoted an error bar six times too big: 5051 against 325 places on
+    /// the floor run. Both are true and they answer different questions, and only one of them
+    /// is about the cartridge.
+    /// </para>
+    /// </summary>
+    public int AskedSpecials { get; init; }
+
+    public int AskedUnread { get; init; }
+
+    public int AskedQuestions { get; init; }
+
+    public int AskedRefusals { get; init; }
+
+    /// <summary>
+    /// How many of the run's own counts were a scene arriving again by another door.
+    /// <para>
+    /// <b>Printed because the prediction was wrong.</b> 193 and 194 found that this cartridge
+    /// writes one scene as several entry stubs and that a fixpoint takes every door, and it
+    /// followed that everything counted per script — the routines it cannot answer, the
+    /// commands it cannot read, the yes-or-nos, the refusals — would be inflated by however
+    /// many doors a scene has. Measured, it is six calls in three hundred and twenty-five.
+    /// </para>
+    /// <para>
+    /// The shape matters where the effect ACCUMULATES: a person walked once per door ends up
+    /// four squares away, and that was worth nine maps. A counter that says how many times is
+    /// not accumulating anything, and 38 duplicate runs out of thousands is noise. Kept anyway,
+    /// because a number that is right is worth having, and printed so it cannot quietly become
+    /// large.
+    /// </para>
+    /// </summary>
+    public int FoldedByDoor { get; init; }
+
+    /// <summary>
     /// The ones that did it more than once, which is the ceiling.
     /// <para>
     /// Here rather than in whoever prints, because a <c>Where</c> in a printer is a rule
@@ -703,8 +740,22 @@ public static class Autoplayer
         ISet<int>? beaten = null,
         bool surfing = false,
         IReadOnlyDictionary<int, int>? remembered = null,
-        bool inOrder = false)
+        bool inOrder = false,
+        IReadOnlyDictionary<uint, uint>? doorsTo = null)
     {
+        // WHICH SCENE A SCRIPT IS, WHICH IS NOT THE SAME AS WHICH SCRIPT IT IS.
+        //
+        // This cartridge writes one scene as several tiny stubs — lockall; setvar 0x4001, N;
+        // goto the scene — one per square you can cross to start it. A player takes one door
+        // and this walk takes all of them, so everything counted per script is counted once
+        // per door: the routines it could not answer, the commands it could not read, the
+        // yes-or-nos it stopped at, and the things it asked for and was refused. Those four
+        // numbers are the error bars this project quotes.
+        //
+        // Handed in rather than worked out, because working it out means reading the
+        // cartridge and nothing in this file has ever done that. See EntriesToAScene.
+        uint Scene(uint address) => doorsTo?.GetValueOrDefault(address, address) ?? address;
+
         var battles = new BattleFactory(rules);
         var progress = new Progression(rules);
 
@@ -765,6 +816,30 @@ public static class Autoplayer
         var bought = new List<Bought>();
         var refusedAtTheCounter = new Dictionary<(int ItemId, string MapId), string>();
         var questions = new Dictionary<string, int>();
+
+        // Every (map, scene) already counted, per counter, and the same thing keyed on the
+        // SCRIPT rather than the scene beside it. The difference between the two is the door
+        // count and nothing else, which is how the door claim gets measured on its own.
+        var countedSpecials = new HashSet<(string, uint, int)>();
+        var countedUnread = new HashSet<(string, uint, byte)>();
+        var countedQuestions = new HashSet<(string, uint)>();
+        var countedRefusals = new HashSet<(string, uint, int, int)>();
+        var byScript = new HashSet<(string, uint, int, int)>();
+
+        // Asked, as opposed to asked somewhere new. A fixpoint asks again on every pass, so
+        // these are the raw counts this project has been quoting as error bars.
+        var askedSpecials = 0;
+        var askedUnread = 0;
+        var askedQuestions = 0;
+        var askedRefusals = 0;
+
+        // And the part of the difference that is doors rather than passes.
+        var foldedByDoor = 0;
+
+        // True when this is somewhere the run has not counted before EXCEPT that the same
+        // scene has already been counted by another door into it.
+        bool ADoorAlreadyTaken(string mapId, uint address, int what, int which) =>
+            byScript.Add((mapId, address, what, which));
         var unread = new Dictionary<byte, int>();
 
         // What talking to each person came to, kept by who they are rather than by which
@@ -862,7 +937,20 @@ public static class Autoplayer
                         .And(did);
 
                     foreach (int routine in did.Specials)
+                    {
+                        askedSpecials++;
+
+                        bool fresh = ADoorAlreadyTaken(map.Id, what.Address, 1, routine);
+
+                        if (!countedSpecials.Add((map.Id, Scene(what.Address), routine)))
+                        {
+                            if (fresh) foldedByDoor++;
+
+                            continue;
+                        }
+
                         specials[routine] = specials.GetValueOrDefault(routine) + 1;
+                    }
 
                     foreach (int flag in did.FlagsSet) flags.Add(flag);
 
@@ -915,12 +1003,34 @@ public static class Autoplayer
                         walksApplied++;
                     }
 
-                    if (did.StoppedAtAQuestion) questions[map.Id] = questions.GetValueOrDefault(map.Id) + 1;
+                    if (did.StoppedAtAQuestion)
+                    {
+                        askedQuestions++;
+
+                        bool fresh = ADoorAlreadyTaken(map.Id, what.Address, 3, 0);
+
+                        if (countedQuestions.Add((map.Id, Scene(what.Address))))
+                            questions[map.Id] = questions.GetValueOrDefault(map.Id) + 1;
+                        else if (fresh) foldedByDoor++;
+                    }
 
                     // And the commands it could not read at all, which is the other half of
                     // the same measurement and has never been carried out of here.
                     foreach (byte code in did.StoppedAt)
+                    {
+                        askedUnread++;
+
+                        bool fresh = ADoorAlreadyTaken(map.Id, what.Address, 2, code);
+
+                        if (!countedUnread.Add((map.Id, Scene(what.Address), code)))
+                        {
+                            if (fresh) foldedByDoor++;
+
+                            continue;
+                        }
+
                         unread[code] = unread.GetValueOrDefault(code) + 1;
+                    }
 
                     if (what.LocalId != 0) spokenTo[(map.Id, what.LocalId)] = did;
 
@@ -930,6 +1040,17 @@ public static class Autoplayer
                     foreach ((int itemId, int count, bool carried) in did.Asked)
                     {
                         if (carried) continue;
+
+                        askedRefusals++;
+
+                        bool freshAsk = ADoorAlreadyTaken(map.Id, what.Address, 4, itemId);
+
+                        if (!countedRefusals.Add((map.Id, Scene(what.Address), itemId, count)))
+                        {
+                            if (freshAsk) foldedByDoor++;
+
+                            continue;
+                        }
 
                         var key = (itemId, count, map.Id);
                         refused[key] = refused.GetValueOrDefault(key) + 1;
@@ -1240,6 +1361,11 @@ public static class Autoplayer
             SwamAnyway = surfing,
             WalkSites = walkedFrom.Count,
             WalksAsked = walksAsked,
+            FoldedByDoor = foldedByDoor,
+            AskedSpecials = askedSpecials,
+            AskedUnread = askedUnread,
+            AskedQuestions = askedQuestions,
+            AskedRefusals = askedRefusals,
             OffTheMap =
             [
                 // EVERYBODY, not only the ones a scene walked. Once the walk stops at a wall
