@@ -426,23 +426,47 @@ public static class WhatItIsWaitingFor
                     && command.Arguments.Length >= 5)
                 {
                     int word = asked is { Arguments.Length: >= 2 } ? asked.Word() : 0;
+                    int against = asked is { Arguments.Length: >= 4 } ? asked.Word(2) : 0;
 
-                    var step = new OnTheWay(
-                        asked?.Code ?? 0,
-                        word,
-                        asked is { Arguments.Length: >= 4 } ? asked.Word(2) : 0,
-                        command.Arguments[0],
-                        true)
+                    var step = new OnTheWay(asked?.Code ?? 0, word, against, command.Arguments[0], true)
                     {
                         DecidedHere = asked?.Code != CheckFlag && put.ContainsKey(word),
                         DecidedBy = put.GetValueOrDefault(word).How,
                         Became = put.GetValueOrDefault(word).Value,
                     };
 
-                    if (rom.IsRomAddress(command.Pointer(1)))
+                    // AN ARM THAT CANNOT HAPPEN IS NOT A PATH.
+                    //
+                    // If this script put a number in the variable itself with a setvar, the
+                    // comparison has one answer and the other arm is dead. Walking it anyway
+                    // produces a route to a setflag that no run could ever take — which is
+                    // exactly what came back for SILPH CO.: the trigger sets 0x4001 to 0 and
+                    // the flag is behind "0x4001 is neither 0 nor 1".
+                    //
+                    // Only a setvar is a number. addvar and subvar need what was there
+                    // before, copyvar names another variable, and a routine's answer is on
+                    // the far side of the code boundary — none of those are known here, and a
+                    // pruner that guessed at them would delete real paths instead of dead
+                    // ones, which is the worse mistake by a distance.
+                    var certain = false;
+                    var takesIt = false;
+
+                    if (asked?.Code == 0x21
+                        && put.TryGetValue(word, out (byte How, int Value) held)
+                        && held.How == SetVar)
+                    {
+                        certain = true;
+                        takesIt = ScriptState.Accepts(
+                            command.Arguments[0], ScriptState.Compare(held.Value, against));
+                    }
+
+                    if ((!certain || takesIt) && rom.IsRomAddress(command.Pointer(1)))
                         queue.Enqueue((command.Pointer(1), 0, [.. chain, step], new(put)));
 
-                    // And carrying on past it is the other answer, priced the same way.
+                    // And carrying on past it is the other answer, priced the same way —
+                    // unless this script has already decided that it goes the other way.
+                    if (certain && takesIt) break;
+
                     chain = [.. chain, step with { TookTheBranch = false }];
 
                     asked = null;

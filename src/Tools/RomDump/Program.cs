@@ -6856,12 +6856,22 @@ public static class Program
 
         if (way is null)
         {
-            // Which would contradict the line above it — this script is only named because
-            // something read a setflag in it — so it is worth saying loudly rather than
-            // printing nothing and looking tidy.
+            // TWO READINGS DISAGREEING, AND THE STRICTER ONE IS RIGHT.
+            //
+            // This script was named because a plain read found a setflag somewhere inside it.
+            // Walking it with the script's own decisions honoured says no run can ever get
+            // there. Both cannot be true, and the one that models what running means wins:
+            // the script is not a way to set this flag, and naming it sent this thread to
+            // SILPH CO. for two rounds.
+            //
+            // Said loudly rather than printed as nothing, because "no line here" is what a
+            // script with no gates looks like too.
             Console.WriteLine(
-                "             (and no way through this script reaches that setflag at all — "
-                + "these two readings disagree)");
+                "             BUT NO RUN CAN REACH THAT setflag FROM HERE — the script decides"
+                + " its own switch and the flag is behind a value it never sets.");
+            Console.WriteLine(
+                "             So this script is NOT a way to set it, and something else enters"
+                + " the shared block it lives in. That is the job.");
 
             return;
         }

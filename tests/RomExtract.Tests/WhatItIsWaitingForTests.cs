@@ -45,6 +45,9 @@ public class WhatItIsWaitingForTests
     /// <summary>And when it came out less, which is the "not yet" arm.</summary>
     private const byte IfLess = 0;
 
+    /// <summary>And when it did not match at all.</summary>
+    private const byte IfNotEqual = 5;
+
     private const int Waiting = 0x0825;
     private const int Opened = 0x0826;
 
@@ -649,6 +652,79 @@ public class WhatItIsWaitingForTests
         IReadOnlyList<OnTheWay> way = WhatItIsWaitingFor.PathTo(new Rom(image), 0x08000100, Opened)!;
 
         Assert.False(way[^1].DecidedHere);
+    }
+
+    /// <summary>
+    /// An arm that cannot happen is not a path.
+    /// <para>
+    /// <b>What SILPH CO. actually is.</b> The trigger puts a number in <c>0x4001</c> with a
+    /// <c>setvar</c> — which square you stepped on — and the <c>setflag</c> is behind
+    /// <em>neither</em> of the values the two triggers write. A reader that walks both arms of
+    /// a comparison it has already answered produces a route no run could take, and reports a
+    /// script as the way to set a flag it can never set. That is two rounds of this thread.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AnArmTheScriptHasAlreadyDecidedAgainstIsNotAPath()
+    {
+        var image = new byte[0x2000];
+
+        Put(image, 0x100, SetVar, 0x01, 0x40, 0x00, 0x00);
+        Put(image, 0x105, Compare, 0x01, 0x40, 0x00, 0x00);
+        Put(image, 0x10A, GotoIf, IfNotEqual);
+        Pointer(image, 0x10C, 0x08000200);
+        Put(image, 0x110, Release, End);
+
+        // Behind "0x4001 is not 0", which this script has just made false.
+        Put(image, 0x200, SetFlag, Opened & 0xFF, Opened >> 8, Release, End);
+
+        Assert.Null(WhatItIsWaitingFor.PathTo(new Rom(image), 0x08000100, Opened));
+    }
+
+    /// <summary>
+    /// And the arm it decided <em>for</em> is still a path, with the rest of the block after
+    /// it dead instead. A pruner that only ever deletes is a pruner that deletes everything.
+    /// </summary>
+    [Fact]
+    public void AndTheArmItDecidedForStillIs()
+    {
+        var image = new byte[0x2000];
+
+        Put(image, 0x100, SetVar, 0x01, 0x40, 0x00, 0x00);
+        Put(image, 0x105, Compare, 0x01, 0x40, 0x00, 0x00);
+        Put(image, 0x10A, GotoIf, IfEqual);
+        Pointer(image, 0x10C, 0x08000200);
+
+        // On the arm it can no longer reach, so this must not be found.
+        Put(image, 0x110, SetFlag, Shared & 0xFF, Shared >> 8, Release, End);
+
+        Put(image, 0x200, SetFlag, Opened & 0xFF, Opened >> 8, Release, End);
+
+        var rom = new Rom(image);
+
+        Assert.NotNull(WhatItIsWaitingFor.PathTo(rom, 0x08000100, Opened));
+        Assert.Null(WhatItIsWaitingFor.PathTo(rom, 0x08000100, Shared));
+    }
+
+    /// <summary>
+    /// And a number this could not work out is not a decision. <c>addvar</c> needs what was
+    /// there before, <c>copyvar</c> names another variable, and a routine's answer is over the
+    /// code boundary — a pruner that guessed at any of those would delete real paths instead
+    /// of dead ones, which is much the worse mistake.
+    /// </summary>
+    [Fact]
+    public void ANumberItCouldNotWorkOutPrunesNothing()
+    {
+        var image = new byte[0x2000];
+
+        Put(image, 0x100, AddVar, 0x01, 0x40, 0x00, 0x00);
+        Put(image, 0x105, Compare, 0x01, 0x40, 0x00, 0x00);
+        Put(image, 0x10A, GotoIf, IfNotEqual);
+        Pointer(image, 0x10C, 0x08000200);
+        Put(image, 0x110, Release, End);
+        Put(image, 0x200, SetFlag, Opened & 0xFF, Opened >> 8, Release, End);
+
+        Assert.NotNull(WhatItIsWaitingFor.PathTo(new Rom(image), 0x08000100, Opened));
     }
 
     /// <summary>
