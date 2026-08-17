@@ -1,7 +1,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-251`, 2849 tests green.
+`claude-252`, 2853 tests green.
 
 Standing rules — do not break these:
 
@@ -101,8 +101,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-213-twelve-boulders-and-three-answers.md` first, then
-`212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
+Read `claude/milestone-214-the-third-ceiling-is-mostly-not-one.md` first, then
+`213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
 **Twenty faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
@@ -226,6 +226,7 @@ those 110 are 35 with no opener, 31 never run, 17 never picked up, 15 obstacles,
 62 gates no walk opens hold 240 people; 146 of them are CUT trees and ROCK SMASH rocks
 3 scripts hold 27 gating flags and 158 objects: CUT, ROCK SMASH, STRENGTH
 the 12 STRENGTH boulders are SEAFOAM and VICTORY ROAD, and their flags split THREE ways
+766 places call 63 routines the widest run cannot answer — and only 2 of them are a ceiling
 2 of those gates hold NOBODY — 0x084A and 0x084B, the ferry, with no setter anywhere
 ```
 
@@ -243,16 +244,20 @@ the 12 STRENGTH boulders are SEAFOAM and VICTORY ROAD, and their flags split THR
    anyway, which is the `#130` at 71 the party ends with. **The floor is clean**: 1 place asks,
    nothing comes of it, so the floor's party of six is entirely earned. Whether that deserves a
    `--pay` lever or a located payout table is a DECISION and it is deliberately not made.
-3. **`special 0x0187` heads all three obstacle scripts and nobody has read it.** CUT, ROCK
-   SMASH and STRENGTH all open `special 0x0187 ; compare 0x800D, 2 ; if == goto 0x081A7AE0`
-   before anything else, so its answer decides whether an obstacle runs at all. It is the same
-   routine at all three and it has never been looked at. `--routines` ranks the ones the run
-   could not answer.
+3. **The TWO places where the run's silence takes a branch.** 214 cut the routine ceiling four
+   ways: at the widest lever setting, of 766 places calling 63 unanswerable routines, 186 have
+   an answer nobody looks at, 433 are compared against a value that is not nought, 145 are
+   mixed, and **2 are places where zero IS the tested value and the silence says yes**. Those
+   two are the whole of what is left of that ceiling and neither has been named. Naming them is
+   the job.
+   Next after that: **`0x194`** — asked 54 times by the widest run, compared against 0 and 1,
+   and **747 sites in the file**, the most of anything. "Both" means its silence matters at some
+   sites and not others and nobody has asked which.
    Also owed and cheap: **seven boulder flags with no setter anywhere** (whatever drops a
    boulder into a hole is not script), **`0x0805`** which the STRENGTH script sets and shares
-   across all twelve boulders and which nothing has asked about, and **`0x0053`** holding 31
-   people across the SILPH CO. floors with no setter — the doors are open (176, 181) and the
-   people are still held, which are two different facts.
+   across all twelve boulders, and **`0x0053`** holding 31 people across the SILPH CO. floors
+   with no setter — the doors are open (176, 181) and the people are still held, which are two
+   different facts.
 4. **Money, for real this time — and the prices are READ now.** Three drinks at 200/300/350 and
    a POKé DOLL at 1000, plus 208's ¥20 a coin and fifteen coin prices, all READ, all at counters
    the run reaches, against a purse of nought. `--money N` is the lever and it is MODELLED; **the
@@ -449,6 +454,10 @@ the other, and nothing about a single green run says which. 207 writes the 2x2 d
 * **A shuffle control on the ceiling sums.** Written at 208, proved unfalsifiable by arithmetic
   and deleted. If every bound plus its own gift is S and no two sites share a pair, a bound
   crossed with somebody else's gift can never be S. Do not write it again.
+* **`special 0x0187`.** It heads all three obstacle scripts, its answer is compared against 2
+  and only 2 at all 376 of its sites, and `0x081A7AE0` — the arm answer 2 takes — is two bytes,
+  `release; end`. Answer 2 means "do nothing". The run answers nought and therefore behaves as
+  it would for any answer but one. Closed (214); do not re-derive it.
 * **The drink, the vending machine, CELADON DEPT, the ferry tickets, the badge-count routine** —
   all dead, see `claude/the-drink-and-the-boat.md`.
 
@@ -468,6 +477,8 @@ the other, and nothing about a single green run says which. 207 writes the 2x2 d
 * `StoryClosure` deliberately still has no bag, so `--can-it-be-finished` is the no-bag control.
 * No milestone docs for `StoryClosure`, `Autoplayer` or `SpecialContracts`.
 * Sound is paused: 31 unconfirmed song headers and battle music still open.
+* 201 of the floor's 396 "could not answer" places have an answer the cartridge never looks at.
+  They are reported and then explained away; they could be taken out of the ceiling line.
 * The 5 flags that look moved and are not — `--flags` prints the count, not the list.
 * The raw whole-file sweep is noise: 3762 sites against 3675 in the reversal. Only the
   jumped-into subset is above the floor. Do not quote the raw number as a finding.
