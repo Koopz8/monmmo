@@ -1,7 +1,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-238`, 2799 tests green.
+`claude-239`, 2801 tests green.
 
 Standing rules — do not break these:
 
@@ -69,11 +69,14 @@ Traps worth carrying:
    only consumer in the repository is asked about ONE setter at three settings and NONE at the
    other three. The fault was real and the blast radius was nought, and only a denominator on
    the CONSUMER could say so. A count of how wrong something is is not a count of who cares.
-10. **The widest agreement can be the least evidence.** 200's `0x92` resumes on `0x00` at ALL
+10. **The widest agreement is usually the WRONG width — three times running now.** 200's `0x92` resumes on `0x00` at ALL
     NINE sites read two, three or four wide — and that is one agreement, not nine: every site is
-    landing in the same run of zero bytes inside the same argument. A nop slide is what a false
-    column looks like from inside the cartridge, not just inside a fixture. Count what the sites
-    agree ON, not how many agree.
+    landing in the same run of zero bytes inside the same argument. `0x95` at 202 did it across
+    THREE wrong widths at seven sites each; `0x43` at 203 did it with `0x0D` five times and then
+    `0x80` five times — the two halves of `0x800D` read as opcodes. Each time the right answer
+    was the width whose sites DISAGREED. In this cartridge's script stream a column of identical
+    resume-bytes is evidence of a misalignment, not of a boundary. Count what the sites agree
+    ON, not how many agree.
 11. **A shape that matters somewhere does not matter everywhere.** 193 found that a scene played
    once per door wrecked the walking, because a walk ACCUMULATES. 194 predicted the same for
    every count the run keeps. Measured, it is six in five thousand — a counter accumulates
@@ -81,7 +84,7 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-202-the-false-column-and-the-long-chain.md` first, then `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
+Read `claude/milestone-203-a-command-with-no-arguments.md` first, then `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
 **Nineteen faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
@@ -185,13 +188,13 @@ sets. CERULEAN CAVE is closed: the run now reaches it, off the SAPPHIRE thread.
 
 ## The next task, precisely
 
-1. **Eight stops with NO CHAIN INTO THEM.** Four milestones of pairs pairing ended at 202:
-   `0xB3`->`0xB4`->`0xB5`->`0xC2` and `0x92`->`0x91`->`0x95` are all read, and nothing new
-   appeared behind the last two. What remains has to be found one at a time: `0x43`, `0x9B`,
-   `0xCA`, `0xC4`, `0xC3`, `0xD3`, `0xA4` — and `0x73`, which is already ruled dead (it stops
-   runs and is worth nothing; the block ends two bytes later at all four sites). **`0xE6` is the
-   wall SIX fixtures across four milestones lean on** and has never been read — whoever gives it
-   a width rebuilds all six, and there are tests that fail the moment they forget.
+1. **Seven stops left, and `0xD3` first.** 203 read `0x43`. What remains: `0x9B` (four sites),
+   `0xCA`, `0xC4`, `0xC3` (three each), `0xD3`, `0xA4` (two each), `0x36` (new, appeared behind
+   `0x43`), and `0x73` which is already ruled dead. **`0xD3` is worth doing before the others**:
+   both its sites read `D3 <pointer> 04 6C 92 1A 08`, and the same address appears twice within
+   eleven bytes. **`0xE6` is load-bearing in SEVEN fixtures across five milestones** and has
+   never been read — it stops nothing reachable, which is why it works as a wall and why nobody
+   has had a reason to read it. Whoever gives it a width rebuilds all seven.
 2. **The money ceiling is MEASURED and unlevered — decide against the number, not the worry.** 201
    counted it: **8 places** ask the run for money at five of the six lever settings and **1 of
    them hands something over** — `16.0 0x0816F75F` wants 500 and gives `#129` at level 5

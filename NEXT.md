@@ -6,15 +6,14 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **Two more script commands read, and they are the two opposite kinds of evidence.**
-  `0x95` has seven sites and three WRONG widths that each agree with themselves seven
-  times over — every site landing in the same run of zero bytes inside the same
-  argument. One agreement, not seven. Read correctly they resume on seven *different*
-  bytes, and the disagreement is the evidence.
-- `0xC2` is the opposite: eight commands each parsing into the next, two carrying real
-  addresses.
-- **3829 → 3848 blocks read to a proper end, 46 → 38 stopped — and not one number in
-  the run moved.** Reach, flags, party, all six lever settings, identical. What moved
-  is the error bars: 40 places at 3 commands → 37 at 2 on the floor.
-- The reading and the run are different denominators, and a width can improve one and
-  leave the other alone. This one did.
+- **A script command that carries no arguments at all** — `0x43`, five sites, every one
+  a block start. What proves it is what comes AFTER: each site is followed by a
+  comparison of `0x800D`, the game's result variable, and then by something that reads
+  `0x800D` again. Something wrote it, and the only candidate is the byte in front.
+- **The widest agreement was wrong for the third milestone running.** Read one byte
+  wide all five sites resume on `0x0D`; two wide, all five on `0x80`. Ten agreements,
+  and they are one — those are the two halves of `0x800D` read as opcodes.
+- 3848 → **3853 blocks read to a proper end**, 38 → 34 stopped. Reach, flags and party
+  unchanged everywhere.
+- **The `--say-yes --in-order` run now stops at one place, at one command, in the whole
+  playthrough.** Two milestones ago it was ten places at five.
