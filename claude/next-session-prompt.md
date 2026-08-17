@@ -1,7 +1,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-240`, 2803 tests green.
+`claude-241`, 2807 tests green.
 
 Standing rules — do not break these:
 
@@ -84,7 +84,7 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-204-a-pointer-handed-over-twice.md` first, then `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
+Read `claude/milestone-205-nine-sites-one-place.md` first, then `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
 **Nineteen faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
@@ -188,6 +188,14 @@ sets. CERULEAN CAVE is closed: the run now reaches it, off the SAPPHIRE thread.
 
 ## The next task, precisely
 
+1. **Re-read every count this project has quoted against the uniform floor.** 205 found that
+   `--in-the-image`'s error bar is a whole-image average computed as though bytes were
+   independent, and the image is nothing of the sort: `0x0089` shows NINE sites against a floor
+   of 1.0, and seven of them are inside 791 bytes of a table at 4.70 bits/byte. Nine sites
+   spread over 16 MiB and nine inside a kilobyte are the same number and different findings, and
+   they printed identically for the whole life of the instrument. `HowClustered` says which now.
+   **Nothing else has been re-read**: `--who-knows`'s 600 against 787, the raw whole-file sweep's
+   3762 against 3675. The instrument exists; the numbers do not.
 1. **Six stops left, and two new ones.** 204 read `0xD3`. What remains: `0x9B` (four sites),
    `0xCA`, `0xC4`, `0xC3` (three each), `0xA4` (two), `0x36` and `0xC6` (new, appeared behind
    `0x43` and `0xD3`), and `0x73` which is ruled dead. **Use a control.** Three milestones

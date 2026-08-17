@@ -6,12 +6,15 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **A pointer handed to two commands in a row.** `0xD3`'s two sites are a repeating
-  column — `78 <ptr>` then `D3 <the same ptr>` then a call, three times over in
-  thirty-three bytes at each site. The same address twice inside ten bytes does not
-  line up at any other width.
-- **And a control, because "the same value twice" is a feeling.** Across the whole
-  16 MiB that pairing is identical in 30.1% of cases; the same shape with four other
-  bytes in that slot occurs 1400 times between them and is identical **once**.
-- 3853 → **3856 blocks read to a proper end**, 34 → 32 stopped. The run is unchanged
-  everywhere — this one is entirely a reading and the playthrough never went near it.
+- **A count of nine turned out to be a finding of one.** The flag holding MT. EMBER
+  shut shows nine sites in the file against an error bar of about one — which reads
+  as signal. Seven of the nine sit inside **791 bytes**, in a table with the same
+  record repeating and names beside it: 4.70 bits per byte, where this game's script
+  runs 5.70.
+- **The error bar was a whole-image average and the image is not uniform.** Nothing in
+  a model that assumes independent bytes predicts seven hits in eight hundred; the
+  uniform expectation for that span is 0.00005.
+- So `0x0089` is closed harder than before — it is behind compiled code, not a script —
+  and the instrument now prints how clumped a count is beside the count.
+- **Nothing else has been re-read.** Every number this project has quoted against that
+  floor carries the same error.
