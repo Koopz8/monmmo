@@ -1,7 +1,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-249`, 2848 tests green.
+`claude-251`, 2849 tests green.
 
 Standing rules — do not break these:
 
@@ -101,8 +101,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-212-fifteen-gates-that-are-trees.md` first, then
-`211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
+Read `claude/milestone-213-twelve-boulders-and-three-answers.md` first, then
+`212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
 **Twenty faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
@@ -224,6 +224,8 @@ the widest run sets 212 of the 322 gating flags — 110 gates it never opens; 20
 those 110 are 35 with no opener, 31 never run, 17 never picked up, 15 obstacles, 12 past the boundary
 35 and 15 are the same at every lever setting, which is how a property of the FILE has to behave
 62 gates no walk opens hold 240 people; 146 of them are CUT trees and ROCK SMASH rocks
+3 scripts hold 27 gating flags and 158 objects: CUT, ROCK SMASH, STRENGTH
+the 12 STRENGTH boulders are SEAFOAM and VICTORY ROAD, and their flags split THREE ways
 2 of those gates hold NOBODY — 0x084A and 0x084B, the ferry, with no setter anywhere
 ```
 
@@ -241,16 +243,16 @@ those 110 are 35 with no opener, 31 never run, 17 never picked up, 15 obstacles,
    anyway, which is the `#130` at 71 the party ends with. **The floor is clean**: 1 place asks,
    nothing comes of it, so the floor's party of six is entirely earned. Whether that deserves a
    `--pay` lever or a located payout table is a DECISION and it is deliberately not made.
-3. **The 35, and the twelve inside them that are asked about a move.** 212 cut the boundary
-   bucket from 44 to 35 by finding that fifteen of the gates hold CUT trees and ROCK SMASH
-   rocks. Twelve of the remaining 35 hold something whose script asks who knows a move and
-   NEVER removes it — the STRENGTH boulders among them. **They were deliberately not folded in**,
-   because whatever clears a boulder is a different mechanism from whatever clears a tree, and
-   widening the rule to catch them would be picking a shape to fit an answer. Reading those
-   twelve is the job, and `--in-the-image` will climb any of them.
-   Also cheap and unread: `0x0053` holds **31** people across the SILPH CO. floors with no
-   setter anywhere — the doors are open (176, 181) and the people are still held, which are two
-   different facts.
+3. **`special 0x0187` heads all three obstacle scripts and nobody has read it.** CUT, ROCK
+   SMASH and STRENGTH all open `special 0x0187 ; compare 0x800D, 2 ; if == goto 0x081A7AE0`
+   before anything else, so its answer decides whether an obstacle runs at all. It is the same
+   routine at all three and it has never been looked at. `--routines` ranks the ones the run
+   could not answer.
+   Also owed and cheap: **seven boulder flags with no setter anywhere** (whatever drops a
+   boulder into a hole is not script), **`0x0805`** which the STRENGTH script sets and shares
+   across all twelve boulders and which nothing has asked about, and **`0x0053`** holding 31
+   people across the SILPH CO. floors with no setter — the doors are open (176, 181) and the
+   people are still held, which are two different facts.
 4. **Money, for real this time — and the prices are READ now.** Three drinks at 200/300/350 and
    a POKé DOLL at 1000, plus 208's ¥20 a coin and fifteen coin prices, all READ, all at counters
    the run reaches, against a purse of nought. `--money N` is the lever and it is MODELLED; **the
@@ -329,6 +331,12 @@ Guards have come back green because **the fixture was more forgiving than the ca
    a script" filter first. It passed because the block was broken, not because the branch was
    missing. **The thing you blot out has to be replaced by something the same width that the
    reader still understands.**
+
+12. **A fixture that violates two rules at once cannot test either** (213). "Every object behind
+   the gate is asked about a move" and "they agree about whether they are removed" both guard
+   one function. The mixed fixture broke both, so a break that weakened the first was caught by
+   the second and the first stayed untested and green. **A fixture for rule A has to satisfy
+   rule B.**
 
 Check for these shapes directly rather than waiting for a break to find them. And the same nop
 that makes a slide can make a width **undiscriminable**: the `0x6F` fixture separates four from
@@ -424,6 +432,11 @@ the other, and nothing about a single green run says which. 207 writes the 2x2 d
 * **The fifteen gating flags 0x0011-0x001F.** They hold CUT trees and ROCK SMASH rocks, one per
   map across thirty-odd maps, running two scripts between them (`0x081BDF13`, `0x081BE00C`).
   Their flags are set by the routine that removes the object. Do not file them as the boundary.
+* **The twelve STRENGTH boulders** (`0x0040`-`0x0045`, `0x0048`-`0x004B`, `0x0058`, `0x0059`).
+  SEAFOAM ISLANDS `1.83`-`1.86` and VICTORY ROAD `1.40`/`1.41`, one script (`0x081BE11D`), which
+  removes nothing and sets the shared `0x0805`. **Their flags split three ways** — two set by
+  arrival scripts on ROUTE 20 and ROUTE 23, two set out of sight, seven set by nothing. Do not
+  treat them as one kind.
 * **What sets a flag with no setflag anywhere in the file.** Picking the thing up. The routine
   that hands something over sets the object's own hide flag in compiled code, and only 7 of the
   575 objects carrying a hide flag have a script that sets it — it is written in `Autoplayer`

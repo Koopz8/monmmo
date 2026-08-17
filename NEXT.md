@@ -6,15 +6,15 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **Fifteen of the gates nothing can open turned out to be trees.** The sixty-two flags no
-  walk opens hold 240 people between them — and 146 of those "people" are CUT trees and
-  ROCK SMASH rocks, one per map across thirty-odd maps, running **two scripts** between them.
-- They looked like the code boundary because nothing sets their flags. True, and misleading
-  in exactly the way the item pickups were last milestone: the script asks who knows the
-  move, removes the object, and the routine sets the flag. **Two milestones running, a bucket
-  called "the boundary" was holding things that open.**
-- Twelve more gates hold something asked about a move that is **never** removed — the
-  STRENGTH boulders. Deliberately not folded in: whatever clears a boulder is a different
-  mechanism, and widening the rule to catch them would be picking a shape to fit an answer.
-- So the honest boundary is **35 flags**, not 110 and not 44. And two of the gates hold
-  nobody at all — the ferry, with no setter anywhere in sixteen megabytes.
+- **The twelve gates left over from last time are SEAFOAM ISLANDS' boulders.** Ten across
+  four floors, two more in VICTORY ROAD, all twelve running one script — which asks who
+  knows STRENGTH, removes nothing, and sets a shared flag rather than the boulder's own.
+- Three script addresses now account for **27 gating flags and 158 objects**: CUT, ROCK
+  SMASH, STRENGTH.
+- **And the twelve are not one thing.** Two of their flags are set by an ordinary arrival
+  script on another route — a reach problem, nothing more. Two are set out of sight. Seven
+  are set by nothing anywhere. Twelve identical objects, one script, and the flags split
+  three ways: the decision last milestone *not* to fold them into the obstacle bucket was
+  right, and now there is a measurement that says so.
+- Five breaks, five catches — one green first time because the fixture broke two rules at
+  once, so the second caught the break and the first stayed untested.
