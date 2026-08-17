@@ -221,6 +221,15 @@ public sealed record ScriptRun
         new Dictionary<int, int>();
 
     /// <summary>
+    /// Every look at and change to the watched variable, in the order they happened.
+    /// <para>
+    /// Empty unless <c>watch</c> was given. <see cref="VariablesWritten"/> above is the same
+    /// information with the two things that matter thrown away — the order, and the reads.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<VariableTouch> Touched { get; init; } = [];
+
+    /// <summary>
     /// The command that stopped the run, or nothing when it ended properly.
     /// <para>
     /// Same instrument as <c>StoppedAt</c>, kept per run because a script can now stop
@@ -369,12 +378,21 @@ public static class ScriptRunner
     /// A number that opens nothing was wrong or irrelevant, and either way that is a result.
     /// </para>
     /// </param>
+    /// <param name="watch">
+    /// One of the story's variables to keep an ordered record of every look at and change to,
+    /// or nothing.
+    /// <para>
+    /// Off by default and deliberately: a full playthrough touches variables tens of thousands
+    /// of times, and a diagnostic that costs the measurement it is diagnosing is not one.
+    /// </para>
+    /// </param>
     public static ScriptRun Run(
         Rom rom,
         uint address,
         ScriptState? state = null,
         int maxPages = 32,
-        IReadOnlyDictionary<int, int>? answers = null)
+        IReadOnlyDictionary<int, int>? answers = null,
+        int? watch = null)
     {
         ScriptState save = (state ?? new ScriptState()).Copy();
 
@@ -388,6 +406,15 @@ public static class ScriptRunner
         var written = new Dictionary<int, int>();
         var stack = new Stack<uint>();
         var codeCalled = new List<uint>();
+        var touched = new List<VariableTouch>();
+
+        // Recorded in order, because the order is the finding. A dictionary of what each
+        // variable ended up holding cannot say what it held when somebody read it, and that
+        // is the only question a counter ever raises.
+        void Touch(int variable, bool wrote, int held, int value)
+        {
+            if (watch == variable) touched.Add(new VariableTouch(variable, wrote, held, value));
+        }
 
         // What a script has put where its dialogue leaves a gap. Sized for the codes the
         // text actually uses: {FD}{02}, {FD}{03} and {FD}{04}, which the commands name as
@@ -511,14 +538,20 @@ public static class ScriptRunner
                     break;
 
                 case 0x21:                              // compare
+                    Touch(command.Word(), false, save.Read(command.Word()), command.Word(2));
                     result = ScriptState.Compare(save.Read(command.Word()), command.Word(2));
                     break;
 
                 case 0x22:                              // comparevars
+                    // Both sides, because either can be the one being watched and a
+                    // comparison is a look at each of them.
+                    Touch(command.Word(), false, save.Read(command.Word()), save.Read(command.Word(2)));
+                    Touch(command.Word(2), false, save.Read(command.Word(2)), save.Read(command.Word()));
                     result = ScriptState.Compare(save.Read(command.Word()), save.Read(command.Word(2)));
                     break;
 
                 case 0x16:                              // setvar
+                    Touch(command.Word(), true, save.Read(command.Word()), command.Word(2));
                     save.Write(command.Word(), command.Word(2));
                     written[command.Word()] = command.Word(2);
                     break;
@@ -540,6 +573,7 @@ public static class ScriptRunner
                     // Which way round is the cartridge's own: the leader writes 0x8008
                     // and the routine compares 0x8000, so the first word is where it
                     // goes and the second is where it comes from.
+                    Touch(command.Word(), true, save.Read(command.Word()), save.Read(command.Word(2)));
                     save.Write(command.Word(), save.Read(command.Word(2)));
                     written[command.Word()] = save.Read(command.Word());
                     break;
@@ -549,15 +583,22 @@ public static class ScriptRunner
                     // rather than treated as ordinary variables because that is what
                     // they are: 0x8000 and 0x8001 are how a script passes two numbers
                     // to a routine, and an item on the ground is exactly two numbers.
+                    Touch(command.Word(), true, save.Read(command.Word()), command.Word(2));
                     save.Write(command.Word(), command.Word(2));
                     break;
 
                 case 0x17:                              // addvar
+                    Touch(
+                        command.Word(), true, save.Read(command.Word()),
+                        save.Read(command.Word()) + command.Word(2));
                     save.Write(command.Word(), save.Read(command.Word()) + command.Word(2));
                     written[command.Word()] = save.Read(command.Word());
                     break;
 
                 case 0x18:                              // subvar
+                    Touch(
+                        command.Word(), true, save.Read(command.Word()),
+                        save.Read(command.Word()) - command.Word(2));
                     save.Write(command.Word(), save.Read(command.Word()) - command.Word(2));
                     written[command.Word()] = save.Read(command.Word());
                     break;
@@ -971,6 +1012,7 @@ public static class ScriptRunner
             FlagsSet = set,
             FlagsCleared = cleared,
             VariablesWritten = written,
+            Touched = touched,
             StoppedAt = stoppedAt,
             StoppedAtOffset = stoppedAtOffset,
         };

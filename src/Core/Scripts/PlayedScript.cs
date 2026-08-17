@@ -11,6 +11,29 @@ namespace PokeMmo.Core.Scripts;
 // found five times in six milestones.
 //
 // A contract belongs where both sides can see it.
+/// <summary>
+/// One moment a script looked at, or changed, one of the story's own variables.
+/// <para>
+/// <b>A read is as much a fact as a write, and only writes have ever been recorded.</b>
+/// <c>--who-writes</c> answers who puts a number in; nothing has ever answered who looks at
+/// one, and the two questions have different answers at the only place it has mattered. The
+/// three balls in the lab hand something over at <c>0x4055 == 2</c> and say "you already have
+/// one" at three or more — so "the run ends holding five" and "the run was holding five when
+/// the ball looked" are different claims, and this project has only ever been able to make the
+/// first.
+/// </para>
+/// </summary>
+/// <param name="Variable">Which of the story's variables.</param>
+/// <param name="Wrote">True for a write, false for a comparison.</param>
+/// <param name="Held">What was in it at that moment — before the write, for a write.</param>
+/// <param name="Value">What went in, for a write; what it was compared against, for a read.</param>
+public sealed record VariableTouch(int Variable, bool Wrote, int Held, int Value)
+{
+    public override string ToString() => Wrote
+        ? $"0x{Variable:X4} <- {Value} (was {Held})"
+        : $"0x{Variable:X4} ? {Value} (held {Held})";
+}
+
 /// <summary>What one script turned out to do, as far as playing the game goes.</summary>
 /// <param name="FlagsSet">Flags it turned on.</param>
 /// <param name="FlagsCleared">Flags it turned off.</param>
@@ -99,5 +122,19 @@ public sealed record PlayedScript(
     /// </para>
     /// </summary>
     public bool StoppedAtAQuestion { get; init; }
+
+    /// <summary>
+    /// Every look at and change to a watched variable, in the order the script did them.
+    /// <para>
+    /// Empty unless somebody asked for a variable to be watched, because a run touches these
+    /// tens of thousands of times and a diagnostic that costs the measurement is not one.
+    /// </para>
+    /// <para>
+    /// Ordered, and that is the whole point: the question this exists for is not what a number
+    /// ended up as but <b>what it was at the moment somebody read it</b>, and a dictionary of
+    /// final values cannot answer that however many times it is printed.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<VariableTouch> Touched { get; init; } = [];
 }
 

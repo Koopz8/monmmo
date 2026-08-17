@@ -207,7 +207,7 @@ public static class Program
         if (options.Play)
             WritePlaythrough(
                 rom, options.RoutineAnswers, options.StartAt, options.Boat, options.Money, options.SayYes,
-                options.Variables, options.Surf, options.InOrder);
+                options.Variables, options.Surf, options.InOrder, options.Watch);
         if (options.WhereFrom.Count > 0) WriteWhereFrom(rom, options.WhereFrom);
         if (options.InTheImage.Count > 0) WriteInTheImage(rom, options.InTheImage);
         if (options.ClimbFrom.Count > 0) WriteClimb(rom, options.ClimbFrom);
@@ -5901,10 +5901,55 @@ public static class Program
         : door.ArrivedOnAnIsland ? "ARRIVED ON AN ISLAND — it never walked this map at all"
         : "never reached the door";
 
+    /// <summary>
+    /// One variable's whole life in the run, in order.
+    /// <para>
+    /// <b>What the run held when somebody looked</b>, which is a different question from what
+    /// it ended up holding and the only one a counter ever raises. The three balls in the lab
+    /// hand something over at <c>0x4055 == 2</c> and say "you already have one" from three
+    /// upwards; a run that ends with five in it may have been read at two and moved on, or may
+    /// never have been two at the moment it mattered, and every instrument this project has
+    /// prints the same five either way.
+    /// </para>
+    /// <para>
+    /// It says what was in the variable and what it was held against, and nothing about which
+    /// arm the script then took. That is the runner's business, and a trace that decided what
+    /// a comparison meant would be a second reader quietly disagreeing with the first.
+    /// </para>
+    /// </summary>
+    private static void WriteTheTrace(Attempt played, int? watch)
+    {
+        if (watch is not { } variable) return;
+
+        Console.WriteLine();
+        Console.WriteLine($"  EVERY LOOK AT AND CHANGE TO 0x{variable:X4}, IN ORDER");
+
+        if (played.Trace.Count == 0)
+        {
+            Console.WriteLine(
+                $"    nothing the run executed touched 0x{variable:X4} at all — which is a"
+                + " different finding from it holding the wrong number, and the two have looked"
+                + " identical until now");
+            return;
+        }
+
+        // Reads and writes counted apart, because the interesting one has always been the one
+        // nothing recorded.
+        int reads = played.Trace.Count(t => !t.What.Wrote);
+
+        Console.WriteLine(
+            $"    {played.Trace.Count} touch(es): {played.Trace.Count - reads} write(s), {reads} read(s)"
+            + (played.TraceDropped > 0
+                ? $" — AND {played.TraceDropped} MORE DROPPED, the trace filled up"
+                : ""));
+
+        foreach (Traced touch in played.Trace) Console.WriteLine($"    {touch}");
+    }
+
     private static void WritePlaythrough(
         Rom rom, IReadOnlyDictionary<int, int> answers, string startAt, bool boat = false, int money = 0,
         bool sayYes = false, IReadOnlyDictionary<int, int>? variables = null, bool surf = false,
-        bool inOrder = false)
+        bool inOrder = false, int? watch = null)
     {
         Console.WriteLine();
         Console.WriteLine("A PLAYTHROUGH");
@@ -5954,7 +5999,7 @@ public static class Program
         // printing, and it does not belong in a file nothing can test. Two live faults were
         // sitting in it when it moved.
         var reader = new HowAScriptRuns(
-            rom, teaches, answers, variables, sayYes, beatenTrainers, remembered);
+            rom, teaches, answers, variables, sayYes, beatenTrainers, remembered, watch);
 
         Attempt played = Autoplayer.Play(
             world, first.Id, rules, reader.Read, Console.WriteLine, boat, money, beatenTrainers, surf,
@@ -5995,6 +6040,8 @@ public static class Program
         {
             Console.WriteLine("    the story's memory: empty — nothing it ran left a number behind");
         }
+
+        WriteTheTrace(played, watch);
 
         // THE PARTY, ONE LINE PER CREATURE.
         //
@@ -10515,6 +10562,13 @@ public static class Program
                                     counter goes to nine before the three balls read it, and the
                                     balls answer "you already have one". A ceiling without it and
                                     a floor with it; neither is the truth alone.
+              --trace 0xNNNN        follow one of the story's variables through the whole run,
+                                    in order: every write and EVERY READ, with what it held at
+                                    the moment somebody looked. Not a lever — it changes nothing
+                                    the run does. --who-writes answers the same question of the
+                                    image, statically, following every arm of every branch; a run
+                                    takes one arm, so the two lists differ and only this one says
+                                    what happened.
               --surf                let the walk cross water. MODELLED, and a ceiling exactly as
                                     --boat is: the walker has always been able to swim and the
                                     playthrough has never told it to, so every sea in the game
@@ -10743,6 +10797,15 @@ public static class Program
         /// </summary>
         public bool InOrder { get; private init; }
 
+        /// <summary>
+        /// One of the story's variables to follow through the run, in order.
+        /// <para>
+        /// Not a lever: it changes nothing the run does. It is the ordered half of the story's
+        /// memory, and the half a dictionary of final values throws away.
+        /// </para>
+        /// </summary>
+        public int? Watch { get; private init; }
+
         /// <summary>What the playthrough has to spend. Modelled, and nothing supplies it.</summary>
         public int Money { get; private init; }
 
@@ -10888,6 +10951,7 @@ public static class Program
             bool boat = false;
             var surf = false;
             var inOrder = false;
+            int? watch = null;
             var money = 0;
             bool sayYes = false;
             string startAt = Beginning.MapId;
@@ -11127,6 +11191,10 @@ public static class Program
                         break;
                     case "--in-order":
                         inOrder = true;
+                        break;
+                    case "--trace":
+                        if (TryNumber(Next(args, ref i, "--trace"), out int followed)) watch = followed;
+
                         break;
                     case "--surf":
                         surf = true;
@@ -11419,6 +11487,7 @@ public static class Program
                 Boat = boat,
                 Surf = surf,
                 InOrder = inOrder,
+                Watch = watch,
                 Money = money,
                 SayYes = sayYes,
                 StartAt = startAt,
