@@ -929,6 +929,74 @@ public static class ScriptCommands
         // and end.
         [0x94] = 2,
 
+        // Two, and this one is a VARIABLE — which is what makes it seven sites rather
+        // than a column of bytes that happen to line up.
+        //
+        //   B3 | 01 40 | 21 01 40 1C 25 ...     five sites: 0x4001, then compare 0x4001
+        //   B3 | 01 40 | 21 01 40 DE 26 ...
+        //   B3 | 0D 80 | 22 0D 80 02 40 ...     two sites:  0x800D, then 0x22 on 0x800D
+        //
+        // Every one of the seven is followed by a command that reads THE SAME VARIABLE it
+        // was just handed. An argument column can happen by accident; an argument column
+        // whose value reappears as the operand of the next command cannot. The two values
+        // are 0x4001 and 0x800D — one of this game's scratch pads and the standard result
+        // variable — and neither is a plausible opcode.
+        //
+        // Read at any other width the stream desynchronises immediately: at 0 and 3 the
+        // next byte is 0x01 or 0x0D, at 1 and 4 it is 0x40 or 0x80, and those are halves
+        // of the variable id rather than commands.
+        [0xB3] = 2,
+
+        // Two, on two sites, and the same shape 0x94 four lines above was settled on:
+        //
+        //   94 00 00 | C1 00 05 | 6C 02      GAME CORNER, 0x0816C77A
+        //              C1 00 00 | 6C 02      the cancel branch, 0x0816CC10
+        //
+        // An argument, then release and end. Widths 0 and 1 are REFUTED rather than
+        // merely unpreferred: both leave site one resuming on `05` with the four bytes
+        // after it reading 0x000F026C and 0x0F026C00, which are not addresses in a 16 MiB
+        // cartridge. So the question is two against three.
+        //
+        // Three swallows the 0x6C as the last argument byte AT BOTH SITES. In the script
+        // region these two live in, 688 of the 4145 bytes sitting immediately before an
+        // `end` are 0x6C — 16.6%, the second commonest thing an end follows, and the pair
+        // `6C 02` occurs 1030 times in the file against the 46 chance would give. Two
+        // independent sites both ending with that exact byte in that exact place, as
+        // data, is the coincidence.
+        //
+        // TWO SITES IS BELOW THIS PROJECT'S USUAL BAR, which is a column of five, and it
+        // is said out loud rather than left in a commit message. What licenses it is that
+        // the bar has already been met this way twice: 0x94 above is two sites of this
+        // shape and 0x35 is two of three. The fixture below can separate two from three
+        // and from zero and one. It cannot separate two from a width larger than four,
+        // because nothing in this game's script stream is that wide.
+        [0xC1] = 2,
+
+        // Two, on five sites, and a column of round numbers.
+        //
+        // Three of them the instrument can see, and two of them it cannot — those sit
+        // behind 0x92, which still has no width, and were read off a hexdump by hand:
+        //
+        //   B4 | 0A 00 | C7 03 | 0F 00 0D 6B 19 08     0x0816C811   ten
+        //   B4 | 14 00 | C7 03 | 0F 00 47 6D 19 08     0x0816C8C8   twenty
+        //   B4 | 14 00 | C7 03 | 0F 00 F8 6D 19 08     0x0816C928   twenty
+        //   B4 | F4 01 | 91 10 27 00 00 00             0x0816C725   five hundred
+        //   B4 | 32 00 | 91 E8 03 00 00 00             0x0816C753   fifty
+        //
+        // 10, 20, 20, 500 and 50. Arguments have columns and opcodes do not, which is the
+        // test that settled 0xA1 at milestone 55 and 0x97 above.
+        //
+        // And the chain, which is 0xB7's test three lines of commands long: 0xC7 is
+        // already known to take one argument, so read two wide the stream goes B4 -> C7
+        // -> loadpointer, three commands each parsing into the next. Read three wide it
+        // stops dead on a `return` with a loadpointer stranded after it; read four wide
+        // the 0xC7 and the 0x03 both vanish into an argument.
+        //
+        // What this does NOT settle: 0x92 and 0xC7's own neighbourhood. Adopting this
+        // moves the stop to 0xC7's far side rather than removing it, and the two sites
+        // above that are read by hand stay unreachable until 0x92 has a width.
+        [0xB4] = 2,
+
         // One byte, and the column says so. Fifteen places in this game a read stops on
         // 0x97; at every one of them the byte after it is 1, 2 or 3 and nothing else,
         // which is an argument rather than an opcode — opcodes vary between sites and
