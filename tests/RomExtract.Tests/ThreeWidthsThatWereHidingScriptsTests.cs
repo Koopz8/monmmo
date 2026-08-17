@@ -91,6 +91,12 @@ public class ThreeWidthsThatWereHidingScriptsTests
         Pointer(image, 0x707, 0x08000740);
         Put(image, 0x70B, End);
 
+        // And a byte the reader cannot step over, right after the block. Without it the zeroes
+        // between here and the target are a NOP SLIDE: a read that drifted past the goto walks
+        // through sixty bytes of 0x00 and arrives at the setflag anyway, so the test passes at
+        // the wrong width for the wrong reason. A zero-filled fixture is not empty space.
+        Put(image, 0x70C, 0xFE);
+
         Put(image, 0x740, SetFlag, 0x58, 0x00, End);
 
         // The pointer that makes 0x404 a script in its own right.
