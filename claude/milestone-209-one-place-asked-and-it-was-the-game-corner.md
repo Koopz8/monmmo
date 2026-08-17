@@ -107,10 +107,10 @@ a count.
 
 ## What is still owed
 
-* **The floor's flag count is still a number with no list.** 207 needed to know which three
-  flags 199 added and had to hand-patch a print into two worktrees to find out. It was
-  `0x026E`/`0x026F`/`0x0270` and they are all on 10.14 — the same map as everything above. The
-  same fix as this milestone, on the line above it.
+* ~~The floor's flag count is still a number with no list.~~ Done at 210, in the same session.
+  207 needed to know which three flags 199 added and had to hand-patch a print into two
+  worktrees to find out. It was `0x026E`/`0x026F`/`0x0270` and they are all on 10.14 — the same
+  map as everything above.
 * `0x8009` is read at the counter and written twenty-two times elsewhere with what look like
   prices and ids. What it is **for** is not claimed here; only that nothing on 10.14 writes it.
 * Whether a `--money N` run reaches the ¥10000 arm is unknown, because the arm is not chosen by

@@ -1,7 +1,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-245`, 2831 tests green.
+`claude-246`, 2835 tests green.
 
 Standing rules — do not break these:
 
@@ -92,8 +92,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-209-one-place-asked-and-it-was-the-game-corner.md` first, then
-`208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
+Read `claude/milestone-210-a-hundred-and-ten-gates-it-never-opens.md` first, then
+`209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
 **Twenty faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
@@ -211,6 +211,7 @@ sets. CERULEAN CAVE is closed: the run now reaches it, off the SAPPHIRE thread.
 5 places guard a coin hand-over; every bound plus its own gift is 10000; 0 chains in the reversal
 2 places sell coins for money at 20 each — READ; 3 price lists, 15 rows, all READ
 the floor is asked for money in ONE place and it is the coin counter; 8 at --say-yes and above
+the widest run sets 212 of the 322 gating flags — 110 gates it never opens; 201 at the floor
 ```
 
 ## The next task, precisely
@@ -227,11 +228,12 @@ the floor is asked for money in ONE place and it is the coin counter; 8 at --say
    anyway, which is the `#130` at 71 the party ends with. **The floor is clean**: 1 place asks,
    nothing comes of it, so the floor's party of six is entirely earned. Whether that deserves a
    `--pay` lever or a located payout table is a DECISION and it is deliberately not made.
-3. **`--play`'s flag count is still a number with no list, and 207 needed the list.** Finding
-   which three flags 199 added took hand-patching a print into two worktrees. 209 did exactly
-   this fix one line lower down — the money ceiling is a list now — and the line above it is
-   still a bare `153 flags`. The story's memory got the same treatment at 184 and the pattern is
-   written there: print a dozen and say how many more. **This is the next one of these.**
+3. **110 gating flags the widest run never sets, and nobody has looked at what they are.** 210
+   put a denominator on the flag count: 212 of 322 at the widest lever setting, 121 of 322 at
+   the floor. The wall flags are in that column and so are 107 others. **The difference between
+   201 unset at the floor and 110 unset at the top is a list nobody has read**, and it is a
+   wider question than the shut-door list — that list names doors, and most of what a flag holds
+   up in this game is a person.
 4. **Money, for real this time — and the prices are READ now.** Three drinks at 200/300/350 and
    a POKé DOLL at 1000, plus 208's ¥20 a coin and fifteen coin prices, all READ, all at counters
    the run reaches, against a purse of nought. `--money N` is the lever and it is MODELLED; **the
