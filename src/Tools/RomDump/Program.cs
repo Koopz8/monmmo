@@ -6170,28 +6170,125 @@ public static class Program
         if (played.Carried.Count > 12)
             Console.WriteLine($"    ... and {played.Carried.Count - 12} more");
 
-        if (money > 0 || played.Bought.Count > 0)
+        // ALWAYS, and this is the whole point of it.
+        //
+        // This section used to sit behind `money > 0 || played.Bought.Count > 0`, so the
+        // default run — which is every run nobody passed --money to — printed nothing here at
+        // all. Not "it bought nothing": nothing. And a report that says nothing is
+        // indistinguishable from a run with nothing to say, which is the trap this project has
+        // written down four times and has been walking past in its own output ever since there
+        // was a bag to fill.
+        //
+        // What it was hiding: four of the six things on the shopping list are asked for on
+        // ground where that thing is SOLD, and the run stood at the counter and could not
+        // afford them. That is a different job from reaching the map, and nothing said so.
+        Console.WriteLine();
+        Console.WriteLine(
+            money > 0
+                ? $"  it was handed {money} to spend (MODELLED — nothing in this game gives it"
+                    + $" any) and spent {money - played.MoneyLeft} of it"
+                : "  it was handed NOTHING to spend, which is the default and is why it buys"
+                    + " nothing. `--money N` is the lever and it is MODELLED — the payout table"
+                    + " has never been located, so there is no read number to hand it.");
+
+        Console.WriteLine(
+            $"  {played.CountersOnReachedGround} shop counter(s) stand on ground it reached;"
+            + $" it stood in front of {played.CountersStoodAt} of them"
+            + $" — bought {played.Bought.Count}, could not buy {played.CouldNotBuy.Count}");
+
+        // And which of the two ways the gap between those numbers is made. A thing "sold on
+        // ground it reached" is sold on a MAP it reached; being beside the person selling it
+        // is a second thing, and until this line the two were one word. Four entries on the
+        // shopping list read as a money problem and one of them is this instead.
+        if (played.CountersOnReachedGround > played.CountersStoodAt)
         {
-            Console.WriteLine();
             Console.WriteLine(
-                $"  it was handed {money} to spend (MODELLED — nothing in this game gives it any)"
-                + $" and spent {money - played.MoneyLeft} of it");
+                $"    the other {played.CountersOnReachedGround - played.CountersStoodAt}:"
+                + $" {played.CountersHiddenByAFlag} hidden behind a flag on their own record,"
+                + $" {played.CountersNeverStoodBeside} it walked the map and never stood beside"
+                + " — a WALK finding, not a money one");
 
-            foreach (Bought buy in played.Bought)
-                Console.WriteLine($"    bought {NameOf(buy.ItemId)} for {buy.Price} at {buy.MapId}");
+            // And which kind of walk finding, which is the only part that is actionable.
+            // A clerk stands BEHIND a counter in this game and the player talks across it, so
+            // a distance of two is not a room it failed to enter — it is one tile of reach
+            // this walk does not have. Sorted nearest first, so the top of this list is the
+            // cheapest thing in it.
+            //
+            // The split first, because a list of eight out of nineteen cannot say whether the
+            // ninth is the same shape, and a filter that keeps output readable must never
+            // decide which question gets asked.
+            int acrossACounter = played.CountersOutOfReach.Count(c => c.NearestStood == 2);
+            int neverOnTheMap = played.CountersOutOfReach.Count(c => c.NearestStood < 0);
 
-            // Why not, when it did not. "It bought nothing" has four causes and they are not
-            // remotely alike; the first run of this hit the one nobody would have guessed.
-            foreach (NotBought missed in played.CouldNotBuy)
-                Console.WriteLine($"    did NOT buy {NameOf(missed.ItemId)} at {missed.MapId}: {missed.Why}");
+            // THE SAME FACT READ THE OTHER WAY, AND IT KILLED THE OBVIOUS EXPLANATION.
+            //
+            // The guess was that a clerk is walled in — that no square beside them can be
+            // stood on, so talking across the counter is the only way the shop works and
+            // adjacency is the wrong rule rather than a missing one. Measured off the map's
+            // own collision, EVERY clerk has two or three walkable squares beside them, and
+            // the run stood on none of them.
+            //
+            // Walkable is not reachable. Those squares are behind the counter, on the clerk's
+            // side of it, and nothing joins them to the shop floor. So the conclusion survives
+            // and the proof of it does not: the number that says so is the distance, which
+            // follows the walk, and not the collision byte, which follows one edge and answers
+            // a different question. Two readings disagreeing, and the one that looks stricter
+            // is the one that is wrong about the question.
+            int walledIn = played.CountersOutOfReach.Count(c => c.SquaresBesideThatAreWalkable == 0);
 
-            if (played.Bought.Count == 0 && played.CouldNotBuy.Count == 0)
+            Console.WriteLine(
+                $"      of those {played.CountersOutOfReach.Count}: {acrossACounter} are exactly"
+                + " 2 away — ACROSS A COUNTER, which is how this game sells things and is not a"
+                + $" reach problem at all; {neverOnTheMap} stood on no square of that map;"
+                + $" {played.CountersOutOfReach.Count - acrossACounter - neverOnTheMap} are"
+                + " some other distance");
+
+            Console.WriteLine(
+                $"      and only {walledIn} of them are WALLED IN — the rest have 2 or 3 walkable"
+                + " squares beside them that this run never stood on. Walkable is not reachable:"
+                + " those squares are the clerk's side of the counter and nothing joins them to"
+                + " the shop floor. The distance is the reading here; the collision byte answers"
+                + " a different question and says the opposite.");
+
+            foreach (CounterOutOfReach far in played.CountersOutOfReach.Take(8))
             {
                 Console.WriteLine(
-                    "    and bought nothing, having stood in front of no counter selling anything");
-                Console.WriteLine(
-                    "    it had been refused");
+                    $"      {far.MapId} object {far.LocalId} at {far.Square}: "
+                    + (far.NearestStood < 0
+                        ? "it stood on NO square of this map — reached by a door it never took"
+                        : $"nearest square it stood on is {far.NearestStood} away, and"
+                            + $" {far.SquaresBesideThatAreWalkable} of the 4 squares beside them"
+                            + " can be stood on at all"));
             }
+
+            if (played.CountersOutOfReach.Count > 8)
+                Console.WriteLine($"      ... and {played.CountersOutOfReach.Count - 8} more");
+        }
+
+        foreach (Bought buy in played.Bought)
+            Console.WriteLine($"    bought {NameOf(buy.ItemId)} for {buy.Price} at {buy.MapId}");
+
+        // Why not, when it did not. "It bought nothing" has four causes and they are not
+        // remotely alike; the first run of this hit the one nobody would have guessed.
+        foreach (NotBought missed in played.CouldNotBuy.Take(12))
+            Console.WriteLine($"    did NOT buy {NameOf(missed.ItemId)} at {missed.MapId}: {missed.Why}");
+
+        if (played.CouldNotBuy.Count > 12)
+            Console.WriteLine($"    ... and {played.CouldNotBuy.Count - 12} more it could not buy");
+
+        // The two silences, told apart. Neither of these is "it bought nothing" — that is the
+        // headline above and it is now always printed.
+        if (played.CountersStoodAt == 0)
+        {
+            Console.WriteLine(
+                "    it never stood in front of a counter selling anything it had been refused —"
+                + " so this is a REACH finding, not a money one");
+        }
+        else if (played.Bought.Count == 0 && played.CouldNotBuy.Count == 0)
+        {
+            Console.WriteLine(
+                "    it stood at counters and neither bought nor was stopped, which should be"
+                + " impossible — every stock line takes one of the two arms");
         }
 
         Console.WriteLine();

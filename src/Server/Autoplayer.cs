@@ -278,6 +278,28 @@ public sealed record FerryTicket(
     public bool Opens => FlagSet || Carried;
 }
 
+/// <summary>
+/// A shop counter on ground it reached that it never got beside, and how near it got.
+/// </summary>
+/// <param name="MapId">The map, which it did reach.</param>
+/// <param name="LocalId">Who on that map.</param>
+/// <param name="Square">Where they stand.</param>
+/// <param name="NearestStood">
+/// Manhattan distance to the nearest square the walk stood on, on this map, or <c>-1</c> when
+/// it stood on no square of this map at all. Two means across a counter.
+/// </param>
+/// <param name="SquaresBesideThatAreWalkable">
+/// How many of the four squares orthogonally beside them this map's own collision says can be
+/// stood on. <b>Nought means no walk could ever get beside them</b>, so talking across the
+/// counter is the only way the shop works and adjacency is the wrong rule, not a missing one.
+/// </param>
+public sealed record CounterOutOfReach(
+    string MapId,
+    int LocalId,
+    GridPosition Square,
+    int NearestStood,
+    int SquaresBesideThatAreWalkable);
+
 /// <summary>Something the playthrough bought, and what it cost.</summary>
 public sealed record Bought(int ItemId, int Count, int Price, string MapId);
 
@@ -486,6 +508,57 @@ public sealed record Attempt(
 
     /// <summary>What it stood in front of and did not buy, and why not.</summary>
     public IReadOnlyList<NotBought> CouldNotBuy { get; init; } = [];
+
+    /// <summary>
+    /// How many shop counters it stood in front of, by map and by who.
+    /// <para>
+    /// The denominator for <see cref="Bought"/> and <see cref="CouldNotBuy"/>, and the reason
+    /// this exists at all: "it bought nothing" and "it never reached a shop" are different
+    /// findings that read as one silence. The buying report was behind <c>money &gt; 0</c>, so
+    /// a default run printed neither — and four entries on the shopping list turn out to be
+    /// standing on ground where the thing is sold.
+    /// </para>
+    /// <para>
+    /// Places rather than times: the same shopkeeper on the same map is one counter however
+    /// many passes stand in front of it.
+    /// </para>
+    /// </summary>
+    public int CountersStoodAt { get; init; }
+
+    /// <summary>
+    /// Shop counters on maps it reached, whether or not it got to one — the denominator above
+    /// <see cref="CountersStoodAt"/>.
+    /// <para>
+    /// The shopping list says a thing is sold "on ground it reached", and ground it reached is
+    /// the MAP. Standing beside the person selling it is a second thing, and the difference
+    /// between these two numbers is exactly how often the two come apart. This project has
+    /// known that a trigger fires only for somebody standing on it since milestone 184 and had
+    /// never asked the same question of a counter.
+    /// </para>
+    /// </summary>
+    public int CountersOnReachedGround { get; init; }
+
+    /// <summary>Counters on reached ground whose own record hides them behind a flag.</summary>
+    public int CountersHiddenByAFlag { get; init; }
+
+    /// <summary>
+    /// Counters on reached ground it was never beside — the map was walked, this square was
+    /// not. The reason a thing sold on ground it reached can still be a walk finding rather
+    /// than a money one.
+    /// </summary>
+    public int CountersNeverStoodBeside { get; init; }
+
+    /// <summary>
+    /// The counters it never stood beside, and how far off the nearest square it DID stand on
+    /// was — sorted nearest first.
+    /// <para>
+    /// The number that tells the two causes apart. A distance of two is a clerk standing behind
+    /// a counter the player talks across, which this walk cannot do and which is not a reach
+    /// problem at all. A large distance, or <c>-1</c> for a map it stood nowhere on, is a room
+    /// it never entered. Both print as "never stood beside" and only this separates them.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<CounterOutOfReach> CountersOutOfReach { get; init; } = [];
 
     /// <summary>
     /// Scripts it reached that stopped at a yes-or-no, by map.
@@ -913,6 +986,14 @@ public static class Autoplayer
 
         var purse = money;
         var bought = new List<Bought>();
+
+        // Every counter it actually stood in front of, by map and by who — and the two
+        // denominators either side of it. All three are places, not times.
+        var stoodAtACounter = new HashSet<(string MapId, int LocalId)>();
+        var onReachedGround = new HashSet<(string MapId, int LocalId)>();
+        var hiddenByAFlag = new HashSet<(string MapId, int LocalId)>();
+        var neverStoodBeside = new HashSet<(string MapId, int LocalId)>();
+        var outOfReach = new Dictionary<(string MapId, int LocalId), CounterOutOfReach>();
         var refusedAtTheCounter = new Dictionary<(int ItemId, string MapId), string>();
         var questions = new Dictionary<string, int>();
 
@@ -1301,8 +1382,77 @@ public static class Autoplayer
             {
                 foreach (MapObject counter in map.Objects.Where(o => o.IsShopkeeper))
                 {
-                    if (!counter.IsHereFor(flags.Contains)) continue;
-                    if (!Beside(map.Id, counter.Square).Any(stood.Contains)) continue;
+                    // Every counter on ground it reached, before either reason to skip one.
+                    // This is the other half of the denominator: a shop on a map it walked
+                    // through and a shop it never got to are the same absence downstream, and
+                    // the shopping list says only "on ground it reached", which is the MAP.
+                    // Reaching a map and standing beside somebody on it are not the same
+                    // thing — this project has written that down about triggers and never
+                    // asked it about a counter.
+                    onReachedGround.Add((map.Id, counter.LocalId));
+
+                    if (!counter.IsHereFor(flags.Contains))
+                    {
+                        hiddenByAFlag.Add((map.Id, counter.LocalId));
+
+                        continue;
+                    }
+
+                    if (!Beside(map.Id, counter.Square).Any(stood.Contains))
+                    {
+                        neverStoodBeside.Add((map.Id, counter.LocalId));
+
+                        // AND HOW FAR OFF IT WAS, which is the whole question.
+                        //
+                        // "It never stood beside them" has two causes that print alike: the
+                        // walk never got into the room at all, or it got in and stopped one
+                        // square short. In this game a shop clerk stands BEHIND a counter and
+                        // the player talks across it, so a walk that requires orthogonal
+                        // adjacency is one tile too strict by construction — and this would
+                        // read as a reach problem for ever.
+                        //
+                        // The distance to the nearest square it did stand on tells them apart
+                        // and nothing else does. Two is "across the counter". Large, or none
+                        // at all, is a room it never entered.
+                        int nearest = stood
+                            .Where(p => p.MapId == map.Id)
+                            .Select(p => Math.Abs(p.Square.X - counter.Square.X)
+                                + Math.Abs(p.Square.Y - counter.Square.Y))
+                            .DefaultIfEmpty(-1)
+                            .Min();
+
+                        // AND WHETHER ANY SQUARE BESIDE THEM IS STANDABLE AT ALL.
+                        //
+                        // This is what turns "probably a counter" into a reading. If every
+                        // square orthogonally beside the clerk is impassable on this map's own
+                        // collision, then no walk of any quality could ever stand next to
+                        // them — so talking across the counter is not a convenience the
+                        // cartridge offers, it is the ONLY way this shop can be used, and a
+                        // walk that requires adjacency is wrong rather than merely incomplete.
+                        //
+                        // Nought here and a distance of two are the same fact read two ways,
+                        // which is what this project asks of anything it is about to believe.
+                        CollisionGrid grid = map.ToGrid();
+
+                        int standable = Beside(map.Id, counter.Square)
+                            .Skip(1)
+                            .Count(b => grid.IsWalkable(b.Item2));
+
+                        outOfReach[(map.Id, counter.LocalId)] =
+                            new CounterOutOfReach(
+                                map.Id, counter.LocalId, counter.Square, nearest, standable);
+
+                        continue;
+                    }
+
+                    // The denominator for everything below it. "It bought nothing" and "it
+                    // never got to a counter at all" are different findings and they print as
+                    // the same silence — which this report has been printing since there has
+                    // been a bag, because the whole section sat behind `money > 0`.
+                    //
+                    // Places, not times, per 195: the same shopkeeper on the same map is one
+                    // counter however many passes stand in front of it.
+                    stoodAtACounter.Add((map.Id, counter.LocalId));
 
                     foreach (int itemId in counter.Stock)
                     {
@@ -1500,6 +1650,11 @@ public static class Autoplayer
             RodeTheBoat = ridingTheBoat,
             Bought = bought,
             MoneyLeft = purse,
+            CountersStoodAt = stoodAtACounter.Count,
+            CountersOnReachedGround = onReachedGround.Count,
+            CountersHiddenByAFlag = hiddenByAFlag.Count,
+            CountersNeverStoodBeside = neverStoodBeside.Count,
+            CountersOutOfReach = [.. outOfReach.Values.OrderBy(c => c.NearestStood)],
             Questions = questions,
             Shore = last.Shore
                 .GroupBy(w => w.MapId)
