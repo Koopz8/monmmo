@@ -97,3 +97,101 @@ public sealed class FlagGates
     /// <summary>How many flags gate anything at all.</summary>
     public int Count => _gates.Count;
 }
+
+/// <summary>
+/// One gating flag, and everything known about what could turn it on or off.
+/// </summary>
+/// <param name="Flag">The flag number.</param>
+/// <param name="Gates">What it moves — somebody, or the boat.</param>
+/// <param name="People">How many people it puts on a map or takes off one.</param>
+/// <param name="Maps">Across how many maps, which is how a story gate reads against a copy.</param>
+/// <param name="SetAtStart">Whether a new game has it on before the first frame.</param>
+/// <param name="SetByAScript">Whether any script anywhere turns it on.</param>
+/// <param name="ClearedByAScript">Whether any script anywhere turns it off.</param>
+public sealed record WhatMoves(
+    int Flag,
+    FlagGate Gates,
+    int People,
+    int Maps,
+    bool SetAtStart,
+    bool SetByAScript,
+    bool ClearedByAScript)
+{
+    /// <summary>True when nothing in the whole world file can change it.</summary>
+    public bool NothingCanMoveIt => !SetByAScript && !ClearedByAScript;
+
+    /// <summary>
+    /// People who will stand where they are for ever, because the flag that would take them
+    /// off starts clear and nothing sets it.
+    /// <para>
+    /// <b>This is the wall list.</b> Every blocked doorway this project has chased is one of
+    /// these, and the three in SAFFRON are three of the eight behind a single flag.
+    /// </para>
+    /// </summary>
+    public bool StuckThere => NothingCanMoveIt && !SetAtStart && People > 0;
+
+    /// <summary>
+    /// And the mirror: people who will never arrive, because the flag hiding them is on before
+    /// the first frame and nothing clears it. Invisible rather than in the way, which is why
+    /// nothing has ever noticed them.
+    /// </summary>
+    public bool NeverArrive => NothingCanMoveIt && SetAtStart && People > 0;
+}
+
+/// <summary>
+/// Which gating flags anything can actually move, and which are the code boundary.
+/// <para>
+/// <b>The general case of every wall this project has chased.</b> One door in SAFFRON took ten
+/// measurements to place, and the answer was that nothing readable sets the flag behind it —
+/// which sounded like a finding about SAFFRON until the counts were put side by side. Most
+/// flags that move a person are moved by nothing this project can read; that is the ordinary
+/// condition of the cartridge, not a special case, and a list of them ranked by how many
+/// people each one moves is the map of what is missing.
+/// </para>
+/// <para>
+/// Derived, like everything else here: the world file says which flags hide whom, the caller
+/// says which flags any script sets or clears, and the two together say the rest. Nothing is
+/// named from memory and no number is written down.
+/// </para>
+/// </summary>
+public static class WhoMovesEachFlag
+{
+    /// <summary>Every gating flag with what could move it, the ones that move most people first.</summary>
+    public static IReadOnlyList<WhatMoves> Rank(
+        WorldData world,
+        IReadOnlyCollection<int> setByAScript,
+        IReadOnlyCollection<int> clearedByAScript)
+    {
+        var gates = new FlagGates(world);
+        var people = new Dictionary<int, List<string>>();
+
+        foreach (MapData map in world.Maps)
+        {
+            foreach (MapObject person in map.Objects.Where(o => o.HiddenBy != 0))
+            {
+                if (!people.TryGetValue(person.HiddenBy, out List<string>? where))
+                    people[person.HiddenBy] = where = [];
+
+                where.Add(map.Id);
+            }
+        }
+
+        var atStart = world.FlagsAtStart.ToHashSet();
+
+        return
+        [
+            .. gates.All
+                .Select(g => new WhatMoves(
+                    g.Flag,
+                    g.Gate,
+                    people.GetValueOrDefault(g.Flag)?.Count ?? 0,
+                    people.GetValueOrDefault(g.Flag)?.Distinct().Count() ?? 0,
+                    atStart.Contains(g.Flag),
+                    setByAScript.Contains(g.Flag),
+                    clearedByAScript.Contains(g.Flag)))
+                .OrderByDescending(f => f.NothingCanMoveIt)
+                .ThenByDescending(f => f.People)
+                .ThenBy(f => f.Flag),
+        ];
+    }
+}

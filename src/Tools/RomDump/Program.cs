@@ -6605,9 +6605,9 @@ public static class Program
             Console.WriteLine($"    {count,4} gate {Describe(kind)}");
 
         Console.WriteLine();
-        Console.WriteLine("  every one of them, and what it moves");
+        Console.WriteLine("  the first 40 of them, and what each moves");
 
-        foreach ((int flag, FlagGate kind) in gates.All)
+        foreach ((int flag, FlagGate kind) in gates.All.Take(40))
         {
             string what = hiding.TryGetValue(flag, out List<string>? where)
                 ? $"{where.Count} person(s) — {string.Join(", ", where.Take(3))}"
@@ -6617,10 +6617,18 @@ public static class Program
             Console.WriteLine($"    0x{flag:X4}  {what}");
         }
 
+        if (gates.All.Count > 40)
+        {
+            Console.WriteLine(
+                $"    ... and {gates.All.Count - 40} more — the ranked list below is the useful half");
+        }
+
         // And the other half, which is the half that decides the rule: how many flags the
         // scripts touch that gate nothing here. Those are the marks on a character — a badge,
         // which starter was taken — and they are the ones that must NOT travel.
         var touched = new HashSet<int>();
+        var turnedOn = new HashSet<int>();
+        var turnedOff = new HashSet<int>();
 
         // What this scan actually opened, by kind.
         //
@@ -6648,6 +6656,9 @@ public static class Program
                     if (command.Arguments.Length < 2) continue;
 
                     touched.Add(command.Word());
+
+                    if (command.Code == SetFlagCode) turnedOn.Add(command.Word());
+                    else turnedOff.Add(command.Word());
                 }
             }
         }
@@ -6673,6 +6684,8 @@ public static class Program
             "    nothing, so it stays personal — a door that fails to open for a friend, which");
         Console.WriteLine(
             "    somebody notices. The opposite error hands over a badge, which nobody notices.");
+
+        WriteWhatNothingMoves(world, turnedOn, turnedOff);
 
         static string Describe(FlagGate kind) => kind switch
         {
@@ -6987,6 +7000,59 @@ public static class Program
                 waiting.OtherQuestions
                     .Take(4)
                     .Select(q => $"{q.Times} x {(q.Code == 0 ? "nothing this could see" : ScriptCommands.NameOf(q.Code))}")));
+    }
+
+    /// <summary>
+    /// The flags nothing in the world can move, and how many people each one holds.
+    /// <para>
+    /// <b>The general case of every wall this project has chased.</b> One door in SAFFRON took
+    /// ten measurements to place and the answer was that nothing readable sets the flag behind
+    /// it — which sounded like a finding about SAFFRON right up until these two counts were
+    /// put side by side. It is the ordinary condition of this cartridge.
+    /// </para>
+    /// <para>
+    /// Split two ways, because they are opposite failures. Somebody the story would move and
+    /// never does is <b>in the way</b>, and gets chased for ten measurements. Somebody the
+    /// story would bring in and never does is <b>invisible</b>, and nothing has ever noticed
+    /// them at all — which makes the second list the more interesting of the two.
+    /// </para>
+    /// </summary>
+    private static void WriteWhatNothingMoves(
+        WorldData world, IReadOnlyCollection<int> turnedOn, IReadOnlyCollection<int> turnedOff)
+    {
+        IReadOnlyList<WhatMoves> ranked = WhoMovesEachFlag.Rank(world, turnedOn, turnedOff);
+
+        List<WhatMoves> stuck = [.. ranked.Where(f => f.StuckThere)];
+        List<WhatMoves> never = [.. ranked.Where(f => f.NeverArrive)];
+        List<WhatMoves> moved = [.. ranked.Where(f => !f.NothingCanMoveIt)];
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  {ranked.Count(f => f.NothingCanMoveIt)} of those {ranked.Count} gating flags are set "
+            + "and cleared by nothing at all — this is the code boundary, drawn");
+        Console.WriteLine(
+            $"    {moved.Count} a script can move, {stuck.Count} hold somebody who will never leave, "
+            + $"{never.Count} hold somebody who will never arrive");
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  {stuck.Sum(f => f.People)} people stand somewhere for ever, behind {stuck.Count} flag(s) "
+            + "nothing sets — every blocked doorway is one of these");
+
+        foreach (WhatMoves flag in stuck.Take(12))
+            Console.WriteLine($"    0x{flag.Flag:X4}  {flag.People,3} people across {flag.Maps} map(s)");
+
+        if (stuck.Count > 12) Console.WriteLine($"    ... and {stuck.Count - 12} more");
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  {never.Sum(f => f.People)} people never arrive at all, behind {never.Count} flag(s) "
+            + "nothing clears — nothing has ever noticed these");
+
+        foreach (WhatMoves flag in never.Take(12))
+            Console.WriteLine($"    0x{flag.Flag:X4}  {flag.People,3} people across {flag.Maps} map(s)");
+
+        if (never.Count > 12) Console.WriteLine($"    ... and {never.Count - 12} more");
     }
 
     /// <summary>setflag and clearflag, both two bytes wide and both long since derived.</summary>
