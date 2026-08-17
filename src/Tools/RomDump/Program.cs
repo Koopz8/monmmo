@@ -6381,22 +6381,27 @@ public static class Program
                 $"  {played.Moved.Count} people were walked out of where they stood by a script it ran"
                 + " — the other way a doorway opens");
 
-            // AND WHERE THAT PUT THEM, WHICH NOTHING HAS EVER ASKED.
-            //
-            // A scene that walks somebody aside is applied as a displacement from wherever
-            // they already are, and the fixpoint plays the scene again on every pass. Six
-            // passes, six walks, and the sixth is over the edge. Reported rather than
-            // clamped: a wrong position that looks plausible is the harder fault to find, and
-            // "somebody is standing in the way" is computed against these.
             Console.WriteLine(
-                $"    {played.OffTheMap.Count} of them ended up on a square THAT IS NOT ON THE MAP");
-
-            foreach (WalkedOffTheMap lost in played.OffTheMap.Take(6))
-                Console.WriteLine($"      {lost}");
-
-            if (played.OffTheMap.Count > 6)
-                Console.WriteLine($"      ... and {played.OffTheMap.Count - 6} more");
+                "    one square at a time, stopping at a wall — a scene's steps applied as one"
+                + " jump put 364 of 426 of these off the edge of the map");
         }
+
+        // AND WHETHER ANYBODY IN THIS WORLD IS STANDING SOMEWHERE THAT IS NOT ON IT.
+        //
+        // Asked of every person the cartridge places, not only the ones a scene walked. Once
+        // the walk stops at a wall nothing the run does can put somebody off the map, and a
+        // check nothing can fail is not a check — this half is about the export, and
+        // "somebody is standing in the way" is computed against exactly these squares.
+        Console.WriteLine(
+            played.OffTheMap.Count == 0
+                ? "  nobody in this world stands on a square that is not on their own map"
+                : $"  {played.OffTheMap.Count} PEOPLE STAND ON A SQUARE THAT IS NOT ON THEIR OWN MAP");
+
+        foreach (WalkedOffTheMap lost in played.OffTheMap.Take(6))
+            Console.WriteLine($"    {lost}");
+
+        if (played.OffTheMap.Count > 6)
+            Console.WriteLine($"    ... and {played.OffTheMap.Count - 6} more");
 
         // A fact about the world file rather than about the run, printed here because this is
         // where it turned up. The mirror of "19 warps lead to maps that are not here", asked

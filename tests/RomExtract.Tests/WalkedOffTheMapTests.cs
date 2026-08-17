@@ -6,37 +6,49 @@ using Xunit;
 namespace PokeMmo.RomExtract.Tests;
 
 /// <summary>
-/// People a scene walked to a square that is not on the map.
+/// A person a scene walks stops at a wall, like everybody else.
 /// <para>
-/// A scene that walks somebody aside is applied as a displacement from wherever they already
-/// are, and the run is a fixpoint: it plays the scene again on every pass. Six passes, six
-/// walks, and the sixth is over the edge. On a real cartridge that is 21 people standing at
-/// coordinates that do not exist — one of them at <c>x = -29</c> on a map 48 wide — and the
-/// blocked-doorway report is computed against exactly those positions.
+/// The steps of a movement list used to be summed and the total applied in one jump, from
+/// wherever the person already was. The run is a fixpoint, so a scene it can reach is played
+/// on every pass and the jump is applied again — and on a real cartridge <b>364 of 426</b> of
+/// those landed off the edge of the map. One person ended at <c>x = -29</c> on a map 48 wide.
 /// </para>
 /// <para>
-/// <b>Reported and not repaired.</b> What stops the scene running twice on the cartridge is a
-/// flag this project has not read; clamping the number would turn a wrong position into a
-/// plausible one, which is the harder fault to find. So the run says it instead, and the
-/// saying is what this guards.
+/// It was not a rounding error at the edges: <em>somebody is standing in the way</em> and
+/// <em>a person removed is a person not in a doorway</em> are both computed against these
+/// squares, so five walks in six were being answered against a square that does not exist.
+/// </para>
+/// <para>
+/// The collision grid is the same oracle the step bytes were derived against in the first
+/// place — a direction mapping that is wrong sends somebody through a wall — so the steps
+/// travel and the walk does the walking.
 /// </para>
 /// </summary>
 public class WalkedOffTheMapTests
 {
-    private static MapData Room() => new("1.0", "1.0", 4, 4, new byte[16]);
+    /// <summary>A four-wide room. Whether anything is in the way is the parameter.</summary>
+    private static MapData Room(byte[]? collision = null) =>
+        new("1.0", "1.0", 4, 4, collision ?? new byte[16]);
 
-    private static MapObject Person(int localId, uint script) =>
-        new(localId, 1, localId, 1, Direction.Down, 0, false) { ScriptAddress = script };
+    private static MapObject Person(int localId, int x, int y, uint script) =>
+        new(localId, 1, x, y, Direction.Down, 0, false) { ScriptAddress = script };
 
     private static PlayedScript Nothing => new([], [], [], [], null, null);
 
+    private static IReadOnlyList<Direction> Steps(int howMany, Direction way) =>
+        [.. Enumerable.Repeat(way, howMany)];
+
     /// <summary>
-    /// One person who keeps something opening so the loop runs a few passes, and one whose
-    /// script walks them the same way every time it is run.
+    /// One person who keeps something opening so the loop runs several passes, and one whose
+    /// script walks them — on every pass, or only once.
     /// </summary>
-    private static Attempt Walk(bool everyPass)
+    private static Attempt Walk(
+        IReadOnlyList<Direction> going, bool everyPass = true, byte[]? collision = null)
     {
-        MapData start = Room() with { Objects = [Person(1, 0x1000), Person(2, 0x2000)] };
+        MapData start = Room(collision) with
+        {
+            Objects = [Person(1, 0, 0, 0x1000), Person(2, 1, 1, 0x2000)],
+        };
 
         var opened = 0x100;
         var asked = 0;
@@ -49,36 +61,61 @@ public class WalkedOffTheMapTests
             (address, _, _) => address == 0x1000
                 ? new PlayedScript(asked++ < 4 ? [opened++] : [], [], [], [], null, null)
                 : everyPass || walked++ == 0
-                    ? Nothing with { Walked = [(2, 1, 0)] }
+                    ? Nothing with { Walked = [(2, going)] }
                     : Nothing);
     }
 
     /// <summary>
-    /// Walked the same way on every pass, they leave the map, and the run says so with the
-    /// square and the size of the map it is not on.
+    /// Walked the same way on every pass of a fixpoint, they stop at the edge and stay on the
+    /// map. This is the whole finding: the loop cannot be stopped from replaying the scene, so
+    /// the walk has to be the thing that is bounded.
     /// </summary>
     [Fact]
-    public void SomebodyWalkedEveryPassEndsUpOffTheMap()
+    public void NobodyIsWalkedOffTheEdgeHoweverManyTimesTheSceneIsPlayed()
     {
-        Attempt played = Walk(everyPass: true);
+        Attempt played = Walk(Steps(3, Direction.Right));
 
-        WalkedOffTheMap lost = Assert.Single(played.OffTheMap);
+        Assert.NotEmpty(played.Moved);
+        Assert.Empty(played.OffTheMap);
+    }
 
-        Assert.Equal("1.0", lost.MapId);
-        Assert.Equal(2, lost.LocalId);
-        Assert.True(lost.To.X >= lost.Width, $"they ended at x={lost.To.X} on a map {lost.Width} wide");
+    /// <summary>And the same going the other way, so it is not a one-sided bound.</summary>
+    [Fact]
+    public void NorOffTheOtherEdge()
+    {
+        Attempt played = Walk(Steps(3, Direction.Left));
+
+        Assert.Empty(played.OffTheMap);
     }
 
     /// <summary>
-    /// AND THE ANSWER THAT MEANS THERE IS NOTHING WRONG. The same person, walked one square by
-    /// a scene that only happens once, is still on the map — so the list is empty while the
-    /// walk itself is not. An instrument that cannot come back empty is not measuring, and
-    /// "nobody was walked" and "nobody was walked off" have to be different answers.
+    /// A wall stops them, and the steps after it do not happen either — a walker stopped at a
+    /// wall does not carry on past it. Without this the bound would be the map's edge only,
+    /// and every interior wall would still be walked through.
     /// </summary>
     [Fact]
-    public void SomebodyWalkedOnceStaysOnTheMap()
+    public void AWallStopsThemBeforeTheEdge()
     {
-        Attempt played = Walk(everyPass: false);
+        // A blocked square at (2,1), with the walker starting at (1,1) and going right.
+        var collision = new byte[16];
+
+        collision[(1 * 4) + 2] = 1;
+
+        Attempt played = Walk(Steps(2, Direction.Right), collision: collision);
+
+        Assert.Empty(played.Moved);
+        Assert.Empty(played.OffTheMap);
+    }
+
+    /// <summary>
+    /// AND THE ANSWER THAT MEANS THE WALK HAPPENED. Somebody walked one square onto ground
+    /// they can stand on has moved, and the run says so — a bound that stopped everybody
+    /// would pass every test above and quietly delete the thing this models.
+    /// </summary>
+    [Fact]
+    public void SomebodyWalkedOntoOpenGroundActuallyMoves()
+    {
+        Attempt played = Walk(Steps(1, Direction.Right), everyPass: false);
 
         Assert.NotEmpty(played.Moved);
         Assert.Empty(played.OffTheMap);

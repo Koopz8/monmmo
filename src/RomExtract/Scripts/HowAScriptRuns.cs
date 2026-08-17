@@ -133,7 +133,7 @@ public sealed class HowAScriptRuns(
         var flagsCleared = new List<int>(run.FlagsCleared);
         var specials = new List<int>(run.SpecialsCalled);
         var hides = new List<int>(run.Hides);
-        var walked = new List<(int PersonId, int Dx, int Dy)>();
+        var walked = new List<(int PersonId, IReadOnlyList<Direction> Steps)>();
 
         // How far a scene walks somebody, as a displacement. The steps are the cartridge's
         // own bytes and what they mean was derived by walking every list across every map
@@ -148,21 +148,13 @@ public sealed class HowAScriptRuns(
             {
                 if (step.IsPlayer) continue;
 
-                var dx = 0;
-                var dy = 0;
+                // The steps, in order, and not their sum. A sum is applied in one jump and
+                // lands wherever the arithmetic says — which on a real cartridge was off the
+                // map five times out of six. A step this project does not model is stood
+                // still through, which is DirectionOf's own honest reading.
+                List<Direction> going = [.. step.Steps.Select(MovementLists.DirectionOf).OfType<Direction>()];
 
-                foreach (byte b in step.Steps)
-                {
-                    switch (MovementLists.DirectionOf(b))
-                    {
-                        case Direction.Left: dx--; break;
-                        case Direction.Right: dx++; break;
-                        case Direction.Up: dy--; break;
-                        case Direction.Down: dy++; break;
-                    }
-                }
-
-                if (dx != 0 || dy != 0) walked.Add((step.PersonId, dx, dy));
+                if (going.Count > 0) walked.Add((step.PersonId, going));
             }
         }
 
