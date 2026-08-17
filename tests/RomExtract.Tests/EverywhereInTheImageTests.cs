@@ -113,6 +113,20 @@ public class EverywhereInTheImageTests
         Put(image, TheWayIn, Goto);
         Pointer(image, TheWayIn + 1, 0x08000000 + (uint)Deep);
 
+        // Read backwards, the four bytes at the top of this image are `29 58 00 02` — a
+        // setflag that ends, sitting at reversed offset 0x300. And 0x08000300 is an address
+        // this image really does jump to. So a control that indexed the real image instead of
+        // the reversal would find a way in to a scene that only exists in the reversal, which
+        // is the one thing the control must not do.
+        Put(image, 0x3CFC, End, 0x00, 0x58, SetFlag);
+
+        // And the byte that makes the wrong index visible rather than merely wrong: read
+        // backwards this one sits in front of the four bytes at 0x207, so if a control looked
+        // up offsets in the real image and opcodes in the reversal it would find a goto there.
+        // Without it the mismatch produces garbage that happens to read as "not a jump", and a
+        // control that quietly under-reports its own noise floor is the failure that matters.
+        Put(image, 0x3DF9, Goto);
+
         // A hit on the flag pattern that is not a setflag at all — three bytes in the middle
         // of something, with bytes after them that are not commands.
         Put(image, 0xA03, SetFlag, Holds & 0xFF, Holds >> 8, 0xFF, 0xFF, 0xFF);
@@ -122,8 +136,20 @@ public class EverywhereInTheImageTests
 
     private static Rom Rom() => new(Image());
 
-    /// <summary>The one script a map points at, which is the whole of the map-first reading.</summary>
-    private static SetsAFlag[] TheWorld() => [new SetsAFlag("1.1", "trigger (0,0)", 0x08000000 + Trigger)];
+    /// <summary>
+    /// What the maps point at — and it is two scripts, on purpose.
+    /// <para>
+    /// The second starts <em>inside</em> the block the first already walked, which is ordinary
+    /// in this cartridge and is the only shape that can tell "the first script to decode a byte
+    /// owns it" from "whichever ran last owns it". With one script in the fixture both rules
+    /// give the same answer and neither can be broken.
+    /// </para>
+    /// </summary>
+    private static SetsAFlag[] TheWorld() =>
+    [
+        new SetsAFlag("1.1", "trigger (0,0)", 0x08000000 + Trigger),
+        new SetsAFlag("1.1", "person 1", 0x08000000 + InTheOpen),
+    ];
 
     /// <summary>
     /// The finding, stated as plainly as it can be: the file moves this flag somewhere the
@@ -163,10 +189,10 @@ public class EverywhereInTheImageTests
     {
         Rom rom = Rom();
 
-        bool[] covered = EverywhereInTheImage.Opened(rom, TheWorld());
+        int[] covered = EverywhereInTheImage.Opened(rom, TheWorld());
 
-        Assert.True(covered[Shared]);
-        Assert.True(covered[InTheOpen]);
+        Assert.NotEqual(EverywhereInTheImage.Nobody, covered[Shared]);
+        Assert.NotEqual(EverywhereInTheImage.Nobody, covered[InTheOpen]);
     }
 
     /// <summary>
@@ -177,20 +203,20 @@ public class EverywhereInTheImageTests
     [Fact]
     public void ACommandsArgumentsAreOpenedTooNotJustItsOpcode()
     {
-        bool[] covered = EverywhereInTheImage.Opened(Rom(), TheWorld());
+        int[] covered = EverywhereInTheImage.Opened(Rom(), TheWorld());
 
-        Assert.True(covered[Trigger + 1]);
-        Assert.True(covered[InTheOpen + 1]);
+        Assert.NotEqual(EverywhereInTheImage.Nobody, covered[Trigger + 1]);
+        Assert.NotEqual(EverywhereInTheImage.Nobody, covered[InTheOpen + 1]);
     }
 
     /// <summary>Nothing points at the orphan, so nothing opens it.</summary>
     [Fact]
     public void WhatNoMapLeadsToIsNotOpened()
     {
-        bool[] covered = EverywhereInTheImage.Opened(Rom(), TheWorld());
+        int[] covered = EverywhereInTheImage.Opened(Rom(), TheWorld());
 
-        Assert.False(covered[Orphan]);
-        Assert.False(covered[Literal]);
+        Assert.Equal(EverywhereInTheImage.Nobody, covered[Orphan]);
+        Assert.Equal(EverywhereInTheImage.Nobody, covered[Literal]);
     }
 
     /// <summary>
@@ -427,12 +453,30 @@ public class EverywhereInTheImageTests
     [Fact]
     public void ReversingTheImageDestroysTheScenesInIt()
     {
-        Rom rom = Rom();
+        // Its own image rather than the shared one: this asserts what the reversal does to a
+        // scene, and a fixture carrying decoys for other rules would answer a mixed question.
+        var image = new byte[0x1000];
 
-        int real = EverywhereInTheImage.EveryFlagMoved(rom).Values.Sum(s => s.Count);
+        Put(image, 0x100, SetFlag, Holds & 0xFF, Holds >> 8);
+        Put(image, 0x103, ClearFlag, Keeps & 0xFF, Keeps >> 8);
+        Put(image, 0x106, End);
 
-        Assert.Equal(6, real);
-        Assert.True(EverywhereInTheImage.NoiseFloor(rom) < real);
+        var rom = new Rom(image);
+
+        Assert.Equal(2, EverywhereInTheImage.EveryFlagMoved(rom).Values.Sum(s => s.Count));
+        Assert.Equal(0, EverywhereInTheImage.NoiseFloor(rom).Sites);
+    }
+
+    /// <summary>
+    /// <b>And the control has to read the reversal, not the image it is a control for.</b>
+    /// This image jumps to 0x08000300, and reversed it has a scene there. A control that
+    /// indexed the real image would call that scene reachable and report a noise floor made of
+    /// the very signal it exists to measure.
+    /// </summary>
+    [Fact]
+    public void TheControlLooksForWaysInInTheReversalNotInTheImage()
+    {
+        Assert.Equal(0, EverywhereInTheImage.NoiseFloor(Rom()).JumpedInto);
     }
 
     /// <summary>
@@ -447,7 +491,7 @@ public class EverywhereInTheImageTests
 
         new Random(20250817).NextBytes(bytes);
 
-        Assert.True(EverywhereInTheImage.NoiseFloor(new Rom(bytes)) > 0);
+        Assert.True(EverywhereInTheImage.NoiseFloor(new Rom(bytes)).Sites > 0);
     }
 
     /// <summary>
@@ -494,6 +538,39 @@ public class EverywhereInTheImageTests
 
         Assert.DoesNotContain(outside, f => f.Flag == OnlyInTheOpen);
         Assert.DoesNotContain(outside, f => f.Flag == 0x0BAD);
+    }
+
+    /// <summary>
+    /// <b>Which script opened a byte, not merely that one did.</b> A climb that reaches an
+    /// opened byte and says "a map leads here" has answered a question nobody asked; the next
+    /// question is always <em>which</em>, and it costs an index to answer.
+    /// </summary>
+    [Fact]
+    public void AnOpenedByteNamesTheScriptThatOpenedIt()
+    {
+        SetsAFlag[] world = TheWorld();
+
+        int[] covered = EverywhereInTheImage.Opened(Rom(), world);
+
+        Assert.Equal("1.1 trigger (0,0)", world[covered[InTheOpen]].ToString());
+    }
+
+    /// <summary>
+    /// And the control covers the promoted filter too. A noise figure on the raw count with
+    /// none on the filtered one leaves the filtered one looking rigorous by association — which
+    /// is the number anybody would actually act on.
+    /// </summary>
+    [Fact]
+    public void TheControlMeasuresTheJumpedIntoFilterAsWellAsTheRawOne()
+    {
+        var bytes = new byte[1 << 21];
+
+        new Random(20260817).NextBytes(bytes);
+
+        (int sites, int jumpedInto) = EverywhereInTheImage.NoiseFloor(new Rom(bytes));
+
+        Assert.True(sites > 0);
+        Assert.True(jumpedInto < sites);
     }
 
     /// <summary>And it finds a flag that is only ever cleared, for the same reason as above.</summary>

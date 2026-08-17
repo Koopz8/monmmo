@@ -6602,9 +6602,9 @@ public static class Program
 
         List<SetsAFlag> scripts = [.. library.All().SelectMany(EveryScriptOn)];
 
-        bool[] covered = EverywhereInTheImage.Opened(rom, scripts);
+        int[] covered = EverywhereInTheImage.Opened(rom, scripts);
 
-        int decoded = covered.Count(b => b);
+        int decoded = covered.Count(b => b != EverywhereInTheImage.Nobody);
 
         Console.WriteLine(
             $"  the map scan opens {scripts.Count} script(s), and what they decode to is "
@@ -6692,22 +6692,31 @@ public static class Program
             }
         }
 
-        // And the climb. Only for sites the map scan never opened, because a site it opened is
-        // already answered by --flags and printing the two the same way is how a new finding
-        // gets buried in a list of old ones.
-        List<FlagSite> unopened =
+        // And the climb, on every site that reads as script.
+        //
+        // THE MISTAKE THIS WAS WRITTEN TO FIX. It climbed only sites the map scan had never
+        // opened, reasoning that an opened site is already answered by --flags and that mixing
+        // the two buries a new finding in a list of old ones. Both halves of that were true and
+        // the conclusion was still wrong: the first thing this instrument was ever pointed at
+        // came back with ONE site for 0x003E in the whole image, opened, and the climb — the
+        // only part that could say what enters it — was the part that did not run.
+        //
+        // "Already answered" was doing the work there, and it was not answered. A filter whose
+        // job is to keep the output readable must never be the thing that decides which
+        // question gets asked.
+        List<FlagSite> climbing =
         [
-            .. sites.Values.SelectMany(s => s).Where(s => s.ReadsAsAScript && !s.Opened).DistinctBy(s => s.Offset),
+            .. sites.Values.SelectMany(s => s).Where(s => s.ReadsAsAScript).DistinctBy(s => s.Offset),
         ];
 
         Console.WriteLine();
         Console.WriteLine(
-            $"  {unopened.Count} site(s) read as script and were never opened — climbing each one");
+            $"  {climbing.Count} site(s) read as script — climbing each one, opened or not");
 
-        foreach (FlagSite site in unopened.Take(12)) Climb(rom, index, covered, site);
+        foreach (FlagSite site in climbing.Take(12)) Climb(rom, index, covered, scripts, site);
 
-        if (unopened.Count > 12)
-            Console.WriteLine($"    ... and {unopened.Count - 12} more not climbed");
+        if (climbing.Count > 12)
+            Console.WriteLine($"    ... and {climbing.Count - 12} more not climbed");
     }
 
     /// <summary>
@@ -6722,13 +6731,17 @@ public static class Program
     private static void Climb(
         Rom rom,
         IReadOnlyDictionary<uint, IReadOnlyList<int>> index,
-        bool[] covered,
+        int[] covered,
+        IReadOnlyList<SetsAFlag> scripts,
         FlagSite site,
         int slack = 192,
-        int maxSteps = 24)
+        int maxSteps = 24,
+        int mostPerStep = 24)
     {
         Console.WriteLine();
-        Console.WriteLine($"    climbing from {site} at 0x{site.Address:X8}");
+        Console.WriteLine(
+            $"    climbing from {site} at 0x{site.Address:X8}"
+            + (site.Opened ? $" — opened by {Owner(site.Offset)}" : " — opened by nothing"));
 
         var seen = new HashSet<uint>();
         var queue = new Queue<(uint Address, int Depth)>();
@@ -6736,7 +6749,7 @@ public static class Program
         queue.Enqueue((site.Address, 0));
 
         var steps = 0;
-        var reachedTheWorld = false;
+        var waysIn = 0;
         var literals = 0;
 
         while (queue.Count > 0 && steps++ < maxSteps)
@@ -6757,18 +6770,30 @@ public static class Program
                 continue;
             }
 
-            foreach (NamesIt named in names.Take(6))
+            foreach (NamesIt named in names.Take(mostPerStep))
             {
-                bool opened = named.Offset < covered.Length && covered[named.Offset];
+                bool opened = named.Offset < covered.Length
+                    && covered[named.Offset] != EverywhereInTheImage.Nobody;
 
                 Console.WriteLine(
                     $"{pad}{named}"
                     + (named.AJump
-                        ? opened ? "  <- THE MAP SCAN OPENS THIS — here is the way in" : "  <- a jump nothing opens"
+                        ? opened
+                            ? $"  <- A WAY IN: {Owner(named.Offset)}"
+                            : "  <- a jump nothing opens"
                         : named.ALiteral ? "  <- a literal: only code reads one" : "  <- loose bytes, probably noise"));
 
-                if (named.AJump && opened) reachedTheWorld = true;
-                if (named.ALiteral) literals++;
+                if (named.AJump && opened) waysIn++;
+
+                // And what a literal sits among. One address in compiled code is a call site;
+                // a run of them on four-byte boundaries is a TABLE, and which entry this is
+                // says what selects it. The difference matters and costs one line to print.
+                if (named.ALiteral)
+                {
+                    literals++;
+
+                    Console.WriteLine($"{pad}  {Neighbours(named.Offset)}");
+                }
 
                 // Climb on from the command that carries the pointer, not from the pointer:
                 // what names this block is what names the command that jumps out of it.
@@ -6780,17 +6805,45 @@ public static class Program
                 }
             }
 
-            if (names.Count > 6) Console.WriteLine($"{pad}... and {names.Count - 6} more naming it");
+            if (names.Count > mostPerStep)
+                Console.WriteLine($"{pad}... and {names.Count - mostPerStep} more naming it");
         }
 
         Console.WriteLine(
-            reachedTheWorld
-                ? "      SO A MAP LEADS HERE after all — the map scan opens something that jumps in."
+            waysIn > 0
+                ? $"      {waysIn} way(s) in, all named above. If they are all disqualified, whatever"
+                    + " enters this block with a third answer is not a script jump."
                 : literals > 0
-                    ? "      NO MAP LEADS HERE. What names it is a literal, which only compiled code "
-                        + "reads — so this scene is run from the far side of the code boundary, and "
-                        + "the offset above is where to look."
-                    : "      NO MAP LEADS HERE, and nothing names it at all.");
+                    ? "      NOTHING JUMPS HERE. What names it is a literal, which only compiled code "
+                        + "reads — so this is run from the far side of the code boundary, and the "
+                        + "offsets above are where to look."
+                    : "      NOTHING JUMPS HERE, and nothing names it at all.");
+
+        // Which script first decoded a byte, in the words the rest of this tool uses.
+        string Owner(int offset) =>
+            offset < covered.Length && covered[offset] is var which and not EverywhereInTheImage.Nobody
+                ? scripts[which].ToString()
+                : "nothing";
+
+        // The aligned words either side of a literal, so a table reads as a table.
+        string Neighbours(int offset)
+        {
+            var around = new List<string>();
+
+            for (int at = offset - 12; at <= offset + 12; at += 4)
+            {
+                if (at < 0 || at + 4 > rom.Length) continue;
+
+                uint word = rom.ReadU32(at);
+
+                around.Add(
+                    at == offset ? $"[0x{word:X8}]"
+                    : rom.IsRomAddress(word) ? $"0x{word:X8}"
+                    : "--------");
+            }
+
+            return "in context: " + string.Join(" ", around);
+        }
     }
 
     /// <summary>
@@ -6818,7 +6871,7 @@ public static class Program
         IReadOnlyCollection<int> turnedOn,
         IReadOnlyCollection<int> turnedOff)
     {
-        bool[] covered = EverywhereInTheImage.Opened(rom, library.All().SelectMany(EveryScriptOn));
+        int[] covered = EverywhereInTheImage.Opened(rom, [.. library.All().SelectMany(EveryScriptOn)]);
 
         IReadOnlyDictionary<int, IReadOnlyList<FlagSite>> moved =
             EverywhereInTheImage.EveryFlagMoved(rom, covered);
@@ -6827,10 +6880,10 @@ public static class Program
 
         List<int> boundary = [.. gates.All.Select(g => g.Flag).Where(f => !world.Contains(f))];
 
-        int decoded = covered.Count(b => b);
+        int decoded = covered.Count(b => b != EverywhereInTheImage.Nobody);
 
         int sites = moved.Values.Sum(s => s.Count);
-        int noise = EverywhereInTheImage.NoiseFloor(rom);
+        (int noiseSites, int noiseJumped) = EverywhereInTheImage.NoiseFloor(rom);
 
         IReadOnlyDictionary<uint, IReadOnlyList<int>> index = EverywhereInTheImage.PointerIndex(rom);
 
@@ -6848,18 +6901,36 @@ public static class Program
         Console.WriteLine(
             $"    {sites} site(s) in the file read as a setflag or clearflag, moving {moved.Count} flag(s)");
         Console.WriteLine(
-            $"    the same sweep on this file REVERSED finds {noise} — same bytes, same frequencies, no");
+            $"    the same sweep on this file REVERSED finds {noiseSites}, {noiseJumped} of them jumped into —");
         Console.WriteLine(
-            "    commands. That is what this filter finds when there is nothing there, and it is the");
+            "    same bytes, same frequencies, no commands. That is what these two filters find when");
         Console.WriteLine(
-            "    number the counts below have to be read against.");
+            "    there is nothing there, and it is what the counts below have to be read against.");
+
+        int unopenedSites = outside.Sum(f => f.Unopened.Count);
+        int jumpedSites = outside.Sum(f => f.JumpedInto.Count);
+
+        // AND IT HAS TO BE THE SAME UNIT ON BOTH SIDES.
+        //
+        // This printed a count of flags beside a count of sites and invited them to be compared.
+        // They cannot be: one flag can hold a dozen sites, and the first run of this put "20"
+        // next to "47" as though 20 were the smaller number.
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    a site something jumps into is {Rate(jumpedSites, unopenedSites)} of the unopened sites "
+            + $"here, against {Rate(noiseJumped, noiseSites)} in the reversal");
+        Console.WriteLine(
+            "    — and if those two are the same number, the jumped-into list below is noise and");
+        Console.WriteLine(
+            "    the only honest thing to do with it is throw it away.");
         Console.WriteLine();
         Console.WriteLine(
             $"    of the {boundary.Count} gating flags nothing in the world moves:");
         Console.WriteLine(
-            $"      {outside.Count} are moved by something reading as script that the maps never open");
+            $"      {outside.Count} are moved by something reading as script that the maps never open "
+            + $"({unopenedSites} site(s))");
         Console.WriteLine(
-            $"        {jumpedInto} of those are jumped into by a script — an entry point to find");
+            $"        {jumpedInto} of those are jumped into by a script ({jumpedSites} site(s)) — an entry point to find");
         Console.WriteLine(
             $"      {boundary.Count - outside.Count} are moved by no script anywhere in the file — compiled code, and");
         Console.WriteLine(
@@ -6876,6 +6947,8 @@ public static class Program
         }
 
         if (outside.Count > 20) Console.WriteLine($"      ... and {outside.Count - 20} more");
+
+        static string Rate(int some, int all) => all == 0 ? "none" : $"{100.0 * some / all:0.0}%";
 
         Console.WriteLine();
         Console.WriteLine(
@@ -7195,10 +7268,14 @@ public static class Program
     private static string WhyItStopped(WhatRan did) =>
         did.StoppedAtAQuestion
             ? "it stopped at a yes-or-no nobody answered — try --say-yes"
-            : did.Routines.Count > 0
-                ? $"it asked routine(s) {string.Join(", ", did.Routines.Take(3).Select(r => $"0x{r:X3}"))} "
-                    + "and took the zero arm — try --answer"
-                : "it ran to the end, so the setflag is on an ordinary branch it had no reason to take";
+            : did.Fought.Count > 0
+                ? $"IT STOPPED AT A FIGHT it did not win (trainer(s) "
+                    + string.Join(", ", did.Fought.Take(3)) + ") — everything after the fight is "
+                    + "unreached, and the setflag may be sitting there unconditionally"
+                : did.Routines.Count > 0
+                    ? $"it asked routine(s) {string.Join(", ", did.Routines.Take(3).Select(r => $"0x{r:X3}"))} "
+                        + "and took the zero arm — try --answer"
+                    : "it ran to the end, so the setflag is on an ordinary branch it had no reason to take";
 
     /// <summary>
     /// The answers that had to go a particular way to reach a <c>setflag</c>, in order.
