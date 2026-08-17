@@ -677,13 +677,22 @@ public class WhoIsInTheDoorwayTests
     [Fact]
     public void WhyAScriptStoppedShortSurvivesTheNextPass()
     {
-        var passes = 0;
+        var times = 0;
 
         var world = new WorldData(
         [
             Room("1.0") with
             {
-                Objects = [new MapObject(1, 1, 1, 1, Direction.Down, 0, false) { ScriptAddress = 0x1000 }],
+                Objects =
+                [
+                    new MapObject(1, 1, 1, 1, Direction.Down, 0, false) { ScriptAddress = 0x1000 },
+
+                    // Somebody who opens something on the first pass, so that there is a
+                    // second pass at all. Without this the loop settles after one and the
+                    // whole question of folding never arises — which is how this rule read
+                    // as guarded while nothing could fail it.
+                    new MapObject(2, 1, 3, 1, Direction.Down, 0, false) { ScriptAddress = 0x2000 },
+                ],
             },
         ]);
 
@@ -692,9 +701,14 @@ public class WhoIsInTheDoorwayTests
             world,
             "1.0",
             TestRules.All,
-            (_, _, _) => ++passes == 1
-                ? Nothing with { StoppedAtAQuestion = true, Specials = [0x0AB] }
-                : Nothing);
+            (address, _, _) => address switch
+            {
+                0x2000 => Nothing with { FlagsSet = [0x0AAA] },
+                _ when ++times == 1 => Nothing with { StoppedAtAQuestion = true, Specials = [0x0AB] },
+                _ => Nothing,
+            });
+
+        Assert.True(times > 1, "the script has to run more than once for folding to mean anything");
 
         WhatRan did = played.Ran[0x1000];
 
