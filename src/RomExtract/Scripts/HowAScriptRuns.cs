@@ -132,6 +132,7 @@ public sealed class HowAScriptRuns(
         var flagsSet = new List<int>(run.FlagsSet);
         var flagsCleared = new List<int>(run.FlagsCleared);
         var specials = new List<int>(run.SpecialsCalled);
+        var money = new List<int>(run.MoneyWalkedPast);
         var hides = new List<int>(run.Hides);
         var walked = new List<(int PersonId, IReadOnlyList<Direction> Steps, uint At)>();
 
@@ -216,6 +217,7 @@ public sealed class HowAScriptRuns(
             flagsSet.AddRange(run.FlagsSet);
             flagsCleared.AddRange(run.FlagsCleared);
             specials.AddRange(run.SpecialsCalled);
+            money.AddRange(run.MoneyWalkedPast);
             hides.AddRange(run.Hides);
             asked.AddRange(run.ItemsAsked.Select(a => (a.ItemId, a.Count, a.Carried)));
             Follow(run);
@@ -255,6 +257,7 @@ public sealed class HowAScriptRuns(
             Hides = hides,
             Walked = walked,
             Asked = asked,
+            MoneyWalkedPast = money,
             StoppedAtAQuestion = run.Question is not null,
             StoppedAt = stoppedAt,
             Touched = touched,

@@ -300,6 +300,15 @@ public sealed record CounterOutOfReach(
     int NearestStood,
     int SquaresBesideThatAreWalkable);
 
+/// <summary>
+/// Somewhere the run was asked for money, could not answer, and was handed something anyway.
+/// </summary>
+/// <param name="MapId">The map it happened on.</param>
+/// <param name="Address">The script.</param>
+/// <param name="Price">What the cartridge asked for, which is READ.</param>
+/// <param name="What">What changed hands on the far side of the unanswered question.</param>
+public sealed record PaidForNothing(string MapId, uint Address, int Price, string What);
+
 /// <summary>Something the playthrough bought, and what it cost.</summary>
 public sealed record Bought(int ItemId, int Count, int Price, string MapId);
 
@@ -524,6 +533,32 @@ public sealed record Attempt(
     /// </para>
     /// </summary>
     public int CountersStoodAt { get; init; }
+
+    /// <summary>
+    /// Places where this run walked past a command asking about money, and answered neither way.
+    /// <para>
+    /// <b>The third ceiling, and the only one without a lever.</b> <c>--say-yes</c> and
+    /// <c>--boat</c> are both named, printed and switchable. This one was found by reading two
+    /// command widths correctly at milestone 200: the reader now steps cleanly over the money
+    /// check, so the run takes the arm where the thing is handed over — every time, with an
+    /// empty purse.
+    /// </para>
+    /// <para>
+    /// Places rather than times, per 195. A number nobody prints reads exactly like a floor.
+    /// </para>
+    /// </summary>
+    public int WalkedPastAMoneyCheck { get; init; }
+
+    /// <summary>
+    /// The subset that actually handed something over on the far side — what the ceiling is
+    /// currently WORTH, as opposed to how wide it is.
+    /// <para>
+    /// Kept apart from the count above on purpose. "It walked past forty checks" and "and three
+    /// of them gave it something" are different claims, and only the second says the party
+    /// number is above the floor.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<PaidForNothing> TookSomethingAnyway { get; init; } = [];
 
     /// <summary>
     /// Shop counters on maps it reached, whether or not it got to one — the denominator above
@@ -984,6 +1019,15 @@ public static class Autoplayer
         // Everything asked for and not carried, by item and by where it was asked.
         var refused = new Dictionary<(int ItemId, int Count, string MapId), int>();
 
+        // Every place the run walked past a money check, and — separately — the ones where
+        // something changed hands on the far side of one. Places, not times.
+        //
+        // Two numbers because they answer different questions. "It walked past 40 checks" is
+        // the size of the gap; "and 3 of those handed something over" is the size of what the
+        // gap is currently worth, and only the second is a claim about the party being wrong.
+        var walkedPastAMoneyCheck = new HashSet<(string MapId, uint Address)>();
+        var tookSomethingAnyway = new Dictionary<(string MapId, uint Address), (int Price, string What)>();
+
         var purse = money;
         var bought = new List<Bought>();
 
@@ -1119,6 +1163,24 @@ public static class Autoplayer
                     // the reason it stopped as the reason a run stopped in PEWTER.
                     ran[(map.Id, what.Address)] =
                         (ran.GetValueOrDefault((map.Id, what.Address)) ?? new WhatRan()).And(did);
+
+                    // The third ceiling, counted. It has no lever yet and saying so is the
+                    // point: an unlevered gap that nobody counts reads exactly like a floor.
+                    if (did.MoneyWalkedPast.Count > 0)
+                    {
+                        walkedPastAMoneyCheck.Add((map.Id, what.Address));
+
+                        string? handed =
+                            did.Gives is { } mon ? $"#{mon.Species} at level {mon.Level}"
+                            : did.Gets is { } item ? $"item 0x{item.ItemId:X3} x{item.Count}"
+                            : null;
+
+                        if (handed is not null)
+                        {
+                            tookSomethingAnyway[(map.Id, what.Address)] =
+                                (did.MoneyWalkedPast[0], handed);
+                        }
+                    }
 
                     foreach (int routine in did.Specials)
                     {
@@ -1651,6 +1713,9 @@ public static class Autoplayer
             Bought = bought,
             MoneyLeft = purse,
             CountersStoodAt = stoodAtACounter.Count,
+            WalkedPastAMoneyCheck = walkedPastAMoneyCheck.Count,
+            TookSomethingAnyway =
+                [.. tookSomethingAnyway.Select(e => new PaidForNothing(e.Key.MapId, e.Key.Address, e.Value.Price, e.Value.What))],
             CountersOnReachedGround = onReachedGround.Count,
             CountersHiddenByAFlag = hiddenByAFlag.Count,
             CountersNeverStoodBeside = neverStoodBeside.Count,

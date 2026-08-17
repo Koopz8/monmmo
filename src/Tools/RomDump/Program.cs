@@ -6266,6 +6266,35 @@ public static class Program
                 Console.WriteLine($"      ... and {played.CountersOutOfReach.Count - 8} more");
         }
 
+        // THE THIRD CEILING, AND THE ONLY ONE WITHOUT A LEVER.
+        //
+        // --say-yes and --boat are named, printed and switchable. This one arrived at 200 by
+        // reading two command widths CORRECTLY: the reader now steps cleanly over the command
+        // that asks about money, so the run takes the arm where the thing is handed over —
+        // every time, with a purse of nought. The first thing that fell out of it was a fifth
+        // party member.
+        //
+        // Both halves, because they are different claims. The count is how WIDE the gap is;
+        // the list under it is what the gap is currently WORTH, and only the list says the
+        // party number is above the floor. Either can be nought and they mean different things.
+        Console.WriteLine(
+            $"  {played.WalkedPastAMoneyCheck} place(s) asked it for money and it answered"
+            + " neither way — a CEILING, and the only one with no lever");
+
+        if (played.TookSomethingAnyway.Count == 0)
+        {
+            Console.WriteLine(
+                "    and nothing changed hands on the far side of one, so nothing it is"
+                + " carrying is unpaid for");
+        }
+
+        foreach (PaidForNothing free in played.TookSomethingAnyway)
+        {
+            Console.WriteLine(
+                $"    {free.MapId} 0x{free.Address:X8} wanted {free.Price} and handed over"
+                + $" {free.What} ANYWAY — this is above the floor");
+        }
+
         foreach (Bought buy in played.Bought)
             Console.WriteLine($"    bought {NameOf(buy.ItemId)} for {buy.Price} at {buy.MapId}");
 

@@ -293,6 +293,22 @@ public sealed record ScriptRun
     public IReadOnlyList<uint> CodeCalled { get; init; } = [];
 
     /// <summary>
+    /// Money this run was asked about or charged, and could answer neither way.
+    /// <para>
+    /// <b>Reading a command's width is not being able to execute it.</b> 0x92 asks whether the
+    /// player has an amount and 0x91 takes it — nine sites each, read at milestone 200 — and
+    /// this runner steps cleanly over both without modelling a purse. So it takes the arm where
+    /// the thing is handed over, every time, and the first thing that fell out of that was a
+    /// fifth party member on a run whose purse is nought.
+    /// </para>
+    /// <para>
+    /// Collected rather than swallowed, because a ceiling nobody counts reads exactly like a
+    /// floor. This is the number that says how big it is.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<int> MoneyWalkedPast { get; init; } = [];
+
+    /// <summary>
     /// Objects this run took off the map, by their number on it.
     /// <para>
     /// Command 0x53, derived from its arguments: 224 sites and every single one holds
@@ -422,6 +438,7 @@ public static class ScriptRunner
         var challenge = new List<string>();
         var beats = new List<SceneBeat>();
         var specials = new List<int>();
+        var money = new List<int>();
         var stock = new List<int>();
         var set = new List<int>();
         var cleared = new List<int>();
@@ -512,6 +529,16 @@ public static class ScriptRunner
 
             switch (code)
             {
+                // ASKED ABOUT MONEY, OR CHARGED IT, AND ANSWERED NEITHER.
+                //
+                // Not a decision and not a lever — a note that one was needed here and none
+                // was made. The read carries straight on, which is what it did before this
+                // case existed; the only new thing is that the walking-past is counted.
+                case 0x92:
+                case 0x91:
+                    money.Add((int)command.Pointer());
+                    break;
+
                 case ScriptCommands.End:
                 case 0x0D:                              // killscript
                     stop = true;
@@ -1021,6 +1048,7 @@ public static class ScriptRunner
             Challenge = challenge,
             Beats = beats,
             SpecialsCalled = specials,
+            MoneyWalkedPast = money,
             NamesRival = namedRival[0],
             CodeCalled = codeCalled,
             Hides = hides,

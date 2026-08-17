@@ -57,6 +57,17 @@ public sealed record PlayedScript(
     public (int ItemId, int Count)? Gets { get; init; }
 
     /// <summary>
+    /// Money this script asked about or charged, which the run could answer neither way.
+    /// <para>
+    /// A ceiling, and the third one — <c>--say-yes</c> and <c>--boat</c> are the other two and
+    /// both are named, printed and levered. This one had neither until it turned up carrying a
+    /// party member: the run walks past the check with an empty purse and takes the arm where
+    /// the thing is handed over. Counted here so that it cannot go on reading like a floor.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<int> MoneyWalkedPast { get; init; } = [];
+
+    /// <summary>
     /// Where the fight this script stopped at leads, once it is won.
     /// <para>
     /// <b>Whoever resolves the fight has to run this, and nobody used to.</b> It is the
