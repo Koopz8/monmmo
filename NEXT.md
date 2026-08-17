@@ -6,16 +6,17 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **Ninety-four fights won and not one level gained.** `BattleFactory.Save` says
-  a battler carries no experience and every caller starting from a save puts it
-  back. The autoplayer's fight didn't, so each win reset the total and the next
-  award started from the bottom of the level it was already at. Six party members
-  at 25 for the whole game. **Highest level 25 → 40, 94/63 won-lost → 108/49.**
-- **The floor still did not move** — 179 of 425 maps. Still loses to GIOVANNI at
-  40 with five LAPRAS and a EEVEE.
-- **And these numbers are not a floor.** Every pass re-runs every script, so a
-  gift is taken once per pass: four of the six are duplicates. `--play` says so
-  out loud now. **The starter is not in the party at all** — `givemon` with the
-  species in a variable, unresolved.
-- **Next**: the starter; the gift taken every pass; then the unknown commands
-  ranked by what is behind them (`0x3F` leads).
+- **Six was the fault, not the cost.** The roadmap has said "--say-yes costs
+  party members: 6 on the floor, 2 with it on" for milestones. Backwards. SILPH
+  CO. hands over a LAPRAS and *then* asks whether to name it; the `setflag` that
+  stops it happening twice is past the question, so an unanswered run takes the
+  gift again every pass. **Five LAPRAS.**
+- **A hanging question is a floor one way and a ceiling the other**, and nothing
+  said so. `--play` alone is below the floor on reach and above it on anything a
+  hanging script hands over. It has been quoted as a floor throughout.
+- **`--play --say-yes`: 211 of 425 maps, 176 flags, 25 field moves, party of 2.**
+  Against 179 / 139 / 19 / 6 without it.
+- **And the levels fix opened no maps at all** — 47 losses became wins, level 25
+  → 49, same 211. Levels are not what gates reach.
+- **Next**: the starter (still never joins — `givemon` from a variable); then the
+  frontier at 211, now that the run is no longer distorted in two directions.
