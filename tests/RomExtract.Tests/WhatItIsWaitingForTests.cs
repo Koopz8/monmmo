@@ -349,6 +349,130 @@ public class WhatItIsWaitingForTests
     }
 
     /// <summary>
+    /// A setflag nothing stands in front of comes back with nothing standing in front of it.
+    /// An empty chain and no chain are not the same answer and must not print the same.
+    /// </summary>
+    [Fact]
+    public void AnUnconditionalSetflagIsGatedByNothing()
+    {
+        var image = new byte[0x2000];
+
+        Put(image, 0x100, SetFlag, Opened & 0xFF, Opened >> 8, Release, End);
+
+        Assert.Empty(WhatItIsWaitingFor.PathTo(new Rom(image), 0x08000100, Opened)!);
+    }
+
+    /// <summary>And a flag nothing reachable sets comes back with no chain at all.</summary>
+    [Fact]
+    public void AFlagNothingSetsHasNoWayToIt()
+    {
+        var image = new byte[0x2000];
+
+        Put(image, 0x100, SetFlag, Opened & 0xFF, Opened >> 8, Release, End);
+
+        Assert.Null(WhatItIsWaitingFor.PathTo(new Rom(image), 0x08000100, Waiting));
+    }
+
+    /// <summary>
+    /// The answers that had to go a particular way, in order — and for the flag asked about
+    /// rather than whichever setflag turns up first.
+    /// <para>
+    /// The decoy is the first line of the script: a setflag of something else, standing
+    /// unconditionally where a reader looking for "the first setflag" would stop. Every real
+    /// script of this shape starts with bookkeeping.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TheChainIsToTheFlagAskedAboutAndNotTheFirstOneFound()
+    {
+        var image = new byte[0x2000];
+
+        Put(image, 0x100, SetFlag, Shared & 0xFF, Shared >> 8);
+        Put(image, 0x103, CheckFlag, Waiting & 0xFF, Waiting >> 8);
+        Put(image, 0x106, GotoIf, IfEqual);
+        Pointer(image, 0x108, 0x08000200);
+        Put(image, 0x10C, Release, End);
+        Put(image, 0x200, SetFlag, Opened & 0xFF, Opened >> 8, Release, End);
+
+        var rom = new Rom(image);
+
+        Assert.Empty(WhatItIsWaitingFor.PathTo(rom, 0x08000100, Shared)!);
+        Assert.Equal(
+            [$"flag 0x{Waiting:X4} SET"],
+            WhatItIsWaitingFor.PathTo(rom, 0x08000100, Opened)!.Select(w => w.ToString()));
+    }
+
+    /// <summary>
+    /// Getting somewhere by <em>not</em> jumping is the condition inverted, and it is the
+    /// commoner of the two — the "not yet" arm of every checkflag in this cartridge is the
+    /// fall-through. Reporting it as though the branch had been taken names the opposite of
+    /// what has to be true, which is a flag number pointing the wrong way.
+    /// </summary>
+    [Fact]
+    public void FallingThroughABranchIsTheConditionInverted()
+    {
+        var image = new byte[0x2000];
+
+        Put(image, 0x100, CheckFlag, Waiting & 0xFF, Waiting >> 8);
+        Put(image, 0x103, GotoIf, IfEqual);
+        Pointer(image, 0x105, 0x08000300);
+        Put(image, 0x109, SetFlag, Opened & 0xFF, Opened >> 8, Release, End);
+        Put(image, 0x300, Release, End);
+
+        Assert.Equal(
+            [$"flag 0x{Waiting:X4} CLEAR"],
+            WhatItIsWaitingFor.PathTo(new Rom(image), 0x08000100, Opened)!.Select(w => w.ToString()));
+    }
+
+    /// <summary>Two deep is two answers, in the order they have to go right.</summary>
+    [Fact]
+    public void EveryAnswerOnTheWayIsInTheChain()
+    {
+        var image = new byte[0x2000];
+
+        Put(image, 0x100, CheckFlag, Waiting & 0xFF, Waiting >> 8);
+        Put(image, 0x103, GotoIf, IfEqual);
+        Pointer(image, 0x105, 0x08000200);
+        Put(image, 0x109, Release, End);
+
+        Put(image, 0x200, Compare, 0x0D, 0x80, 0x01, 0x00);
+        Put(image, 0x205, GotoIf, IfEqual);
+        Pointer(image, 0x207, 0x08000300);
+        Put(image, 0x20B, Release, End);
+
+        Put(image, 0x300, SetFlag, Opened & 0xFF, Opened >> 8, Release, End);
+
+        Assert.Equal(
+            [$"flag 0x{Waiting:X4} SET", "0x800D == 1"],
+            WhatItIsWaitingFor.PathTo(new Rom(image), 0x08000100, Opened)!.Select(w => w.ToString()));
+    }
+
+    /// <summary>
+    /// And a chain through a handoff is still a chain. Most of the work in this game is at
+    /// the other end of a <c>call</c>.
+    /// </summary>
+    [Fact]
+    public void AChainThroughAHandoffIsStillAChain()
+    {
+        var image = new byte[0x2000];
+
+        Put(image, 0x100, CheckFlag, Waiting & 0xFF, Waiting >> 8);
+        Put(image, 0x103, GotoIf, IfEqual);
+        Pointer(image, 0x105, 0x08000200);
+        Put(image, 0x109, Release, End);
+
+        Put(image, 0x200, Call);
+        Pointer(image, 0x201, 0x08000400);
+        Put(image, 0x205, Release, End);
+
+        Put(image, 0x400, SetFlag, Opened & 0xFF, Opened >> 8, Return);
+
+        Assert.Equal(
+            [$"flag 0x{Waiting:X4} SET"],
+            WhatItIsWaitingFor.PathTo(new Rom(image), 0x08000100, Opened)!.Select(w => w.ToString()));
+    }
+
+    /// <summary>
     /// And the other half of the job: who turns it on. A flag nothing sets is a door behind
     /// the code boundary; a flag somebody two maps away sets is a walk.
     /// </summary>

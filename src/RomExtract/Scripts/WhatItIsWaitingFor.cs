@@ -135,6 +135,60 @@ public sealed record SetsAFlag(string MapId, string What, uint Address)
 }
 
 /// <summary>
+/// One condition standing between the start of a script and something inside it.
+/// <para>
+/// Not "which flags does this script mention" — <em>which answers had to go a particular way
+/// for this command to run at all</em>. A script that ran and did not set its flag has the
+/// setting behind one of these, and the chain of them is the list of things that have to be
+/// true before that door opens.
+/// </para>
+/// </summary>
+/// <param name="AskedBy">The command that left the comparison — <c>checkflag</c>, <c>compare</c>, or something unnamed.</param>
+/// <param name="Word">Its first word: a flag number, or the variable being compared.</param>
+/// <param name="Against">What it was compared against, for a <c>compare</c>.</param>
+/// <param name="Condition">The operator byte on the branch.</param>
+/// <param name="TookTheBranch">Whether getting here meant jumping rather than falling through.</param>
+public sealed record OnTheWay(byte AskedBy, int Word, int Against, byte Condition, bool TookTheBranch)
+{
+    /// <summary>What had to be true, in words.</summary>
+    public override string ToString()
+    {
+        if (AskedBy == 0x2B)
+        {
+            bool jumpsWhenSet = ScriptState.Accepts(Condition, ScriptState.Compare(1, 1));
+            bool jumpsWhenClear = ScriptState.Accepts(Condition, ScriptState.Compare(0, 1));
+
+            return jumpsWhenSet == jumpsWhenClear
+                ? $"flag 0x{Word:X4} either way"
+                : $"flag 0x{Word:X4} {(TookTheBranch == jumpsWhenSet ? "SET" : "CLEAR")}";
+        }
+
+        if (AskedBy == 0x21) return $"0x{Word:X4} {Operator()} {Against}";
+
+        return $"something this could not name (0x{AskedBy:X2}) {Operator()} {Against}";
+    }
+
+    /// <summary>
+    /// The comparison as it had to come out. Falling through a branch is the operator
+    /// inverted, which is a thing worth writing down once rather than in every caller.
+    /// </summary>
+    private string Operator()
+    {
+        string taken = Condition switch
+        {
+            0 => "<", 1 => "==", 2 => ">", 3 => "<=", 4 => ">=", 5 => "!=", _ => "?",
+        };
+
+        string missed = Condition switch
+        {
+            0 => ">=", 1 => "!=", 2 => "<=", 3 => ">", 4 => "<", 5 => "==", _ => "?",
+        };
+
+        return TookTheBranch ? taken : missed;
+    }
+}
+
+/// <summary>
 /// What a person standing in a doorway is waiting for.
 /// <para>
 /// <b>The question a playthrough cannot ask.</b> A run takes one arm of each conditional —
@@ -256,6 +310,88 @@ public static class WhatItIsWaitingFor
         {
             OtherQuestions = [.. otherwise.OrderByDescending(p => p.Value).Select(p => (p.Key, p.Value))],
         };
+    }
+
+    /// <summary>
+    /// What stands between the start of a script and its turning a particular flag on.
+    /// <para>
+    /// <b>The question after "it ran this script and the flag is still unset".</b> Three
+    /// SAFFRON doors are one flag, that flag is set by a trigger in SILPH CO., and the run
+    /// stood on the trigger and ran it. So the <c>setflag</c> is behind a branch inside it,
+    /// and this is the list of answers that had to go a particular way to reach it.
+    /// </para>
+    /// <para>
+    /// <b>One path, not every path.</b> The first route found is returned, and a
+    /// <c>setflag</c> reachable two ways has a second chain this does not show. That is a
+    /// real limit and the reason this returns a chain rather than a verdict: an empty chain
+    /// means unconditional <em>on the way found</em>, and null means nothing reachable sets
+    /// the flag at all.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<OnTheWay>? PathTo(Rom rom, uint address, int flag, int maxSteps = 8192)
+    {
+        var seen = new HashSet<(uint Block, int At)>();
+        var queue = new Queue<(uint Block, int At, List<OnTheWay> Chain)>();
+
+        queue.Enqueue((address, 0, []));
+
+        var steps = 0;
+
+        while (queue.Count > 0 && steps++ < maxSteps)
+        {
+            (uint block, int at, List<OnTheWay> chain) = queue.Dequeue();
+
+            if (!seen.Add((block, at))) continue;
+            if (rom.ToOffsetOrNull(block) is null) continue;
+
+            List<ScriptCommand> commands = ScriptReader.Read(rom, block);
+
+            // What left the comparison the next conditional will read. Carried across
+            // commands rather than assumed adjacent, because a script that compares and then
+            // does something harmless before branching is still branching on the compare.
+            ScriptCommand? asked = null;
+
+            for (int i = at; i < commands.Count; i++)
+            {
+                ScriptCommand command = commands[i];
+
+                if (command.Code == SetFlag && command.Arguments.Length >= 2 && command.Word() == flag)
+                    return chain;
+
+                if (command.Code is CheckFlag or 0x21 or 0x22 or 0x47) asked = command;
+
+                if (command.Code is ScriptCommands.GotoIf or ScriptCommands.CallIf
+                    && command.Arguments.Length >= 5)
+                {
+                    var step = new OnTheWay(
+                        asked?.Code ?? 0,
+                        asked is { Arguments.Length: >= 2 } ? asked.Word() : 0,
+                        asked is { Arguments.Length: >= 4 } ? asked.Word(2) : 0,
+                        command.Arguments[0],
+                        true);
+
+                    if (rom.IsRomAddress(command.Pointer(1)))
+                        queue.Enqueue((command.Pointer(1), 0, [.. chain, step]));
+
+                    // And carrying on past it is the other answer, priced the same way.
+                    chain = [.. chain, step with { TookTheBranch = false }];
+
+                    asked = null;
+
+                    continue;
+                }
+
+                if (command.Code is ScriptCommands.Goto or ScriptCommands.Call
+                    && rom.IsRomAddress(command.Pointer()))
+                {
+                    queue.Enqueue((command.Pointer(), 0, chain));
+
+                    if (command.Code == ScriptCommands.Goto) break;
+                }
+            }
+        }
+
+        return null;
     }
 
     /// <summary>

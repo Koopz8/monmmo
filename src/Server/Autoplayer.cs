@@ -80,6 +80,43 @@ public sealed record PlayedScript(
 }
 
 /// <summary>
+/// What running one script came to, as far as why it might not have finished.
+/// <para>
+/// A script that ran and did not do the thing it is named for stopped somewhere, and where is
+/// the whole job. This game gives a run exactly three ways to stop short: a yes-or-no nobody
+/// answered, a routine into code this cannot execute, or an ordinary branch it had no reason
+/// to take. The first two have levers already — <c>--say-yes</c> and <c>--answer</c> — and
+/// the third needs the bytes read.
+/// </para>
+/// </summary>
+public sealed record WhatRan
+{
+    /// <summary>True when some pass of it stopped at a yes-or-no.</summary>
+    public bool StoppedAtAQuestion { get; init; }
+
+    /// <summary>Routines it asked and could not be answered, so it took the zero arm.</summary>
+    public IReadOnlyList<int> Routines { get; init; } = [];
+
+    /// <summary>Flags it turned on, on the best pass it had.</summary>
+    public IReadOnlyList<int> Set { get; init; } = [];
+
+    /// <summary>
+    /// This and one more pass of the same script, folded together.
+    /// <para>
+    /// The same script runs on every pass with a different bag and different flags behind it.
+    /// Keeping only the last is keeping whichever pass happened to be last; keeping the union
+    /// is "everything this script has ever managed", which is the honest ceiling.
+    /// </para>
+    /// </summary>
+    public WhatRan And(PlayedScript did) => new()
+    {
+        StoppedAtAQuestion = StoppedAtAQuestion || did.StoppedAtAQuestion,
+        Routines = [.. Routines.Union(did.Specials)],
+        Set = [.. Set.Union(did.FlagsSet)],
+    };
+}
+
+/// <summary>
 /// A door out of somewhere it reached, into somewhere it never did.
 /// <para>
 /// The number that matters when a run stops. "246 maps it never got to" is a list nobody can
@@ -387,7 +424,7 @@ public sealed record Attempt(
     /// it — and nothing here could tell those apart.
     /// </para>
     /// </summary>
-    public IReadOnlyCollection<uint> Ran { get; init; } = [];
+    public IReadOnlyDictionary<uint, WhatRan> Ran { get; init; } = new Dictionary<uint, WhatRan>();
 
     /// <summary>People a script took off a map, which is how a doorway stops being blocked.</summary>
     public IReadOnlyCollection<(string MapId, int LocalId)> Removed { get; init; } = [];
@@ -549,8 +586,8 @@ public static class Autoplayer
         // this — `asIfGone` is its own parameter — and nothing has ever told it.
         var gone = new HashSet<(string MapId, int LocalId)>();
 
-        // Every script that actually ran, by where it starts.
-        var ran = new HashSet<uint>();
+        // Every script that actually ran, by where it starts, and what running it came to.
+        var ran = new Dictionary<uint, WhatRan>();
 
         // And people a script has walked somewhere else, which is the other half of the same
         // idea and had no parameter at all until now.
@@ -605,8 +642,15 @@ public static class Autoplayer
                     PlayedScript did = runScript(what.Address, flags, bag);
 
                     // That it ran at all, which is a different fact from the map being
-                    // reached. A trigger fires only for somebody standing exactly on it.
-                    ran.Add(what.Address);
+                    // reached. A trigger fires only for somebody standing exactly on it —
+                    // and what running it came to, because a script that ran and did not do
+                    // the thing it is named for stopped somewhere, and where is the job.
+                    //
+                    // Merged across passes rather than overwritten: the same script runs on
+                    // every pass with a different bag and different flags, and the pass that
+                    // got furthest is the one worth reporting.
+                    ran[what.Address] = (ran.GetValueOrDefault(what.Address) ?? new WhatRan())
+                        .And(did);
 
                     foreach (int routine in did.Specials)
                         specials[routine] = specials.GetValueOrDefault(routine) + 1;

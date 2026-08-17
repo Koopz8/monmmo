@@ -6690,6 +6690,10 @@ public static class Program
                 Console.WriteLine(
                     $"           set by {sets.MapId} {world.Find(sets.MapId)?.Name ?? "(not exported)"} "
                     + $"{sets.What} — {Standing(sets)}");
+
+                // And, when the run got into the script and still did not set it, what it
+                // would have had to be true to get to the setflag.
+                if (played.Ran.ContainsKey(sets.Address)) WriteTheWayIn(rom, sets, who.HiddenBy);
             }
 
             if (removes.Count > 3) Console.WriteLine($"           ... and {removes.Count - 3} more that set it");
@@ -6761,8 +6765,8 @@ public static class Program
         string Standing(SetsAFlag sets) =>
             !played.Reached.Contains(sets.MapId)
                 ? "ON A MAP IT NEVER REACHED — that map is the job"
-                : played.Ran.Contains(sets.Address)
-                    ? "IT RAN THIS SCRIPT AND THE FLAG IS STILL UNSET — the setflag is behind a branch inside it"
+                : played.Ran.TryGetValue(sets.Address, out WhatRan? did)
+                    ? "IT RAN THIS SCRIPT AND THE FLAG IS STILL UNSET — " + WhyItStopped(did)
                     : "on a map it reached, and it never ran this script — it never stood on the square";
 
         if (waiting.AskedWithoutABranch > 0)
@@ -6773,6 +6777,56 @@ public static class Program
         }
 
         WriteWhatElseItAsks(waiting);
+    }
+
+    /// <summary>
+    /// Why a script that ran did not get as far as the flag it sets.
+    /// <para>
+    /// Three ways, and two of them already have a lever. A yes-or-no nobody answered is
+    /// <c>--say-yes</c>; a routine into code this cannot execute is <c>--answer</c>; an
+    /// ordinary branch is the one that needs the bytes read, and <see cref="WriteTheWayIn"/>
+    /// reads them.
+    /// </para>
+    /// </summary>
+    private static string WhyItStopped(WhatRan did) =>
+        did.StoppedAtAQuestion
+            ? "it stopped at a yes-or-no nobody answered — try --say-yes"
+            : did.Routines.Count > 0
+                ? $"it asked routine(s) {string.Join(", ", did.Routines.Take(3).Select(r => $"0x{r:X3}"))} "
+                    + "and took the zero arm — try --answer"
+                : "it ran to the end, so the setflag is on an ordinary branch it had no reason to take";
+
+    /// <summary>
+    /// The answers that had to go a particular way to reach a <c>setflag</c>, in order.
+    /// <para>
+    /// The last question in the chain. Three SAFFRON doors are one flag; that flag is set by a
+    /// trigger in SILPH CO.; the run stood on the trigger and ran it and the flag is still
+    /// unset. So the setting is behind a branch <em>inside</em> that script, and this is the
+    /// list of what has to be true first.
+    /// </para>
+    /// </summary>
+    private static void WriteTheWayIn(Rom rom, SetsAFlag sets, int flag)
+    {
+        IReadOnlyList<OnTheWay>? way = WhatItIsWaitingFor.PathTo(rom, sets.Address, flag);
+
+        if (way is null)
+        {
+            // Which would contradict the line above it — this script is only named because
+            // something read a setflag in it — so it is worth saying loudly rather than
+            // printing nothing and looking tidy.
+            Console.WriteLine(
+                "             (and no way through this script reaches that setflag at all — "
+                + "these two readings disagree)");
+
+            return;
+        }
+
+        Console.WriteLine(
+            way.Count == 0
+                ? "             nothing gates it on the way found — it sets the flag unconditionally"
+                : $"             to get there: {string.Join(" AND ", way.Take(6))}"
+                    + (way.Count > 6 ? $", and {way.Count - 6} more" : string.Empty)
+                    + "  (one path of possibly several)");
     }
 
     /// <summary>

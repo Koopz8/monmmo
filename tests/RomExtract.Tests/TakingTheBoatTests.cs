@@ -665,6 +665,44 @@ public class WhoIsInTheDoorwayTests
     }
 
     /// <summary>
+    /// Why a script stopped short survives the passes after the one it stopped on.
+    /// <para>
+    /// The same script runs on every pass, with a different bag and different flags behind it.
+    /// Keeping only the last is keeping whichever pass happened to be last — and the reason a
+    /// script did not finish is usually visible on one pass and gone by the next, because by
+    /// then the run is walking past it with nothing left to say. Folded together instead:
+    /// everything this script has ever managed, which is the honest ceiling.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void WhyAScriptStoppedShortSurvivesTheNextPass()
+    {
+        var passes = 0;
+
+        var world = new WorldData(
+        [
+            Room("1.0") with
+            {
+                Objects = [new MapObject(1, 1, 1, 1, Direction.Down, 0, false) { ScriptAddress = 0x1000 }],
+            },
+        ]);
+
+        // Stops at a question the first time it is run, and has nothing to say ever after.
+        Attempt played = Autoplayer.Play(
+            world,
+            "1.0",
+            TestRules.All,
+            (_, _, _) => ++passes == 1
+                ? Nothing with { StoppedAtAQuestion = true, Specials = [0x0AB] }
+                : Nothing);
+
+        WhatRan did = played.Ran[0x1000];
+
+        Assert.True(did.StoppedAtAQuestion);
+        Assert.Equal([0x0AB], did.Routines);
+    }
+
+    /// <summary>
     /// And a door nobody is standing in names nobody. The list is only worth having if it is
     /// empty when it should be.
     /// </summary>
