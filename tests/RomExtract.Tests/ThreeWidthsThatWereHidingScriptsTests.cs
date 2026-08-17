@@ -106,6 +106,16 @@ public class ThreeWidthsThatWereHidingScriptsTests
 
         // The second wrong width, with a flag hidden inside its own arguments. Read at one, the
         // arguments decode as a `setflag` that is not there; read at four they are arguments.
+        //
+        // Said plainly, because a test that claims a discrimination it does not make is worse
+        // than no test: this fixture separates FOUR from ONE and nothing else. At three the
+        // last argument byte is a 0x00, the reader calls it a nop, and the read rejoins at
+        // 0x78A — so three and four behave identically here and no assertion on this image can
+        // tell them apart. That is not an oversight, it is the shape of the command: on the
+        // cartridge the same nop absorbs the same difference, and the only thing separating
+        // three from four there is the column — five sites of five landing on padding at three
+        // and on `copyvar`/`compare` at four. That argument lives in the width table beside the
+        // bytes, because a fixture cannot hold it.
         Put(image, 0x780, SetVar, 0x04, 0x80, 0x00, 0x00);
         Put(image, 0x785, WasWrongToo, 0x00, SetFlag, 0x5A, 0x00);
         Put(image, 0x78A, CopyVar, 0x00, 0x80, 0x0D, 0x80);
