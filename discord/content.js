@@ -22,12 +22,12 @@ the ROM you already own, on your own machine, at runtime**. The client ships non
 of it. The server never sees any of it.
 
 This is a solo engineering project, built in public, one measured milestone at a
-time. **2,411 tests**, none of which need a cartridge. An authoritative server, a
+time. **2,753 tests**, none of which need a cartridge. An authoritative server, a
 Gen III battle engine accurate down to truncation order, and a growing list of
-things two people can do to each other: **see each other, chat, add friends,
-form a guild, trade, duel, climb a ladder, and buy and sell on a player market**.
-**Sound and animations are in** too — songs, cries, and a move's animation read
-as the 48-opcode program it is.
+things two people can do together: **see each other, chat, add friends, form a
+guild, trade, duel, climb a ladder, buy and sell on a player market, and travel
+the story as a company**. **Sound and animations are in** too — songs, cries, and
+a move's animation read as the 48-opcode program it is.
 
 Breeding, IVs, EVs, natures, abilities, weather and held items are all in. The
 tier list is **recomputed from the cartridge's own base stats** rather than
@@ -39,7 +39,9 @@ startup, interest instead of broadcast, saves that write only what changed, and
 **more than one copy of a busy place** — so forty people in a room never becomes
 four hundred.
 
-**Where to go**
+Repo: {{REPO}}`,
+
+`**Where to go**
 
 > **#rules** — read this first. One of them will get you banned instantly.
 > **#announcements** — the only channel that will ever ping you unprompted.
@@ -53,9 +55,7 @@ four hundred.
 React or ask in #general for notification roles: **devlog pings**,
 **build pings**, **playtest pings**. All three are opt-in and off by default.
 
-**Field Tester** is granted, not requested — see #rules.
-
-Repo: {{REPO}}`,
+**Field Tester** is granted, not requested — see #rules.`,
   ],
 
   rules: [
@@ -195,11 +195,10 @@ out of \`Core\`.** Movement is applied locally the instant a key is pressed and 
 server almost never disagrees, so rejection is an exception path, not the normal
 flow. No reconciliation, no rubber-banding.
 
-**Three multiplayer verbs so far:** seeing each other, trading one thing each,
-and fighting. Trade and duel are deliberately the same shape — one at a time,
-an invitation that dies when either side walks away, and asking somebody who has
-already asked you is how it begins. Two verbs that behave the same way are two
-verbs a player only has to learn once.
+**Trade and duel are deliberately the same shape** — one at a time, an invitation
+that dies when either side walks away, and asking somebody who has already asked
+you is how it begins. Two verbs that behave the same way are two verbs a player
+only has to learn once. Guilds, the market and co-op all reuse that shape.
 
 **The scaling run (111–124)** rebuilt most of this underneath the game: a door
 with a measured width, interest instead of broadcast, an index instead of a scan,
@@ -231,6 +230,25 @@ Open questions worth arguing about, any time:
 - A flag set in memory that the save does not have.
 - Simulating maps nobody is standing on (walk away and back, and the street
   resets).`,
+
+`**Co-op: travelling as a company.** Invite somebody and you land in the same
+copy of every map, and doors move you together instead of quietly splitting you
+up.
+
+The interesting part is what your friend can *see*. Join three gyms behind
+somebody and, while you are travelling together, the world shows you your own
+progress **or** anything the people with you have opened — so you can follow them
+through a door you have not earned yet.
+
+**Nothing is written to their save.** They are borrowing a world, not being
+handed one. When the company breaks up, everybody keeps exactly what they played
+for, and there is nothing to undo because nothing was ever done to them.
+
+Same rule as everywhere else in here: the world reports, and something outside
+the lock writes it down. Borrowing is a question asked at the moment somebody
+opens a door, not a copy of anybody's save sitting somewhere going stale.
+
+Still open: a parcel handed to the company still goes to one person.`,
   ],
 
   'battle-engine': [
@@ -299,6 +317,11 @@ missing was two fields of memory.
 **A family named for the machinery it appears to need is usually named wrong.**
 The naming comes from how a move *feels* to a player, and how a move feels and
 what it costs to implement are unrelated.`,
+
+`**Switching creatures mid-duel is in.** It was refused for a long time and said
+so in the code rather than quietly pretending otherwise — and it was the one
+missing piece under the last ordering bug still on the list, the moves that are
+meant to act on somebody running away. Both are closed.`,
   ],
 
   'data-and-extraction': [
@@ -368,8 +391,37 @@ guardrail nobody has tested.**
 Standing unsolved problems:
 - **The font.** Four mechanical methods ruled out. The mapping is not identity,
   the sheet is not one of the four candidates, and the geometry may not be 8×8.
-- **The box count.** Stated nowhere on the cartridge, so more than one box would
-  have to be remembered rather than read.`,
+- **The box count.** Stated nowhere on the cartridge. Eight is a decision, not a
+  reading, and it is labelled as one.
+
+**Reading the file rather than the world — message below.**`,
+
+`**Reading the file, not the world.** Every search here used to start at a map
+and follow the doors out of it. That can never answer *is there anything the maps
+do not point at* — and the output looks identical to a search that went
+everywhere and found nothing. Three separate times this month, "nothing in the
+game does X" turned out to mean "nothing I opened does X".
+
+There is a sweep now that reads all sixteen megabytes for the bytes that move a
+story flag, asks of every hit whether the map search had ever decoded it, and
+climbs until it reaches something with a name. It is run a second time on the
+same file **backwards**, as a control — whatever it finds there is what it finds
+when there is nothing to find. 600 hits against 787 is noise. 7 against 0 is not.
+
+It also prints how many scripts it opened, and of what kind. A kind with no line
+is a kind nothing looked at, which is the single thing the old output could never
+tell you.
+
+**Where that leaves the reading:** 2,915 scripts on 425 maps. 322 flags gate
+something in the world, and 258 of them are moved by a script somewhere. The rest
+sit behind the cartridge's compiled code — which this project does not read and
+does not intend to, so they are a boundary with an address on it rather than a
+mystery.
+
+And the thing worth carrying: **fifteen faults were closed here in a fortnight
+and every one of them was in this project, not on the cartridge.** Nothing fails
+when it is wrong; it comes back confident and slightly off. Assume the number in
+front of you is distorted until an instrument says which direction.`,
   ],
 
   suggestions: [
@@ -618,24 +670,36 @@ and is extracted at runtime. What's left is pure engineering.`,
 posting in #bug-reports.
 
 **Known and open**
-- **A flag set in memory that the save does not have.** The sharpest lead on this
-  list — it has a reproduction path and an obvious symptom (a named trainer
-  missing from a room).
-- **The flag race.** Older, vaguer, possibly the same animal: a script's flags
-  reach the server from the client. Still without evidence, and one previous
-  sighting was withdrawn after turning out to be two events a second apart read
-  as one.
+- **The story does not finish yet.** A tool plays the game from a fresh save and
+  walks as far as it can get. It reaches **390 of 425 places**. The last door
+  with somebody standing in it is opened by a switch that nothing in the game
+  ever flips — meaning whatever flips it is in the cartridge's compiled code,
+  and this project reads data, not code.
+- **A scene that moves somebody aside runs again every time the walk goes
+  round.** 55 people get walked; **21 end up on a square that is not on the map**
+  — one of them thirty steps past the edge. Something on the cartridge stops the
+  scene repeating and it has not been found. Not being papered over with a clamp:
+  the honest number here goes *down*, not up.
+- **53 pieces of script still stop early**, on bytes whose meaning is unknown.
+  Two of them turned out to be a wrong guess made earlier in the file rather than
+  a command at all, which is the usual shape of this.
+- **11 places have no way in at all**, five of them islands with no dock in what
+  gets read.
+- **Sound is paused.** 31 song headers unconfirmed, and battle music still open.
+- **A flag set in memory that the save does not have**, and the older, vaguer
+  **flag race** that may be the same animal: a script's flags reach the server
+  from the client, so two conversations inside one round trip both see the old
+  state.
 - **A thousand players on real hardware.** Every scaling number so far is from
-  two cores with the load generator sharing them. Needs a second machine; the
-  only open question code cannot answer.
+  two cores with the load generator sharing them. The only open question code
+  cannot answer.
+**More below.**`,
+
+`**Known and open, continued**
 - **LOW KICK**, which wants species weight — on the dex table rather than the
   base-stat record, so it needs a locator of its own.
-- **PURSUIT's ordering**, which needs the switch moved inside the turn. Written
-  down as not done rather than quietly assumed.
 - **Ten held-item effects**, every one about something outside a fight, and
   **thirty-two abilities**, which now have the hooks they were waiting for.
-- **Nineteen warps** leading to maps that are not exported. One measurement,
-  not yet taken.
 - **Four more regions.** The largest item by far and the least like the others:
   extraction work against cartridges this project does not have.
 - **Text rendering.** The cartridge's font has not been located. Four mechanical
@@ -646,22 +710,42 @@ posting in #bug-reports.
 - **Whether a duel should be refused across bands at all.** The ladder records
   which band a fight counted in rather than restricting who may fight whom —
   measure first, then decide whether to forbid.
-**More below.**`,
-
-`**Known and open, continued**
 - **Unsimulated maps.** Only maps with a player on them tick. Walk away and back
   and the townsfolk have reset to their starting positions.
-- **Switching in a duel** is refused, and says so in the code rather than
-  hiding it.
-- **A flag set in memory that the save does not have**, and the older, vaguer
-  flag race that may be the same animal.
+- **In co-op, a parcel handed to the company still goes to one person.**
+- **Money is modelled.** What a fight pays out is on a table nobody has located.
 - **One thing stated but not proved:** that a duel's result is taken exactly
   once. Breaking it leaves every test green, because reaching it needs a real
   duel driven to a finish through the world. Said out loud rather than assumed.
 
-**Closed items and non-bugs are in the message below.**`,
+**Closed items and non-bugs are in the messages below.**`,
 
 `**Closed, so please stop reporting them**
+- ~~The player had no bag.~~ Every character in the game who asks whether you are
+  carrying something had been told "no" since the walker was written. Silently,
+  for months. There is a bag now.
+- ~~Switching creatures in a duel is refused.~~ It is in, and it was the missing
+  piece under the last ordering bug on this list.
+- ~~The walk cannot cross water.~~ It can. Which move crosses water is read out
+  of the file twice over rather than handed in as a setting.
+- ~~The shop sells nothing.~~ A carrying limit named for one pocket was being
+  counted across the whole bag, so every purchase past sixty items was refused
+  without saying so. A refused purchase now says which of four reasons it was.
+- ~~Nobody ever answered a yes-or-no.~~ Every run had stopped dead at the first
+  "would you like to…?" since the walker was written — and a script that stopped
+  mid-sentence looks exactly like somebody with nothing more to say.
+- ~~The party never gains a level.~~ It does. Three at level 75 with the sea open.
+- ~~SAFFRON's shut doors.~~ Ten measurements went into one door before the counts
+  sat side by side and showed it to be one ordinary member of a set of 245.
+  Closed in the reading and in the walk.
+- ~~The market's window between committing and the in-memory copy.~~ It could put
+  a creature in your box **and** on the market at once, both halves internally
+  consistent and nothing throwing, until two people owned it.
+- ~~The battle engine's silent half.~~ Every remaining effect family is modelled.
+
+**More closed items, and the things that are not bugs, below.**`,
+
+`**Closed, continued**
 - ~~The bedroom PC's behaviour byte.~~ There is no byte. The bedroom machine is
   scripted, not a tile — proved, not assumed.
 - ~~Joining takes forever under load.~~ The door was one unbounded 997 ms hash
@@ -678,19 +762,17 @@ posting in #bug-reports.
   count is printed rather than rounded up.
 - ~~One box holds everything.~~ Eight now. Nothing on the cartridge says how
   many there should be, so the number is modelled and the reason sits beside it.
-- ~~The market's window between committing and the in-memory copy.~~ Closed —
-  and it was worse than it sounded. It could put a creature in your box **and**
-  on the market at once, with both halves internally consistent and nothing
-  throwing, until two people owned it.
-- ~~The battle engine's silent half.~~ **Finished.** Every remaining effect
-  family is modelled. Fourteen of the last twenty-three needed no new machinery
-  at all — just a line pointing at something the engine already had.
+- ~~Nineteen warps leading to maps that are not exported.~~ Measured. It is 11
+  places with no way in, and they are on the open list above with reasons.
 
 **Not bugs**
 - The client refusing a ROM whose SHA-1 doesn't match. Working as intended.
 - A duel costing you nothing — no experience, no money, no black-out, and your
   copies arriving on their feet however the real party is doing. All deliberate:
-  a fight that could cost an afternoon is a fight nobody agrees to twice.`,
+  a fight that could cost an afternoon is a fight nobody agrees to twice.
+- Your friend seeing a door you opened while you travel together. That is what
+  co-op **is**. Nothing is written to their save, and they leave with exactly
+  what they earned.`,
   ],
 
   // ────────────────────────────────────────────────────────────── THE BACK ROOM
