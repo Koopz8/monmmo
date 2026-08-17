@@ -141,6 +141,11 @@ public class EverywhereInTheImageTests
         Put(image, 0xF0F, CopyVarIfNotZero, Counter & 0xFF, Counter >> 8, 0x02, 0x40);
         Put(image, 0xF14, End);
 
+        // And a writer opcode that is not one: three bytes in the middle of something, with
+        // bytes after them that are not commands. Without this the sweep's filter is a rule
+        // with no case to fail on.
+        Put(image, 0xF30, SetVar, 0xAD, 0x0B, 0xFF, 0xFF, 0xFF, 0xFF);
+
         // A hit on the flag pattern that is not a setflag at all — three bytes in the middle
         // of something, with bytes after them that are not commands.
         Put(image, 0xA03, SetFlag, Holds & 0xFF, Holds >> 8, 0xFF, 0xFF, 0xFF);
