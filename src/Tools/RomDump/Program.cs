@@ -6075,6 +6075,14 @@ public static class Program
                   + string.Join(", ", missing.Take(14).Select(f => $"0x{f:X4}"))
                   + (missing.Count > 14 ? $", +{missing.Count - 14} more" : ""));
 
+        // AND WHY EACH OF THEM IS SHUT, which the line above cannot say.
+        //
+        // "110 gating flags it never set" reads the same whether the run is one door short of
+        // everything or a hundred and ten scripts short, and those are opposite findings. This
+        // is the join --flags has never made: --flags takes only the ROM and has never seen an
+        // Attempt, and the run knows what it set and nothing about what else could have.
+        WriteWhyTheGatesAreShut(rom, world, gates, played.Flags);
+
         // WHY IT COULD CROSS WATER, WHICH WAS A COMMAND-LINE FLAG UNTIL NOW.
         //
         // The sea is 1245 squares across 35 maps and the walk has always been told whether to
@@ -7755,6 +7763,66 @@ public static class Program
         Console.WriteLine(
             "  walking, because people ended up in the wrong place. Nothing else had been asked.");
     }
+
+    /// <summary>
+    /// The gates a run never opened, sorted by whether anything in the file could have opened
+    /// them.
+    /// <para>
+    /// The rule is in <see cref="WhyTheGatesAreShut"/> rather than here, for the eighth time: a
+    /// rule about the world inside this file is a rule nothing can fail.
+    /// </para>
+    /// </summary>
+    private static void WriteWhyTheGatesAreShut(
+        Rom rom, WorldData world, FlagGates gates, IReadOnlyCollection<int> set)
+    {
+        List<SetsAFlag> scripts = [.. MapLibrary.Open(rom).All().SelectMany(EveryScriptOn)];
+
+        int[] covered = EverywhereInTheImage.Opened(rom, scripts);
+
+        // What picking a thing up sets, read off the objects' own records. The cartridge does
+        // it inside the standard routine that hands the thing over, which is compiled code —
+        // only 7 of the 575 objects carrying a hide flag have a script that sets it.
+        HashSet<int> onTheFloor =
+        [
+            .. world.Maps.SelectMany(m => m.Objects).Where(o => o.CanBeTakenAway).Select(o => o.HiddenBy),
+        ];
+
+        IReadOnlyList<ShutGate> shut = WhyTheGatesAreShut.Of(
+            gates, set, EverywhereInTheImage.EveryFlagMoved(rom, covered), onTheFloor);
+
+        if (shut.Count == 0) return;
+
+        Console.WriteLine("      and why each of those is shut, asked of the WHOLE file:");
+
+        foreach ((ShutBecause why, int count) in WhyTheGatesAreShut.Counted(shut))
+        {
+            Console.WriteLine($"        {count,4}  {Because(why)}");
+        }
+
+        // The two that can never be walked to, named. The third bucket is the reach problem and
+        // it is as long as the walk is short, so it is counted and not listed.
+        foreach (ShutBecause why in new[] { ShutBecause.NothingSetsIt, ShutBecause.OnlyPastTheBoundary })
+        {
+            List<ShutGate> these = [.. shut.Where(g => g.Why == why)];
+
+            if (these.Count == 0) continue;
+
+            Console.WriteLine(
+                $"        {Because(why)}: "
+                + string.Join(
+                    ", ",
+                    these.Take(12).Select(g => $"0x{g.Flag:X4}" + (g.Sites > 0 ? $" ({g.Sites} setter(s))" : "")))
+                + (these.Count > 12 ? $", +{these.Count - 12} more" : ""));
+        }
+    }
+
+    private static string Because(ShutBecause why) => why switch
+    {
+        ShutBecause.NothingSetsIt => "no setflag names it and nothing on the floor hides behind it — the boundary",
+        ShutBecause.OnlyPastTheBoundary => "set only where the map scan cannot see — past the code boundary",
+        ShutBecause.TakenOffTheFloor => "set by PICKING SOMETHING UP — the object's record says so, no script does",
+        _ => "set by a script on a map, and the run never ran it — a REACH problem",
+    };
 
     /// <summary>
     /// What the three coin commands count, how much of it fits, and what it buys.
