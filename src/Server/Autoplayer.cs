@@ -164,7 +164,19 @@ public sealed record Blocker(
     IReadOnlyList<int> AskedFor,
     bool Walked,
     bool Hid,
-    int FlagsSet);
+    int FlagsSet)
+{
+    /// <summary>
+    /// Routines its script asked the game for and did not get an answer from.
+    /// <para>
+    /// The difference between "talking to him does nothing" and "talking to him asks the game
+    /// a question this project cannot ask, and takes the nothing arm". The first is a person
+    /// with no part in the story; the second is a wall with a number on it, and the number is
+    /// the thing to hand to <c>--answer</c>.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<int> Routines { get; init; } = [];
+}
 
 /// <summary>
 /// Something a script wanted that the playthrough was not carrying, and where.
@@ -802,7 +814,14 @@ public static class Autoplayer
                                     ],
                                     spokenTo.GetValueOrDefault((m.Id, p.LocalId))?.Walked.Count > 0,
                                     spokenTo.GetValueOrDefault((m.Id, p.LocalId))?.Hides.Count > 0,
-                                    spokenTo.GetValueOrDefault((m.Id, p.LocalId))?.FlagsSet.Count ?? 0)),
+                                    spokenTo.GetValueOrDefault((m.Id, p.LocalId))?.FlagsSet.Count ?? 0)
+                                {
+                                    Routines =
+                                    [
+                                        .. spokenTo.GetValueOrDefault((m.Id, p.LocalId))?.Specials
+                                            .Distinct() ?? [],
+                                    ],
+                                }),
                         ],
                     }))
                 .DistinctBy(d => (d.FromMapId, d.ToMapId, d.Square)),

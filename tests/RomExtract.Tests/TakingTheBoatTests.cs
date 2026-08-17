@@ -535,6 +535,42 @@ public class WhoIsInTheDoorwayTests
     }
 
     /// <summary>
+    /// And a blocker who asks the game something says which number.
+    /// <para>
+    /// "Talking to him does nothing" and "talking to him asks the game a question this project
+    /// cannot ask, and takes the nothing arm" are a person with no part in the story and a
+    /// wall with a number on it. The second is the number to hand to <c>--answer</c>, and
+    /// without this line the two are the same sentence.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ABlockerWhoAsksTheGameSomethingSaysWhichNumber()
+    {
+        Attempt played = Autoplayer.Play(
+            Gate(),
+            "1.0",
+            TestRules.All,
+            (address, _, _) => address == 0x2000
+                ? new PlayedScript([], [], [], [0x187, 0x187, 0x159], null, null)
+                : Nothing);
+
+        Blocker who = Assert.Single(Assert.Single(played.ShutDoors, d => d.ToMapId == "1.1").Who);
+
+        // Each routine once, however many times it was asked: this is a list of numbers to
+        // try, not a tally.
+        Assert.Equal([0x187, 0x159], who.Routines);
+    }
+
+    /// <summary>And somebody who asks nothing claims nothing.</summary>
+    [Fact]
+    public void AndSomebodyWhoAsksNothingClaimsNothing()
+    {
+        Attempt played = Autoplayer.Play(Gate(), "1.0", TestRules.All, (_, _, _) => Nothing);
+
+        Assert.Empty(Assert.Single(Assert.Single(played.ShutDoors, d => d.ToMapId == "1.1").Who).Routines);
+    }
+
+    /// <summary>
     /// And a door nobody is standing in names nobody. The list is only worth having if it is
     /// empty when it should be.
     /// </summary>
