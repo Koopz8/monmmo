@@ -6622,8 +6622,24 @@ public static class Program
         // which starter was taken — and they are the ones that must NOT travel.
         var touched = new HashSet<int>();
 
+        // What this scan actually opened, by kind.
+        //
+        // A null result is only worth as much as the reading behind it, and three times this
+        // session "nothing in the world does X" turned out to be a sentence about a scan that
+        // had never looked at some whole class of script. A count per kind is the cheapest
+        // possible way to tell "there are none" from "I did not look" — and the two have been
+        // indistinguishable in this output for as long as it has existed.
+        var kinds = new Dictionary<string, int>();
+
         foreach (LoadedMap map in library.All())
         {
+            foreach (SetsAFlag script in EveryScriptOn(map))
+            {
+                string kind = script.What.Split(' ')[0] + (script.What.StartsWith("on ") ? " " + script.What.Split(' ')[1] : "");
+
+                kinds[kind] = kinds.GetValueOrDefault(kind) + 1;
+            }
+
             foreach ((string _, string _, uint address) in ScriptsOf(map))
             {
                 foreach (ScriptCommand command in ScriptReader.ReadAll(rom, address))
@@ -6638,6 +6654,14 @@ public static class Program
 
         int marks = touched.Count(f => !gates.IsAboutTheWorld(f));
 
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  {kinds.Values.Sum()} scripts were opened to work that out: "
+            + string.Join(", ", kinds.OrderByDescending(k => k.Value).Select(k => $"{k.Value} {k.Key}")));
+        Console.WriteLine(
+            "    a kind with no line here is a kind nothing looked at, which reads exactly like");
+        Console.WriteLine(
+            "    a kind with nothing in it — and that has been true of this output all along");
         Console.WriteLine();
         Console.WriteLine($"  {touched.Count} flags are set or cleared by a script somewhere");
         Console.WriteLine($"    {touched.Count - marks} of those gate something — they travel between people playing together");
