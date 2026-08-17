@@ -1,7 +1,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-243`, 2811 tests green.
+`claude-244`, 2827 tests green.
 
 Standing rules — do not break these:
 
@@ -92,8 +92,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-207-the-other-floor-and-the-table-nobody-re-ran.md` first, then
-`206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
+Read `claude/milestone-208-the-number-none-of-them-holds.md` first, then
+`207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
 **Twenty faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
@@ -130,6 +130,7 @@ dotnet run -c Release --project src/Tools/RomDump -- firered.gba --flags
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --scripts
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --fights
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --who-knows
+dotnet run -c Release --project src/Tools/RomDump -- firered.gba --coins
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --entries
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --counters
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --in-the-image 0x003E,0x003F
@@ -151,7 +152,10 @@ stopped read of one command with the run-up and **where the read started**. `--f
 back "nothing of this kind skips a guard" for six of the eight kinds, which is the answer it
 has to be able to give. `--who-knows` asks the WHOLE FILE who knows a move — the obstacle scan
 asks the maps, and the maps are 0.6% of it — and prints the reversed-image floor beside the
-count, because 600 against 787 is noise and 7 against 0 is not. `--entries` counts the scenes
+count, because 600 against 787 is noise and 7 against 0 is not. `--coins` reads the three commands that move a count, and derives the one number none of them
+holds: five places read the count, compare it against a bound, branch and hand a quantity over,
+and every bound plus its own gift is 10000. Four different pairs, one sum, and the same chain
+hunt on the reversed image finds NOUGHT. `--entries` counts the scenes
 this cartridge writes as several doors into one room, and separates them from the shared
 routines that look identical — by the number each door says, which is different per door for a
 scene and the same for a crowd.
@@ -204,6 +208,8 @@ sets. CERULEAN CAVE is closed: the run now reaches it, off the SAPPHIRE thread.
 9 people on or beside a door behind 5 flags — the wall list
 21 people never arrive at all
 11 of 425 maps have no way in at all
+5 places guard a coin hand-over; every bound plus its own gift is 10000; 0 chains in the reversal
+2 places sell coins for money at 20 each — READ; 3 price lists, 15 rows, all READ
 ```
 
 ## The next task, precisely
@@ -220,15 +226,18 @@ sets. CERULEAN CAVE is closed: the run now reaches it, off the SAPPHIRE thread.
    anyway, which is the `#130` at 71 the party ends with. **The floor is clean**: 1 place asks,
    nothing comes of it, so the floor's party of six is entirely earned. Whether that deserves a
    `--pay` lever or a located payout table is a DECISION and it is deliberately not made.
-3. **The GAME CORNER is readable now and nobody has looked at it.** `92 <u32> <u8>` checks money
-   against 10000 and 1000, `B4` hands over 500 and 50 of something, `91` takes the money, `B3`
-   hands `0x4001` to the compare after it. That is a coin exchange and NONE of it is claimed —
-   it is what the next read is looking at.
-4. **Money, for real this time.** Three drinks at 200/300/350 and a POKé DOLL at 1000, all READ,
-   all at counters the run now reaches, against a purse of nought. `--money N` is the lever and
-   it is MODELLED; the payout table has never been located. 197 filed the POKé DOLL as a reach
-   problem and 198's rule change showed it is a money problem after all — the reverse of 197's
-   own correction, and only the fix could tell.
+3. **The GAME CORNER is read (208) and the run's side of it is not.** `--coins` says five
+   places guard a hand-over and all five sum to 10000, two places sell coins at 20 each, and
+   three price lists hold fifteen rows. What it does NOT say is whether the RUN stands in front
+   of any of them: 10.14 is on no shut-door list and every site is inside a script the map scan
+   opens, but 201's "8 places ask the run for money" is **a count with no list**, so whether two
+   of those eight are the coin counter's cannot be read off. Printing that list is the job.
+4. **Money, for real this time — and the prices are READ now.** Three drinks at 200/300/350 and
+   a POKé DOLL at 1000, plus 208's ¥20 a coin and fifteen coin prices, all READ, all at counters
+   the run reaches, against a purse of nought. `--money N` is the lever and it is MODELLED; **the
+   payout table is still unlocated**, and that is the one number that would make the lever
+   unnecessary. 197 filed the POKé DOLL as a reach problem and 198's rule change showed it is a
+   money problem after all — the reverse of 197's own correction, and only the fix could tell.
 5. **`Attempt.Ran` is fixed (196) and it moved nothing, for a reason worth carrying.** The key
    is `(map, address)` now and five breaks caught it. But the tally 196 added says the only
    consumer in the repository is asked about **one** setter at three lever settings and **zero**
@@ -288,6 +297,19 @@ Guards have come back green because **the fixture was more forgiving than the ca
    207's matrix: break the move floor → the flag test stays green, the move tests go red; break
    the flag floor → the reverse. Six break runs, one red each time, and the greens are the
    result.
+
+10. **A fixture where the thing being looked for sits somewhere the scan never reaches** (208).
+   `B3 v; B4 g; end` looks like the test for "a read with no compare after it is not a guard".
+   It is not: the hand-over lands at index ONE and the fall-through scan starts at three, so the
+   fixture answers correctly for a reason that has nothing to do with the compare. A break that
+   removed the compare check came back green against it. **Ask where in the fixture the thing
+   you are asserting about actually is.**
+
+11. **A fixture that fails the reader before it fails the rule** (208). The replacement for the
+   above put filler where the branch was, so the block stopped decoding and failed the "reads as
+   a script" filter first. It passed because the block was broken, not because the branch was
+   missing. **The thing you blot out has to be replaced by something the same width that the
+   reader still understands.**
 
 Check for these shapes directly rather than waiting for a break to find them. And the same nop
 that makes a slide can make a width **undiscriminable**: the `0x6F` fixture separates four from
@@ -380,6 +402,13 @@ the other, and nothing about a single green run says which. 207 writes the 2x2 d
   the union equals the final reach at every lever setting, even where a pass dips. And since 193
   the final walk agrees with the last pass's own walk too. Closed.
 * **CERULEAN CAVE is not a SAFFRON problem.** `0x005C`, set by `32.0` ONE ISLAND person 3.
+* **What the coin commands count and how much fits.** Ten thousand, off five sites and four
+  distinct (bound, gift) pairs, with nought chains in the reversal (208). And what a coin costs:
+  ¥20, off two sites that ask, give and pay. Do not re-derive either; do look for the payout
+  table, which is a different question.
+* **A shuffle control on the ceiling sums.** Written at 208, proved unfalsifiable by arithmetic
+  and deleted. If every bound plus its own gift is S and no two sites share a pair, a bound
+  crossed with somebody else's gift can never be S. Do not write it again.
 * **The drink, the vending machine, CELADON DEPT, the ferry tickets, the badge-count routine** —
   all dead, see `claude/the-drink-and-the-boat.md`.
 
@@ -390,7 +419,7 @@ the other, and nothing about a single green run says which. 207 writes the 2x2 d
 * Eleven maps have no way in at all, five of them Sevii isles with no dock in the export.
 * A way in reports only the shortest chain, so an upper-bound edge can hide a real one.
 * `Bag.PocketCapacity` was counted across the whole bag — fixed at 190 tests ago, but it shipped.
-* Money is modelled. The payout table has never been located.
+* The purse is modelled and the payout table has never been located. The PRICES are read (208).
 * **`MapScripts` — the fifth list — has no test coverage at all.**
 * A guard nothing can fail: `SpecialContracts.ComparedAfter`. Decoy or deletion.
 * Co-op step 4: a parcel still goes to one person.
