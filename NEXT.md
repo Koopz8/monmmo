@@ -6,21 +6,21 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **The run has a starter.** `--play --say-yes --in-order` comes back with a party
-  of four and the fourth is `#3` — the only creature in this game a player
-  chooses, and no run this project has printed has ever held one. It arrives on
-  the **floor**, which is the strictest run there is.
-- **One line of ordering, never chosen.** A map's arrival script ran *after* every
-  person on that map — the order the three loops happen to sit in. Nobody has ever
-  talked to somebody on a map they had not yet arrived on.
-- **And the cause written down for three milestones was the opposite of the real
-  one.** The roadmap said the counter ratcheted *past* two before the balls read
-  it. Traced, the balls read **one**, every pass, for seven passes. The two landed
-  immediately after the last of them had been asked. The number was right for one
-  instant and nobody was looking.
-- **`--trace 0xNNNN`** is the new instrument: every look at *and read of* one
-  variable, in order, with what it held at the moment somebody looked.
-  `--who-writes` answers the same question of the image, down every arm of every
-  branch; a run takes one arm, and reading a cause off the static list was reading
-  it off the wrong instrument.
-- Not one of 2721 tests noticed when the order changed. Seven do now.
+- **A fight has two exits and only one was ever read.** The runner, meeting a
+  trainer it had already beaten, jumped into that fight's own script — the badge,
+  the flags, the thing the victory was for. That script belongs to *winning*. Run
+  on every later pass, it handed all eight gym leaders' TMs over once per pass,
+  for ever.
+- **`--fights`** reads both exits of all **729** `trainerbattle` sites. Only 27
+  carry a second exit at all; **10 of those skip a guard** — a `checkflag` in the
+  bytes after the command that the jump never arrives at, named by nothing else in
+  the file. Eight of the ten are the eight gyms.
+- **So a beaten trainer falls through**, and the victory is handed back and run
+  once, on the pass that wins it. Flags up at every lever setting, the fixpoint
+  settles one to two passes sooner, and `--in-order` gains a level.
+- **The run now says whether anything changed hands twice.** `0 of 125` places
+  with the levers on, `0 of 198` with the sea open — and `11 of 103` on the floor
+  run, which is what `--in-order` is for. The denominator is printed: *none of
+  them twice* and *nothing hands anything over* read the same before this.
+- The fixture that guarded the old reading passed the whole time. Its bytes after
+  the command were a line and an end — the shape **both readings agree about**.
