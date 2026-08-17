@@ -1,3 +1,4 @@
+using PokeMmo.Core.Scripts;
 using PokeMmo.Core.World;
 using PokeMmo.Server;
 using Xunit;
@@ -90,5 +91,23 @@ public class TheShoreItTurnedBackFromTests
         };
 
         Assert.Empty(Walk(open).Shore);
+    }
+
+    /// <summary>
+    /// And the playthrough passes the lever on, or <c>--surf</c> is a flag that does nothing
+    /// and every number printed under it is the number without it.
+    /// </summary>
+    [Fact]
+    public void ThePlaythroughHandsTheLeverToTheWalk()
+    {
+        var world = new WorldData([Strip(MetatileBehaviour.Water)]);
+
+        PlayedScript nothing = new([], [], [], [], null, null);
+
+        Attempt ashore = Autoplayer.Play(world, "1.0", TestRules.All, (_, _, _) => nothing);
+        Attempt afloat = Autoplayer.Play(world, "1.0", TestRules.All, (_, _, _) => nothing, surfing: true);
+
+        Assert.NotEmpty(ashore.Shore);
+        Assert.Empty(afloat.Shore);
     }
 }
