@@ -100,11 +100,17 @@ public class WhatIsBehindAStopTests
     [Fact]
     public void OnlyAWidthThatReachesAProperEndCounts()
     {
-        // At no width and at one this reads to an end; at every other width it lands on the
-        // unknown byte the image is filled with and dies.
-        Behind behind = WhatIsBehindAStop.Of(Image(0x100, Release, End), 0x100);
+        // At no width this reads a setflag and then runs into the unknown byte — some commands,
+        // no end. At four it reads a single end and stops properly. Only the second is
+        // evidence, and the setflag on the first must not reach the verdict: a width that died
+        // mid-block has not seen what is behind this stop, it has moved the same question along
+        // by a few bytes.
+        Behind behind = WhatIsBehindAStop.Of(
+            Image(0x100, SetFlag, 0x56, 0x00, NoWidth, End), 0x100);
 
-        Assert.Equal(2, behind.WidthsThatParse);
+        Assert.Equal(1, behind.WidthsThatParse);
+        Assert.DoesNotContain(SetFlag, behind.Consequences);
+        Assert.True(behind.NothingBehindIt);
     }
 
     /// <summary>
