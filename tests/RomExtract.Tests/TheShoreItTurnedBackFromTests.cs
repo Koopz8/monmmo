@@ -100,7 +100,21 @@ public class TheShoreItTurnedBackFromTests
     [Fact]
     public void ThePlaythroughHandsTheLeverToTheWalk()
     {
-        var world = new WorldData([Strip(MetatileBehaviour.Water)]);
+        // A door on the far side of the water, so this asks what the run REACHES and not only
+        // what it counted. Two calls into the walk take this lever and the shore is filled in
+        // by one of them; a test that watched the shore alone left the other unguarded.
+        MapData shore = Strip(MetatileBehaviour.Water) with
+        {
+            Warps = [new Warp(2, 0, 0, "1.1")],
+        };
+
+        MapData across = new MapData("1.1", "1.1", 2, 1, new byte[2])
+        {
+            Behaviours = [MetatileBehaviour.Normal, MetatileBehaviour.Normal],
+            Warps = [new Warp(0, 0, 0, "1.0")],
+        };
+
+        var world = new WorldData([shore, across]);
 
         PlayedScript nothing = new([], [], [], [], null, null);
 
@@ -108,6 +122,9 @@ public class TheShoreItTurnedBackFromTests
         Attempt afloat = Autoplayer.Play(world, "1.0", TestRules.All, (_, _, _) => nothing, surfing: true);
 
         Assert.NotEmpty(ashore.Shore);
+        Assert.DoesNotContain("1.1", ashore.Reached);
+
         Assert.Empty(afloat.Shore);
+        Assert.Contains("1.1", afloat.Reached);
     }
 }
