@@ -540,7 +540,8 @@ public static class WhatItIsWaitingFor
         IEnumerable<MapObject> people,
         IEnumerable<MapTrigger> triggers,
         IEnumerable<MapSign> signs,
-        IEnumerable<MapEntryScript> onEntry)
+        IEnumerable<MapEntryScript> onEntry,
+        IEnumerable<Maps.MapScriptEntry>? onLoad = null)
     {
         foreach (MapObject person in people.Where(o => o.HasScript))
             yield return new SetsAFlag(mapId, $"person {person.LocalId}", person.ScriptAddress);
@@ -556,6 +557,14 @@ public static class WhatItIsWaitingFor
             yield return new SetsAFlag(
                 mapId, $"on arrival (0x{entry.Variable:X4} == {entry.Value})", entry.ScriptAddress);
         }
+
+        // And the fifth kind: the entries in the map's own script list that carry no
+        // condition. When the cartridge runs one is not written down anywhere in the data,
+        // which is a good reason not to run them and no reason at all not to read them — and
+        // for three rounds "nothing in the world sets this flag" was a sentence about a scan
+        // that had never opened one.
+        foreach (Maps.MapScriptEntry entry in (onLoad ?? []).Where(e => e.Pointer != 0))
+            yield return new SetsAFlag(mapId, $"on load (kind {entry.Kind})", entry.Pointer);
     }
 
     /// <summary>

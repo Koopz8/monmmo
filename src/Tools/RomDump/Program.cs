@@ -6989,7 +6989,8 @@ public static class Program
             map.Objects,
             map.Triggers,
             map.Signs,
-            map.OnEntry);
+            map.OnEntry,
+            map.OnLoad);
 
     private static void WriteSound(Rom rom)
     {

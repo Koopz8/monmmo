@@ -1,4 +1,5 @@
 using PokeMmo.Core.World;
+using PokeMmo.RomExtract.Maps;
 using PokeMmo.RomExtract.Scripts;
 using Xunit;
 
@@ -758,6 +759,30 @@ public class WhatItIsWaitingForTests
             found.Select(s => s.ToString()));
     }
 
+    /// <summary>
+    /// And the fifth kind: the map's own script entries that carry no condition.
+    /// <para>
+    /// <b>The third omission of exactly this shape in one session.</b> The fifth list was
+    /// found milestones ago and its unconditional entries have been "read and counted and left
+    /// alone" ever since, because running one means knowing when the cartridge runs it. That
+    /// reservation is about running them. Reading them is free, and without it "nothing in the
+    /// world sets flag 0x003E" was a sentence about a scan that had never opened one.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void EveryScriptOnAMapIncludesTheOnesWithNoConditionAtAll()
+    {
+        IEnumerable<SetsAFlag> found = WhatItIsWaitingFor.EveryScriptOn(
+            "1.57",
+            [],
+            [],
+            [],
+            [],
+            [new MapScriptEntry(1, 0x08001000), new MapScriptEntry(3, 0x08002000)]);
+
+        Assert.Equal(["1.57 on load (kind 1)", "1.57 on load (kind 3)"], found.Select(s => s.ToString()));
+    }
+
     /// <summary>And nothing with no script attached is listed as one.</summary>
     [Fact]
     public void AndWhatHasNoScriptIsNotListed()
@@ -767,7 +792,8 @@ public class WhatItIsWaitingForTests
             [new MapObject(1, 1, 1, 1, Direction.Down, 0, false)],
             [new MapTrigger(5, 15, 0x4060, 0)],
             [new MapSign(9, 43, 0, 0)],
-            [new MapEntryScript(0x4050, 1, 0)]);
+            [new MapEntryScript(0x4050, 1, 0)],
+            [new MapScriptEntry(1, 0)]);
 
         Assert.Empty(found);
     }

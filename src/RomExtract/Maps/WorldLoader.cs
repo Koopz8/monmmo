@@ -106,6 +106,18 @@ public sealed record LoadedMap(
     public IReadOnlyList<MapEntryScript> OnEntry { get; init; } = [];
 
     /// <summary>
+    /// The entries in this map's own script list that carry no condition.
+    /// <para>
+    /// <b>Read, counted, and left alone since the fifth list was found</b> — because running
+    /// one means knowing <em>when</em> the cartridge runs it, which is not written down
+    /// anywhere in the data. That reservation is about running them. It is not a reason not to
+    /// <em>read</em> them, and for three rounds "nothing in the world sets this flag" was a
+    /// sentence about a scan that had never looked at a single one.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<MapScriptEntry> OnLoad { get; init; } = [];
+
+    /// <summary>
     /// The signs, notice boards and bookshelves on this map.
     /// <para>
     /// Client-side only, and deliberately so. A sign has nothing the server needs to
