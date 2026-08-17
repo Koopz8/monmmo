@@ -314,6 +314,29 @@ public sealed record Hop(string MapId, string How)
     public override string ToString() => $"{MapId} ({How})";
 }
 
+/// <summary>
+/// One place that handed something over, and which passes it did so on.
+/// <para>
+/// <b>A run that takes the same gift twice is a ceiling, and nothing said so.</b> The party
+/// has said it for a while — <em>a second copy of something already in it</em> — and the bag
+/// never has, because an item picked up off the floor is kept from refilling by the flag on
+/// the object's own record and an item handed over by a person is kept from refilling by a
+/// guard inside the script. Only one of those two was ever read.
+/// </para>
+/// </summary>
+/// <param name="MapId">Where.</param>
+/// <param name="LocalId">Which person, or zero for an arrival script or a trigger.</param>
+/// <param name="Address">Which script.</param>
+/// <param name="What">What it hands over, said plainly.</param>
+/// <param name="Passes">The passes it happened on.</param>
+public sealed record HandedOver(
+    string MapId, int LocalId, uint Address, string What, IReadOnlyList<int> Passes)
+{
+    public override string ToString() =>
+        $"{MapId,-8} {(LocalId == 0 ? "on arrival" : $"person {LocalId}"),-12} 0x{Address:X8}"
+        + $"  {What}  on pass(es) {string.Join(",", Passes)}";
+}
+
 /// <summary>Why the playthrough stopped.</summary>
 public enum StoppedBecause
 {
@@ -473,6 +496,26 @@ public sealed record Attempt(
     /// </para>
     /// </summary>
     public IReadOnlyList<FerryTicket> Tickets { get; init; } = [];
+
+    /// <summary>
+    /// Every place that handed something over, and the passes it did so on.
+    /// <para>
+    /// The whole list rather than only the repeats, so the denominator is visible: "none of
+    /// them twice" and "nothing handed anything over" are different findings and they printed
+    /// the same as each other before this.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<HandedOver> Handovers { get; init; } = [];
+
+    /// <summary>
+    /// The ones that did it more than once, which is the ceiling.
+    /// <para>
+    /// Here rather than in whoever prints, because a <c>Where</c> in a printer is a rule
+    /// about the world in a file no test can reach — and this project has moved the same
+    /// kind of line out of the same file five times for the same reason.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<HandedOver> HandedOverTwice => [.. Handovers.Where(h => h.Passes.Count > 1)];
 
     /// <summary>
     /// Maps that no door, map edge or scripted door anywhere in the world leads to.
@@ -673,6 +716,12 @@ public static class Autoplayer
 
         StoppedBecause stopped = StoppedBecause.ItNeverSettled;
 
+        // Where something changed hands, by the script that did it. Kept by script rather
+        // than by what it hands over: five shopkeepers selling the same potion is not one
+        // place handing it over five times, and the question here is about the second.
+        var handovers =
+            new Dictionary<(string MapId, int LocalId, uint Address), (string What, List<int> Passes)>();
+
         for (int pass = 1; pass <= MostPasses; pass++)
         {
             passes = pass;
@@ -696,8 +745,17 @@ public static class Autoplayer
 
             foreach (MapData map in world.Maps.Where(m => reach.Maps.Contains(m.Id)))
             {
-                foreach (Runnable what in Reachable(map, stood, flags, gone, remembered, inOrder))
+                // A queue rather than a loop, for one reason: winning a fight runs a script,
+                // and it has to run HERE — with the same bag, the same flags and the same
+                // folding as everything else. Handing it to a second copy of this body is how
+                // the two would drift apart, and this project has found that fault five times.
+                var toRun = new Queue<Runnable>(Reachable(map, stood, flags, gone, remembered, inOrder));
+                var alreadyRun = new HashSet<uint>();
+
+                while (toRun.Count > 0)
                 {
+                    Runnable what = toRun.Dequeue();
+
                     PlayedScript did = runScript(what.Address, flags, bag);
 
                     // In the order it happened, which is the entire point of the thing.
@@ -765,6 +823,22 @@ public static class Autoplayer
                     }
 
                     if (did.Takes is { } handedOver) bag.Remove(handedOver.ItemId, handedOver.Count);
+
+                    if (did.Gets is not null || did.Gives is not null)
+                    {
+                        var where = (map.Id, what.LocalId, what.Address);
+
+                        if (!handovers.TryGetValue(where, out (string What, List<int> Passes) already))
+                        {
+                            handovers[where] = already = (
+                                did.Gives is { } creature
+                                    ? $"#{creature.Species} at {creature.Level}"
+                                    : $"item 0x{did.Gets!.Value.ItemId:X3} x{did.Gets!.Value.Count}",
+                                []);
+                        }
+
+                        already.Passes.Add(pass);
+                    }
 
                     if (did.Gets is { } got)
                     {
@@ -838,6 +912,21 @@ public static class Autoplayer
                         case true:
                             fought.Add(trainerId);
                             won++;
+
+                            // AND WHAT THE VICTORY WAS FOR, now, on the pass that won it.
+                            // The badge, the flags, the LIFT KEY on the floor of the ROCKET
+                            // HIDEOUT. It used to run on the pass AFTER the win, and on every
+                            // pass after that as well, because "beaten" was read as "resume
+                            // inside the fight's own script" — which handed the eight gym
+                            // leaders' TMs over once per pass for ever.
+                            if (did.AfterTheFight != 0 && alreadyRun.Add(did.AfterTheFight))
+                            {
+                                // Nobody's, on purpose: the continuation belongs to the
+                                // battle rather than to the person, and filing it under them
+                                // would overwrite what talking to them came to.
+                                toRun.Enqueue(new Runnable(did.AfterTheFight, 0));
+                            }
+
                             break;
 
                         case false:
@@ -1029,6 +1118,13 @@ public static class Autoplayer
         {
             FightAttemptsLost = lost,
             Carried = bag.Entries,
+            Handovers =
+            [
+                .. handovers
+                    .Select(h => new HandedOver(h.Key.MapId, h.Key.LocalId, h.Key.Address, h.Value.What, h.Value.Passes))
+                    .OrderByDescending(h => h.Passes.Count)
+                    .ThenBy(h => h.MapId, StringComparer.Ordinal),
+            ],
             Trace = trace,
             TraceDropped = dropped,
             Ran = ran,

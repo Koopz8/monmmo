@@ -94,6 +94,18 @@ public sealed record ScriptRun
     public int? TrainerId { get; init; }
 
     /// <summary>
+    /// Where the fight leads, when this run stopped at one.
+    /// <para>
+    /// <b>The battle's own continuation, handed back instead of jumped to.</b> Every variant
+    /// that carries one carries it as its last script-shaped pointer; the cartridge runs it
+    /// when the fight is WON, once, and then never again. Reading it as "where a beaten
+    /// trainer resumes" ran it on every pass after the win instead — see
+    /// <see cref="WhatAFightLeadsTo"/> for the column of guards that reading skipped.
+    /// </para>
+    /// </summary>
+    public uint AfterTheFight { get; init; }
+
+    /// <summary>
     /// What the trainer says on the way into that fight, kept apart from the rest.
     /// <para>
     /// Apart because it belongs to the fight and not to the conversation. The Nugget
@@ -424,6 +436,7 @@ public static class ScriptRunner
         var hides = new List<int>();
 
         int? trainerId = null;
+        uint afterTheFight = 0;
         int? gives = null;
         int givesCount = 0;
         int? takes = null;
@@ -942,28 +955,31 @@ public static class ScriptRunner
 
                     if (save.HasBeaten(id))
                     {
-                        // Beaten already, so the fight does nothing — and what runs
-                        // instead is the script the fight leads to, not the bytes that
-                        // happen to follow the command.
+                        // Beaten already, so the fight itself does nothing and the script
+                        // CARRIES ON WITH THE BYTES AFTER THE COMMAND. Not with the script
+                        // the fight leads to: that one is the battle's own continuation and
+                        // it runs when the battle is won, once.
                         //
-                        // Those bytes are usually a line and an end, which is why this
-                        // read as working: the trainer said their second line and the
-                        // script stopped. What it stopped short of, in the ROCKET
-                        // HIDEOUT, is the clearflag that puts the LIFT KEY on the floor
-                        // — sixty-six maps' worth of story behind a pointer nobody
-                        // followed.
-                        //
-                        // The last pointer that reads as a script is the one taken. The
-                        // earlier ones are lines the trainer says, and telling them apart
-                        // is done by reading rather than by trusting the variant.
-                        uint after = ScriptReader.ScriptsAfterAFight(rom, command).LastOrDefault();
-
-                        if (after != 0) jump = after;
-
+                        // This used to jump there instead, which was right about the ROCKET
+                        // HIDEOUT — the clearflag that puts the LIFT KEY on the floor is
+                        // inside one — and wrong about what it costs. Every one of the eight
+                        // gym leaders is `trainerbattle` kind 1, and every one of the eight
+                        // has a `checkflag` and a branch in the bytes immediately after the
+                        // command: have you already taken the TM. Jumping past it made those
+                        // bytes unreachable, so the answer was never asked and the TM was
+                        // handed over again on every pass for ever. --fights is the column:
+                        // 8 of 8 of kind 1, and 2 of 19 of kind 2, and nothing else in the
+                        // cartridge names those addresses, so falling through is the only
+                        // reading under which the cartridge's own guard means anything.
                         break;
                     }
 
                     trainerId = id;
+
+                    // And where the victory leads, for whoever resolves the fight. Read
+                    // here because the command is here; run there because only the fight
+                    // knows whether it was won.
+                    afterTheFight = ScriptReader.ScriptsAfterAFight(rom, command).LastOrDefault();
 
                     // Every variant but one opens with the line they say on sight, and
                     // that line belongs to the fight rather than to what comes after it.
@@ -999,6 +1015,7 @@ public static class ScriptRunner
             Hides = hides,
             Stock = stock,
             TrainerId = trainerId,
+            AfterTheFight = afterTheFight,
             GivesItem = gives,
             GivesCount = givesCount,
             TakesItem = takes,
