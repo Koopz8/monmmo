@@ -188,6 +188,21 @@ public sealed record OnTheWay(byte AskedBy, int Word, int Against, byte Conditio
     }
 }
 
+/// <summary>One script writing a variable, and what it puts in it.</summary>
+/// <param name="How">The command — <c>setvar</c>, <c>addvar</c>, <c>subvar</c>, <c>copyvar</c>.</param>
+/// <param name="Value">
+/// The second word. A number for everything except <c>copyvar</c>, where it is another
+/// variable and what is in it cannot be known from here — said out loud rather than printed as
+/// though it were a value.
+/// </param>
+public sealed record WritesAVariable(SetsAFlag Where, byte How, int Value)
+{
+    public override string ToString() =>
+        How == 0x19
+            ? $"{Where} copies 0x{Value:X4} into it"
+            : $"{Where} {ScriptCommands.NameOf(How)} {Value}";
+}
+
 /// <summary>
 /// What a person standing in a doorway is waiting for.
 /// <para>
@@ -393,6 +408,49 @@ public static class WhatItIsWaitingFor
 
         return null;
     }
+
+    /// <summary>
+    /// Everywhere a script writes a variable, by variable.
+    /// <para>
+    /// <b>The mirror of <see cref="SetBy"/>, and the thing the chain to SAFFRON turned out to
+    /// need.</b> What stands in front of that door is not a flag at all — it is
+    /// <c>0x4001 != 0 AND 0x4001 != 1</c>, a story counter, and "which flags gate what" cannot
+    /// see a counter. A variable nothing writes is behind the code boundary exactly as a flag
+    /// nothing sets is, and the two questions had one answer between them.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyDictionary<int, IReadOnlyList<WritesAVariable>> WritesTo(
+        Rom rom, IEnumerable<SetsAFlag> scripts)
+    {
+        var found = new Dictionary<int, List<WritesAVariable>>();
+
+        foreach (SetsAFlag script in scripts)
+        {
+            foreach (ScriptCommand command in ScriptReader.ReadAll(rom, script.Address))
+            {
+                // setvar, addvar, subvar and copyvarifnotzero all take the variable first and
+                // a number second. copyvar takes a variable second, and what is in it is not
+                // knowable from here — which is worth saying rather than reporting as a value.
+                if (command.Code is not (SetVar or AddVar or SubVar or CopyVar or CopyVarIfNotZero)) continue;
+                if (command.Arguments.Length < 4) continue;
+
+                if (!found.TryGetValue(command.Word(), out List<WritesAVariable>? where))
+                    found[command.Word()] = where = [];
+
+                var wrote = new WritesAVariable(script, command.Code, command.Word(2));
+
+                if (!where.Contains(wrote)) where.Add(wrote);
+            }
+        }
+
+        return found.ToDictionary(p => p.Key, p => (IReadOnlyList<WritesAVariable>)p.Value);
+    }
+
+    private const byte SetVar = 0x16;
+    private const byte AddVar = 0x17;
+    private const byte SubVar = 0x18;
+    private const byte CopyVar = 0x19;
+    private const byte CopyVarIfNotZero = 0x1A;
 
     /// <summary>
     /// Everywhere a script turns a flag on, by flag.

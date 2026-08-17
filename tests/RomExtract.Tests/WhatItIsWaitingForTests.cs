@@ -34,6 +34,9 @@ public class WhatItIsWaitingForTests
     private const byte HideObject = 0x53;
     private const byte GiveItem = 0x46;
     private const byte Special = 0x25;
+    private const byte SetVar = 0x16;
+    private const byte AddVar = 0x17;
+    private const byte CopyVar = 0x19;
 
     /// <summary>Jump when the comparison came out equal — a checkflag's "already done" arm.</summary>
     private const byte IfEqual = 1;
@@ -470,6 +473,68 @@ public class WhatItIsWaitingForTests
         Assert.Equal(
             [$"flag 0x{Waiting:X4} SET"],
             WhatItIsWaitingFor.PathTo(new Rom(image), 0x08000100, Opened)!.Select(w => w.ToString()));
+    }
+
+    /// <summary>
+    /// Who could put the right number in a variable, which is the mirror of who sets a flag.
+    /// <para>
+    /// What stands in front of SAFFRON is <c>0x4001 != 0 AND 0x4001 != 1</c> — a counter, not
+    /// a flag — and an instrument that only knows about flags reports a counter as nothing at
+    /// all. A variable nothing writes is behind the code boundary exactly as a flag nothing
+    /// sets is.
+    /// </para>
+    /// <para>
+    /// The decoy is the second script: one that <em>reads</em> the variable and never writes
+    /// it. Every script gated on a counter is one of those, so a scan that counted mentions
+    /// would hand back the gate itself as the way through it.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void WritesToNamesEveryScriptThatPutsANumberInAVariable()
+    {
+        var image = new byte[0x2000];
+
+        Put(image, 0x100, SetVar, 0x01, 0x40, 0x02, 0x00, End);
+        Put(image, 0x200, AddVar, 0x01, 0x40, 0x01, 0x00, End);
+
+        // Reads it and never writes it, and — the part that took a run to get right — does
+        // not hand off to anything that writes it either. ReadAll follows calls and gotos, so
+        // a decoy that jumps into the writer is credited with the writer's work, correctly.
+        Put(image, 0x300, Compare, 0x01, 0x40, 0x02, 0x00);
+        Put(image, 0x305, GotoIf, IfEqual);
+        Pointer(image, 0x307, 0x08000400);
+        Put(image, 0x30B, Release, End);
+        Put(image, 0x400, Release, End);
+
+        IReadOnlyDictionary<int, IReadOnlyList<WritesAVariable>> writes = WhatItIsWaitingFor.WritesTo(
+            new Rom(image),
+            [
+                new SetsAFlag("1.57", "trigger (5,15)", 0x08000100),
+                new SetsAFlag("1.57", "person 4", 0x08000200),
+                new SetsAFlag("3.10", "person 1", 0x08000300),
+            ]);
+
+        Assert.Equal(
+            ["1.57 trigger (5,15) setvar 2", "1.57 person 4 addvar 1"],
+            writes[0x4001].Select(w => w.ToString()));
+    }
+
+    /// <summary>
+    /// And a <c>copyvar</c> says it copied rather than naming a value it does not know. The
+    /// second word there is another variable, and printing it as a number is a number nobody
+    /// read.
+    /// </summary>
+    [Fact]
+    public void ACopiedVariableIsNotReportedAsAValue()
+    {
+        var image = new byte[0x2000];
+
+        Put(image, 0x100, CopyVar, 0x01, 0x40, 0x08, 0x80, End);
+
+        IReadOnlyList<WritesAVariable> writes = WhatItIsWaitingFor.WritesTo(
+            new Rom(image), [new SetsAFlag("1.57", "person 4", 0x08000100)])[0x4001];
+
+        Assert.Equal("1.57 person 4 copies 0x8008 into it", Assert.Single(writes).ToString());
     }
 
     /// <summary>

@@ -206,7 +206,8 @@ public static class Program
         if (options.Closure) WriteClosure(rom, options.RoutineAnswers, options.StartAt);
         if (options.Play)
             WritePlaythrough(
-                rom, options.RoutineAnswers, options.StartAt, options.Boat, options.Money, options.SayYes);
+                rom, options.RoutineAnswers, options.StartAt, options.Boat, options.Money, options.SayYes,
+                options.Variables);
         if (options.WhereFrom.Count > 0) WriteWhereFrom(rom, options.WhereFrom);
 
         if (options.SequenceWidths) WriteSequenceWidths(rom);
@@ -5755,7 +5756,7 @@ public static class Program
 
     private static void WritePlaythrough(
         Rom rom, IReadOnlyDictionary<int, int> answers, string startAt, bool boat = false, int money = 0,
-        bool sayYes = false)
+        bool sayYes = false, IReadOnlyDictionary<int, int>? variables = null)
     {
         Console.WriteLine();
         Console.WriteLine("A PLAYTHROUGH");
@@ -5782,6 +5783,14 @@ public static class Program
                     ", ", answers.Select(a => $"0x{a.Key:X3}={a.Value}")) + " (modelled)");
         }
 
+        if (variables is { Count: > 0 })
+        {
+            Console.WriteLine(
+                "  putting " + string.Join(
+                    ", ", variables.Select(v => $"0x{v.Key:X4}={v.Value}"))
+                + " in the story's own variables before every script (modelled — this is a ceiling)");
+        }
+
         Console.WriteLine();
 
         PlayedScript Run(uint address, IReadOnlyCollection<int> flags, Bag carrying)
@@ -5794,6 +5803,11 @@ public static class Program
             };
 
             foreach (int flag in flags) state.Set(flag);
+
+            // Modelled, and put in before the script rather than after: a counter is read on
+            // the first line of the scene it gates.
+            foreach ((int variable, int put) in variables ?? new Dictionary<int, int>())
+                state.Write(variable, put);
 
             ScriptRun run = ScriptRunner.Run(rom, address, state, answers: answers);
 
@@ -6235,6 +6249,14 @@ public static class Program
                     .SelectMany(ScriptsOf)
                     .Select(s => new SetsAFlag(s.MapId, s.What, s.Address))));
 
+        // And who writes each variable, read the same way and only if something asks.
+        var writers = new Lazy<IReadOnlyDictionary<int, IReadOnlyList<WritesAVariable>>>(
+            () => WhatItIsWaitingFor.WritesTo(
+                rom,
+                MapLibrary.Open(rom).All()
+                    .SelectMany(ScriptsOf)
+                    .Select(s => new SetsAFlag(s.MapId, s.What, s.Address))));
+
         foreach (IGrouping<(string ToMapId, string Why), ShutDoor> shut in byTarget.Take(30))
         {
             Console.WriteLine(
@@ -6292,7 +6314,8 @@ public static class Program
                 // the same output as a person with nothing to say, and four of those are
                 // standing in the last four doorways. Reading both arms is the one thing
                 // `ReadAll` has always been able to do and nothing has ever asked it for.
-                if (did.Length == 0 && who.Talked) WriteWhatItIsWaitingFor(rom, world, fromMapId, who, played, setters);
+                if (did.Length == 0 && who.Talked)
+                    WriteWhatItIsWaitingFor(rom, world, fromMapId, who, played, setters, writers);
             }
         }
 
@@ -6659,7 +6682,8 @@ public static class Program
         string mapId,
         Blocker who,
         Attempt played,
-        Lazy<IReadOnlyDictionary<int, IReadOnlyList<SetsAFlag>>> setters)
+        Lazy<IReadOnlyDictionary<int, IReadOnlyList<SetsAFlag>>> setters,
+        Lazy<IReadOnlyDictionary<int, IReadOnlyList<WritesAVariable>>> writers)
     {
         // The record first, because that is where this game keeps it. Only 7 of the 575
         // objects carrying a hide flag have a script that sets it — the flag that takes
@@ -6693,7 +6717,8 @@ public static class Program
 
                 // And, when the run got into the script and still did not set it, what it
                 // would have had to be true to get to the setflag.
-                if (played.Ran.ContainsKey(sets.Address)) WriteTheWayIn(rom, sets, who.HiddenBy);
+                if (played.Ran.ContainsKey(sets.Address))
+                    WriteTheWayIn(rom, world, sets, who.HiddenBy, writers);
             }
 
             if (removes.Count > 3) Console.WriteLine($"           ... and {removes.Count - 3} more that set it");
@@ -6805,8 +6830,28 @@ public static class Program
     /// list of what has to be true first.
     /// </para>
     /// </summary>
-    private static void WriteTheWayIn(Rom rom, SetsAFlag sets, int flag)
+    private static void WriteTheWayIn(
+        Rom rom,
+        WorldData world,
+        SetsAFlag sets,
+        int flag,
+        Lazy<IReadOnlyDictionary<int, IReadOnlyList<WritesAVariable>>> writers)
     {
+        // The trigger's own record, which is where the last answer was hiding too.
+        //
+        // A trigger in this cartridge fires when a variable equals a value, and both are
+        // written down on the square rather than in the script. The playthrough runs every
+        // trigger it stands on regardless — an upper bound on what runs, which is the right
+        // default for a floor — so a scene meant for later runs now, takes the not-yet arm of
+        // its own counter, and reports as a script that does nothing.
+        if (world.Find(sets.MapId)?.Triggers.FirstOrDefault(t => t.ScriptAddress == sets.Address)
+            is { Variable: not 0 } fires)
+        {
+            Console.WriteLine(
+                $"             its own record fires it when 0x{fires.Variable:X4} == {fires.Value} "
+                + "— and the run stood on it and ran it whatever was in there");
+        }
+
         IReadOnlyList<OnTheWay>? way = WhatItIsWaitingFor.PathTo(rom, sets.Address, flag);
 
         if (way is null)
@@ -6827,6 +6872,21 @@ public static class Program
                 : $"             to get there: {string.Join(" AND ", way.Take(6))}"
                     + (way.Count > 6 ? $", and {way.Count - 6} more" : string.Empty)
                     + "  (one path of possibly several)");
+
+        // And who could put the right number in. A variable nothing writes is behind the code
+        // boundary exactly as a flag nothing sets is — the same finding, and until now only
+        // half of it could be reached, because "what gates what" only ever asked about flags.
+        foreach (int variable in way.Where(w => w.AskedBy != 0x2B).Select(w => w.Word).Distinct().Take(3))
+        {
+            IReadOnlyList<WritesAVariable> puts = writers.Value.GetValueOrDefault(variable, []);
+
+            Console.WriteLine(
+                puts.Count == 0
+                    ? $"             NOTHING IN THE WORLD WRITES 0x{variable:X4} — it comes out of a routine"
+                    : $"             0x{variable:X4} is written by {puts.Count}: "
+                        + string.Join("; ", puts.Take(3))
+                        + (puts.Count > 3 ? $", +{puts.Count - 3} more" : string.Empty));
+        }
     }
 
     /// <summary>
@@ -9524,6 +9584,19 @@ public static class Program
 
         public IReadOnlyDictionary<int, int> RoutineAnswers { get; private init; } = new Dictionary<int, int>();
 
+        /// <summary>
+        /// Numbers to put in the story's own variables before each script runs. <b>Modelled</b>,
+        /// exactly as <c>--answer</c> is.
+        /// <para>
+        /// What stands in front of SAFFRON is <c>0x4001 != 0 AND 0x4001 != 1</c> — a counter,
+        /// not a flag. A run cannot reach a counter's later values by walking, because the
+        /// thing that advances it is a scene it has already run at the wrong moment. So it is
+        /// handed in from outside and the difference is the measurement, which is the same
+        /// bargain this project has made with the boat, the money and the routines.
+        /// </para>
+        /// </summary>
+        public IReadOnlyDictionary<int, int> Variables { get; private init; } = new Dictionary<int, int>();
+
         /// <summary>Measure how many bytes each sequence command's arguments take.</summary>
         public bool SequenceWidths { get; private init; }
 
@@ -9644,6 +9717,7 @@ public static class Program
             bool sayYes = false;
             string startAt = Beginning.MapId;
             var routineAnswers = new Dictionary<int, int>();
+            var variables = new Dictionary<int, int>();
             bool sequenceWidths = false;
             int? oneSong = null;
             bool derive = false;
@@ -9914,6 +9988,20 @@ public static class Program
 
                         break;
                     }
+                    case "--var":
+                    {
+                        // variable=value, the same shape as --answer and just as modelled.
+                        string[] halves = Next(args, ref i, "--var").Split('=', 2);
+
+                        if (halves.Length == 2
+                            && TryNumber(halves[0], out int whichVariable)
+                            && TryNumber(halves[1], out int put))
+                        {
+                            variables[whichVariable] = put;
+                        }
+
+                        break;
+                    }
                     case "--sequence-widths":
                         sequenceWidths = true;
                         break;
@@ -10089,6 +10177,7 @@ public static class Program
                 ScriptedDoors = scriptedDoors,
                 Special = special,
                 RoutineAnswers = routineAnswers,
+                Variables = variables,
                 AnswerSweep = answerSweep,
                 SpecialsOn = specialsOn,
                 Shared = shared,
