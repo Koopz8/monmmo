@@ -143,11 +143,19 @@ public class ThreeWidthsThatWereHidingScriptsTests
     }
 
     /// <summary>
-    /// And what was behind it is read now. At six the read lands on the high byte of a
-    /// coordinate and calls it a nop, which parses cleanly and quietly contains less.
+    /// And the block reads through it rather than stopping dead — which is what having any
+    /// width at all buys.
+    /// <para>
+    /// <b>This does not tell six from seven and is not claimed to.</b> At six the read lands on
+    /// the high byte of the second coordinate, calls it a nop, and carries on to the same place;
+    /// the two widths only separate across the twenty sites on the cartridge, where one lands on
+    /// <c>compare</c> every time and the other on a nop every time. The width itself is held by
+    /// the table above. Said out loud because a test named for a discrimination it does not make
+    /// is worse than no test.
+    /// </para>
     /// </summary>
     [Fact]
-    public void WhatWasBehindTheWidestOneIsReachedNow()
+    public void TheBlockBehindItReadsThroughRatherThanStoppingDead()
     {
         (IReadOnlyCollection<int> on, IReadOnlyCollection<int> _) = WhatItIsWaitingFor.Touches(
             Rom(), [new SetsAFlag("1.1", "trigger (2,2)", 0x08000600)]);
