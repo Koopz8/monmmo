@@ -6626,9 +6626,10 @@ public static class Program
         // And the other half, which is the half that decides the rule: how many flags the
         // scripts touch that gate nothing here. Those are the marks on a character — a badge,
         // which starter was taken — and they are the ones that must NOT travel.
-        var touched = new HashSet<int>();
-        var turnedOn = new HashSet<int>();
-        var turnedOff = new HashSet<int>();
+        (IReadOnlyCollection<int> turnedOn, IReadOnlyCollection<int> turnedOff) =
+            WhatItIsWaitingFor.Touches(rom, library.All().SelectMany(EveryScriptOn));
+
+        var touched = new HashSet<int>(turnedOn.Concat(turnedOff));
 
         // What this scan actually opened, by kind.
         //
@@ -6648,19 +6649,6 @@ public static class Program
                 kinds[kind] = kinds.GetValueOrDefault(kind) + 1;
             }
 
-            foreach ((string _, string _, uint address) in ScriptsOf(map))
-            {
-                foreach (ScriptCommand command in ScriptReader.ReadAll(rom, address))
-                {
-                    if (command.Code is not (SetFlagCode or ClearFlagCode)) continue;
-                    if (command.Arguments.Length < 2) continue;
-
-                    touched.Add(command.Word());
-
-                    if (command.Code == SetFlagCode) turnedOn.Add(command.Word());
-                    else turnedOff.Add(command.Word());
-                }
-            }
         }
 
         int marks = touched.Count(f => !gates.IsAboutTheWorld(f));

@@ -574,6 +574,40 @@ public static class WhatItIsWaitingFor
     }
 
     /// <summary>
+    /// Which flags any of these scripts turns on, and which any of them turns off.
+    /// <para>
+    /// <b>Both halves, and kept apart.</b> Three flags in the middle of this game are opened
+    /// by a <c>clearflag</c> and nothing else — milestone 73 was about finding them — so a
+    /// scan that counted only <c>setflag</c> would put the whole middle of the story on the
+    /// list of things nothing can move, and send the next session hunting for a routine that
+    /// does not exist.
+    /// </para>
+    /// <para>
+    /// And a flag can be both: set in one place and cleared in another is the commonest shape
+    /// there is. Two sets rather than one classification, so nothing has to choose.
+    /// </para>
+    /// </summary>
+    public static (IReadOnlyCollection<int> TurnedOn, IReadOnlyCollection<int> TurnedOff) Touches(
+        Rom rom, IEnumerable<SetsAFlag> scripts)
+    {
+        var on = new HashSet<int>();
+        var off = new HashSet<int>();
+
+        foreach (SetsAFlag script in scripts)
+        {
+            foreach (ScriptCommand command in ScriptReader.ReadAll(rom, script.Address))
+            {
+                if (command.Arguments.Length < 2) continue;
+
+                if (command.Code == SetFlag) on.Add(command.Word());
+                else if (command.Code == ClearFlag) off.Add(command.Word());
+            }
+        }
+
+        return (on, off);
+    }
+
+    /// <summary>
     /// Everywhere a script writes a variable, by variable.
     /// <para>
     /// <b>The mirror of <see cref="SetBy"/>, and the thing the chain to SAFFRON turned out to

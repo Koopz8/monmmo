@@ -41,6 +41,7 @@ public class WhatItIsWaitingForTests
     private const byte CopyVar = 0x19;
     private const byte SpecialVar = 0x26;
     private const byte TrainerBattle = 0x5C;
+    private const byte ClearFlag = 0x2A;
 
     /// <summary>Jump when the comparison came out equal — a checkflag's "already done" arm.</summary>
     private const byte IfEqual = 1;
@@ -875,6 +876,50 @@ public class WhatItIsWaitingForTests
         Put(image, 0x400, SetFlag, Opened & 0xFF, Opened >> 8, Release, End);
 
         Assert.NotNull(WhatItIsWaitingFor.PathTo(new Rom(image), 0x08000100, Opened));
+    }
+
+    /// <summary>
+    /// Turning a flag off is moving it just as much as turning it on.
+    /// <para>
+    /// Three flags in the middle of this game are opened by a <c>clearflag</c> and nothing
+    /// else — milestone 73 was about finding them. A scan that counted only <c>setflag</c>
+    /// would put the whole middle of the story on the list of things nothing can move, and
+    /// send the next session hunting for a routine that does not exist.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TouchesKeepsTurningAFlagOnAndOffApart()
+    {
+        var image = new byte[0x2000];
+
+        Put(image, 0x100, SetFlag, Opened & 0xFF, Opened >> 8);
+        Put(image, 0x103, ClearFlag, Waiting & 0xFF, Waiting >> 8, Release, End);
+
+        (IReadOnlyCollection<int> on, IReadOnlyCollection<int> off) = WhatItIsWaitingFor.Touches(
+            new Rom(image), [new SetsAFlag("1.57", "person 4", 0x08000100)]);
+
+        Assert.Equal([Opened], on);
+        Assert.Equal([Waiting], off);
+    }
+
+    /// <summary>
+    /// And a flag both set and cleared somewhere is on both lists, which is why they are two
+    /// sets rather than one classification: set in one place and cleared in another is the
+    /// commonest shape there is, and nothing should have to choose which it counts as.
+    /// </summary>
+    [Fact]
+    public void AndAFlagBothSetAndClearedIsOnBothLists()
+    {
+        var image = new byte[0x2000];
+
+        Put(image, 0x100, SetFlag, Opened & 0xFF, Opened >> 8);
+        Put(image, 0x103, ClearFlag, Opened & 0xFF, Opened >> 8, Release, End);
+
+        (IReadOnlyCollection<int> on, IReadOnlyCollection<int> off) = WhatItIsWaitingFor.Touches(
+            new Rom(image), [new SetsAFlag("1.57", "person 4", 0x08000100)]);
+
+        Assert.Equal([Opened], on);
+        Assert.Equal([Opened], off);
     }
 
     /// <summary>
