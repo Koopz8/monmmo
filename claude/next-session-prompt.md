@@ -1,7 +1,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-232`, 2776 tests green.
+`claude-233`, 2779 tests green.
 
 Standing rules — do not break these:
 
@@ -76,7 +76,7 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-196-the-key-was-wrong-and-nobody-was-asking.md` first, then `195`, `194`, `193`, `192`, `191`, `190`, `189`,
+Read `claude/milestone-197-the-run-cannot-stand-where-the-player-stands.md` first, then `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
 **Nineteen faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
@@ -179,15 +179,16 @@ sets. CERULEAN CAVE is closed: the run now reaches it, off the SAPPHIRE thread.
 
 ## The next task, precisely
 
-1. **The buying report is silent and four shopping-list entries are one purchase away.** At
-   `--play --say-yes --boat --in-order` the list is six places and **four of them are standing
-   on ground where the thing is sold** — `10.5` wants three drinks sold at `3.13`, `14.1` wants
-   a POKé DOLL sold at `10.3`. The run does not buy them because it has no money, and the whole
-   buying report is behind `if (money > 0 || played.Bought.Count > 0)`, so it prints NOTHING.
-   A silent zero reads exactly like nothing to say. Money is MODELLED and the payout table has
-   never been located — that is the known half; this is the unknown half. The other two are
-   `33.1`'s TINYMUSHROOM and BIG MUSHROOM, which nothing on any map hands over: the code
-   boundary with a number on it, same shape as `0x0089`.
+1. **Talking across a counter.** 197 found the run stands in front of AT MOST ONE shop counter
+   in the whole game — 11 of 11, 14 of 14, 19 of 19 of the others are **exactly two squares
+   away** at every lever setting, no exceptions and no tail. A clerk stands behind a counter and
+   the player talks across it; this walk requires orthogonal adjacency, so it can never buy
+   anything anywhere. Fixing it is a change to who the walk may speak to, which is the most
+   load-bearing rule in the project: its own milestone, its own break, and reach measured at all
+   six settings before believing the direction. **Down is not a regression.** And read 197's
+   second half first — the obvious proof (that the clerks are walled in) was measured and came
+   back the OTHER WAY: every clerk has 2 or 3 walkable squares beside them. Walkable is not
+   reachable, and the collision byte answers a different question from the distance.
 2. **`Attempt.Ran` is fixed (196) and it moved nothing, for a reason worth carrying.** The key
    is `(map, address)` now and five breaks caught it. But the tally 196 added says the only
    consumer in the repository is asked about **one** setter at three lever settings and **zero**
@@ -263,6 +264,12 @@ a break passes, suspect the fixture — or where the rule lives — before the c
 
 ## Things already ruled out — don't re-chase these
 
+* **Money being the reason the run buys nothing.** It is not, or not first. The run cannot get
+  to the till: at most one counter in the game is ever stood beside. Money stays MODELLED and
+  `--money N` is the lever, but it is downstream of the walk now.
+* **The clerks being walled in.** They are not. Every one has 2 or 3 walkable squares beside
+  them and the run stood on none of them, because those squares are the clerk's side of the
+  counter. Do not re-measure the collision; it answers a different question.
 * **`--flags` using the playthrough.** It does not. `case "--flags"` reaches
   `WriteFlagGates(rom)` — one parameter, and it is the ROM. Nothing in it has ever seen an
   `Attempt`. Diffing `--flags` across a playthrough change is diffing a scan that did not look.

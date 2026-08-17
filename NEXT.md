@@ -6,17 +6,16 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **The key was wrong for nineteen milestones and it moved nothing.** The run's
-  record of what it ran was keyed on a script's address with no map beside it —
-  one nurse's script hangs off nineteen Pokémon Centres, so running it once read
-  as running it in every town. Fixed, and five deliberate breaks all caught it.
-- **Every `--play` run is byte-identical before and after**, at all six lever
-  settings. Not because the cartridge has no shared blocks — it runs 7 to 17 of
-  them on more than one map — but because the only code that reads that record is
-  asked about **one** setter, and at the boat settings **none**. A count of how
-  wrong something is is not a count of who cares.
-- The command the task said was reading it, `--flags`, never ran a playthrough at
-  all. It takes the ROM and nothing else.
-- **And four shopping-list entries are one purchase away**: with the boat open the
-  run stands on ground where the drinks and the POKé DOLL are sold and asks for
-  them anyway. It has no money, so the whole buying report prints nothing.
+- **The run stands in front of at most one shop counter in the entire game.** Twenty
+  stand on ground it reached with the boat open; it got beside one. And every
+  single one of the other nineteen is **exactly two squares away** — 11 of 11 at
+  the floor, 14 of 14, 19 of 19, at every lever setting, no exceptions.
+- A clerk stands behind a counter and the player talks across it. This walk requires
+  orthogonal adjacency, so it has never been able to buy anything anywhere. The
+  shopping list read as a money problem and three of its six entries are; one is
+  this, and two come from a routine.
+- **The whole buying report was printing nothing at all** — not "it bought nothing",
+  nothing — because it sat behind `money > 0`. A silence and a nought read alike.
+- And the obvious proof came back the other way: the clerks are **not** walled in.
+  Every one has two or three walkable squares beside them. Walkable is not
+  reachable, and the reading that looked stricter was wrong about the question.
