@@ -6897,10 +6897,41 @@ public static class Program
         Console.WriteLine();
         Console.WriteLine(
             $"  {played.Specials.Values.Sum()} place(s) call {played.Specials.Count} routines it could "
-            + "not answer — every one took the zero arm");
+            + "not answer — and the zero it answered instead is not one thing");
 
-        foreach ((int routine, int times) in played.Specials.OrderByDescending(p => p.Value).Take(8))
-            Console.WriteLine($"    routine 0x{routine:X3} asked {times} time(s)");
+        // AND WHAT THE ZERO AMOUNTED TO, which "every one took the zero arm" cannot say.
+        //
+        // A routine whose answer is only ever compared against 2 does the same thing for nought
+        // as for 3, 4 or 9 — the silence costs nothing a wrong answer would not. A routine
+        // compared against nought takes its branch BECAUSE the run said nothing. Those are
+        // opposite findings and this line has been printing them as one number.
+        //
+        // --routines knows the shape and has never seen a run; the run knows what it asked and
+        // nothing about the shape. The join lives in SpecialCalls, not here.
+        IReadOnlyList<SpecialCalls.WhatZeroDid> silence = SpecialCalls.ZeroAt(
+            SpecialCalls.Profiles(SpecialCalls.All(rom, MapLibrary.Open(rom))), played.Specials);
+
+        foreach (SpecialCalls.WhatZeroDid what in silence.Take(8))
+        {
+            Console.WriteLine(
+                $"    routine 0x{what.Routine:X3} asked {what.Asked,4} time(s)"
+                + $"  — {Silence(what)}");
+        }
+
+        foreach (SpecialCalls.ZeroWas was in new[]
+                 {
+                     SpecialCalls.ZeroWas.AnAssertion, SpecialCalls.ZeroWas.Both,
+                     SpecialCalls.ZeroWas.ARefusal, SpecialCalls.ZeroWas.NeverTested,
+                 })
+        {
+            List<SpecialCalls.WhatZeroDid> these = [.. silence.Where(z => z.Was == was)];
+
+            if (these.Count == 0) continue;
+
+            Console.WriteLine(
+                $"      {these.Sum(z => z.Asked),4} of the places, across {these.Count} routine(s):"
+                + $" {Meaning(was)}");
+        }
 
         Console.WriteLine();
         Console.WriteLine("    try --routines to see what each of those is asked, then --answer");
@@ -7763,6 +7794,22 @@ public static class Program
         Console.WriteLine(
             "  walking, because people ended up in the wrong place. Nothing else had been asked.");
     }
+
+    /// <summary>What a routine's answer is compared against, in one phrase.</summary>
+    private static string Silence(SpecialCalls.WhatZeroDid what) =>
+        what.Tested.Count == 0
+            ? "its answer is never looked at"
+            : $"compared against {string.Join(", ", what.Tested.Order())} — {Meaning(what.Was)}";
+
+    private static string Meaning(SpecialCalls.ZeroWas was) => was switch
+    {
+        SpecialCalls.ZeroWas.NeverTested => "the answer decides nothing",
+        SpecialCalls.ZeroWas.AnAssertion =>
+            "ZERO IS THE VALUE TESTED, so the run's silence TAKES the branch — it said yes",
+        SpecialCalls.ZeroWas.ARefusal =>
+            "zero is never the value tested, so it falls through like any other wrong answer",
+        _ => "tested against zero at some sites and something else at others",
+    };
 
     /// <summary>
     /// The gates a run never opened, sorted by whether anything in the file could have opened

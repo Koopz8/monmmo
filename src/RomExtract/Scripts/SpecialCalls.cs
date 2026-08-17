@@ -389,6 +389,77 @@ public static class SpecialCalls
                 : "answer never looked at");
     }
 
+    /// <summary>What answering nought amounted to at the places a run actually asked.</summary>
+    public enum ZeroWas
+    {
+        /// <summary>Nothing ever compares this routine's answer, so nought decides nothing.</summary>
+        NeverTested,
+
+        /// <summary>
+        /// Every comparison is against something other than nought, so nought falls through —
+        /// and so would every other value the file never tests. <b>The run declined to answer
+        /// and the decline cost nothing that any other wrong answer would not have cost.</b>
+        /// </summary>
+        ARefusal,
+
+        /// <summary>
+        /// Every comparison is against nought, so the default TAKES the branch at every site.
+        /// <b>The run did not decline; it said yes.</b>
+        /// </summary>
+        AnAssertion,
+
+        /// <summary>Compared against nought at some sites and something else at others.</summary>
+        Both,
+    }
+
+    /// <summary>
+    /// One routine a run could not answer, and what its silence did.
+    /// </summary>
+    /// <param name="Asked">How many places the RUN asked it — not how many exist in the file.</param>
+    /// <param name="Tested">Every value the file compares its answer against.</param>
+    public sealed record WhatZeroDid(int Routine, int Asked, ZeroWas Was, IReadOnlyList<int> Tested);
+
+    /// <summary>
+    /// The join nobody has made: which routines a run could not answer, against what the file
+    /// does with the answer.
+    /// <para>
+    /// <b>"Every one took the zero arm" is three different things.</b> A run reports how many
+    /// places called a routine it could not answer and calls the whole number a ceiling. But a
+    /// routine whose answer is only ever compared against 2 does the same thing for nought as
+    /// for 3, 4 or 9 — the silence costs nothing a wrong answer would not — while a routine
+    /// compared against nought takes its branch <em>because</em> the run said nothing. Those are
+    /// opposite findings and they have been printing as one number.
+    /// </para>
+    /// <para>
+    /// <c>--routines</c> knows the shape and has never seen a run; the run knows what it asked
+    /// and nothing about the shape. Neither half can say this on its own.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<WhatZeroDid> ZeroAt(
+        IEnumerable<Profile> profiles, IReadOnlyDictionary<int, int> asked)
+    {
+        Dictionary<int, Profile> byRoutine = profiles.ToDictionary(p => p.Routine);
+
+        var found = new List<WhatZeroDid>();
+
+        foreach ((int routine, int times) in asked)
+        {
+            IReadOnlyList<int> tested =
+                byRoutine.TryGetValue(routine, out Profile? profile) ? profile.AnswersSeen : [];
+
+            found.Add(new WhatZeroDid(
+                routine,
+                times,
+                tested.Count == 0 ? ZeroWas.NeverTested
+                : tested.All(v => v == 0) ? ZeroWas.AnAssertion
+                : tested.All(v => v != 0) ? ZeroWas.ARefusal
+                : ZeroWas.Both,
+                tested));
+        }
+
+        return [.. found.OrderByDescending(z => z.Asked).ThenBy(z => z.Routine)];
+    }
+
     public static List<Profile> Profiles(IEnumerable<SpecialCall> calls) =>
     [
         .. calls
