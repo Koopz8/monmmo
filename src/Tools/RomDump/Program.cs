@@ -213,6 +213,7 @@ public static class Program
         if (options.ClimbFrom.Count > 0) WriteClimb(rom, options.ClimbFrom);
         if (options.WhoWrites.Count > 0) WriteWhoWrites(rom, options.WhoWrites);
         if (options.Stops.Count > 0) WriteStops(rom, options.Stops);
+        if (options.Fights) WriteFights(rom);
 
         if (options.SequenceWidths) WriteSequenceWidths(rom);
 
@@ -7096,6 +7097,96 @@ public static class Program
     /// only way to ask who puts a two in it was to read bytes by eye.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Both exits of every <c>trainerbattle</c> in the image, and which of them holds a guard.
+    /// <para>
+    /// <b>Ranked by nothing.</b> There is no ranking here on purpose: the question is whether
+    /// a shape exists at all, and a count of one kind against another is the whole answer. A
+    /// column of fall-throughs that hold a conditional nothing else names is evidence that
+    /// the runner's jump skips a guard the cartridge wrote; an empty column is evidence that
+    /// it does not, and the reason for printing both.
+    /// </para>
+    /// </summary>
+    private static void WriteFights(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("WHERE A BEATEN TRAINER CARRIES ON");
+        Console.WriteLine();
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        IReadOnlyDictionary<uint, IReadOnlyList<int>> names = EverywhereInTheImage.PointerIndex(rom);
+
+        IReadOnlyList<AFight> fights = WhatAFightLeadsTo.In(
+            rom, library.All().SelectMany(EveryScriptOn), names);
+
+        Console.WriteLine(
+            $"  {fights.Count} trainerbattle(s) the map scan opens, across "
+            + $"{fights.Select(f => f.MapId).Distinct().Count()} map(s)");
+        Console.WriteLine(
+            "  a beaten trainer resumes at ONE of two places, and this project has only ever read one:");
+        Console.WriteLine(
+            "    the JUMP    — the last pointer inside the command that reads like a script");
+        Console.WriteLine(
+            "    the AFTER   — the byte immediately following the command, which nothing reaches today");
+        Console.WriteLine();
+
+        foreach (IGrouping<byte, AFight> kind in fights.GroupBy(f => f.Variant).OrderBy(g => g.Key))
+        {
+            Console.WriteLine(
+                $"  kind {kind.Key} — {kind.Count()} site(s), "
+                + $"{kind.Count(f => f.Jump != 0)} of them with a script pointer to jump to");
+
+            foreach (IGrouping<WhatFollows, AFight> shape in kind
+                         .GroupBy(f => f.Follows)
+                         .OrderByDescending(g => g.Count()))
+            {
+                int unnamed = shape.Count(f => f.NamedBy == 0);
+
+                Console.WriteLine(
+                    $"    the after reads as {Shape(shape.Key),-14} {shape.Count(),3} site(s)"
+                    + $" — {unnamed} of them named by nothing else in the file");
+            }
+
+            // The ones that matter, if any: a guard on the fall-through, a jump that never
+            // comes back to it, and no other way in. Printed with the addresses so the next
+            // person reads the bytes rather than this sentence.
+            List<AFight> skipped =
+            [
+                .. kind.Where(f => f.Follows == WhatFollows.AGuard && f.Jump != 0 && !f.JumpRejoins),
+            ];
+
+            if (skipped.Count == 0)
+            {
+                Console.WriteLine("    NOTHING OF THIS KIND SKIPS A GUARD — the two exits agree here");
+
+                continue;
+            }
+
+            Console.WriteLine(
+                $"    {skipped.Count} of them SKIP A GUARD: the after is a conditional, and the jump");
+            Console.WriteLine(
+                "    never arrives at it. Under the jump reading those bytes are unreachable.");
+
+            foreach (AFight one in skipped.Take(12))
+            {
+                Console.WriteLine(
+                    $"      {one.MapId,-8} {one.Who,-22} at 0x{one.At + Rom.BaseAddress:X8}"
+                    + $"  after 0x{one.After:X8} (named by {one.NamedBy})  jump 0x{one.Jump:X8}");
+            }
+
+            if (skipped.Count > 12) Console.WriteLine($"      ... and {skipped.Count - 12} more");
+        }
+
+        static string Shape(WhatFollows what) => what switch
+        {
+            WhatFollows.AGuard => "A GUARD",
+            WhatFollows.JustALine => "just a line",
+            WhatFollows.NothingAtAll => "nothing at all",
+            _ => "not commands",
+        };
+    }
+
     private static void WriteWhoWrites(Rom rom, IReadOnlyList<int> variables)
     {
         Console.WriteLine();
@@ -10574,6 +10665,11 @@ public static class Program
                                     playthrough has never told it to, so every sea in the game
                                     has been indistinguishable from a wall. --play prints how
                                     many squares that is either way.
+              --fights              every trainerbattle a map opens, with BOTH of the places a
+                                    beaten trainer could carry on from: the byte after the
+                                    command, and the last of its own pointers that reads like
+                                    a script. The runner takes the second. This says what the
+                                    first one holds, and how many of them nothing else names.
               --routines            what every routine this project cannot execute is
                                     asked: how many arguments, what its answer is compared
                                     against, how many sites branch on it.
@@ -10778,6 +10874,9 @@ public static class Program
         /// <summary>Commands to show every stopped read of, with the bytes around each.</summary>
         public IReadOnlyList<byte> Stops { get; private init; } = [];
 
+        /// <summary>Whether to read both exits of every trainerbattle in the image.</summary>
+        public bool Fights { get; private init; }
+
         /// <summary>Whether the playthrough may take the ferry, which makes its reach a ceiling.</summary>
         public bool Boat { get; private init; }
 
@@ -10942,6 +11041,7 @@ public static class Program
             bool flagGates = false;
             bool closure = false;
             bool specialContracts = false;
+            bool fights = false;
             bool play = false;
             var whereFrom = new List<int>();
             var inTheImage = new List<int>();
@@ -11185,6 +11285,9 @@ public static class Program
                         break;
                     case "--routines":
                         specialContracts = true;
+                        break;
+                    case "--fights":
+                        fights = true;
                         break;
                     case "--play":
                         play = true;
@@ -11484,6 +11587,7 @@ public static class Program
                 ClimbFrom = climbFrom,
                 WhoWrites = whoWrites,
                 Stops = stops,
+                Fights = fights,
                 Boat = boat,
                 Surf = surf,
                 InOrder = inOrder,

@@ -56,6 +56,17 @@ public sealed record PlayedScript(
     /// <summary>An item it handed over, and how many.</summary>
     public (int ItemId, int Count)? Gets { get; init; }
 
+    /// <summary>
+    /// Where the fight this script stopped at leads, once it is won.
+    /// <para>
+    /// <b>Whoever resolves the fight has to run this, and nobody used to.</b> It is the
+    /// battle's own continuation — the badge, the flags, the thing the victory was for — and
+    /// it belongs to winning rather than to having won. Handed back rather than jumped to,
+    /// because a script cannot know how a fight went and a run can.
+    /// </para>
+    /// </summary>
+    public uint AfterTheFight { get; init; }
+
     /// <summary>An item it took away, and how many.</summary>
     public (int ItemId, int Count)? Takes { get; init; }
 

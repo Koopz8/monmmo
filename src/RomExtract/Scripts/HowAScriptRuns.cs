@@ -178,6 +178,7 @@ public sealed class HowAScriptRuns(
         int takesCount = run.TakesCount;
         (int Species, int Level)? mon = run.GivesMon;
         int? fights = run.TrainerId;
+        uint afterTheFight = run.AfterTheFight;
 
         // And the yes-or-no, which nothing in this project has ever answered.
         //
@@ -236,6 +237,9 @@ public sealed class HowAScriptRuns(
             if (run.TakesItem is not null) takesCount = run.TakesCount;
 
             mon ??= run.GivesMon;
+
+            if (fights is null && run.TrainerId is not null) afterTheFight = run.AfterTheFight;
+
             fights ??= run.TrainerId;
         }
 
@@ -254,6 +258,7 @@ public sealed class HowAScriptRuns(
             fights)
         {
             Gets = gives is { } got ? (got, Math.Max(1, givesCount)) : null,
+            AfterTheFight = afterTheFight,
             Takes = takes is { } gave ? (gave, Math.Max(1, takesCount)) : null,
             Hides = hides,
             Walked = walked,

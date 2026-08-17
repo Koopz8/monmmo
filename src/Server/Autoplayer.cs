@@ -696,8 +696,17 @@ public static class Autoplayer
 
             foreach (MapData map in world.Maps.Where(m => reach.Maps.Contains(m.Id)))
             {
-                foreach (Runnable what in Reachable(map, stood, flags, gone, remembered, inOrder))
+                // A queue rather than a loop, for one reason: winning a fight runs a script,
+                // and it has to run HERE — with the same bag, the same flags and the same
+                // folding as everything else. Handing it to a second copy of this body is how
+                // the two would drift apart, and this project has found that fault five times.
+                var toRun = new Queue<Runnable>(Reachable(map, stood, flags, gone, remembered, inOrder));
+                var alreadyRun = new HashSet<uint>();
+
+                while (toRun.Count > 0)
                 {
+                    Runnable what = toRun.Dequeue();
+
                     PlayedScript did = runScript(what.Address, flags, bag);
 
                     // In the order it happened, which is the entire point of the thing.
@@ -838,6 +847,21 @@ public static class Autoplayer
                         case true:
                             fought.Add(trainerId);
                             won++;
+
+                            // AND WHAT THE VICTORY WAS FOR, now, on the pass that won it.
+                            // The badge, the flags, the LIFT KEY on the floor of the ROCKET
+                            // HIDEOUT. It used to run on the pass AFTER the win, and on every
+                            // pass after that as well, because "beaten" was read as "resume
+                            // inside the fight's own script" — which handed the eight gym
+                            // leaders' TMs over once per pass for ever.
+                            if (did.AfterTheFight != 0 && alreadyRun.Add(did.AfterTheFight))
+                            {
+                                // Nobody's, on purpose: the continuation belongs to the
+                                // battle rather than to the person, and filing it under them
+                                // would overwrite what talking to them came to.
+                                toRun.Enqueue(new Runnable(did.AfterTheFight, 0));
+                            }
+
                             break;
 
                         case false:
