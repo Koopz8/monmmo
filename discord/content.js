@@ -22,7 +22,7 @@ the ROM you already own, on your own machine, at runtime**. The client ships non
 of it. The server never sees any of it.
 
 This is a solo engineering project, built in public, one measured milestone at a
-time. **2,753 tests**, none of which need a cartridge. An authoritative server, a
+time. **2,841 tests**, none of which need a cartridge. An authoritative server, a
 Gen III battle engine accurate down to truncation order, and a growing list of
 things two people can do together: **see each other, chat, add friends, form a
 guild, trade, duel, climb a ladder, buy and sell on a player market, and travel
@@ -44,6 +44,7 @@ Repo: {{REPO}}`,
 `**Where to go**
 
 > **#rules** — read this first. One of them will get you banned instantly.
+> **#plain-english** — what all this actually means, with the jargon taken out.
 > **#announcements** — the only channel that will ever ping you unprompted.
 > **#devlog** — what got built each day, and what it cost.
 > **#milestones** — the long-form writeups. Start at the bottom.
@@ -56,6 +57,60 @@ React or ask in #general for notification roles: **devlog pings**,
 **build pings**, **playtest pings**. All three are opt-in and off by default.
 
 **Field Tester** is granted, not requested — see #rules.`,
+  ],
+
+  'plain-english': [
+`# In plain English
+
+No jargon in this channel. If anything here needs a glossary, it is written
+wrong — say so in #general and it gets rewritten.
+
+**What is being built?**
+A version of a Game Boy game you can play online with other people. You supply
+your own copy of the game. The program reads the maps, the creatures, the music
+and the rules straight out of your file, on your own computer, and draws them
+itself. Nothing is copied, nothing is uploaded, nothing is sold.
+
+**Why is it taking so long?**
+Because nobody ever wrote down how that file is arranged. Every single thing —
+where the maps are, what a move does, which song plays where — has to be found by
+staring at the raw contents until the pattern shows up. Then it has to be
+*proved*, because "it looks right" and "it is right" are not the same thing, and
+this project has been fooled by the difference more times than is comfortable.
+
+**How do you know it works?**
+**2,841 automatic checks** run every time anything changes. If a change breaks
+something that used to work, they go red and it does not ship. None of them need
+a copy of the game.
+
+**What is being worked on right now — message below.**`,
+
+`## Right now: a robot that plays the game
+
+It starts a brand new save and plays as far as it can get on its own. The point
+is not to beat the game. It is to find every place a real player would get stuck
+**automatically**, instead of waiting for somebody to walk into it and complain.
+
+It currently gets to **381 of the game's 425 places.**
+
+**What it has found, roughly in order of how silly they are:**
+
+- **The player had no bag.** Every character in the game who asks "are you
+  carrying one of these?" had been told no. For months. Silently.
+- **It never bought anything in a shop.** Not because it was broke —
+  shopkeepers stand behind a counter, and the robot would only talk to somebody
+  standing directly beside it. It walked past every till in the game.
+- **Then it turned out it had no money**, so it got refused at all of them. It
+  gets handed a purse now.
+- **A scene where somebody steps out of your way** was flinging people clean off
+  the edge of the map.
+
+**The honest part.** Fixing that last one made our headline number go *down* — we
+thought the robot reached 390 places and it really reaches 381. The lower one is
+the true one, and it stays.
+
+**Next:** get the walk further, then work out what is behind the last 44 doors
+that nothing in the game appears to open.`,
   ],
 
   rules: [
@@ -412,16 +467,37 @@ It also prints how many scripts it opened, and of what kind. A kind with no line
 is a kind nothing looked at, which is the single thing the old output could never
 tell you.
 
-**Where that leaves the reading:** 2,915 scripts on 425 maps. 322 flags gate
-something in the world, and 258 of them are moved by a script somewhere. The rest
-sit behind the cartridge's compiled code — which this project does not read and
-does not intend to, so they are a boundary with an address on it rather than a
-mystery.
+**Where that leaves the reading:** 2,915 scripts on 425 maps, 3,856 blocks read
+to a proper end and 32 that still stop on a byte nobody has identified. **322
+flags gate something in the world**; the widest walk opens 212 of them and leaves
+110 shut. Of those 110, 48 would open if the walk got further, and 62 would not —
+44 have no opener anywhere in the file at all.
 
-And the thing worth carrying: **fifteen faults were closed here in a fortnight
-and every one of them was in this project, not on the cartridge.** Nothing fails
-when it is wrong; it comes back confident and slightly off. Assume the number in
-front of you is distorted until an instrument says which direction.`,
+That last group is the boundary: the cartridge opens them from its own compiled
+code, which this project does not read and does not intend to. A boundary with an
+address on it, rather than a mystery.
+
+**The thing worth carrying:** a long run of faults closed here recently and
+**every one of them was in this project, not on the cartridge.** Nothing fails
+when it is wrong; it comes back confident and slightly off.
+
+**A note on measuring — message below.**`,
+
+`**How you tell a finding from noise here.** Search sixteen megabytes for a
+pattern and you will always find some. The test is to run the same search on the
+same file **backwards** and compare: whatever turns up there is what the search
+finds when there is nothing to find.
+
+That control was wrong for a while, and the way it was wrong is worth knowing.
+**Reversing a file keeps things clumped together.** Nine hits scattered across
+the whole image and nine hits crammed into one kilobyte printed exactly the same
+sentence — so both sides of the comparison were counting clumps as though they
+were evidence. Once that was fixed, one previously published result changed which
+side of the line it fell on.
+
+The rule that came out of it: **a count with no denominator cannot come back
+empty.** "Nothing does this" and "nothing looked" read identically until both
+halves are printed. Anything quoted here now carries the floor it beat.`,
   ],
 
   suggestions: [
@@ -671,20 +747,18 @@ posting in #bug-reports.
 
 **Known and open**
 - **The story does not finish yet.** A tool plays the game from a fresh save and
-  walks as far as it can get. It reaches **390 of 425 places**. The last door
-  with somebody standing in it is opened by a switch that nothing in the game
-  ever flips — meaning whatever flips it is in the cartridge's compiled code,
-  and this project reads data, not code.
-- **A scene that moves somebody aside runs again every time the walk goes
-  round.** 55 people get walked; **21 end up on a square that is not on the map**
-  — one of them thirty steps past the edge. Something on the cartridge stops the
-  scene repeating and it has not been found. Not being papered over with a clamp:
-  the honest number here goes *down*, not up.
-- **53 pieces of script still stop early**, on bytes whose meaning is unknown.
-  Two of them turned out to be a wrong guess made earlier in the file rather than
-  a command at all, which is the usual shape of this.
+  walks as far as it can get. It reaches **381 of 425 places** and opens **212 of
+  the 322 switches** that gate something. Of the 110 it never opens, 48 would come
+  with a longer walk — and **44 have no opener anywhere in the file at all**,
+  because the cartridge flips those from its own compiled code, which this
+  project reads none of.
+- **32 pieces of script still stop early**, on bytes whose meaning is unknown.
+  Several turned out to be a wrong guess made earlier in the file rather than a
+  command at all, which is the usual shape of this.
 - **11 places have no way in at all**, five of them islands with no dock in what
   gets read.
+- **Money is modelled and the payout table has never been located.** Nothing in
+  the walk earns anything, so what a fight pays out is a decision, not a reading.
 - **Sound is paused.** 31 song headers unconfirmed, and battle music still open.
 - **A flag set in memory that the save does not have**, and the older, vaguer
   **flag race** that may be the same animal: a script's flags reach the server
@@ -713,7 +787,6 @@ posting in #bug-reports.
 - **Unsimulated maps.** Only maps with a player on them tick. Walk away and back
   and the townsfolk have reset to their starting positions.
 - **In co-op, a parcel handed to the company still goes to one person.**
-- **Money is modelled.** What a fight pays out is on a table nobody has located.
 - **One thing stated but not proved:** that a duel's result is taken exactly
   once. Breaking it leaves every test green, because reaching it needs a real
   duel driven to a finish through the world. Said out loud rather than assumed.
@@ -721,6 +794,14 @@ posting in #bug-reports.
 **Closed items and non-bugs are in the messages below.**`,
 
 `**Closed, so please stop reporting them**
+- ~~The walker never buys anything.~~ It was not broke. Shopkeepers stand behind
+  a counter, and it would only talk to somebody it could stand right beside — so
+  in the whole game it never once stood next to a shop clerk. It talks across a
+  counter now, and every shop in the game opened up.
+- ~~People flung off the edge of the map by a scripted scene.~~ The scene was
+  applying a whole walk as one leap instead of a step at a time. Fixed — and the
+  reach it had been inflating came **down**, 390 places to 381. The lower number
+  is the true one and it is not being rounded back up.
 - ~~The player had no bag.~~ Every character in the game who asks whether you are
   carrying something had been told "no" since the walker was written. Silently,
   for months. There is a bag now.
@@ -735,6 +816,9 @@ posting in #bug-reports.
   "would you like to…?" since the walker was written — and a script that stopped
   mid-sentence looks exactly like somebody with nothing more to say.
 - ~~The party never gains a level.~~ It does. Three at level 75 with the sea open.
+**Still closed, continued below.**`,
+
+`**Closed, continued**
 - ~~SAFFRON's shut doors.~~ Ten measurements went into one door before the counts
   sat side by side and showed it to be one ordinary member of a set of 245.
   Closed in the reading and in the walk.

@@ -119,6 +119,7 @@ const TREE = [
     channels: [
       { key: 'welcome',       name: 'welcome',       type: 'text',         mode: 'readonly', topic: 'What this is and where to go next.' },
       { key: 'rules',         name: 'rules',         type: 'text',         mode: 'readonly', topic: 'Read rule 1. It is the one with no warning attached.' },
+      { key: 'plain-english', name: 'plain-english', type: 'text',         mode: 'readonly', topic: 'What we are working on right now, with the jargon taken out.' },
       { key: 'announcements', name: 'announcements', type: 'announcement', mode: 'readonly', topic: 'Project news. The only channel that pings you unprompted.' },
       { key: 'changelog',     name: 'changelog',     type: 'text',         mode: 'readonly', topic: 'Build-by-build changes, with commit and test count.' },
     ],
