@@ -125,7 +125,7 @@ public class EverywhereInTheImageTests
         // up offsets in the real image and opcodes in the reversal it would find a goto there.
         // Without it the mismatch produces garbage that happens to read as "not a jump", and a
         // control that quietly under-reports its own noise floor is the failure that matters.
-        Put(image, 0x3FF9, Goto);
+        Put(image, 0x3DF9, Goto);
 
         // A hit on the flag pattern that is not a setflag at all — three bytes in the middle
         // of something, with bytes after them that are not commands.
