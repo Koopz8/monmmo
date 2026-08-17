@@ -143,6 +143,9 @@ public sealed class TheCeilingWithNoLeverTests
     /// <summary>A place that asks for two different amounts inside one script.</summary>
     private const uint AsksTwoPrices = 0x4000;
 
+    /// <summary>A place that asks for a different amount on each pass — a different arm taken.</summary>
+    private const uint AsksAgainOnTheNextPass = 0x5000;
+
     /// <summary>
     /// Three asking places across two maps, one of which asks twice and one of which is the
     /// SAME script address on both maps.
@@ -179,12 +182,19 @@ public sealed class TheCeilingWithNoLeverTests
                     {
                         ScriptAddress = AsksAndGivesNothing,
                     },
+                    new MapObject(2, 1, 2, 1, Direction.Down, 0, false)
+                    {
+                        ScriptAddress = AsksAgainOnTheNextPass,
+                    },
                 ],
             },
         ]);
 
-    private static Attempt Counters() =>
-        Autoplayer.Play(
+    private static Attempt Counters()
+    {
+        var pass = 0;
+
+        return Autoplayer.Play(
             FourCounters(),
             "1.0",
             TestRules.All,
@@ -196,8 +206,15 @@ public sealed class TheCeilingWithNoLeverTests
                 {
                     MoneyWalkedPast = [1000, 10000],
                 },
+
+                // And this one asks a DIFFERENT amount each time it is run, the way a script
+                // whose branch depends on a variable does. Merging across passes is what turns
+                // that into one place asking two amounts; overwriting keeps whichever was last.
+                AsksAgainOnTheNextPass => Nothing with { MoneyWalkedPast = [pass++ == 0 ? 500 : 5000] },
+
                 _ => Nothing with { MoneyWalkedPast = [350] },
             });
+    }
 
     /// <summary>
     /// THE COUNT AND THE LIST ARE TWO CLAIMS AND THEY HAVE TO AGREE.
@@ -214,11 +231,15 @@ public sealed class TheCeilingWithNoLeverTests
     {
         Attempt played = Counters();
 
-        Assert.Equal(3, played.WalkedPastAMoneyCheck);
+        Assert.Equal(4, played.WalkedPastAMoneyCheck);
         Assert.Equal(played.WalkedPastAMoneyCheck, played.MoneyChecks.Count);
 
         Assert.Equal(
-            new[] { ("1.0", AsksAndGivesNothing), ("1.0", AsksTwoPrices), ("2.0", AsksAndGivesNothing) },
+            new[]
+            {
+                ("1.0", AsksAndGivesNothing), ("1.0", AsksTwoPrices),
+                ("2.0", AsksAndGivesNothing), ("2.0", AsksAgainOnTheNextPass),
+            },
             played.MoneyChecks.Select(m => (m.MapId, m.Address)).OrderBy(m => m.MapId).ThenBy(m => m.Address));
     }
 
@@ -252,22 +273,33 @@ public sealed class TheCeilingWithNoLeverTests
     }
 
     /// <summary>
-    /// PLACES AND NOT TIMES, which is 195's rule and the one a fixpoint breaks by default.
+    /// PLACES AND NOT TIMES, which is 195's rule and the one a fixpoint breaks by default —
+    /// and the amounts MERGE across passes rather than the last one winning.
     /// <para>
-    /// Every pass runs every script again, so a list that appended would grow with the number
-    /// of passes and the count beside it would stop being a count of places. The assertion on
-    /// the pass count is not decoration: with one pass this test cannot fail.
+    /// Every pass runs every script again. A list that appended would grow with the number of
+    /// passes and the count beside it would stop being a count of places; a record that
+    /// overwrote would report whichever amount the last pass happened to ask for. The
+    /// assertion on the pass count is not decoration — with one pass neither half of this can
+    /// fail.
+    /// </para>
+    /// <para>
+    /// That the amounts are distinct is not asserted, because the collection they are kept in
+    /// makes it true for free. What is asserted is that both are there.
     /// </para>
     /// </summary>
     [Fact]
-    public void AskingOnEveryPassIsStillOnePlace()
+    public void AskingOnEveryPassIsStillOnePlaceAndTheAmountsMerge()
     {
         Attempt played = Counters();
 
         Assert.True(played.Passes > 1, $"the fixture has to run more than once; it ran {played.Passes} time(s)");
 
-        Assert.Equal(3, played.MoneyChecks.Count);
-        Assert.All(played.MoneyChecks, m => Assert.Equal(m.Prices.Distinct().Count(), m.Prices.Count));
+        Assert.Equal(4, played.MoneyChecks.Count);
+
+        AskedForMoney across =
+            Assert.Single(played.MoneyChecks, m => m.Address == AsksAgainOnTheNextPass);
+
+        Assert.Equal(new[] { 500, 5000 }, across.Prices.Order());
     }
 
     /// <summary>
