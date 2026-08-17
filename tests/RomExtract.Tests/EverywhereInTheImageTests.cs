@@ -453,12 +453,18 @@ public class EverywhereInTheImageTests
     [Fact]
     public void ReversingTheImageDestroysTheScenesInIt()
     {
-        Rom rom = Rom();
+        // Its own image rather than the shared one: this asserts what the reversal does to a
+        // scene, and a fixture carrying decoys for other rules would answer a mixed question.
+        var image = new byte[0x1000];
 
-        int real = EverywhereInTheImage.EveryFlagMoved(rom).Values.Sum(s => s.Count);
+        Put(image, 0x100, SetFlag, Holds & 0xFF, Holds >> 8);
+        Put(image, 0x103, ClearFlag, Keeps & 0xFF, Keeps >> 8);
+        Put(image, 0x106, End);
 
-        Assert.Equal(6, real);
-        Assert.True(EverywhereInTheImage.NoiseFloor(rom).Sites < real);
+        var rom = new Rom(image);
+
+        Assert.Equal(2, EverywhereInTheImage.EveryFlagMoved(rom).Values.Sum(s => s.Count));
+        Assert.Equal(0, EverywhereInTheImage.NoiseFloor(rom).Sites);
     }
 
     /// <summary>
