@@ -6,18 +6,19 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **The sea was the same silence as a wall.** `WorldWalker` has taken a `surfing`
-  flag since it was written and the playthrough never passed it, so every water
-  square was dropped as unwalkable alongside every wall. The frontier said
-  `move 249: 20 squares`; the sea on the same run is **1245 squares across 35
-  maps**.
-- **`--play --say-yes --boat --surf`: 390 of 425 maps**, party at 75, 41 field
-  moves. Against 215 with neither lever. Both are MODELLED and both are ceilings.
-- **Not crossed on a guess.** Which move crosses water is the next thing to READ.
-  That turns 390 from a ceiling into a floor.
-- **Shut doors are counted by reason now**: 42 never reached the door, 17 arrived
-  on an island, **zero somebody standing in the way**. The list stops at twenty
-  and the count is sixty-four, so the frontier's shape was whatever the first
-  twenty happened to be.
-- One guard came back green three times, each for a different reason, before it
-  caught anything. The third attempt is the guard.
+- **`--who-writes 0xNNNN`** is the mirror of `--in-the-image`: every place in the
+  whole file that puts a number in one of the story's own variables. A gate is a
+  flag or a variable and only one could be hunted through the image.
+- **It answers the starter in one run.** `0x4055` goes 1 at the trigger north of
+  PALLET TOWN, 2 at the lab's arrival script, then 3–9 across the lab — and 2 is
+  what makes the three balls hand something over.
+- **And why no run ever held one**: the run rebuilt every variable from nothing at
+  every script. Flags crossed, the bag crossed, beaten trainers crossed. Numbers
+  did not. Fixed.
+- **Where the scratch pads stop is READ**: the `0x4000`s are written up to 168
+  times each, every band above tops out at 21. There is a cliff at `0x4010` and
+  `--who-writes` prints the bands.
+- **The starter still doesn't arrive**, and now for a reason worth having: the run
+  runs every script on a map regardless of its condition, so `0x4055` ratchets to
+  9 before the balls read it. That is the four-milestone-old open question with a
+  case attached at last.

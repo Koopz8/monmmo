@@ -56,6 +56,39 @@ public sealed class HowAScriptRuns(
     IReadOnlyCollection<int>? beaten = null)
 {
     /// <summary>
+    /// Where the scratch pads stop and the story's own memory begins.
+    /// <para>
+    /// <b>Read off the cartridge rather than assumed.</b> <c>--who-writes</c> counts how many
+    /// places in the whole image put a number in each variable, and the distribution has a
+    /// cliff in it: the twelve variables below this are written up to a hundred and sixty-eight
+    /// times each, and every band above tops out at twenty-one and mostly under ten. A pad
+    /// three hundred scripts scribble on is not something the story remembers.
+    /// </para>
+    /// <para>
+    /// Where exactly to cut is a decision — MODELLED — but that there is somewhere to cut is
+    /// a measurement, and the number is printed by the instrument that found it.
+    /// </para>
+    /// </summary>
+    public const int FirstRemembered = 0x4010;
+
+    /// <summary>
+    /// What the story is holding, across scripts.
+    /// <para>
+    /// <b>Flags crossed from one script to the next and numbers did not.</b> The run carried its
+    /// flags, its bag, and latterly the trainers it had beaten; every variable was rebuilt from
+    /// nothing at every script, so a counter set by one scene was zero by the time the next
+    /// scene read it.
+    /// </para>
+    /// <para>
+    /// PALLET TOWN is the whole opening of the game and it is a counter: the trigger north of
+    /// the town puts one in <c>0x4055</c>, the lab's arrival script reads that one and puts in
+    /// two, and two is what makes the three balls give you something. With no memory between
+    /// scripts the first step of that was undone before the second ran, and no run this project
+    /// has printed has ever held a starter.
+    /// </para>
+    /// </summary>
+    private readonly Dictionary<int, int> _remembered = [];
+    /// <summary>
     /// Run one script with everything the walk has learned so far, and say what it did.
     /// </summary>
     /// <param name="flags">What the run has turned on, which decides which arm every branch takes.</param>
@@ -76,6 +109,10 @@ public sealed class HowAScriptRuns(
         // behind it, on every pass, however many the run wins.
         foreach (int trainer in (beaten ?? [])) state.MarkBeaten(trainer);
 
+        // What earlier scenes left in the story's own variables. Before the injected ones, so
+        // a lever on the command line still wins.
+        foreach ((int variable, int held) in _remembered) state.Write(variable, held);
+
         // Modelled, and put in before the script rather than after: a counter is read on
         // the first line of the scene it gates.
         foreach ((int variable, int put) in variables ?? new Dictionary<int, int>())
@@ -83,6 +120,7 @@ public sealed class HowAScriptRuns(
 
         ScriptRun run = ScriptRunner.Run(rom, address, state, answers: answers);
 
+        var wrote = new Dictionary<int, int>(run.VariablesWritten);
         var flagsSet = new List<int>(run.FlagsSet);
         var flagsCleared = new List<int>(run.FlagsCleared);
         var specials = new List<int>(run.SpecialsCalled);
@@ -167,6 +205,8 @@ public sealed class HowAScriptRuns(
 
             run = ScriptRunner.Run(rom, carryOn, state, answers: answers);
 
+            foreach ((int variable, int value) in run.VariablesWritten) wrote[variable] = value;
+
             flagsSet.AddRange(run.FlagsSet);
             flagsCleared.AddRange(run.FlagsCleared);
             specials.AddRange(run.SpecialsCalled);
@@ -184,6 +224,12 @@ public sealed class HowAScriptRuns(
 
             mon ??= run.GivesMon;
             fights ??= run.TrainerId;
+        }
+
+        // And what this scene left behind for the next one, minus the scratch pads.
+        foreach ((int variable, int value) in wrote)
+        {
+            if (variable >= FirstRemembered) _remembered[variable] = value;
         }
 
         return new PlayedScript(
