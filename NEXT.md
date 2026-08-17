@@ -6,18 +6,17 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **The error bars were counting the fixpoint's own passes.** *5051 calls to 28
-  routines it could not answer* and *399 script runs stopped at 3 commands* both
-  counted every run of every script on every pass — and the run talks to everybody
-  again each time round. The floor run asks **5047 times at 319 places**, and stops
-  399 times at **40**.
-- Both numbers are true and they answer different questions. Only one of them is
-  about the cartridge; the other is about how many times the loop went round.
-- **And the prediction was wrong.** The last two milestones found that one scene is
-  written as several doors and that this walk takes all of them, and it followed
-  that every count would be inflated by the door count. It is **six** out of 5047.
-  The door shape matters where an effect *accumulates* — a person walked once per
-  door ends up four squares out, and that was worth nine maps — and not where
-  something is merely counted.
-- The break for that came back green: nothing asserted what happens in the ordinary
-  case, which is 5041 of the 5047.
+- **The key was wrong for nineteen milestones and it moved nothing.** The run's
+  record of what it ran was keyed on a script's address with no map beside it —
+  one nurse's script hangs off nineteen Pokémon Centres, so running it once read
+  as running it in every town. Fixed, and five deliberate breaks all caught it.
+- **Every `--play` run is byte-identical before and after**, at all six lever
+  settings. Not because the cartridge has no shared blocks — it runs 7 to 17 of
+  them on more than one map — but because the only code that reads that record is
+  asked about **one** setter, and at the boat settings **none**. A count of how
+  wrong something is is not a count of who cares.
+- The command the task said was reading it, `--flags`, never ran a playthrough at
+  all. It takes the ROM and nothing else.
+- **And four shopping-list entries are one purchase away**: with the boat open the
+  run stands on ground where the drinks and the POKé DOLL are sold and asks for
+  them anyway. It has no money, so the whole buying report prints nothing.

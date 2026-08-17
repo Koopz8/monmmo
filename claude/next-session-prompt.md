@@ -1,7 +1,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-231`, 2771 tests green.
+`claude-232`, 2776 tests green.
 
 Standing rules — do not break these:
 
@@ -64,14 +64,19 @@ Traps worth carrying:
    twice" and "nothing hands anything over" read identically until 190 printed both halves.
    195 is the same trap a third time: "5051 calls to 28 routines" was the fixpoint's own passes,
    and the number about the cartridge is 319 places.
-9. **A shape that matters somewhere does not matter everywhere.** 193 found that a scene played
+9. **Before believing "X is wrong everywhere", print how many places ask X.** 196 fixed a key
+   that had been wrong for nineteen milestones and it moved nothing at any lever setting: the
+   only consumer in the repository is asked about ONE setter at three settings and NONE at the
+   other three. The fault was real and the blast radius was nought, and only a denominator on
+   the CONSUMER could say so. A count of how wrong something is is not a count of who cares.
+10. **A shape that matters somewhere does not matter everywhere.** 193 found that a scene played
    once per door wrecked the walking, because a walk ACCUMULATES. 194 predicted the same for
    every count the run keeps. Measured, it is six in five thousand — a counter accumulates
    nothing. The prediction was mine and reasonable and wrong, and only measuring said so.
 
 ## Where things are
 
-Read `claude/milestone-195-places-not-times.md` first, then `194`, `193`, `192`, `191`, `190`, `189`,
+Read `claude/milestone-196-the-key-was-wrong-and-nobody-was-asking.md` first, then `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
 **Nineteen faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
@@ -174,15 +179,20 @@ sets. CERULEAN CAVE is closed: the run now reaches it, off the SAPPHIRE thread.
 
 ## The next task, precisely
 
-1. **`ran` is still keyed on a script address alone**, and 12 blocks are reached from more than
-   one MAP — nineteen Pokémon Centres share a nurse. `--flags` uses `played.Ran.ContainsKey` to
-   decide whether a script ran at all, so a nurse run on one map reads as run on nineteen. That
-   is the same fault 193 shipped and 194 fixed for the walking, still live somewhere else, and
-   it is a grep rather than a hunt: `ran`, and anything else in this repository keyed on
-   `what.Address` without the map beside it.
-2. **The refusals and the yes-or-nos are corrected but unread.** 195 made all four counts places
-   rather than times; nobody has looked at what the shopping list and the hanging-question list
-   now say. `--play` prints both.
+1. **The buying report is silent and four shopping-list entries are one purchase away.** At
+   `--play --say-yes --boat --in-order` the list is six places and **four of them are standing
+   on ground where the thing is sold** — `10.5` wants three drinks sold at `3.13`, `14.1` wants
+   a POKé DOLL sold at `10.3`. The run does not buy them because it has no money, and the whole
+   buying report is behind `if (money > 0 || played.Bought.Count > 0)`, so it prints NOTHING.
+   A silent zero reads exactly like nothing to say. Money is MODELLED and the payout table has
+   never been located — that is the known half; this is the unknown half. The other two are
+   `33.1`'s TINYMUSHROOM and BIG MUSHROOM, which nothing on any map hands over: the code
+   boundary with a number on it, same shape as `0x0089`.
+2. **`Attempt.Ran` is fixed (196) and it moved nothing, for a reason worth carrying.** The key
+   is `(map, address)` now and five breaks caught it. But the tally 196 added says the only
+   consumer in the repository is asked about **one** setter at three lever settings and **zero**
+   at the other three. `--flags` never looked at it at all — it takes only the ROM. Before the
+   next "X is wrong everywhere", print how many places ask X.
 3. **`--entries` reads only the scripts the map scan opens**, which is 0.6% of the file. The
    same sweep asked of the whole image is `--in-the-image`'s question and has never been asked
    of this shape.
@@ -253,6 +263,13 @@ a break passes, suspect the fixture — or where the rule lives — before the c
 
 ## Things already ruled out — don't re-chase these
 
+* **`--flags` using the playthrough.** It does not. `case "--flags"` reaches
+  `WriteFlagGates(rom)` — one parameter, and it is the ROM. Nothing in it has ever seen an
+  `Attempt`. Diffing `--flags` across a playthrough change is diffing a scan that did not look.
+* **Anything else in the run keyed on an address alone.** The grep 194 asked for is done and
+  `Ran` was the only one. `moved`, `gone`, `spokenTo`, `handovers`, `walkedFrom`, `refused` and
+  all five of 195's counted sets already carry the map; `alreadyRun` is a per-map local, the
+  same key by scope. Do not re-run this grep.
 * **The blockers' own scripts.** All four contain **no conditional of any kind**. What moves
   them is on the object's record, not in the script.
 * **`0x4001` is scratch, not a story counter.** 285 scripts write it. The scratch pads stop at
