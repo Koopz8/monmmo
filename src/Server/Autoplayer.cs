@@ -41,6 +41,22 @@ public sealed record PlayedScript(
     /// </summary>
     public IReadOnlyList<int> Hides { get; init; } = [];
 
+    /// <summary>
+    /// Commands with no width that stopped this run's reading, by opcode.
+    /// <para>
+    /// <b>The half of the error bar that was missing.</b> A run reports the routines it could
+    /// not answer, and it has never reported the commands it could not read. Those are not the
+    /// same boundary: a routine is the game's own code and nothing here will ever follow it,
+    /// while a command with no width is a gap in a table in this repository — the difference
+    /// between "the world is this small" and "my reader stopped".
+    /// </para>
+    /// <para>
+    /// One byte with no entry hid nineteen people on eleven maps, and every instrument that saw
+    /// it reported a smaller world, cleanly, with no error anywhere.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<byte> StoppedAt { get; init; } = [];
+
     /// <summary>What it asked the bag for, and what it was told.</summary>
     public IReadOnlyList<(int ItemId, int Count, bool Carried)> Asked { get; init; } = [];
 
@@ -413,6 +429,16 @@ public sealed record Attempt(
     /// </summary>
     public IReadOnlyList<Wanted> Refused { get; init; } = [];
 
+    /// <summary>
+    /// How many scripts stopped at each command with no width, commonest first.
+    /// <para>
+    /// The second error bar, beside the routines. A door this walk calls shut may have been
+    /// behind a command this project cannot step over, and that is a fault here rather than a
+    /// fact about the cartridge.
+    /// </para>
+    /// </summary>
+    public IReadOnlyDictionary<byte, int> UnreadCommands { get; init; } = new Dictionary<byte, int>();
+
     /// <summary>What it bought, and what each one cost.</summary>
     public IReadOnlyList<Bought> Bought { get; init; } = [];
 
@@ -618,6 +644,7 @@ public static class Autoplayer
         var bought = new List<Bought>();
         var refusedAtTheCounter = new Dictionary<(int ItemId, string MapId), string>();
         var questions = new Dictionary<string, int>();
+        var unread = new Dictionary<byte, int>();
 
         // What talking to each person came to, kept by who they are rather than by which
         // script address they share. Somebody standing in a doorway is only actionable
@@ -697,6 +724,11 @@ public static class Autoplayer
                     }
 
                     if (did.StoppedAtAQuestion) questions[map.Id] = questions.GetValueOrDefault(map.Id) + 1;
+
+                    // And the commands it could not read at all, which is the other half of
+                    // the same measurement and has never been carried out of here.
+                    foreach (byte code in did.StoppedAt)
+                        unread[code] = unread.GetValueOrDefault(code) + 1;
 
                     if (what.LocalId != 0) spokenTo[(map.Id, what.LocalId)] = did;
 
@@ -956,6 +988,7 @@ public static class Autoplayer
             Bought = bought,
             MoneyLeft = purse,
             Questions = questions,
+            UnreadCommands = unread,
             CouldNotBuy = [.. refusedAtTheCounter.Select(r => new NotBought(r.Key.ItemId, r.Key.MapId, r.Value))],
             Tickets =
             [
