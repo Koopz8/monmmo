@@ -28,6 +28,38 @@ public static class MetatileBehaviour
     /// <summary>Tall grass — where land encounters happen. Confirmed on Route 1.</summary>
     public const byte TallGrass = 0x02;
 
+    /// <summary>
+    /// A shop counter: solid, and talked across.
+    /// <para>
+    /// Read two independent ways rather than taken from another game's table, because that
+    /// table has already been wrong here once — three of the four ledge names it supplied did
+    /// not survive contact with this cartridge.
+    /// </para>
+    /// <para>
+    /// <b>By what it stands beside.</b> Of the 37 unwalkable squares orthogonally beside a
+    /// shopkeeper, 34 carry this value — 91.9%. Of the 1923 unwalkable squares beside ANY of
+    /// the file's people, 171 do — 8.9%. Ten-fold, and the control is the point: a wall stands
+    /// beside everybody.
+    /// </para>
+    /// <para>
+    /// <b>By its shape.</b> A counter is a square with somebody on one side and floor a player
+    /// can stand on directly opposite. Of the 728 squares in the world carrying this value,
+    /// 164 have that shape — 22.5%. Of the 92566 unwalkable squares carrying 0x00, 278 do —
+    /// 0.3%. Seventy-five-fold.
+    /// </para>
+    /// <para>
+    /// 22.5% rather than most, and that is the shape too: a counter is a RUN of squares and
+    /// only the one the clerk stands behind has anybody behind it. The other three or four
+    /// tiles of the same counter have wall behind them and are still counter.
+    /// </para>
+    /// <para>
+    /// What it costs: the playthrough stood in front of at most one shop counter in the entire
+    /// game before this value had a name, because it required orthogonal adjacency to talk to
+    /// anybody, and every clerk in this game stands behind one of these.
+    /// </para>
+    /// </summary>
+    public const byte Counter = 0x80;
+
     /// <summary>Long grass. Adjacent to tall grass in the numbering and also an encounter square.</summary>
     public const byte LongGrass = 0x03;
 

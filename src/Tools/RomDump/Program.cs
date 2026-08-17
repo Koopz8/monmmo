@@ -216,6 +216,7 @@ public static class Program
         if (options.Fights) WriteFights(rom);
         if (options.WhoKnows) WriteWhoKnows(rom);
         if (options.Entries) WriteEntries(rom);
+        if (options.Counters) WriteCounters(rom);
 
         if (options.SequenceWidths) WriteSequenceWidths(rom);
 
@@ -7337,6 +7338,196 @@ public static class Program
     /// <summary>
     /// The scenes written as several doors into one room, and what that costs every count.
     /// </summary>
+
+    /// <summary>
+    /// What the cartridge puts between a shopkeeper and the floor a player stands on.
+    /// <para>
+    /// 197 measured that the playthrough stands in front of at most ONE shop counter in the
+    /// whole game, and that every counter it misses is <b>exactly two squares</b> from the
+    /// nearest floor it stood on — 11 of 11, 14 of 14, 19 of 19, at every lever setting. The
+    /// explanation is obvious and this is the instrument that refuses to take it on trust: if
+    /// talking across a counter is a thing this cartridge does, then the square in between is
+    /// not an ordinary wall and its behaviour byte will say so, the same way water and ledges
+    /// do.
+    /// </para>
+    /// <para>
+    /// Asked of EVERY shopkeeper in the file rather than of the ones a run reached, because
+    /// "the squares the playthrough happened to miss" is a fact about the playthrough. The
+    /// distribution is what decides it: one value on most of them is a behaviour, and a spread
+    /// across many values is ordinary scenery and the guess was wrong.
+    /// </para>
+    /// <para>
+    /// It can come back empty. If no shopkeeper in the file has an unwalkable square beside
+    /// them, the whole idea is wrong and this prints that.
+    /// </para>
+    /// </summary>
+    private static void WriteCounters(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("WHAT IS BETWEEN A SHOPKEEPER AND THE FLOOR");
+        Console.WriteLine();
+
+        Core.World.WorldData world = WorldExporter.Export(rom);
+
+        var shops = 0;
+        var withNoWalkableNeighbour = 0;
+
+        // The behaviour byte of every unwalkable square orthogonally beside a shopkeeper, and
+        // the same for every unwalkable square beside ANYBODY, which is the control. A value
+        // that is common around shopkeepers and equally common around everybody is scenery.
+        var besideAShop = new Dictionary<byte, int>();
+        var besideAnybody = new Dictionary<byte, int>();
+
+        foreach (MapData map in world.Maps)
+        {
+            CollisionGrid grid = map.ToGrid();
+
+            foreach (MapObject person in map.Objects)
+            {
+                var walkable = 0;
+
+                foreach (GridPosition square in Around(person.Square))
+                {
+                    if (!grid.Contains(square)) continue;
+
+                    if (grid.IsWalkable(square))
+                    {
+                        walkable++;
+
+                        continue;
+                    }
+
+                    byte behaviour = map.BehaviourAt(square);
+
+                    besideAnybody[behaviour] = besideAnybody.GetValueOrDefault(behaviour) + 1;
+
+                    if (person.IsShopkeeper)
+                        besideAShop[behaviour] = besideAShop.GetValueOrDefault(behaviour) + 1;
+                }
+
+                if (!person.IsShopkeeper) continue;
+
+                shops++;
+
+                if (walkable == 0) withNoWalkableNeighbour++;
+            }
+        }
+
+        Console.WriteLine($"  {shops} shopkeeper(s) in the file, on {world.Maps.Count} map(s)");
+        Console.WriteLine(
+            $"  {withNoWalkableNeighbour} of them have NO walkable square beside them at all");
+
+        if (besideAShop.Count == 0)
+        {
+            Console.WriteLine(
+                "  and NOT ONE has an unwalkable square beside them — so there is nothing between"
+                + " a shopkeeper and the floor, and the counter idea is wrong.");
+
+            return;
+        }
+
+        int total = besideAShop.Values.Sum();
+        int control = besideAnybody.Values.Sum();
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  the behaviour byte of the {total} unwalkable square(s) beside a shopkeeper,"
+            + $" against the same byte beside ANY of the file's people ({control} square(s)):");
+
+        foreach ((byte behaviour, int count) in besideAShop.OrderByDescending(p => p.Value).Take(8))
+        {
+            int anybody = besideAnybody.GetValueOrDefault(behaviour);
+
+            // The share is the discriminator, not the count. A behaviour that is 90% of what
+            // is beside a shopkeeper and 3% of what is beside everybody is a counter. One that
+            // is 90% of both is a wall, and walls are beside everybody.
+            Console.WriteLine(
+                $"    0x{behaviour:X2}  {count,4} beside a shop ({100.0 * count / total,5:F1}%)"
+                + $"   {anybody,5} beside anybody ({100.0 * anybody / control,5:F1}%)"
+                + (behaviour == MetatileBehaviour.Normal ? "   ordinary ground" : string.Empty));
+        }
+
+        Console.WriteLine();
+        Console.WriteLine(
+            "  a value that is most of the first column and little of the second is a counter."
+            + " One that is most of both is a wall, and walls stand beside everybody.");
+
+        // AND THE SAME THING READ BY SHAPE, WHICH IS WHAT THIS PROJECT TRUSTS.
+        //
+        // A distribution can be enriched by accident. A counter has a shape and the shape is
+        // the claim: somebody standing on one side of the square and floor a player can stand
+        // on directly OPPOSITE. Nothing else in a building looks like that — a wall has wall
+        // behind it, and a person against a wall has no floor on the far side.
+        //
+        // Asked of every square in the file carrying the top value, not of the ones beside a
+        // shop, so the number has the whole file as its denominator. Printed with its own
+        // control: the same shape counted for ordinary unwalkable ground.
+        byte top = besideAShop.OrderByDescending(pair => pair.Value).First().Key;
+
+        Console.WriteLine();
+        Console.WriteLine($"  and the SHAPE of 0x{top:X2}, asked of every square in the file:");
+
+        foreach (byte value in new[] { top, MetatileBehaviour.Normal })
+        {
+            var squares = 0;
+            var sandwiched = 0;
+
+            foreach (MapData map in world.Maps)
+            {
+                CollisionGrid grid = map.ToGrid();
+
+                var people = map.Objects.Select(o => o.Square).ToHashSet();
+
+                for (var y = 0; y < map.Height; y++)
+                {
+                    for (var x = 0; x < map.Width; x++)
+                    {
+                        var here = new GridPosition(x, y);
+
+                        if (grid.IsWalkable(here)) continue;
+                        if (map.BehaviourAt(here) != value) continue;
+
+                        squares++;
+
+                        // Somebody on one side, floor directly opposite. Both axes.
+                        bool acrossY =
+                            (people.Contains(here with { Y = y - 1 })
+                                && grid.Contains(here with { Y = y + 1 })
+                                && grid.IsWalkable(here with { Y = y + 1 }))
+                            || (people.Contains(here with { Y = y + 1 })
+                                && grid.Contains(here with { Y = y - 1 })
+                                && grid.IsWalkable(here with { Y = y - 1 }));
+
+                        bool acrossX =
+                            (people.Contains(here with { X = x - 1 })
+                                && grid.Contains(here with { X = x + 1 })
+                                && grid.IsWalkable(here with { X = x + 1 }))
+                            || (people.Contains(here with { X = x + 1 })
+                                && grid.Contains(here with { X = x - 1 })
+                                && grid.IsWalkable(here with { X = x - 1 }));
+
+                        if (acrossY || acrossX) sandwiched++;
+                    }
+                }
+            }
+
+            Console.WriteLine(
+                $"    0x{value:X2}  {squares,6} unwalkable square(s) in the world,"
+                + $" {sandwiched,5} with somebody on one side and floor directly opposite"
+                + $"  ({(squares == 0 ? 0 : 100.0 * sandwiched / squares),5:F1}%)"
+                + (value == MetatileBehaviour.Normal ? "   <- the control" : string.Empty));
+        }
+    }
+
+    /// <summary>The four squares orthogonally beside one.</summary>
+    private static IEnumerable<GridPosition> Around(GridPosition at) =>
+    [
+        at with { Y = at.Y - 1 },
+        at with { Y = at.Y + 1 },
+        at with { X = at.X - 1 },
+        at with { X = at.X + 1 },
+    ];
+
     private static void WriteEntries(Rom rom)
     {
         Console.WriteLine();
@@ -11363,6 +11554,9 @@ public static class Program
         /// <summary>Whether to count the scenes written as several doors into one room.</summary>
         public bool Entries { get; private init; }
 
+        /// <summary>Read what sits between a shopkeeper and the floor. See WriteCounters.</summary>
+        public bool Counters { get; private init; }
+
         /// <summary>Whether the playthrough may take the ferry, which makes its reach a ceiling.</summary>
         public bool Boat { get; private init; }
 
@@ -11530,6 +11724,7 @@ public static class Program
             bool fights = false;
             bool whoKnows = false;
             bool entries = false;
+            var counters = false;
             bool play = false;
             var whereFrom = new List<int>();
             var inTheImage = new List<int>();
@@ -11782,6 +11977,9 @@ public static class Program
                         break;
                     case "--entries":
                         entries = true;
+                        break;
+                    case "--counters":
+                        counters = true;
                         break;
                     case "--play":
                         play = true;
@@ -12084,6 +12282,7 @@ public static class Program
                 Fights = fights,
                 WhoKnows = whoKnows,
                 Entries = entries,
+                Counters = counters,
                 Boat = boat,
                 Surf = surf,
                 InOrder = inOrder,

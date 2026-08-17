@@ -1398,7 +1398,7 @@ public static class Autoplayer
                         continue;
                     }
 
-                    if (!Beside(map.Id, counter.Square).Any(stood.Contains))
+                    if (!SpokenToFrom(map, counter.Square).Any(stood.Contains))
                     {
                         neverStoodBeside.Add((map.Id, counter.LocalId));
 
@@ -2151,7 +2151,7 @@ public static class Autoplayer
             // different things in the file, and only the first was being asked about.
             if (gone.Contains((map.Id, person.LocalId))) continue;
 
-            if (Beside(map.Id, person.Square).Any(stood.Contains))
+            if (SpokenToFrom(map, person.Square).Any(stood.Contains))
             {
                 yield return new Runnable(
                     person.ScriptAddress,
@@ -2230,4 +2230,45 @@ public static class Autoplayer
         (mapId, at with { X = at.X - 1 }),
         (mapId, at with { X = at.X + 1 }),
     ];
+
+    /// <summary>
+    /// Where somebody can be spoken to from: beside them, and across a counter.
+    /// <para>
+    /// <b>The rule that decides what this whole project can reach, and it was one square too
+    /// strict.</b> Every shop clerk in this game stands behind a
+    /// <see cref="MetatileBehaviour.Counter"/> square, so a walk requiring orthogonal adjacency
+    /// stood in front of at most ONE counter in the entire cartridge — 11 of 11, 14 of 14 and
+    /// 19 of 19 of the ones it missed were exactly two squares from the nearest floor it stood
+    /// on, at every lever setting, with no exceptions and no tail.
+    /// </para>
+    /// <para>
+    /// This is READ and not modelled. <c>0x80</c> was measured two ways before it was given a
+    /// name — by what it stands beside (91.9% against an 8.9% control) and by its own shape
+    /// (22.5% against 0.3%) — and the evidence is written out on the constant.
+    /// </para>
+    /// <para>
+    /// One square of counter, not a line of them: the square between must itself be the
+    /// counter, so this reaches exactly two away and only through that one value. A wall two
+    /// away is still a wall, which is the discrimination the fixture has to make.
+    /// </para>
+    /// </summary>
+    private static IEnumerable<(string, GridPosition)> SpokenToFrom(MapData map, GridPosition at)
+    {
+        foreach ((string, GridPosition) near in Beside(map.Id, at)) yield return near;
+
+        foreach (GridPosition way in (GridPosition[])
+        [
+            at with { Y = at.Y - 1 },
+            at with { Y = at.Y + 1 },
+            at with { X = at.X - 1 },
+            at with { X = at.X + 1 },
+        ])
+        {
+            if (map.BehaviourAt(way) != MetatileBehaviour.Counter) continue;
+
+            yield return (map.Id, new GridPosition(
+                way.X + (way.X - at.X),
+                way.Y + (way.Y - at.Y)));
+        }
+    }
 }
