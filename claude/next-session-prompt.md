@@ -1,7 +1,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-244`, 2827 tests green.
+`claude-245`, 2831 tests green.
 
 Standing rules — do not break these:
 
@@ -92,8 +92,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-208-the-number-none-of-them-holds.md` first, then
-`207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
+Read `claude/milestone-209-one-place-asked-and-it-was-the-game-corner.md` first, then
+`208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
 **Twenty faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
@@ -210,6 +210,7 @@ sets. CERULEAN CAVE is closed: the run now reaches it, off the SAPPHIRE thread.
 11 of 425 maps have no way in at all
 5 places guard a coin hand-over; every bound plus its own gift is 10000; 0 chains in the reversal
 2 places sell coins for money at 20 each — READ; 3 price lists, 15 rows, all READ
+the floor is asked for money in ONE place and it is the coin counter; 8 at --say-yes and above
 ```
 
 ## The next task, precisely
@@ -226,12 +227,11 @@ sets. CERULEAN CAVE is closed: the run now reaches it, off the SAPPHIRE thread.
    anyway, which is the `#130` at 71 the party ends with. **The floor is clean**: 1 place asks,
    nothing comes of it, so the floor's party of six is entirely earned. Whether that deserves a
    `--pay` lever or a located payout table is a DECISION and it is deliberately not made.
-3. **The GAME CORNER is read (208) and the run's side of it is not.** `--coins` says five
-   places guard a hand-over and all five sum to 10000, two places sell coins at 20 each, and
-   three price lists hold fifteen rows. What it does NOT say is whether the RUN stands in front
-   of any of them: 10.14 is on no shut-door list and every site is inside a script the map scan
-   opens, but 201's "8 places ask the run for money" is **a count with no list**, so whether two
-   of those eight are the coin counter's cannot be read off. Printing that list is the job.
+3. **`--play`'s flag count is still a number with no list, and 207 needed the list.** Finding
+   which three flags 199 added took hand-patching a print into two worktrees. 209 did exactly
+   this fix one line lower down — the money ceiling is a list now — and the line above it is
+   still a bare `153 flags`. The story's memory got the same treatment at 184 and the pattern is
+   written there: print a dozen and say how many more. **This is the next one of these.**
 4. **Money, for real this time — and the prices are READ now.** Three drinks at 200/300/350 and
    a POKé DOLL at 1000, plus 208's ¥20 a coin and fifteen coin prices, all READ, all at counters
    the run reaches, against a purse of nought. `--money N` is the lever and it is MODELLED; **the
@@ -420,6 +420,8 @@ the other, and nothing about a single green run says which. 207 writes the 2x2 d
 * A way in reports only the shortest chain, so an upper-bound edge can hide a real one.
 * `Bag.PocketCapacity` was counted across the whole bag — fixed at 190 tests ago, but it shipped.
 * The purse is modelled and the payout table has never been located. The PRICES are read (208).
+* `0x8009` picks which arm of the coin counter runs, 22 scripts write it and NONE on 10.14, so
+  the ¥10000 arm is chosen past the code boundary. What the variable is for is not claimed.
 * **`MapScripts` — the fifth list — has no test coverage at all.**
 * A guard nothing can fail: `SpecialContracts.ComparedAfter`. Decoy or deletion.
 * Co-op step 4: a parcel still goes to one person.

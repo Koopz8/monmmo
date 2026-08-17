@@ -6,17 +6,15 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **The cartridge never writes down how many coins fit, so it was derived.** Five places
-  read the count, compare it against a bound, branch, and hand a quantity over. Four
-  different bounds, four different gifts — and **every bound plus its own gift is exactly
-  10000**. The same chain hunt on the reversed image finds **nought**.
-- The counter sells coins at **¥20 each**, read off two sites that ask, give and pay. That
-  is the first money number in this project with a source: the purse is still modelled, the
-  payout table still unlocated, but the prices are read.
-- Three price lists, fifteen rows, all read — five creatures, five TMs and five held items
-  nobody knew were there.
-- **The printer named the creatures as berries and mail first.** Every id in every list is
-  inside the item table AND the species table, so "try one, fall back to the other" always
-  answered with whichever came first and never said so. What fixes it is the door: one list's
-  exit hands over a creature, the other two hand over an item.
-- And a control written this session turned out to be unfalsifiable arithmetic. Deleted.
+- **"8 places asked it for money" finally says which eight.** The count has been printed
+  since milestone 200 and the list never was. At the floor there is exactly **one**, and it
+  is the GAME CORNER coin counter read last milestone — the reading had been calling it
+  "1 place" for nine milestones.
+- The counter offers two prices. **The run only ever sees one of them**, and the bytes say
+  why: which arm runs is picked by `0x8009`, twenty-two scripts write that variable and
+  **none of them is on that map**, so the run holds nought and takes the ¥1000 arm. The other
+  arm is chosen by a menu row — compiled code, past the code boundary.
+- So the whole-image reading sees two exchanges and the run sees one, and neither is wrong.
+- Four breaks, four catches. The new fixture shape worth keeping: **a script that answers
+  differently on the second pass** — without one, a run that overwrote instead of merging
+  looked identical to one that did it right.
