@@ -27,7 +27,12 @@ public class WhatTheRunAlreadyKnowsTests
     /// <summary>The standard call that puts a yes-or-no on the screen.</summary>
     private const byte YesOrNo = 0x05;
 
+    private const byte Compare = 0x21;
+    private const byte GotoIf = 0x06;
     private const byte End = 0x02;
+
+    /// <summary>The variable a yes-or-no box answers into, which is what everything reads.</summary>
+    private const int Answer = 0x800D;
 
     private const int Trainer = 0x0170;
 
@@ -68,8 +73,16 @@ public class WhatTheRunAlreadyKnowsTests
         Put(image, 0x205, LoadPointer, 0x00);
         Pointer(image, 0x207, 0x08000400);
         Put(image, 0x20B, CallStandard, YesOrNo);
-        Put(image, 0x20D, GiveMon, SpeciesVariable & 0xFF, SpeciesVariable >> 8, 5);
-        Put(image, 0x21C, End);
+
+        // And the answer is read, or "yes" would mean nothing and a run that answered no would
+        // walk off with the creature anyway.
+        Put(image, 0x20D, Compare, Answer & 0xFF, Answer >> 8, 1, 0x00);
+        Put(image, 0x212, GotoIf, 0x01);
+        Pointer(image, 0x214, 0x08000230);
+        Put(image, 0x218, End);
+
+        Put(image, 0x230, GiveMon, SpeciesVariable & 0xFF, SpeciesVariable >> 8, 5);
+        Put(image, 0x23F, End);
 
         return new Rom(image);
     }
@@ -124,6 +137,11 @@ public class WhatTheRunAlreadyKnowsTests
     /// <summary>
     /// And a run that answers nothing gets nothing, which is what makes the line above a
     /// measurement rather than a coincidence.
+    /// <para>
+    /// The answer is read by a <c>compare</c> in the fixture rather than assumed. Without it,
+    /// yes and no reach the same <c>givemon</c> and none of this says anything about answering
+    /// — which is how a break that wrote nought into the answer variable came back green.
+    /// </para>
     /// </summary>
     [Fact]
     public void AndARunThatNeverAnswersStopsAtTheQuestion()
