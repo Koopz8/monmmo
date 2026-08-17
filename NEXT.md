@@ -6,18 +6,19 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **SAFFRON is open in the playthrough now**, not just in the reading. A
-  `trainerbattle` is its own conditional — beaten, the script carries on — and
-  the run **never told the reader who it had beaten**. `HasBeaten` was false at
-  every site on every pass, so every script with a fight in it stopped at the
-  fight forever, however many the run won.
-- **A trainer was marked fought before the fight**, so a loss was final: it met
-  GIOVANNI on pass one with what it had and never went back while the party
-  doubled in level. Beaten stays beaten; lost to does not.
-- **The continuation after a question carried flags and not variables**, so
-  PALLET TOWN's `givemon` read the starter's species as nought. No run this
-  project ever printed had a starter.
-- **`--play --say-yes`: 211 → 215 maps, 176 → 195 flags, 25 → 31 field moves.**
-  Three fixes in a row moved nothing before the fourth moved it.
-- **Next**: move the playthrough's reader into the library — two of these three
-  fixes are in `Program.cs` and cannot be guarded. Fifth instance.
+- **The debt at the top of the roadmap, paid.** The playthrough's script reader
+  was 140 lines of local function in `Program.cs` — no tests, no fixture can
+  reach it, nothing can break it. Two live fixes were sitting in there and both
+  breaks came back green last milestone.
+- **It was stuck there for a reason**: it needs `Rom` (RomExtract) and returns
+  `PlayedScript` (Server), and neither assembly can see the other. So
+  `PlayedScript` moved to Core — a contract belongs where both sides can see it
+  — and the reader moved to RomExtract.
+- **Not one number moved**: 215 maps, 195 flags, 31 field moves, 281 won, 52
+  lost to, party of 3 at 59. Checked against the pre-refactor build rather than
+  against memory, which caught a stale figure I'd have reported as a change.
+- **Both green breaks now bite**, along with their opposite halves. A third was
+  green because the fixture was wrong — yes and no reached the same command — and
+  a test I wrote called `AnsweringNoHandsNothingOver` that did not answer no was
+  deleted rather than kept.
+- **Next**: CERULEAN CAVE is the only blocked doorway left; who writes `0x4055`.
