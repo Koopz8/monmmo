@@ -7152,6 +7152,19 @@ public static class Program
                 + $"{found.Count(s => s.ReadsAsAScript)} of which read as script, "
                 + $"{found.Count(s => s.Opened)} of which the map scan opened");
 
+            // AND HOW MANY OF THEM ARE THE SAME PLACE TWICE.
+            //
+            // The error bar above is a whole-image average computed as though every byte
+            // were independent, and this image is nothing of the sort. 0x0089 turns up nine
+            // times against a floor of one, which reads as signal — and SEVEN of the nine
+            // are inside 788 bytes of a low-entropy table with names in it, where the same
+            // record repeats and the pattern is a field inside it rather than a command.
+            //
+            // A uniform floor cannot model that, so the clustering is printed beside it.
+            // Sites that arrive in a clump are one fact about the file, however many of them
+            // there are; sites spread across it are as many facts as there are sites.
+            WriteHowClustered(rom, found.Select(f => f.Offset));
+
             if (found.Count == 0)
             {
                 Console.WriteLine(
@@ -7556,6 +7569,42 @@ public static class Program
         at with { X = at.X - 1 },
         at with { X = at.X + 1 },
     ];
+
+    /// <summary>
+    /// Prints how much of a count is one place rather than many. The rule is on
+    /// <see cref="HowClustered"/>; only the wording is this file's business.
+    /// </summary>
+    private static void WriteHowClustered(Rom rom, IEnumerable<int> offsets)
+    {
+        List<int> at = [.. offsets];
+
+        if (at.Count < 2) return;
+
+        IReadOnlyList<Clump> clumps = HowClustered.In(rom, at);
+
+        if (clumps.Count == 0)
+        {
+            Console.WriteLine(
+                "    and no two of them are within a kilobyte of each other — so the count above"
+                + " is that many separate facts about this file");
+
+            return;
+        }
+
+        Console.WriteLine(
+            $"    {clumps.Sum(c => c.Sites)} of them sit within a kilobyte of another — that is"
+            + $" {clumps.Count} place(s), not {clumps.Sum(c => c.Sites)}. The whole-image error"
+            + " bar assumes independent bytes and cannot model a clump; a run of table data"
+            + " makes them all by itself.");
+
+        foreach (Clump clump in clumps)
+        {
+            Console.WriteLine(
+                $"      0x{clump.From:X6}..0x{clump.To:X6}  {clump.Sites} site(s) in"
+                + $" {clump.To - clump.From + 3} byte(s), entropy {clump.Entropy:0.00} bits/byte"
+                + (clump.LooksLikeATable ? "   <- table-like, not script" : string.Empty));
+        }
+    }
 
     private static void WriteEntries(Rom rom)
     {
