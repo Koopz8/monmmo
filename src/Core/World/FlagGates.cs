@@ -104,6 +104,16 @@ public sealed class FlagGates
 /// <param name="Flag">The flag number.</param>
 /// <param name="Gates">What it moves — somebody, or the boat.</param>
 /// <param name="People">How many people it puts on a map or takes off one.</param>
+/// <param name="InDoorways">
+/// How many of those stand on or beside a door.
+/// <para>
+/// <b>The number that separates a wall from furniture.</b> Three hundred and eighty-eight
+/// people stand somewhere for ever in this world file, and almost none of them are in anybody's
+/// way — they are villagers who never leave a square nobody needs. A list ranked by how many
+/// people a flag holds reads as a wall list and is not one; ranked by how many of them are
+/// standing in a doorway, it is.
+/// </para>
+/// </param>
 /// <param name="Maps">Across how many maps, which is how a story gate reads against a copy.</param>
 /// <param name="SetAtStart">Whether a new game has it on before the first frame.</param>
 /// <param name="SetByAScript">Whether any script anywhere turns it on.</param>
@@ -112,6 +122,7 @@ public sealed record WhatMoves(
     int Flag,
     FlagGate Gates,
     int People,
+    int InDoorways,
     int Maps,
     bool SetAtStart,
     bool SetByAScript,
@@ -164,6 +175,7 @@ public static class WhoMovesEachFlag
     {
         var gates = new FlagGates(world);
         var people = new Dictionary<int, List<string>>();
+        var blocking = new Dictionary<int, int>();
 
         foreach (MapData map in world.Maps)
         {
@@ -173,6 +185,12 @@ public static class WhoMovesEachFlag
                     people[person.HiddenBy] = where = [];
 
                 where.Add(map.Id);
+
+                // On the door or touching it, which is the same test the playthrough uses to
+                // decide that somebody is in the way. Anywhere else on the map and they are
+                // somebody standing about, not a wall.
+                if (map.Warps.Any(w => Touching(w.Square, person.Square)))
+                    blocking[person.HiddenBy] = blocking.GetValueOrDefault(person.HiddenBy) + 1;
             }
         }
 
@@ -185,13 +203,22 @@ public static class WhoMovesEachFlag
                     g.Flag,
                     g.Gate,
                     people.GetValueOrDefault(g.Flag)?.Count ?? 0,
+                    blocking.GetValueOrDefault(g.Flag),
                     people.GetValueOrDefault(g.Flag)?.Distinct().Count() ?? 0,
                     atStart.Contains(g.Flag),
                     setByAScript.Contains(g.Flag),
                     clearedByAScript.Contains(g.Flag)))
                 .OrderByDescending(f => f.NothingCanMoveIt)
+                .ThenByDescending(f => f.InDoorways)
                 .ThenByDescending(f => f.People)
                 .ThenBy(f => f.Flag),
         ];
     }
+
+    /// <summary>
+    /// Whether two squares are the same one or touching, which is close enough to be in the
+    /// way of a door — the playthrough's own test, so the two lists cannot drift apart.
+    /// </summary>
+    private static bool Touching(GridPosition one, GridPosition two) =>
+        Math.Abs(one.X - two.X) <= 1 && Math.Abs(one.Y - two.Y) <= 1;
 }

@@ -7025,12 +7025,27 @@ public static class Program
         Console.WriteLine();
         Console.WriteLine(
             $"  {stuck.Sum(f => f.People)} people stand somewhere for ever, behind {stuck.Count} flag(s) "
-            + "nothing sets — every blocked doorway is one of these");
+            + "nothing sets");
+        Console.WriteLine(
+            $"    of them {stuck.Sum(f => f.InDoorways)} are standing on or beside a door, behind "
+            + $"{stuck.Count(f => f.InDoorways > 0)} flag(s) — THIS is the wall list");
+        Console.WriteLine(
+            "    the rest are villagers on squares nobody needs. Every blocked doorway is one of");
+        Console.WriteLine(
+            "    these flags; almost none of these flags is a blocked doorway, and ranking by how");
+        Console.WriteLine(
+            "    many people one holds reads as a wall list while being nothing of the kind");
 
-        foreach (WhatMoves flag in stuck.Take(12))
-            Console.WriteLine($"    0x{flag.Flag:X4}  {flag.People,3} people across {flag.Maps} map(s)");
+        foreach (WhatMoves flag in stuck.Where(f => f.InDoorways > 0).Take(12))
+        {
+            Console.WriteLine(
+                $"    0x{flag.Flag:X4}  {flag.InDoorways,3} in doorways of {flag.People,3} people "
+                + $"across {flag.Maps} map(s)");
+        }
 
-        if (stuck.Count > 12) Console.WriteLine($"    ... and {stuck.Count - 12} more");
+        int walls = stuck.Count(f => f.InDoorways > 0);
+
+        if (walls > 12) Console.WriteLine($"    ... and {walls - 12} more with somebody in a doorway");
 
         Console.WriteLine();
         Console.WriteLine(
@@ -7038,7 +7053,11 @@ public static class Program
             + "nothing clears — nothing has ever noticed these");
 
         foreach (WhatMoves flag in never.Take(12))
-            Console.WriteLine($"    0x{flag.Flag:X4}  {flag.People,3} people across {flag.Maps} map(s)");
+        {
+            Console.WriteLine(
+                $"    0x{flag.Flag:X4}  {flag.People,3} people across {flag.Maps} map(s)"
+                + (flag.InDoorways > 0 ? $" ({flag.InDoorways} of them in a doorway)" : string.Empty));
+        }
 
         if (never.Count > 12) Console.WriteLine($"    ... and {never.Count - 12} more");
     }

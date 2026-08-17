@@ -27,8 +27,8 @@ public class WhatNothingMovesTests
 
     private static MapData Room(string id) => new(id, id, 4, 4, new byte[16]);
 
-    private static MapObject Person(int id, int hiddenBy) =>
-        new(id, 1, 1, 1, Direction.Down, 0, false) { HiddenBy = hiddenBy };
+    private static MapObject Person(int id, int hiddenBy, int x = 1, int y = 1) =>
+        new(id, 1, x, y, Direction.Down, 0, false) { HiddenBy = hiddenBy };
 
     /// <summary>
     /// Four flags, one of each kind, and two people behind the stuck one so that counting
@@ -37,7 +37,13 @@ public class WhatNothingMovesTests
     private static WorldData World() =>
         new(
         [
-            Room("3.10") with { Objects = [Person(1, Stuck), Person(2, Stuck), Person(3, Movable)] },
+            Room("3.10") with
+            {
+                // The door, and one of the two behind the stuck flag standing in front of it.
+                // The other is across the room, which is where almost all of them are.
+                Warps = [new Warp(2, 0, 0, "14.0")],
+                Objects = [Person(1, Stuck, 2, 1), Person(2, Stuck, 0, 3), Person(3, Movable)],
+            },
             Room("14.0") with { Objects = [Person(1, Stuck), Person(2, Absent), Person(3, OnlyCleared)] },
         ])
         {
@@ -60,6 +66,50 @@ public class WhatNothingMovesTests
         Assert.False(flag.NeverArrive);
         Assert.Equal(3, flag.People);
         Assert.Equal(2, flag.Maps);
+    }
+
+    /// <summary>
+    /// And how many of them are actually in the way, which is a different number entirely.
+    /// <para>
+    /// <b>The number that separates a wall from furniture.</b> Three hundred and eighty-eight
+    /// people stand somewhere for ever on the real cartridge and almost none of them are in
+    /// anybody's way — they are villagers on squares nobody needs. A list ranked by how many
+    /// people a flag holds reads as a wall list and is nothing of the kind, and I wrote the
+    /// line "every blocked doorway is one of these" as though the reverse were also true.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AndHowManyOfThemAreStandingInADoorway()
+    {
+        WhatMoves flag = Assert.Single(Ranked(), f => f.Flag == Stuck);
+
+        Assert.Equal(1, flag.InDoorways);
+    }
+
+    /// <summary>
+    /// Somebody nothing hides is not counted as being in a doorway either, however close to
+    /// one they stand — the question is what a flag holds, not who is near a door.
+    /// </summary>
+    [Fact]
+    public void AndSomebodyNoFlagHidesIsNotCountedAtAll()
+    {
+        var world = new WorldData(
+        [
+            Room("3.10") with
+            {
+                Warps = [new Warp(2, 0, 0, "14.0")],
+                Objects =
+                [
+                    Person(1, Stuck, 2, 1),
+                    new MapObject(2, 1, 2, 1, Direction.Down, 0, false),
+                ],
+            },
+        ]);
+
+        WhatMoves flag = Assert.Single(WhoMovesEachFlag.Rank(world, [], []), f => f.Flag == Stuck);
+
+        Assert.Equal(1, flag.InDoorways);
+        Assert.Equal(1, flag.People);
     }
 
     /// <summary>
@@ -122,6 +172,7 @@ public class WhatNothingMovesTests
 
         Assert.Equal(Stuck, ranked[0].Flag);
         Assert.Equal(Absent, ranked[1].Flag);
+        Assert.True(ranked[0].InDoorways > ranked[1].InDoorways, "a wall outranks a crowd");
         Assert.All(ranked.Take(2), f => Assert.True(f.NothingCanMoveIt));
         Assert.All(ranked.Skip(2), f => Assert.False(f.NothingCanMoveIt));
     }
