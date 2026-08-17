@@ -6,21 +6,20 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **A fight has two exits and only one was ever read.** The runner, meeting a
-  trainer it had already beaten, jumped into that fight's own script — the badge,
-  the flags, the thing the victory was for. That script belongs to *winning*. Run
-  on every later pass, it handed all eight gym leaders' TMs over once per pass,
-  for ever.
-- **`--fights`** reads both exits of all **729** `trainerbattle` sites. Only 27
-  carry a second exit at all; **10 of those skip a guard** — a `checkflag` in the
-  bytes after the command that the jump never arrives at, named by nothing else in
-  the file. Eight of the ten are the eight gyms.
-- **So a beaten trainer falls through**, and the victory is handed back and run
-  once, on the pass that wins it. Flags up at every lever setting, the fixpoint
-  settles one to two passes sooner, and `--in-order` gains a level.
-- **The run now says whether anything changed hands twice.** `0 of 125` places
-  with the levers on, `0 of 198` with the sea open — and `11 of 103` on the floor
-  run, which is what `--in-order` is for. The denominator is printed: *none of
-  them twice* and *nothing hands anything over* read the same before this.
-- The fixture that guarded the old reading passed the whole time. Its bytes after
-  the command were a line and an end — the shape **both readings agree about**.
+- **`--surf` is gone as a fact.** The walk crosses water when the party knows the
+  move — the cartridge's own condition. `--play --say-yes --boat --in-order` now
+  reaches **390 of 425** with no surf lever at all, and `--say-yes` alone reaches
+  **243** where it used to reach 215. Two modelled levers left: `--say-yes` and
+  `--boat`.
+- **`--who-knows`** asks the whole file who knows a move, not just the maps — and
+  the maps are 0.6% of it. 600 raw sites against **787 in the reversal**; 7 jumped
+  into against **0**. Four of the seven offer a field effect after a yes-or-no and
+  say what for in the cartridge's own words. One asks about move 57 and says *"The
+  water is dyed a deep blue… Would you like to SURF?"*
+- **A fight has two exits and only one was ever read.** A beaten trainer resumed
+  inside the fight's own script — the victory — so all eight gyms handed their TM
+  over once per pass, for ever. `--fights` reads both exits of all 729 sites.
+- **21 people end the run at coordinates that do not exist**, one at `x = -29` on a
+  map 48 wide: a scene that walks somebody aside is re-applied every pass.
+  Measured, printed, and deliberately not clamped — the blocked-doorway report is
+  computed against those positions.

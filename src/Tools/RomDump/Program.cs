@@ -214,6 +214,7 @@ public static class Program
         if (options.WhoWrites.Count > 0) WriteWhoWrites(rom, options.WhoWrites);
         if (options.Stops.Count > 0) WriteStops(rom, options.Stops);
         if (options.Fights) WriteFights(rom);
+        if (options.WhoKnows) WriteWhoKnows(rom);
 
         if (options.SequenceWidths) WriteSequenceWidths(rom);
 
@@ -6015,6 +6016,22 @@ public static class Program
         Console.WriteLine(
             $"    {played.Flags.Count} flags, {played.Moves.Count} field moves, "
             + $"{played.Party.Count} in the party, highest level {played.HighestLevel}");
+
+        // WHY IT COULD CROSS WATER, WHICH WAS A COMMAND-LINE FLAG UNTIL NOW.
+        //
+        // The sea is 1245 squares across 35 maps and the walk has always been told whether to
+        // swim. The cartridge decides it the other way round: the one block in the image that
+        // offers to cross water asks who knows the move first — so this run asks the same
+        // question of its own party, and --surf is what is left when the answer is no.
+        Console.WriteLine(
+            $"    crossing water: {(
+                played.SurfMove == 0
+                    ? "this cartridge has no move by that name, so there is none — READ"
+                    : played.LearnedToCrossOnPass > 0
+                        ? $"READ — the party knew move {played.SurfMove} from pass {played.LearnedToCrossOnPass}, so it swam"
+                        : played.SwamAnyway
+                            ? $"MODELLED — nobody ever knew move {played.SurfMove}; --surf swam anyway, and this is a ceiling"
+                            : $"nobody ever knew move {played.SurfMove}, so every sea was a wall")}");
         Console.WriteLine(
             $"    {played.FightsWon} fights won, {played.FightsLost} lost to"
             + (played.FightAttemptsLost > played.FightsLost
@@ -6363,6 +6380,22 @@ public static class Program
             Console.WriteLine(
                 $"  {played.Moved.Count} people were walked out of where they stood by a script it ran"
                 + " — the other way a doorway opens");
+
+            // AND WHERE THAT PUT THEM, WHICH NOTHING HAS EVER ASKED.
+            //
+            // A scene that walks somebody aside is applied as a displacement from wherever
+            // they already are, and the fixpoint plays the scene again on every pass. Six
+            // passes, six walks, and the sixth is over the edge. Reported rather than
+            // clamped: a wrong position that looks plausible is the harder fault to find, and
+            // "somebody is standing in the way" is computed against these.
+            Console.WriteLine(
+                $"    {played.OffTheMap.Count} of them ended up on a square THAT IS NOT ON THE MAP");
+
+            foreach (WalkedOffTheMap lost in played.OffTheMap.Take(6))
+                Console.WriteLine($"      {lost}");
+
+            if (played.OffTheMap.Count > 6)
+                Console.WriteLine($"      ... and {played.OffTheMap.Count - 6} more");
         }
 
         // A fact about the world file rather than about the run, printed here because this is
@@ -7115,6 +7148,110 @@ public static class Program
     /// only way to ask who puts a two in it was to read bytes by eye.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Every place in the file that asks who knows a move, with the floor under it.
+    /// <para>
+    /// <b>The obstacle list is a fact about the maps, and it has been read as a fact about the
+    /// game.</b> CUT, STRENGTH and ROCK SMASH were found because two hundred map objects open
+    /// by naming them. Nothing on any map opens by naming the move that crosses water, and a
+    /// scan that only opens maps says exactly what it would say if the move did not exist —
+    /// which is trap one, and this is the instrument that stops it applying here.
+    /// </para>
+    /// </summary>
+    private static void WriteWhoKnows(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("WHO KNOWS A MOVE, ASKED OF THE WHOLE FILE");
+        Console.WriteLine();
+
+        List<MoveData> moves = MoveExtractor.Extract(rom);
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        List<SetsAFlag> scripts = [.. library.All().SelectMany(EveryScriptOn)];
+
+        int[] covered = EverywhereInTheImage.Opened(rom, scripts);
+
+        IReadOnlyDictionary<uint, IReadOnlyList<int>> index = EverywhereInTheImage.PointerIndex(rom);
+
+        IReadOnlyList<MoveSite> sites = EverywhereInTheImage.AsksWhoKnows(rom, moves.Count, covered);
+
+        (int floor, int floorReads, int floorJumped) =
+            EverywhereInTheImage.MoveNoiseFloor(rom, moves.Count);
+
+        List<MoveSite> real = [.. sites.Where(s => s.ReadsAsAScript)];
+
+        List<MoveSite> jumped =
+        [
+            .. real.Where(s => EverywhereInTheImage.WhoNames(rom, index, s.Address, 192).Any(n => n.AJump)),
+        ];
+
+        Console.WriteLine(
+            $"  the move table this cartridge holds has {moves.Count} entries, which is the range"
+            + " a plausible move id is read against");
+        Console.WriteLine(
+            $"  a three-byte pattern turns up by accident about {EverywhereInTheImage.ByChance(rom, 3):0.0}"
+            + " time(s) in an image this size");
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  {sites.Count} site(s) read as \"who knows this move\", {real.Count} of them read on to a"
+            + $" proper end, {jumped.Count} of those are jumped into");
+        Console.WriteLine(
+            $"  the same sweep on this file REVERSED finds {floor}, {floorReads} reading on,"
+            + $" {floorJumped} jumped into — same bytes, same frequencies, NO COMMANDS");
+        Console.WriteLine(
+            "    if those two are the same number the list below is noise and the only honest"
+            + " thing to do with it is throw it away");
+        Console.WriteLine();
+
+        Console.WriteLine($"  {real.Count(s => s.Opened)} of the {real.Count} the map scan opened; the rest it never did");
+        Console.WriteLine();
+
+        foreach (IGrouping<int, MoveSite> move in jumped
+                     .GroupBy(s => s.Move)
+                     .OrderByDescending(g => g.Count())
+                     .ThenBy(g => g.Key))
+        {
+            string name = move.Key < moves.Count ? moves[move.Key].Name : "(past the table)";
+
+            int opened = move.Count(s => s.Opened);
+
+            Console.WriteLine(
+                $"    move {move.Key,3} {name,-14} {move.Count(),2} site(s) jumped into, {opened} of them"
+                + $" opened by the map scan{(opened == 0 ? "  <- NOTHING ON ANY MAP ASKS THIS" : "")}");
+
+            foreach (MoveSite site in move.OrderBy(s => s.Offset).Take(4))
+            {
+                Console.WriteLine($"      0x{site.Address:X8}  {Where(site, scripts, covered)}");
+
+                // AND WHETHER IT OFFERS ANYTHING. Three bytes turn up by accident; a block
+                // that asks who knows a move, puts a yes-or-no on the screen and then does a
+                // field effect is a scene, and the cartridge says in its own words what for.
+                if (!site.Offers) continue;
+
+                Console.WriteLine(
+                    $"        offers it: field effect {site.FieldEffect}, and it says"
+                    + $"  \"{OneLine(string.Join(
+                        " ",
+                        GameText.DecodeDialogue(rom.Span[(int)(site.Question - Rom.BaseAddress)..])))}\"");
+            }
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("  and the ones nothing opens, climbed:");
+
+        foreach (MoveSite site in jumped.Where(s => !s.Opened).Take(8))
+            Climb(rom, index, covered, scripts, new FlagSite(site.Offset, 0, true, true, false));
+
+        static string OneLine(string said) =>
+            string.Join(" ", said.Split(['\n', '\r'], StringSplitOptions.RemoveEmptyEntries)).Trim();
+
+        static string Where(MoveSite site, IReadOnlyList<SetsAFlag> scripts, int[] covered) =>
+            site.Offset < covered.Length && covered[site.Offset] is var owner and not EverywhereInTheImage.Nobody
+                ? $"{scripts[owner]}"
+                : "nothing opens it";
+    }
+
     /// <summary>
     /// Both exits of every <c>trainerbattle</c> in the image, and which of them holds a guard.
     /// <para>
@@ -10678,16 +10815,22 @@ public static class Program
                                     image, statically, following every arm of every branch; a run
                                     takes one arm, so the two lists differ and only this one says
                                     what happened.
-              --surf                let the walk cross water. MODELLED, and a ceiling exactly as
-                                    --boat is: the walker has always been able to swim and the
-                                    playthrough has never told it to, so every sea in the game
-                                    has been indistinguishable from a wall. --play prints how
-                                    many squares that is either way.
+              --surf                swim WHETHER OR NOT the party knows how. MODELLED, and now
+                                    only the override: the walk crosses water on its own when
+                                    the party knows the move the cartridge crosses water with,
+                                    which is READ — see --who-knows. This is what is left when
+                                    the answer to the cartridge's own question is no.
               --fights              every trainerbattle a map opens, with BOTH of the places a
                                     beaten trainer could carry on from: the byte after the
                                     command, and the last of its own pointers that reads like
                                     a script. The runner takes the second. This says what the
                                     first one holds, and how many of them nothing else names.
+              --who-knows           every place in the WHOLE FILE that asks which party slot
+                                    knows a move, by move, with the reversed-image floor beside
+                                    it. The obstacle scan asks this of the maps, and the maps
+                                    are 0.6% of the file — so the move that crosses water has
+                                    been invisible in exactly the way a move nothing asks about
+                                    is invisible.
               --routines            what every routine this project cannot execute is
                                     asked: how many arguments, what its answer is compared
                                     against, how many sites branch on it.
@@ -10895,6 +11038,9 @@ public static class Program
         /// <summary>Whether to read both exits of every trainerbattle in the image.</summary>
         public bool Fights { get; private init; }
 
+        /// <summary>Whether to hunt every place in the file that asks who knows a move.</summary>
+        public bool WhoKnows { get; private init; }
+
         /// <summary>Whether the playthrough may take the ferry, which makes its reach a ceiling.</summary>
         public bool Boat { get; private init; }
 
@@ -11060,6 +11206,7 @@ public static class Program
             bool closure = false;
             bool specialContracts = false;
             bool fights = false;
+            bool whoKnows = false;
             bool play = false;
             var whereFrom = new List<int>();
             var inTheImage = new List<int>();
@@ -11306,6 +11453,9 @@ public static class Program
                         break;
                     case "--fights":
                         fights = true;
+                        break;
+                    case "--who-knows":
+                        whoKnows = true;
                         break;
                     case "--play":
                         play = true;
@@ -11606,6 +11756,7 @@ public static class Program
                 WhoWrites = whoWrites,
                 Stops = stops,
                 Fights = fights,
+                WhoKnows = whoKnows,
                 Boat = boat,
                 Surf = surf,
                 InOrder = inOrder,
