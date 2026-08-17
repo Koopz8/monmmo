@@ -141,7 +141,30 @@ public sealed record ShutDoor(
     /// </summary>
     public bool ArrivedOnAnIsland =>
         WalkableOnThisMap > 4 && StoodOnThisMap * 8 < WalkableOnThisMap;
+
+    /// <summary>
+    /// Whoever is standing in it, and what talking to them came to.
+    /// <para>
+    /// "Somebody is standing in the way" was true for eight measurements running and named
+    /// nobody. Which person, and what happens when you talk to them, are the two things that
+    /// make it actionable — and they lived in different halves of this output with nothing
+    /// joining them up.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<Blocker> Who { get; init; } = [];
 }
+
+/// <summary>Somebody in a doorway, and what talking to them did.</summary>
+/// <param name="Talked">False when the run never got close enough to speak to them at all.</param>
+public sealed record Blocker(
+    int LocalId,
+    GridPosition Square,
+    int MovementType,
+    bool Talked,
+    IReadOnlyList<int> AskedFor,
+    bool Walked,
+    bool Hid,
+    int FlagsSet);
 
 /// <summary>
 /// Something a script wanted that the playthrough was not carrying, and where.
@@ -496,6 +519,12 @@ public static class Autoplayer
         var refusedAtTheCounter = new Dictionary<(int ItemId, string MapId), string>();
         var questions = new Dictionary<string, int>();
 
+        // What talking to each person came to, kept by who they are rather than by which
+        // script address they share. Somebody standing in a doorway is only actionable
+        // alongside what happens when you talk to them, and until now the two numbers lived
+        // in different halves of the output with nothing joining them.
+        var spokenTo = new Dictionary<(string MapId, int LocalId), PlayedScript>();
+
         var won = 0;
         var lost = 0;
         var skipped = 0;
@@ -557,6 +586,8 @@ public static class Autoplayer
                     }
 
                     if (did.StoppedAtAQuestion) questions[map.Id] = questions.GetValueOrDefault(map.Id) + 1;
+
+                    if (what.LocalId != 0) spokenTo[(map.Id, what.LocalId)] = did;
 
                     // What it handed over, and what it asked for and did not get. The
                     // refusals are the shopping list — the one thing that says what the
@@ -754,7 +785,26 @@ public static class Autoplayer
                         last.People.Any(p => p.MapId == m.Id && Near(p.Square, w.Square)),
                         stoodPerMap.GetValueOrDefault(m.Id),
                         Walkable(m),
-                        w.IsDynamic)))
+                        w.IsDynamic)
+                    {
+                        Who =
+                        [
+                            .. last.People
+                                .Where(p => p.MapId == m.Id && Near(p.Square, w.Square))
+                                .Select(p => new Blocker(
+                                    p.LocalId,
+                                    p.Square,
+                                    p.MovementType,
+                                    spokenTo.ContainsKey((m.Id, p.LocalId)),
+                                    [
+                                        .. spokenTo.GetValueOrDefault((m.Id, p.LocalId))?.Asked
+                                            .Select(a => a.ItemId) ?? [],
+                                    ],
+                                    spokenTo.GetValueOrDefault((m.Id, p.LocalId))?.Walked.Count > 0,
+                                    spokenTo.GetValueOrDefault((m.Id, p.LocalId))?.Hides.Count > 0,
+                                    spokenTo.GetValueOrDefault((m.Id, p.LocalId))?.FlagsSet.Count ?? 0)),
+                        ],
+                    }))
                 .DistinctBy(d => (d.FromMapId, d.ToMapId, d.Square)),
         ];
 
@@ -1201,7 +1251,9 @@ public static class Autoplayer
             if (Beside(map.Id, person.Square).Any(stood.Contains))
             {
                 yield return new Runnable(
-                    person.ScriptAddress, person.CanBeTakenAway ? person.HiddenBy : 0);
+                    person.ScriptAddress,
+                    person.CanBeTakenAway ? person.HiddenBy : 0,
+                    person.LocalId);
             }
         }
 
@@ -1227,7 +1279,7 @@ public static class Autoplayer
     /// would delete them from the world for the rest of the run.
     /// </para>
     /// </summary>
-    private sealed record Runnable(uint Address, int TakenAway);
+    private sealed record Runnable(uint Address, int TakenAway, int LocalId = 0);
 
     /// <summary>How many squares of a map anybody could stand on at all.</summary>
     private static int Walkable(MapData map)

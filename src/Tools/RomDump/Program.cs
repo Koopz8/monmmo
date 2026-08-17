@@ -6233,6 +6233,33 @@ public static class Program
                 $"       from {shut.Count()} door(s): "
                 + string.Join(", ", shut.Take(3).Select(d => $"{d.FromMapId} {d.Square}"))
                 + (shut.Count() > 3 ? $", and {shut.Count() - 3} more" : ""));
+
+            // And who, when somebody is. "Somebody is standing in the way" was true for eight
+            // measurements running and named nobody; which person and what talking to them
+            // came to are the two things that make it a job rather than an observation.
+            foreach (Blocker who in shut.SelectMany(d => d.Who).DistinctBy(w => w.LocalId).Take(4))
+            {
+                string[] did =
+                [
+                    .. new[]
+                    {
+                        who.AskedFor.Count > 0
+                            ? "asks for " + string.Join(" or ", who.AskedFor.Select(NameOf))
+                            : null,
+                        who.Walked ? "walks somebody" : null,
+                        who.Hid ? "hides somebody" : null,
+                        who.FlagsSet > 0 ? $"sets {who.FlagsSet} flag(s)" : null,
+                    }.OfType<string>(),
+                ];
+
+                Console.WriteLine(
+                    $"       object {who.LocalId} at {who.Square}, movement {who.MovementType}: "
+                    + (!who.Talked
+                        ? "NEVER TALKED TO — it could not stand beside them"
+                        : did.Length == 0
+                            ? "talked to, and nothing it did opens anything"
+                            : "talked to — " + string.Join(", ", did)));
+            }
         }
 
         if (byTarget.Count > 30) Console.WriteLine($"    ... and {byTarget.Count - 30} more destinations");

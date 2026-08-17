@@ -417,3 +417,142 @@ public class SteppingAsideTests
         Assert.DoesNotContain("1.1", played.Reached);
     }
 }
+
+/// <summary>
+/// Naming whoever is in the doorway, and what talking to them came to.
+/// <para>
+/// "Somebody is standing in the way" was true of SAFFRON's three doors for eight measurements
+/// running and named nobody. Which person, and what happens when you talk to them, are the two
+/// things that turn it from an observation into a job — and they lived in different halves of
+/// the same output with nothing joining them up.
+/// </para>
+/// </summary>
+public class WhoIsInTheDoorwayTests
+{
+    private static MapData Room(string id) => new(id, id, 4, 4, new byte[16]);
+
+    private static PlayedScript Nothing => new([], [], [], [], null, null);
+
+    private const int Drink = 0x001A;
+
+    /// <summary>A guard rooted on a door, and somebody beside him.</summary>
+    private static WorldData Gate() =>
+        new(
+        [
+            Room("1.0") with
+            {
+                Warps = [new Warp(3, 1, 0, "1.1")],
+                Objects =
+                [
+                    new MapObject(1, 1, 1, 1, Direction.Down, 0, false) { ScriptAddress = 0x1000 },
+                    new MapObject(2, 1, 3, 1, Direction.Down, 7, false) { ScriptAddress = 0x2000 },
+                ],
+            },
+            Room("1.1") with { Warps = [new Warp(1, 1, 0, "1.0")] },
+        ]);
+
+    /// <summary>
+    /// The blocker is named, with his number, his square and how he moves. Without those a
+    /// shut door is a fact nobody can act on.
+    /// </summary>
+    [Fact]
+    public void TheBlockerIsNamed()
+    {
+        Attempt played = Autoplayer.Play(Gate(), "1.0", TestRules.All, (_, _, _) => Nothing);
+
+        ShutDoor door = Assert.Single(played.ShutDoors, d => d.ToMapId == "1.1");
+
+        Assert.True(door.SomebodyIsInTheWay);
+
+        Blocker who = Assert.Single(door.Who);
+
+        Assert.Equal(2, who.LocalId);
+        Assert.Equal(new GridPosition(3, 1), who.Square);
+        Assert.Equal(7, who.MovementType);
+    }
+
+    /// <summary>
+    /// And what talking to him came to travels with him. A guard who asks for a drink and a
+    /// man with nothing to say are the same line otherwise, and they are not the same job.
+    /// </summary>
+    [Fact]
+    public void WhatTalkingToHimCameToTravelsWithHim()
+    {
+        Attempt played = Autoplayer.Play(
+            Gate(),
+            "1.0",
+            TestRules.All,
+            (address, _, _) => address == 0x2000
+                ? Nothing with { Asked = [(Drink, 1, false)] }
+                : Nothing);
+
+        Blocker who = Assert.Single(Assert.Single(played.ShutDoors, d => d.ToMapId == "1.1").Who);
+
+        Assert.True(who.Talked);
+        Assert.Equal(Drink, Assert.Single(who.AskedFor));
+    }
+
+    /// <summary>
+    /// And somebody with nothing to say at all says so, which is a different finding entirely.
+    /// <para>
+    /// A guard who asks for a drink is a gate with a price on it. Somebody rooted in a doorway
+    /// with no script whatsoever cannot be moved by talking to them at all, and whatever opens
+    /// that door is somewhere else on the map. The two read identically without this.
+    /// </para>
+    /// <para>
+    /// Note what this is <em>not</em>: a person the walk could not reach is never reported as
+    /// being in the way in the first place, because it never bumped into them. Every blocker
+    /// has a square beside it that was stood on — that is what makes it a blocker — so a
+    /// blocker with a script has always been talked to, and the only way this can be false is
+    /// having no script.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void SomebodyWithNothingToSayAtAllSaysSo()
+    {
+        var world = new WorldData(
+        [
+            Room("1.0") with
+            {
+                Warps = [new Warp(3, 1, 0, "1.1")],
+                Objects =
+                [
+                    new MapObject(1, 1, 1, 1, Direction.Down, 0, false) { ScriptAddress = 0x1000 },
+
+                    // No script. Nothing anybody says to him will ever move him.
+                    new MapObject(2, 1, 3, 1, Direction.Down, 7, false),
+                ],
+            },
+            Room("1.1") with { Warps = [new Warp(1, 1, 0, "1.0")] },
+        ]);
+
+        Attempt played = Autoplayer.Play(world, "1.0", TestRules.All, (_, _, _) => Nothing);
+
+        Blocker who = Assert.Single(Assert.Single(played.ShutDoors, d => d.ToMapId == "1.1").Who);
+
+        Assert.False(who.Talked);
+        Assert.Empty(who.AskedFor);
+    }
+
+    /// <summary>
+    /// And a door nobody is standing in names nobody. The list is only worth having if it is
+    /// empty when it should be.
+    /// </summary>
+    [Fact]
+    public void ADoorNobodyIsStandingInNamesNobody()
+    {
+        var world = new WorldData(
+        [
+            Room("1.0") with
+            {
+                // The door is fine; 1.1 is simply not joined back and has nothing in it.
+                Warps = [new Warp(3, 1, 0, "1.9")],
+                Objects = [new MapObject(1, 1, 1, 1, Direction.Down, 0, false) { ScriptAddress = 0x1000 }],
+            },
+        ]);
+
+        Attempt played = Autoplayer.Play(world, "1.0", TestRules.All, (_, _, _) => Nothing);
+
+        Assert.All(played.ShutDoors, d => Assert.Empty(d.Who));
+    }
+}
