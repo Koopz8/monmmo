@@ -1,7 +1,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-236`, 2791 tests green.
+`claude-237`, 2796 tests green.
 
 Standing rules — do not break these:
 
@@ -81,7 +81,7 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-200-the-money-commands-and-the-thing-behind-them.md` first, then `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
+Read `claude/milestone-201-eight-places-wide-and-worth-one-magikarp.md` first, then `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
 **Nineteen faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
@@ -185,20 +185,18 @@ sets. CERULEAN CAVE is closed: the run now reaches it, off the SAPPHIRE thread.
 
 ## The next task, precisely
 
-1. **The money ceiling has no lever, and it is now worth a party member.** 200 read `0x92` and
-   `0x91` — the commands that ask about money and take it, nine sites each. The run steps
-   cleanly OVER them without answering, takes the arm where the thing is handed over, and comes
-   away with a fifth party member (`#130` at 71) while its purse is nought and it is being
-   refused four things at a counter. Both facts are printed and they contradict each other.
-   Nine places ask and nine take; this run answers none of the eighteen. `--say-yes` and
-   `--boat` are named, printed and counted. This one is not, and until it is, "5 in the party"
-   means "5, one of which was not paid for". **That is the top of this list.**
-2. **`0x95` at `0x0816A43E` and `0xC2` at `0x0816CDB6`.** The next two in the queue, both
-   exposed by 200. The pairs keep pairing: `0x95` sits immediately after `0x91` at four of its
-   nine sites and after `0x94` at the GAME CORNER; `0xC2` sits immediately after `0xB5` at all
-   three of its. Remaining: `0x95`, `0x9B`, `0x73`, `0xCA`, `0x43`, `0xC4`, `0xC3`, `0xC2`.
-   **`0xE6` is the wall SIX fixtures now lean on** — whoever gives it a width rebuilds all six,
-   and two tests fail the moment they forget.
+1. **`0x95` at `0x0816A43E` and `0xC2` at `0x0816CDB6`.** The next two in the queue. The pairs
+   keep pairing: `0x95` sits immediately after `0x91` at four of its nine sites and after `0x94`
+   at the GAME CORNER; `0xC2` sits immediately after `0xB5` at all three of its. Remaining:
+   `0x95`, `0x9B`, `0x73`, `0xCA`, `0x43`, `0xC4`, `0xC3`, `0xC2`. **`0xE6` is the wall SIX
+   fixtures lean on** — whoever gives it a width rebuilds all six, and two tests fail the moment
+   they forget.
+2. **The money ceiling is MEASURED now — decide against the number, not the worry.** 201
+   counted it: **8 places** ask the run for money at five of the six lever settings and **1 of
+   them hands something over** — `16.0 0x0816F75F` wants 500 and gives `#129` at level 5
+   anyway, which is the `#130` at 71 the party ends with. **The floor is clean**: 1 place asks,
+   nothing comes of it, so the floor's party of six is entirely earned. Whether that deserves a
+   `--pay` lever or a located payout table is a DECISION and it is deliberately not made.
 3. **The GAME CORNER is readable now and nobody has looked at it.** `92 <u32> <u8>` checks money
    against 10000 and 1000, `B4` hands over 500 and 50 of something, `91` takes the money, `B3`
    hands `0x4001` to the compare after it. That is a coin exchange and NONE of it is claimed —

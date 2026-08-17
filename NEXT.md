@@ -6,15 +6,14 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **Reading three more script commands put a Pokémon in the party.** `0x92` and
-  `0x91` — ask about money, take the money — nine sites each carrying the same nine
-  prices: 50, 200, 300, 350, 500, 500, 1000, 10000, 50.
-- 3803 → **3829 blocks read to a proper end**, 49 → 46 stopped, +1 flag and **+1 party
-  member at five of the six lever settings**. Reach unmoved.
-- **And the run did not pay for it.** Its purse is nought, it is refused four things at
-  a counter, and it comes away with a fifth Pokémon — because reading a command's
-  width is not the same as executing it. It steps over the money check and takes the
-  arm behind it. A ceiling, and unlike the boat and the yes-or-nos it has no lever.
-- The best evidence looked like the worst: read at three wrong widths, all nine sites
-  agree on `0x00`. That is one agreement, not nine — every site landing in the same
-  run of zeroes inside the same argument.
+- **The unpaid-for Pokémon has a name and a number.** The ceiling 200 found is
+  **eight places wide and worth exactly one MAGIKARP**: `16.0 0x0816F75F` asks for
+  500 and hands over `#129` at level 5 regardless, which is the `#130` at 71 the
+  party ends with.
+- **The floor is clean.** One place asks it for money and nothing comes of it — so the
+  floor run's party of six is entirely earned, and only the five `--say-yes` settings
+  carry something unpaid for.
+- Two numbers rather than one, because they are two claims: how WIDE the gap is and
+  what it is currently WORTH. Either can be nought and they mean opposite things.
+- No lever was added. The gap is measured; whether to model a purse is a decision, and
+  it should be made against the number rather than against the worry.
