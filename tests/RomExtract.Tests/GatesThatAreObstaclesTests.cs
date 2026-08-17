@@ -98,15 +98,31 @@ public sealed class GatesThatAreObstaclesTests
             },
         ]);
 
-    /// <summary>Asked about a move and then taken off the map is an obstacle.</summary>
+    private static IReadOnlyList<AnObstacleGate> Found() => GatesThatAreObstacles.In(Image(), World());
+
+    private static IReadOnlyList<int> Removed() =>
+        [.. Found().Where(g => g.Removed).Select(g => g.Flag)];
+
+    private static IReadOnlyList<int> Staying() =>
+        [.. Found().Where(g => !g.Removed).Select(g => g.Flag)];
+
+    /// <summary>
+    /// Asked about a move and then taken off the map is an obstacle — and WHICH move is part of
+    /// the answer.
+    /// <para>
+    /// "Asked about a move" was all the first version of this said, and which move is the whole
+    /// difference between a tree and a boulder: fifteen of this cartridge's gates ask about 15
+    /// and 249, twelve ask about 70, and only the first fifteen are removed.
+    /// </para>
+    /// </summary>
     [Fact]
     public void SomethingAskedAboutAMoveAndThenRemovedIsAnObstacle()
     {
-        (IReadOnlyList<int> flags, IReadOnlyList<uint> scripts, _) =
-            GatesThatAreObstacles.In(Image(), World());
+        AnObstacleGate tree = Assert.Single(Found(), g => g.Flag == ATree);
 
-        Assert.Equal(new[] { ATree }, flags);
-        Assert.Equal(new[] { Rom.BaseAddress + AsksAndTakes }, scripts);
+        Assert.True(tree.Removed);
+        Assert.Equal(new[] { 15 }, tree.Moves);
+        Assert.Equal(new[] { Rom.BaseAddress + AsksAndTakes }, tree.Scripts);
     }
 
     /// <summary>
@@ -121,11 +137,11 @@ public sealed class GatesThatAreObstaclesTests
     [Fact]
     public void SomethingAskedAboutAMoveAndNeverRemovedIsADifferentThing()
     {
-        (IReadOnlyList<int> flags, _, IReadOnlyList<int> staying) =
-            GatesThatAreObstacles.In(Image(), World());
+        AnObstacleGate boulder = Assert.Single(Found(), g => g.Flag == ABoulderThatStays);
 
-        Assert.Equal(new[] { ABoulderThatStays }, staying);
-        Assert.DoesNotContain(ABoulderThatStays, flags);
+        Assert.False(boulder.Removed);
+        Assert.Equal(new[] { 0x46 }, boulder.Moves);
+        Assert.DoesNotContain(ABoulderThatStays, Removed());
     }
 
     /// <summary>
@@ -135,11 +151,8 @@ public sealed class GatesThatAreObstaclesTests
     [Fact]
     public void SomethingRemovedWithoutBeingAskedIsNeither()
     {
-        (IReadOnlyList<int> flags, _, IReadOnlyList<int> staying) =
-            GatesThatAreObstacles.In(Image(), World());
-
-        Assert.DoesNotContain(SomethingRemovedWithNoQuestion, flags);
-        Assert.DoesNotContain(SomethingRemovedWithNoQuestion, staying);
+        Assert.DoesNotContain(SomethingRemovedWithNoQuestion, Removed());
+        Assert.DoesNotContain(SomethingRemovedWithNoQuestion, Staying());
     }
 
     /// <summary>
@@ -148,11 +161,8 @@ public sealed class GatesThatAreObstaclesTests
     [Fact]
     public void AFlagHoldingATreeAndAPersonIsNotAnObstaclesFlag()
     {
-        (IReadOnlyList<int> flags, _, IReadOnlyList<int> staying) =
-            GatesThatAreObstacles.In(Image(), World());
-
-        Assert.DoesNotContain(ATreeAndAPerson, flags);
-        Assert.DoesNotContain(ATreeAndAPerson, staying);
+        Assert.DoesNotContain(ATreeAndAPerson, Removed());
+        Assert.DoesNotContain(ATreeAndAPerson, Staying());
     }
 
     /// <summary>
@@ -168,11 +178,8 @@ public sealed class GatesThatAreObstaclesTests
     [Fact]
     public void AFlagHoldingATreeAndABoulderIsNeitherKind()
     {
-        (IReadOnlyList<int> flags, _, IReadOnlyList<int> staying) =
-            GatesThatAreObstacles.In(Image(), World());
-
-        Assert.DoesNotContain(ATreeAndABoulder, flags);
-        Assert.DoesNotContain(ATreeAndABoulder, staying);
+        Assert.DoesNotContain(ATreeAndABoulder, Removed());
+        Assert.DoesNotContain(ATreeAndABoulder, Staying());
     }
 
     /// <summary>
@@ -190,11 +197,6 @@ public sealed class GatesThatAreObstaclesTests
                 },
             ]);
 
-        (IReadOnlyList<int> flags, IReadOnlyList<uint> scripts, IReadOnlyList<int> staying) =
-            GatesThatAreObstacles.In(Image(), plain);
-
-        Assert.Empty(flags);
-        Assert.Empty(scripts);
-        Assert.Empty(staying);
+        Assert.Empty(GatesThatAreObstacles.In(Image(), plain));
     }
 }

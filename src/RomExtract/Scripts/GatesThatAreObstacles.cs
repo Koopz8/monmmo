@@ -24,6 +24,19 @@ namespace PokeMmo.RomExtract.Scripts;
 /// cartridge happens to use are printed rather than written down.
 /// </para>
 /// </summary>
+/// <summary>One gating flag whose objects are all the same kind of obstacle.</summary>
+/// <param name="Moves">
+/// The move ids their scripts ask about. <b>Printed rather than assumed</b> — "asked about a
+/// move" was all the first version of this said, and which move is the difference between a
+/// tree and a boulder.
+/// </param>
+/// <param name="Removed">
+/// Whether the objects are taken off the map afterwards. False is the interesting one: the
+/// thing is asked about and stays exactly where it is, and whatever clears it is not this.
+/// </param>
+public sealed record AnObstacleGate(
+    int Flag, IReadOnlyList<int> Moves, IReadOnlyList<uint> Scripts, bool Removed);
+
 public static class GatesThatAreObstacles
 {
     /// <summary>Takes an object off the map. Claimed already — 224 sites, all object numbers.</summary>
@@ -39,18 +52,17 @@ public static class GatesThatAreObstacles
     /// </para>
     /// </summary>
     /// <returns>
-    /// The gates whose objects are asked about a move and then taken off the map, the scripts
-    /// they run, and — separately — the gates whose objects are asked about a move and are
-    /// <b>never</b> taken off it.
+    /// Every gate whose objects are ALL asked about a move, with which move and whether they
+    /// are then taken off the map.
     /// <para>
-    /// The second list is not folded into the first. Seven of this cartridge's gates hold
-    /// something whose script asks who knows move 70 and never removes anything, and whatever
-    /// clears those is a different mechanism from the one that clears a tree. Widening the rule
-    /// to catch them would be picking a shape to fit an answer.
+    /// The two kinds are one list with a flag on them rather than two lists, because they are
+    /// the same question answered two ways — and the removed half is not allowed to swallow the
+    /// other. Twelve of this cartridge's gates hold something asked about a move and never
+    /// removed; whatever clears those is a different mechanism from the one that clears a tree,
+    /// and widening the rule to catch them would be picking a shape to fit an answer.
     /// </para>
     /// </returns>
-    public static (IReadOnlyList<int> Flags, IReadOnlyList<uint> Scripts, IReadOnlyList<int> AskedButNotRemoved)
-        In(Rom rom, WorldData world)
+    public static IReadOnlyList<AnObstacleGate> In(Rom rom, WorldData world)
     {
         var behind = new Dictionary<int, List<uint>>();
 
@@ -69,46 +81,49 @@ public static class GatesThatAreObstacles
             }
         }
 
-        var known = new Dictionary<uint, (bool Asks, bool Takes)>();
+        var known = new Dictionary<uint, (IReadOnlyList<int> Moves, bool Takes)>();
 
-        (bool Asks, bool Takes) What(uint address)
+        (IReadOnlyList<int> Moves, bool Takes) What(uint address)
         {
-            if (address == 0) return (false, false);
+            if (address == 0) return ([], false);
 
-            if (known.TryGetValue(address, out (bool, bool) already)) return already;
+            if (known.TryGetValue(address, out (IReadOnlyList<int>, bool) already)) return already;
 
-            var asks = false;
+            var moves = new SortedSet<int>();
             var takes = false;
 
             foreach (ScriptCommand command in ScriptReader.ReadAll(rom, address))
             {
-                if (command.Code == ObstacleMoves.FindMove) asks = true;
+                if (command.Code == ObstacleMoves.FindMove) moves.Add(command.Word());
                 if (command.Code == TakeOffTheMap) takes = true;
             }
 
-            return known[address] = (asks, takes);
+            return known[address] = ([.. moves], takes);
         }
 
-        var flags = new List<int>();
-        var staying = new List<int>();
-        var scripts = new SortedSet<uint>();
+        var found = new List<AnObstacleGate>();
 
         foreach ((int flag, List<uint> theirs) in behind)
         {
-            if (theirs.All(a => What(a) is { Asks: true, Takes: true }))
-            {
-                flags.Add(flag);
+            List<(IReadOnlyList<int> Moves, bool Takes)> what = [.. theirs.Select(What)];
 
-                foreach (uint address in theirs) scripts.Add(address);
+            // Every one of them has to be asked about something, or this is a flag that holds a
+            // person as well and calling it an obstacle's would hide the person inside a bucket
+            // named for scenery.
+            if (what.Any(w => w.Moves.Count == 0)) continue;
 
-                continue;
-            }
+            // And they have to agree about whether they are taken away. A flag holding a tree
+            // and a boulder is neither kind: the two things behind it are cleared by different
+            // mechanisms and no one answer is true of both.
+            if (what.Select(w => w.Takes).Distinct().Count() != 1) continue;
 
-            // Asked about a move and never taken off the map. A different mechanism, kept
-            // apart rather than folded in.
-            if (theirs.All(a => What(a) is { Asks: true, Takes: false })) staying.Add(flag);
+            found.Add(new AnObstacleGate(
+                flag,
+                [.. what.SelectMany(w => w.Moves).Distinct().Order()],
+                [.. theirs.Distinct().Order()],
+                what[0].Takes));
         }
 
-        return ([.. flags.Order()], [.. scripts], [.. staying.Order()]);
+        return [.. found.OrderBy(g => g.Flag)];
     }
 }

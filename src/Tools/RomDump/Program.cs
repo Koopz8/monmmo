@@ -7787,25 +7787,49 @@ public static class Program
             .. world.Maps.SelectMany(m => m.Objects).Where(o => o.CanBeTakenAway).Select(o => o.HiddenBy),
         ];
 
-        (IReadOnlyList<int> obstacles, IReadOnlyList<uint> obstacleScripts, IReadOnlyList<int> staying) =
-            GatesThatAreObstacles.In(rom, world);
+        IReadOnlyList<AnObstacleGate> asked = GatesThatAreObstacles.In(rom, world);
+
+        List<AnObstacleGate> obstacles = [.. asked.Where(g => g.Removed)];
+        List<AnObstacleGate> staying = [.. asked.Where(g => !g.Removed)];
 
         IReadOnlyList<ShutGate> shut = WhyTheGatesAreShut.Of(
-            gates, set, EverywhereInTheImage.EveryFlagMoved(rom, covered), onTheFloor, obstacles);
+            gates,
+            set,
+            EverywhereInTheImage.EveryFlagMoved(rom, covered),
+            onTheFloor,
+            [.. obstacles.Select(g => g.Flag)]);
 
         if (shut.Count == 0) return;
 
         Console.WriteLine("      and why each of those is shut, asked of the WHOLE file:");
 
-        if (obstacles.Count > 0)
+        if (asked.Count > 0)
         {
+            List<MoveData> named = MoveExtractor.Extract(rom);
+
+            string Move(int id) => id > 0 && id < named.Count ? named[id].Name : $"move {id}";
+
+            string Moves(IEnumerable<AnObstacleGate> which) =>
+                string.Join(
+                    ", ",
+                    which.SelectMany(g => g.Moves).Distinct().Order().Select(m => $"{Move(m)} ({m})"));
+
             Console.WriteLine(
-                $"        (obstacles: {obstacles.Count} gating flag(s) in the world hold nothing but"
-                + $" things asked about a move and then taken off the map, between them running"
-                + $" {obstacleScripts.Count} script(s)"
-                + $" — {string.Join(", ", obstacleScripts.Take(4).Select(a3 => $"0x{a3:X8}"))};"
-                + $" a further {staying.Count} hold something asked about a move and NEVER taken"
-                + " off it, which is a different mechanism and is left where it fell)");
+                $"        {obstacles.Count} gating flag(s) in the world hold nothing but things"
+                + $" asked about a move AND then taken off the map — {Moves(obstacles)} — between"
+                + $" them running {obstacles.SelectMany(g => g.Scripts).Distinct().Count()} script(s)");
+            Console.WriteLine(
+                $"        and {staying.Count} hold something asked about a move and NEVER taken off"
+                + $" it — {Moves(staying)} — which is a different mechanism and is left where it"
+                + " fell rather than folded in");
+
+            foreach (AnObstacleGate gate in staying)
+            {
+                Console.WriteLine(
+                    $"          0x{gate.Flag:X4}  {Moves([gate]),-24}"
+                    + $" {gates.Behind(gate.Flag).Count} object(s) —"
+                    + $" {string.Join(", ", gates.Behind(gate.Flag).Take(4).Select(h => $"{h.MapId} p{h.LocalId}"))}");
+            }
         }
 
         foreach ((ShutBecause why, int count) in WhyTheGatesAreShut.Counted(shut))
