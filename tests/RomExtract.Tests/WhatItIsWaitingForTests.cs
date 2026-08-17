@@ -283,9 +283,24 @@ public class WhatItIsWaitingForTests
         Put(image, 0x200, SetFlag, Opened & 0xFF, Opened >> 8, End);
         Put(image, 0x300, SetFlag, Shared & 0xFF, Shared >> 8, End);
 
+        // The decoy, and the whole difficulty: somebody who asks about the flag and never
+        // turns it on. Every doorway this instrument is pointed at is one of these — a script
+        // whose only mention of the flag is the question — so a scan that counts mentions
+        // rather than settings would hand back the blockers themselves as the way through,
+        // and the answer would be "go and talk to the man in the doorway".
+        Put(image, 0x400, CheckFlag, Opened & 0xFF, Opened >> 8);
+        Put(image, 0x403, GotoIf, IfEqual);
+        Pointer(image, 0x405, 0x08000300);
+        Put(image, 0x409, Release, End);
+
         IReadOnlyDictionary<int, IReadOnlyList<string>> setters = WhatItIsWaitingFor.SetBy(
             new Rom(image),
-            [("3.10 person 1", 0x08000100), ("5.3 trigger (4,7)", 0x08000200), ("1.72 sign", 0x08000300)]);
+            [
+                ("3.10 person 1", 0x08000100),
+                ("5.3 trigger (4,7)", 0x08000200),
+                ("1.72 sign", 0x08000300),
+                ("14.0 person 1", 0x08000400),
+            ]);
 
         Assert.Equal(["3.10 person 1", "5.3 trigger (4,7)"], setters[Opened]);
         Assert.False(setters.ContainsKey(Waiting));
