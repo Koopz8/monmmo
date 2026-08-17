@@ -6,15 +6,14 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **The square a shop is talked across has a name now: `0x80`.** Read twice, with a
-  control each time — 91.9% of the unwalkable squares beside a shopkeeper against
-  8.9% beside anybody, and 22.5% of its own squares have somebody on one side with
-  floor directly opposite against 0.3% for ordinary ground.
-- The walk may now be spoken to across exactly one counter square. **Reach did not
-  move at any of the six lever settings** — a shopkeeper opens no doors — and it is
-  **+2 flags at five of the six**. Every counter is now reached: 11 of 11, 14 of 14,
-  20 of 20.
-- **A command with no width turned up that nothing had ever reached**: `0xC1`, one
-  place, on the far side of a counter. `0xB3` went from 3 places to 7.
-- And the POKé DOLL is a money problem after all — 1000 against a purse of nought.
-  The milestone before this one had filed it as a reach problem.
+- **Three script commands read, and the whole chain came from one square.** Letting
+  the robot talk across a shop counter exposed `0xC1`; reading that led to `0xB3`
+  (seven sites) and, once that was adopted, `0xB4` behind it.
+- `0xB3` is the clean one: two argument bytes that are a **variable**, and at all
+  seven sites the very next command reads that same variable back. An argument
+  column can happen by accident; one whose value reappears as the next command's
+  operand cannot.
+- **3783 → 3803 blocks now read to a proper end**, 53 → 49 stopped, and **+3 flags at
+  every one of the six lever settings** with reach unmoved. A consistent delta across
+  six independent runs is what a real width looks like.
+- The stops are a **queue, not a set**: adopting `0xB4` exposed `0xB5` behind it.

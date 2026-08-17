@@ -1,7 +1,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-234`, 2783 tests green.
+`claude-235`, 2787 tests green.
 
 Standing rules — do not break these:
 
@@ -76,7 +76,7 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-198-the-square-a-shop-is-talked-across.md` first, then `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
+Read `claude/milestone-199-three-widths-behind-a-counter.md` first, then `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
 **Nineteen faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
@@ -180,37 +180,43 @@ sets. CERULEAN CAVE is closed: the run now reaches it, off the SAPPHIRE thread.
 
 ## The next task, precisely
 
-1. **`0xC1`, and `0xB3` at seven places.** 198 let the walk talk across a counter and a command
-   with no width appeared that nothing had ever reached — one place, on the far side of a shop
-   counter. `0xB3` went from 3 places to 7 at the same time. This is the job that found `0x1F`
-   and `0x6F`: `--stops 0xC1` prints where the read started, and **check alignment before
-   adopting a width** — two earlier entries turned out to be symptoms of a wrong width upstream
-   rather than commands.
-2. **Money, for real this time.** Three drinks at 200/300/350 and a POKé DOLL at 1000, all READ,
+1. **`0xB5` at `0x0816CDB3`, then `0x92`.** The stops are a QUEUE and not a set: 199 read
+   `0xB3` (seven sites), which exposed `0xB4` (five sites), which exposed `0xB5`. Each is only
+   visible once the one in front of it has a number. `0x92` is the other one worth having — it
+   is the wall in front of two of `0xB4`'s five sites, which is why those had to be read off a
+   hexdump by hand rather than by instrument. Remaining: `0x92`, `0x9B`, `0x73`, `0xCA`, `0x43`,
+   `0xC4`, `0xC3`, `0xB5`. **`0xE6` is doing double duty** — it is on this list AND it is the
+   anti-slide wall the width fixtures lean on, so whoever gives it a width must rebuild those
+   three fixtures in the same commit. There is a test that fires when they forget.
+2. **The GAME CORNER is readable now and nobody has looked at it.** `92 <u32> <u8>` checks money
+   against 10000 and 1000, `B4` hands over 500 and 50 of something, `91` takes the money, `B3`
+   hands `0x4001` to the compare after it. That is a coin exchange and NONE of it is claimed —
+   it is what the next read is looking at.
+3. **Money, for real this time.** Three drinks at 200/300/350 and a POKé DOLL at 1000, all READ,
    all at counters the run now reaches, against a purse of nought. `--money N` is the lever and
    it is MODELLED; the payout table has never been located. 197 filed the POKé DOLL as a reach
    problem and 198's rule change showed it is a money problem after all — the reverse of 197's
    own correction, and only the fix could tell.
-3. **`Attempt.Ran` is fixed (196) and it moved nothing, for a reason worth carrying.** The key
+4. **`Attempt.Ran` is fixed (196) and it moved nothing, for a reason worth carrying.** The key
    is `(map, address)` now and five breaks caught it. But the tally 196 added says the only
    consumer in the repository is asked about **one** setter at three lever settings and **zero**
    at the other three. `--flags` never looked at it at all — it takes only the ROM. Before the
    next "X is wrong everywhere", print how many places ask X.
-4. **`--entries` reads only the scripts the map scan opens**, which is 0.6% of the file. The
+5. **`--entries` reads only the scripts the map scan opens**, which is 0.6% of the file. The
    same sweep asked of the whole image is `--in-the-image`'s question and has never been asked
    of this shape.
-5. **The 41 doors never reached** at 381 of 425, and `1.103` MT. EMBER behind `0x0089` — nothing
+6. **The 41 doors never reached** at 381 of 425, and `1.103` MT. EMBER behind `0x0089` — nothing
    in the world sets it, so it is the code boundary with an address on it. The RUBY is behind it
    (`1.102` person 1), and `32.0` person 3 wants the RUBY and the SAPPHIRE both. The SAPPHIRE
    half is closed (190); the RUBY half is not.
-6. **The 53 blocks that still stop.** Two entries turned out to be symptoms of a wrong width
+7. **The blocks that still stop.** Two entries turned out to be symptoms of a wrong width
    upstream rather than commands, so **check alignment before adopting a width**: `--stops
    0xNN` prints where each read started. The remaining named stops are `0xB3`, `0xCA`, `0xC3`,
    `0xC4`, `0x43`, `0x73`, `0xE6` — 17 of 24 have something behind them at every width that
    reads on. **`--derive`'s verdict is advisory — READ THE BYTES.**
-7. **The four that no width reads on from** — `0x92`, `0x9B`, `0xD3`, `0x62`. Misreads, so those
+8. **The four that no width reads on from** — `0x92`, `0x9B`, `0xD3`, `0x62`. Misreads, so those
    blocks are wrong earlier; finding where is the job that found `0x1F` and `0x6F`.
-8. **The five wall flags** — `0x0013`, `0x0012`, `0x0089`, `0x0053`, `0x0017` — and the ~28
+9. **The five wall flags** — `0x0013`, `0x0012`, `0x0089`, `0x0053`, `0x0017` — and the ~28
    hand-rolled map walks left in `Program.cs`.
 
 ## Fixtures lie in one direction
