@@ -1,7 +1,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-226`, 2744 tests green.
+`claude-227`, 2753 tests green.
 
 Standing rules — do not break these:
 
@@ -65,9 +65,9 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-190-the-guard-on-the-other-side-of-the-fight.md` first, then `189`,
+Read `claude/milestone-191-the-sea-was-a-question-not-a-lever.md` first, then `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
-**Thirteen faults closed and every one was in this project, not on the cartridge.** A walk that
+**Fifteen faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
 script" list; a list ranked by a count instead of by what it costs; a party that could not gain
 a level; a roadmap line that called a fix a cost; a continuation that carried flags and not
@@ -79,8 +79,8 @@ which skipped a `checkflag` at all eight gyms.
 
 `175-reading-the-file-not-the-world` is the instrument set (`--in-the-image`, `--climb`, the
 reversal control). `184` adds `--who-writes`. `187`/`188` are the two wrong widths and
-`--stops`. `189` is `--trace` and the ordering. `190` is `--fights` and the handover count.
-`173-reading-the-other-arm` still has the best table of wrong turns.
+`--stops`. `189` is `--trace` and the ordering. `190` is `--fights` and the handover count. `191` is
+`--who-knows` and the sea. `173-reading-the-other-arm` still has the best table of wrong turns.
 
 **The pattern, thirteen times over: right at every step and quietly wrong at the end.** Nothing
 in this project fails when it is wrong. Assume the number in front of you is distorted until an
@@ -96,6 +96,7 @@ dotnet run -c Release --project src/Tools/RomDump -- firered.gba --play --say-ye
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --flags
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --scripts
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --fights
+dotnet run -c Release --project src/Tools/RomDump -- firered.gba --who-knows
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --in-the-image 0x003E,0x003F
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --who-writes 0x4055
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --play --say-yes --in-order --trace 0x4055
@@ -111,33 +112,36 @@ run takes one arm. `--trace 0xNNNN` is the same question asked of the RUN: every
 every read, in order, with what the variable held at the moment somebody looked — but **its
 address column is the script that ran, not the site of the write.** `--stops 0xNN` prints every
 stopped read of one command with the run-up and **where the read started**. `--fights` reads
-**both** exits of every `trainerbattle` and sorts the fall-through into four shapes; it is the
-instrument that settled 190 and it comes back "nothing of this kind skips a guard" for six of
-the eight kinds, which is the answer it has to be able to give.
+**both** exits of every `trainerbattle` and sorts the fall-through into four shapes; it comes
+back "nothing of this kind skips a guard" for six of the eight kinds, which is the answer it
+has to be able to give. `--who-knows` asks the WHOLE FILE who knows a move — the obstacle scan
+asks the maps, and the maps are 0.6% of it — and prints the reversed-image floor beside the
+count, because 600 against 787 is noise and 7 against 0 is not.
 
 ## The floor, restated
 
 `--play` alone is not a floor: below the floor on reach, above it on anything a hanging script
-hands over. Three levers are MODELLED — `--say-yes`, `--boat`, `--surf` — so anything with them
-on is a ceiling. `--in-order` is the one lever that makes it stricter. Say which every time.
+hands over. **Two levers are MODELLED — `--say-yes` and `--boat`.** `--surf` is now only an
+override: the walk crosses water on its own when the party knows the move, which is READ.
+`--in-order` is the one lever that makes it stricter. Say which every time.
 
 ```
 --play                                      183 / 150, party of 6 at 52, 11 of 103 handed twice
---play --say-yes                            215 / 195, party of 3 at 59, 10 of 128 handed twice
---play --say-yes --in-order                 215 / 196, party of FOUR at 60, 0 of 125
---play --say-yes --boat                     306 / 223
---play --say-yes --boat --surf              390 / 285, party of 3 at 75, 11 of 202
---play --say-yes --boat --surf --in-order   390 / 286, party of FOUR at 75, 0 of 198
+                                            crossing water: nobody ever knew move 57 — a wall
+--play --say-yes                            243 / 225, party of 3 at 67
+--play --say-yes --in-order                 243 / 227, party of FOUR at 67, 0 of 150 handed twice
+--play --say-yes --boat                     390 / 287, party of 3 at 77
+--play --say-yes --boat --in-order          390 / 288, party of FOUR at 77, 0 of 198
+--play --say-yes --boat --surf --in-order   390 / 286  <- --surf now COSTS two flags
 ```
 
-**The starter arrives on the FLOOR and not on the ceiling** (`#3`, with `--in-order`). And
-**with `--in-order` on, nothing in the game is handed over twice** — 0 of 125 places, 0 of 198
-with the sea open. Without it, ten or eleven places hand the same thing over on every pass:
-the SILPH CO. gift and nine arrival scripts and triggers. That is the lever's cost, and it has
-a number on it for the first time.
+**390 of 425 no longer needs `--surf`.** The party learns move 57 on pass 3 and swims. The
+starter arrives on the floor with `--in-order`, and with `--in-order` on **nothing in the game
+is handed over twice**.
 
-Shut doors at 390, counted by reason: **39 never reached the door, 1 arrived on an island, zero
-somebody standing in the way.**
+Shut doors at 390, counted by reason: **39 never reached the door, 1 arrived on an island, 1
+somebody standing in the way** — MT. EMBER `1.103`, behind `0x0089`, which nothing in the world
+sets. CERULEAN CAVE is closed: the run now reaches it, off the SAPPHIRE thread.
 
 ## Where the reading stands
 
@@ -145,6 +149,7 @@ somebody standing in the way.**
 2915 scripts on 425 maps, reaching 3836 blocks
 3783 read to a proper end, 53 stopped
 729 trainerbattle sites on 104 maps; 27 carry a second exit, 10 of those skipped a guard
+7 places in the file ask who knows a move and are jumped into; 0 in the reversal; 4 offer
 322 flags gate something; 258 are moved by a script somewhere; 233 are the code boundary
 9 people on or beside a door behind 5 flags — the wall list
 21 people never arrive at all
@@ -153,27 +158,34 @@ somebody standing in the way.**
 
 ## The next task, precisely
 
-1. **The two kind-2 sites `--fights` names** — `1.114 person 6` at `0x08163F93` and
-   `14.2 person 5` at `0x0816EDA2`. Both skip a guard and both were changed by 190's edit, and
-   **nobody has read their bytes by hand.** Kind 1 was settled off a column of eight; kind 2 is
-   riding on a column of two out of nineteen. `--script-map 1.114` and forty bytes of hexdump.
-   This is the smallest well-shaped job on the list.
-2. **Which move crosses water, READ rather than assumed.** Still the largest single number:
-   `--surf` is a lever standing in for a fact, and reading it turns 390 of 425 from a ceiling
-   into a floor. The sea it stands in is 1245 squares across 35 maps.
-3. **The 39 doors never reached** at 390 of 425. `--play` counts shut doors by reason.
-   And `--trace` the other counters — `0x4050`, `0x4052`, `0x4057`, `0x4060` were all traced in
-   order at 190 and each is written exactly once, so **the re-run problem is closed for the
-   story counters.** What has not been looked at is anything below `0x4010`.
-4. **The 53 blocks that still stop.** Two entries on this list turned out to be symptoms of a
-   wrong width upstream rather than commands, so **check alignment before adopting a width**:
-   `--stops 0xNN` prints where each read started. The remaining named stops are `0xB3`, `0xCA`,
-   `0xC3`, `0xC4`, `0x43`, `0x73`, and `0xE6` — 17 of 24 have something behind them at every
-   width that reads on.
+1. **The scene that walks somebody aside, re-applied every pass.** `--play` now prints it: 55
+   people walked, **21 of them ending on a square that is not on the map** — `3.2 person 5` at
+   `x = -29` on a map 48 wide, `3.2 person 7` walked thirty times to `y = 95` on a map 40 tall.
+   The displacement is applied from wherever they already are and the fixpoint replays the
+   scene. *Somebody is standing in the way* and *a person removed is a person not in a doorway*
+   are computed against these positions.
+
+   **Do not clamp it.** Applying each scene's walk once takes the boat run 390 -> 381, and the
+   honest direction is down; what stops the scene running twice on the cartridge is a flag
+   nobody has read. Read that first. `--who-writes` and `--in-the-image` are the instruments,
+   and `0x3.2` is the map to start on.
+2. **The fixpoint stops on counts, not membership.** `flags.Count == flagsWere` and
+   `moved.Count == movedWere`: a pass that swaps one flag for another, or walks somebody
+   further without adding a key, reads as "nothing opened". That is how the boat run stops with
+   its top-of-pass reach at 381 and its final reach at 390. Comparing sets risks never
+   terminating — the comment in `Autoplayer` says why — so this needs a reading rather than a
+   swap.
+3. **The 39 doors never reached** at 390 of 425, and `1.103` MT. EMBER behind `0x0089` —
+   nothing in the world sets it, so it is the code boundary with an address on it. The RUBY is
+   behind it (`1.102` person 1), and `32.0` person 3 wants both the RUBY and the SAPPHIRE.
+4. **The 53 blocks that still stop.** Two entries turned out to be symptoms of a wrong width
+   upstream rather than commands, so **check alignment before adopting a width**: `--stops
+   0xNN` prints where each read started. The remaining named stops are `0xB3`, `0xCA`, `0xC3`,
+   `0xC4`, `0x43`, `0x73`, `0xE6` — 17 of 24 have something behind them at every width that
+   reads on.
 
    **`--derive`'s verdict is advisory — READ THE BYTES.** It is wrong about `0xD0` and it threw
-   out both plausible widths for `0x3F`; neither has been tuned away, and tuning a scorer until
-   it agrees with a reading is decoration rather than evidence.
+   out both plausible widths for `0x3F`.
 5. **The four that no width reads on from** — `0x92`, `0x9B`, `0xD3`, `0x62`. Misreads, so those
    blocks are wrong earlier; finding where is the job that found `0x1F` and `0x6F`.
 6. **The five wall flags** — `0x0013`, `0x0012`, `0x0089`, `0x0053`, `0x0017` — and the ~28
@@ -246,8 +258,15 @@ a break passes, suspect the fixture — or where the rule lives — before the c
   every pass equals the final reach at all five lever settings, even though the boat-and-surf
   runs dip from 376 to 374 between passes one and two. The dip heals. Do not re-chase it.
 * **Where a beaten trainer resumes.** Settled at 190 off `--fights`: the bytes after the
-  command, and the fight's own script runs once, on the pass that wins it. Kind 1 is settled
-  off eight of eight. Kind 2 is the one still owed a reading — see task 1.
+  command, and the fight's own script runs once, on the pass that wins it. Kind 1 off eight of
+  eight; **kind 2's two sites were read by hand at 191** — `1.114` person 6 (the SAPPHIRE) and
+  `14.2` person 5 — and both have a guard in the fall-through. Closed.
+* **Which move crosses water.** Move 57, read twice: the move table's own name, and the only
+  block in the image that offers to cross water (`0x081A6AD6`, jumped into, on no map, saying
+  *"The water is dyed a deep blue… Would you like to SURF?"*). `--surf` is now the override
+  only. Do not put the lever back in front of the fact.
+* **CERULEAN CAVE.** Reached. The SAPPHIRE comes off `1.114` person 6's fight and `32.0` person
+  3 takes it.
 * **CERULEAN CAVE is not a SAFFRON problem.** `0x005C`, set by `32.0` ONE ISLAND person 3.
 * **The drink, the vending machine, CELADON DEPT, the ferry tickets, the badge-count routine** —
   all dead, see `claude/the-drink-and-the-boat.md`.
@@ -270,4 +289,4 @@ a break passes, suspect the fixture — or where the rule lives — before the c
 * The raw whole-file sweep is noise: 3762 sites against 3675 in the reversal. Only the
   jumped-into subset is above the floor. Do not quote the raw number as a finding.
 
-Start with `--play`, `--flags` and `--fights`. I'll paste the output.
+Start with `--play`, `--flags` and `--who-knows`. I'll paste the output.
