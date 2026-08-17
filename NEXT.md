@@ -6,19 +6,18 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **The debt at the top of the roadmap, paid.** The playthrough's script reader
-  was 140 lines of local function in `Program.cs` — no tests, no fixture can
-  reach it, nothing can break it. Two live fixes were sitting in there and both
-  breaks came back green last milestone.
-- **It was stuck there for a reason**: it needs `Rom` (RomExtract) and returns
-  `PlayedScript` (Server), and neither assembly can see the other. So
-  `PlayedScript` moved to Core — a contract belongs where both sides can see it
-  — and the reader moved to RomExtract.
-- **Not one number moved**: 215 maps, 195 flags, 31 field moves, 281 won, 52
-  lost to, party of 3 at 59. Checked against the pre-refactor build rather than
-  against memory, which caught a stale figure I'd have reported as a change.
-- **Both green breaks now bite**, along with their opposite halves. A third was
-  green because the fixture was wrong — yes and no reached the same command — and
-  a test I wrote called `AnsweringNoHandsNothingOver` that did not answer no was
-  deleted rather than kept.
-- **Next**: CERULEAN CAVE is the only blocked doorway left; who writes `0x4055`.
+- **The sea was the same silence as a wall.** `WorldWalker` has taken a `surfing`
+  flag since it was written and the playthrough never passed it, so every water
+  square was dropped as unwalkable alongside every wall. The frontier said
+  `move 249: 20 squares`; the sea on the same run is **1245 squares across 35
+  maps**.
+- **`--play --say-yes --boat --surf`: 390 of 425 maps**, party at 75, 41 field
+  moves. Against 215 with neither lever. Both are MODELLED and both are ceilings.
+- **Not crossed on a guess.** Which move crosses water is the next thing to READ.
+  That turns 390 from a ceiling into a floor.
+- **Shut doors are counted by reason now**: 42 never reached the door, 17 arrived
+  on an island, **zero somebody standing in the way**. The list stops at twenty
+  and the count is sixty-four, so the frontier's shape was whatever the first
+  twenty happened to be.
+- One guard came back green three times, each for a different reason, before it
+  caught anything. The third attempt is the guard.
