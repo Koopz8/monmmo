@@ -215,6 +215,7 @@ public static class Program
         if (options.Stops.Count > 0) WriteStops(rom, options.Stops);
         if (options.Fights) WriteFights(rom);
         if (options.WhoKnows) WriteWhoKnows(rom);
+        if (options.Coins) WriteTheCoinCase(rom);
         if (options.Entries) WriteEntries(rom);
         if (options.Counters) WriteCounters(rom);
 
@@ -7705,6 +7706,256 @@ public static class Program
     }
 
     /// <summary>
+    /// What the three coin commands count, how much of it fits, and what it buys.
+    /// <para>
+    /// <b>199 and 200 settled five widths and claimed nothing about any of them</b> — "the pair
+    /// the GAME CORNER is built out of: the one that asks and the one that takes. What each
+    /// does is NOT claimed here; only how wide it is." This prints the claim, and the number it
+    /// turns on is written nowhere in the file: it is a bound plus a gift, at sites that agree
+    /// on neither.
+    /// </para>
+    /// </summary>
+    private static void WriteTheCoinCase(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("WHAT THE COIN COMMANDS COUNT, ASKED OF THE WHOLE FILE");
+        Console.WriteLine();
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        List<SetsAFlag> scripts = [.. library.All().SelectMany(EveryScriptOn)];
+
+        int[] covered = EverywhereInTheImage.Opened(rom, scripts);
+
+        IReadOnlyList<TheCoinCase.Site> sites = TheCoinCase.Everywhere(rom, covered);
+
+        List<TheCoinCase.Site> real = [.. sites.Where(s => s.ReadsAsScript)];
+
+        (int floorSites, int floorReads, int floorPlaces) = TheCoinCase.NoiseFloor(rom);
+
+        List<int> places = [.. real.Select(s => s.Offset)];
+
+        int realPlaces = places.Count
+                         - HowClustered.Clumped(rom, places)
+                         + HowClustered.In(rom, places).Count;
+
+        Console.WriteLine(
+            $"  {sites.Count} site(s) in the file carry one of the three coin commands;"
+            + $" {real.Count} of them read on to a proper end, {real.Count(s => s.Opened)} of those"
+            + " the map scan opened");
+        Console.WriteLine(
+            $"  the same sweep on this file REVERSED finds {floorSites} site(s), {floorReads}"
+            + $" reading on — {floorPlaces} place(s) against this file's {realPlaces}");
+        Console.WriteLine(
+            "    place(s) and not site(s) on both sides, because reversing a file preserves"
+            + " clumping as well as frequency (206)");
+        Console.WriteLine();
+
+        foreach ((byte code, string what) in new[]
+                 {
+                     (TheCoinCase.HowMany, "reads the count into a variable"),
+                     (TheCoinCase.HandOver, "adds to it"),
+                     (TheCoinCase.TakeAway, "takes from it"),
+                 })
+        {
+            Console.WriteLine(
+                $"    0x{code:X2} {what,-32} {real.Count(s => s.Code == code),4} site(s) reading on");
+        }
+
+        // THE CEILING, WHICH IS THE WHOLE POINT.
+        IReadOnlyList<TheCoinCase.Ceiling> ceilings = TheCoinCase.Ceilings(rom);
+
+        Console.WriteLine();
+
+        if (ceilings.Count == 0)
+        {
+            Console.WriteLine(
+                "  NOTHING IN THE FILE READS THE COUNT, COMPARES IT AND HANDS SOME OVER — so there"
+                + " is no capacity to derive, and this instrument has nothing to say about one.");
+        }
+        else
+        {
+            Console.WriteLine(
+                $"  {ceilings.Count} place(s) read the count, compare it against a bound, branch,"
+                + " and hand some over on the fall-through:");
+
+            foreach (TheCoinCase.Ceiling c in ceilings.OrderBy(c => c.Offset))
+            {
+                Console.WriteLine(
+                    $"    0x{Rom.BaseAddress + (uint)c.Offset:X8}  variable 0x{c.Variable:X4}"
+                    + $"  bound {c.Bound,6}  gift {c.Gift,5}  ->  {c.Sum,6}"
+                    + $"   {(c.Offset < covered.Length && covered[c.Offset] != EverywhereInTheImage.Nobody
+                        ? "the map scan opened this"
+                        : "PAST THE CODE BOUNDARY")}");
+            }
+
+            IReadOnlyList<(int Sum, int Sites, int DistinctPairs)> capacity =
+                TheCoinCase.Capacity(ceilings);
+
+            Console.WriteLine();
+
+            if (capacity.Count == 1)
+            {
+                Console.WriteLine(
+                    $"  EVERY ONE OF THEM SUMS TO {capacity[0].Sum} — from"
+                    + $" {capacity[0].DistinctPairs} distinct (bound, gift) pair(s) at"
+                    + $" {capacity[0].Sites} site(s).");
+                Console.WriteLine(
+                    "    a guard that refuses at the bound before adding the gift is a guard"
+                    + " against passing bound + gift, so that number is the capacity — READ,"
+                    + " and written nowhere in the file.");
+            }
+            else
+            {
+                Console.WriteLine(
+                    $"  THE SUMS DISAGREE — {capacity.Count} different ones, so these are that many"
+                    + " unrelated guards and there is no capacity here:");
+
+                foreach ((int sum, int at, int pairs) in capacity)
+                {
+                    Console.WriteLine($"    {sum,8} at {at} site(s), {pairs} distinct pair(s)");
+                }
+            }
+
+            // THE CONTROL, and it is the reversed image rather than a shuffle of the bounds
+            // and gifts. A shuffle CANNOT come back agreeing — see TheCoinCase.CeilingFloor —
+            // and a control with one outcome is not one.
+            (int floorChains, int floorSums) = TheCoinCase.CeilingFloor(rom);
+
+            Console.WriteLine();
+            Console.WriteLine(
+                $"  CONTROL — the same chain hunt on this file REVERSED finds {floorChains}"
+                + $" chain(s)"
+                + (floorChains == 0
+                    ? ", so nothing with these byte statistics makes this shape by accident."
+                    : $" summing to {floorSums} different number(s)"
+                      + (floorSums == 1
+                          ? " — WHICH IS THE SAME KIND OF AGREEMENT, so the one above is worth"
+                            + " nothing. Read further before believing it."
+                          : ", which scatter, so the agreement above is not what these bytes do"
+                            + " by accident.")));
+        }
+
+        // MONEY IN, COINS OUT.
+        IReadOnlyList<TheCoinCase.Exchange> exchanges = TheCoinCase.Exchanges(rom);
+
+        Console.WriteLine();
+
+        if (exchanges.Count == 0)
+        {
+            Console.WriteLine(
+                "  NOTHING IN THE FILE ASKS AFTER MONEY, HANDS SOME OF THIS OVER AND THEN TAKES"
+                + " THE MONEY — so nothing here says what one of these costs.");
+        }
+        else
+        {
+            Console.WriteLine($"  {exchanges.Count} place(s) sell them for money:");
+
+            foreach (TheCoinCase.Exchange e in exchanges.OrderBy(e => e.Offset))
+            {
+                Console.WriteLine(
+                    $"    0x{Rom.BaseAddress + (uint)e.Offset:X8}  asked {e.Asked,7}"
+                    + $"  gave {e.Given,5}  took {e.Paid,7}"
+                    + (e.Given > 0 && e.Paid % e.Given == 0
+                        ? $"  ->  {e.Paid / e.Given} each"
+                        : "  ->  not a whole number each"));
+            }
+
+            long[] rates =
+            [
+                .. exchanges.Where(e => e.Given > 0 && e.Paid % e.Given == 0)
+                    .Select(e => e.Paid / e.Given).Distinct(),
+            ];
+
+            Console.WriteLine(
+                rates.Length == 1
+                    ? $"    one price at every place that sells them: {rates[0]} — READ"
+                    : $"    {rates.Length} different prices, so there is no single one: "
+                      + string.Join(", ", rates));
+        }
+
+        // WHAT IT BUYS.
+        IReadOnlyList<TheCoinCase.PriceList> lists = TheCoinCase.PriceLists(rom);
+
+        Console.WriteLine();
+
+        if (lists.Count == 0)
+        {
+            Console.WriteLine(
+                "  NO PRICE LIST IN THE FILE IS WRITTEN THIS WAY — two setvars and a shared door,"
+                + " with the second variable one something subtracts from the count.");
+        }
+        else
+        {
+            List<ItemRecord> items = ItemTable.Locate(rom) is { } at ? ItemTable.Read(rom, at) : [];
+            List<SpeciesData> species = RomExtractor.Open(rom).ExtractSpecies();
+
+            Console.WriteLine(
+                $"  {lists.Count} price list(s) written as script — rows of two setvars leaving by"
+                + " one door, priced in the variable something subtracts:");
+
+            foreach (TheCoinCase.PriceList list in lists)
+            {
+                Console.WriteLine();
+                Console.WriteLine(
+                    $"    0x{Rom.BaseAddress + (uint)list.Offset:X8}  thing in"
+                    + $" 0x{list.ThingVariable:X4}, price in 0x{list.PriceVariable:X4}, all"
+                    + $" leaving by 0x{list.SharedExit:X8} — {list.Rows.Count} row(s)");
+
+                Console.WriteLine(
+                    "      its door hands over: "
+                    + (list.HandsOverItems, list.HandsOverCreatures) switch
+                    {
+                        (true, false) => "an ITEM — so the first column is read against the item table",
+                        (false, true) =>
+                            "a CREATURE — so the first column is read against the species table",
+                        (true, true) =>
+                            "BOTH an item and a creature — AMBIGUOUS, so both readings are printed",
+                        _ => "NEITHER — nothing names these, so both readings are printed unclaimed",
+                    });
+
+                bool decided = list.HandsOverItems ^ list.HandsOverCreatures;
+
+                foreach (TheCoinCase.PriceRow row in list.Rows)
+                {
+                    string asItem = items.FirstOrDefault(i => i.Id == row.Thing)?.Name ?? "-";
+                    string asCreature = species.FirstOrDefault(s => s.Index == row.Thing)?.Name ?? "-";
+
+                    Console.WriteLine(
+                        $"      {row.Thing,5}  {row.Price,6}  "
+                        + (decided
+                            ? list.HandsOverItems ? asItem : asCreature
+                            : $"as an item: {asItem,-14} as a creature: {asCreature}"));
+                }
+            }
+
+            Console.WriteLine();
+            Console.WriteLine(
+                "    WHICH TABLE A ROW IS READ AGAINST COMES OFF THE DOOR AND NOT OFF THE NUMBER.");
+            Console.WriteLine(
+                "    Every id in every list above is inside the item table AND inside the species");
+            Console.WriteLine(
+                "    table, so a reading that tries one and falls back to the other answers with");
+            Console.WriteLine(
+                "    whichever was tried first and never says it did. The first version of this");
+            Console.WriteLine(
+                "    printed five creatures as berries and mail, and looked exactly like this one.");
+        }
+
+        IReadOnlyList<(int Offset, int Held, int Price)> spends = TheCoinCase.Spends(rom);
+
+        Console.WriteLine();
+        Console.WriteLine(
+            spends.Count == 0
+                ? "  and nothing compares the count against a price and then subtracts it — the"
+                  + " spending side is not in this file in that shape."
+                : $"  {spends.Count} place(s) compare the count against a price and then subtract"
+                  + $" it: {string.Join(", ", spends.Take(6)
+                      .Select(s => $"0x{Rom.BaseAddress + (uint)s.Offset:X8} (0x{s.Held:X4} against 0x{s.Price:X4})"))}"
+                  + (spends.Count > 6 ? ", ..." : ""));
+    }
+
+    /// <summary>
     /// Every place in the file that asks who knows a move, with the floor under it.
     /// <para>
     /// <b>The obstacle list is a fact about the maps, and it has been read as a fact about the
@@ -11683,6 +11934,9 @@ public static class Program
         /// <summary>Whether to hunt every place in the file that asks who knows a move.</summary>
         public bool WhoKnows { get; private init; }
 
+        /// <summary>Whether to read the three coin commands and what they add up to.</summary>
+        public bool Coins { get; private init; }
+
         /// <summary>Whether to count the scenes written as several doors into one room.</summary>
         public bool Entries { get; private init; }
 
@@ -11855,6 +12109,7 @@ public static class Program
             bool specialContracts = false;
             bool fights = false;
             bool whoKnows = false;
+            var coins = false;
             bool entries = false;
             var counters = false;
             bool play = false;
@@ -12106,6 +12361,9 @@ public static class Program
                         break;
                     case "--who-knows":
                         whoKnows = true;
+                        break;
+                    case "--coins":
+                        coins = true;
                         break;
                     case "--entries":
                         entries = true;
@@ -12413,6 +12671,7 @@ public static class Program
                 Stops = stops,
                 Fights = fights,
                 WhoKnows = whoKnows,
+                Coins = coins,
                 Entries = entries,
                 Counters = counters,
                 Boat = boat,
