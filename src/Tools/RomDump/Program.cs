@@ -209,13 +209,15 @@ public static class Program
         if (options.Arrivals) WriteArrivals(rom);
         if (options.TheFloor) WriteTheFloorTable(rom, options.StartAt);
         if (options.FieldEffects) WriteFieldEffects(rom);
+        if (options.Namespaces) WriteNamespaces(rom);
         if (options.Slots.Count > 0) WriteSlots(rom, options.Slots);
         if (options.ReadFrom.Count > 0) WriteBlocks(rom, options.ReadFrom);
         if (options.Closure) WriteClosure(rom, options.RoutineAnswers, options.StartAt);
         if (options.Play)
             WritePlaythrough(
                 rom, options.RoutineAnswers, options.StartAt, options.Boat, options.Money, options.SayYes,
-                options.Variables, options.Surf, options.InOrder, options.Watch, options.Signs);
+                options.Variables, options.Surf, options.InOrder, options.Watch, options.Signs,
+                options.Moved);
         if (options.WhereFrom.Count > 0) WriteWhereFrom(rom, options.WhereFrom);
         if (options.InTheImage.Count > 0) WriteInTheImage(rom, options.InTheImage);
         if (options.ClimbFrom.Count > 0) WriteClimb(rom, options.ClimbFrom);
@@ -5940,14 +5942,27 @@ public static class Program
         if (watch is not { } variable) return;
 
         Console.WriteLine();
-        Console.WriteLine($"  EVERY LOOK AT AND CHANGE TO 0x{variable:X4}, IN ORDER");
+        Console.WriteLine($"  EVERY LOOK AT AND CHANGE TO THE VARIABLE 0x{variable:X4}, IN ORDER");
+
+        // AND WHETHER THIS NUMBER IS ALSO A FLAG, which is the whole of 243. This watches a
+        // VARIABLE; 27 numbers in the map scan are named both ways, and `--trace 0x003F`
+        // answered "nothing touched it" at 240 about a number three scripts had cleared as a
+        // flag on the same run.
+        int alsoAFlag = played.FlagMoves.Count(m => m.Flag == variable);
+
+        if (alsoAFlag > 0)
+        {
+            Console.WriteLine(
+                $"    AND THE RUN MOVED THE FLAG 0x{variable:X4} {alsoAFlag} time(s) — a"
+                + " different namespace and a different question. `--moved` is that one.");
+        }
 
         if (played.Trace.Count == 0)
         {
             Console.WriteLine(
-                $"    nothing the run executed touched 0x{variable:X4} at all — which is a"
-                + " different finding from it holding the wrong number, and the two have looked"
-                + " identical until now");
+                $"    nothing the run executed touched the VARIABLE 0x{variable:X4} at all —"
+                + " which is a different finding from it holding the wrong number, and the two"
+                + " have looked identical until now");
             return;
         }
 
@@ -6347,7 +6362,8 @@ public static class Program
     private static void WritePlaythrough(
         Rom rom, IReadOnlyDictionary<int, int> answers, string startAt, bool boat = false, int money = 0,
         bool sayYes = false, IReadOnlyDictionary<int, int>? variables = null, bool surf = false,
-        bool inOrder = false, int? watch = null, bool signs = false)
+        bool inOrder = false, int? watch = null, bool signs = false,
+        IReadOnlyList<int>? moved = null)
     {
         Console.WriteLine();
         Console.WriteLine("A PLAYTHROUGH");
@@ -6482,6 +6498,8 @@ public static class Program
         // is the join --flags has never made: --flags takes only the ROM and has never seen an
         // Attempt, and the run knows what it set and nothing about what else could have.
         WriteWhyTheGatesAreShut(rom, world, gates, played.Flags, played.TookBack);
+
+        if (moved is { Count: > 0 }) WriteWhatMovedEachFlag(played, world, moved);
 
         if (signs)
         {
@@ -8845,6 +8863,115 @@ public static class Program
     /// exactly that confusion.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Every time the run turned a given flag on or off, with the script that did it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The flag half of <c>--trace</c>.</b> That one watches a VARIABLE, and flags and
+    /// variables share the number space in the command line, so <c>--trace 0x003F</c> answers a
+    /// question about something else and says "nothing the run executed touched it". 240 named
+    /// the gap and printed a summary; this prints the list.
+    /// </para>
+    /// <para>
+    /// Every move and not the last one, because the order is the finding: a flag set on pass 1
+    /// and cleared on pass 3 and a flag set and cleared on every pass are the same summary and
+    /// two different worlds.
+    /// </para>
+    /// </remarks>
+    private static void WriteWhatMovedEachFlag(
+        Attempt played, WorldData world, IReadOnlyList<int> which)
+    {
+        var gates = new FlagGates(world);
+
+        foreach (int flag in which)
+        {
+            IReadOnlyList<MovedAFlag> moves = [.. played.FlagMoves.Where(m => m.Flag == flag)];
+
+            Console.WriteLine();
+            Console.WriteLine(
+                $"    EVERY MOVE OF FLAG 0x{flag:X4}: {moves.Count(m => !m.Cleared)} set(s),"
+                + $" {moves.Count(m => m.Cleared)} clear(s)");
+
+            // The three things that are true of it whatever the run did, so that an empty list
+            // below is a finding rather than a blank.
+            Console.WriteLine(
+                $"      it holds {gates.Behind(flag).Count} object(s) in the world file,"
+                + $" {(gates.IsAboutTheWorld(flag) ? "and it GATES something" : "and it gates nothing")},"
+                + $" {(world.FlagsAtStart.Contains(flag) ? "and it is ON before the first frame" : "and a new game does not set it")}");
+
+            Console.WriteLine(
+                moves.Count == 0
+                    ? "      NOTHING THE RUN EXECUTED MOVED IT AS A FLAG — which is a different"
+                      + " finding from it ending up off, and the two have looked identical until now"
+                    : $"      ends the run {(played.Flags.Contains(flag) ? "ON" : "OFF")}");
+
+            // The other namespace, for the same reason --trace now names this one.
+            int alsoAVariable = played.Trace.Count(t => t.What.Variable == flag);
+
+            if (alsoAVariable > 0)
+            {
+                Console.WriteLine(
+                    $"      and the run touched the VARIABLE 0x{flag:X4} {alsoAVariable} time(s)"
+                    + " — a different namespace. `--trace` is that one.");
+            }
+
+            foreach (MovedAFlag one in moves) Console.WriteLine($"        {one}");
+        }
+    }
+
+    /// <summary>
+    /// The numbers this cartridge uses in both namespaces at once.
+    /// </summary>
+    private static void WriteNamespaces(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("ONE NUMBER, TWO NAMESPACES");
+        Console.WriteLine();
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        BothNamespaces scan = TwoNamespacesOneNumber.Of(
+            rom, library.All().SelectMany(EveryScriptOn).Select(s => s.Address));
+
+        Console.WriteLine(
+            $"  the map scan reads {scan.Commands} command(s) and names {scan.Flags.Count}"
+            + $" number(s) as a FLAG and {scan.Variables.Count} as a VARIABLE");
+
+        IReadOnlyList<SharedNumber> shared = scan.Shared;
+
+        Console.WriteLine(
+            $"  {shared.Count} number(s) are named BOTH ways, against a floor of {scan.Floor:F2}"
+            + " if the two sets landed independently in the span they occupy");
+
+        Console.WriteLine();
+
+        foreach (SharedNumber one in shared.Take(20)) Console.WriteLine($"    {one}");
+
+        if (shared.Count > 20) Console.WriteLine($"    ... +{shared.Count - 20} more");
+
+        // AND THE SAME QUESTION ASKED THE WRONG WAY, kept because the size of it is the
+        // argument for asking the right one. 233 threw away a raw whole-image sweep for this
+        // reason and this is the same sweep, so it is printed as the noise it is.
+        Console.WriteLine();
+        Console.WriteLine("  and the same question asked of the WHOLE IMAGE, which is the noise:");
+
+        IReadOnlyDictionary<int, IReadOnlyList<FlagSite>> everyFlag =
+            EverywhereInTheImage.EveryFlagMoved(rom);
+
+        HashSet<int> everyVariable =
+        [
+            .. EverywhereInTheImage.EveryVariableWritten(rom).Keys,
+            .. EverywhereInTheImage.EveryVariableRead(rom).Keys,
+        ];
+
+        Console.WriteLine(
+            $"    {everyFlag.Count} as a flag, {everyVariable.Count} as a variable,"
+            + $" {everyFlag.Keys.Count(everyVariable.Contains)} both — sixteen megabytes of"
+            + " graphics hold every three-byte pattern many times over, so this says nothing"
+            + " about the game and everything about the method");
+    }
+
     /// <summary>Why a sign went unread, in words.</summary>
     private static string Unread(UnreadBecause why) => why switch
     {
@@ -13719,6 +13846,18 @@ public static class Program
         /// </summary>
         public bool Signs { get; private init; }
 
+        /// <summary>
+        /// Every number this cartridge uses as a flag AND as a variable — the room there is to
+        /// be wrong when an instrument is handed a bare number.
+        /// </summary>
+        public bool Namespaces { get; private init; }
+
+        /// <summary>
+        /// With <c>--play</c>: every time the run turned these FLAGS on or off, with the script
+        /// and the pass. The flag half of <c>--trace</c>, which watches a variable.
+        /// </summary>
+        public IReadOnlyList<int> Moved { get; private init; } = [];
+
         /// <summary>Commands to ask the index question of.</summary>
         public IReadOnlyList<byte> Slots { get; private init; } = [];
 
@@ -13936,6 +14075,8 @@ public static class Program
             bool theFloor = false;
             bool fieldEffects = false;
             bool signs = false;
+            bool namespaces = false;
+            var moved = new List<int>();
             var slots = new List<byte>();
             var readFrom = new List<uint>();
             bool fights = false;
@@ -14210,6 +14351,18 @@ public static class Program
                     case "--signs":
                         signs = true;
                         break;
+                    case "--namespaces":
+                        namespaces = true;
+                        break;
+                    case "--moved":
+                    {
+                        foreach (string named in Next(args, ref i, "--moved").Split(','))
+                        {
+                            if (TryNumber(named, out int one)) moved.Add(one);
+                        }
+
+                        break;
+                    }
                     case "--slots":
                     {
                         foreach (string named in Next(args, ref i, "--slots").Split(','))
@@ -14555,6 +14708,8 @@ public static class Program
                 TheFloor = theFloor,
                 FieldEffects = fieldEffects,
                 Signs = signs,
+                Namespaces = namespaces,
+                Moved = moved,
                 Slots = slots,
                 ReadFrom = readFrom,
                 Play = play,
