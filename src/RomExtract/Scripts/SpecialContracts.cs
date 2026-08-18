@@ -157,7 +157,6 @@ public static class SpecialContracts
 
     public static List<SpecialContract> Derive(Rom rom, MapLibrary library, Action<string>? log = null)
     {
-        var sites = new Dictionary<int, int>();
         var arguments = new Dictionary<int, int>();
         var compared = new Dictionary<int, Dictionary<int, int>>();
         var calls = new List<(int Routine, int At)>();
@@ -185,8 +184,6 @@ public static class SpecialContracts
                 };
 
                 if (routine < 0) continue;
-
-                sites[routine] = sites.GetValueOrDefault(routine) + 1;
 
                 // The call itself, by byte position. Same rule as the branches below and for
                 // the same reason — see SpecialContract.CallInflation.
