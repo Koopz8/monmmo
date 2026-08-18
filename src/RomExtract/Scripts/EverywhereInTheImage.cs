@@ -300,6 +300,99 @@ public static class EverywhereInTheImage
     /// <summary>The four commands that put a number in a variable, in the order they were derived.</summary>
     private static readonly byte[] Writers = [0x16, 0x17, 0x18, 0x1A];
 
+    /// <summary>Where in a command's arguments a variable being READ sits.</summary>
+    /// <param name="Code">The command.</param>
+    /// <param name="At">Which argument byte the variable id starts at.</param>
+    /// <param name="What">What the command does with it, for printing.</param>
+    private sealed record Reader(byte Code, int At, string What);
+
+    /// <summary>
+    /// Every way a script names a variable in order to LOOK at what is in it.
+    /// <para>
+    /// <b>This project has had <c>--who-writes</c> since 184 and nothing on the other side.</b>
+    /// "Nothing sets this" and "nothing reads this" are opposite findings about a variable and
+    /// only one of them has ever been askable — so a variable written once and never looked at
+    /// has read, for eleven milestones, exactly like a variable that gates something.
+    /// </para>
+    /// <para>
+    /// Both operands of <c>comparevars</c>, because it looks at two; the SOURCE of the two
+    /// copying commands and not the destination, because a destination is a write and counting
+    /// it here would make every write a read as well.
+    /// </para>
+    /// </summary>
+    private static readonly Reader[] Readers =
+    [
+        new(0x21, 0, "compare"),
+        new(0x22, 0, "comparevars, first"),
+        new(0x22, 2, "comparevars, second"),
+        new(0x19, 2, "copyvar, from"),
+        new(0x1A, 2, "copyvarifnotzero, from"),
+    ];
+
+    /// <summary>
+    /// Every place in the whole image that reads a variable — <c>--who-writes</c>'s mirror.
+    /// <para>
+    /// It has to be able to come back empty and mean it. <c>0x4059</c> is written once, by the
+    /// one arm of the one branch the run's silence still decides (214), and <b>nothing anywhere
+    /// in sixteen megabytes reads it</b> — which is what turns that last piece of ceiling into
+    /// nothing at all. A count of writers could never have said so.
+    /// </para>
+    /// </summary>
+    /// <param name="covered">What the map scan decoded, so a site can say which side of the
+    /// code boundary it is on.</param>
+    public static IReadOnlyList<VariableSite> Reads(Rom rom, int variable, int[]? covered = null)
+    {
+        var sites = new List<VariableSite>();
+
+        byte low = (byte)(variable & 0xFF);
+        byte high = (byte)(variable >> 8);
+
+        foreach (Reader reader in Readers)
+        {
+            foreach (int offset in rom.FindAll(new byte[] { reader.Code }))
+            {
+                if (offset + 5 > rom.Length) continue;
+                if (rom.ReadU8(offset + 1 + reader.At) != low) continue;
+                if (rom.ReadU8(offset + 2 + reader.At) != high) continue;
+
+                sites.Add(new VariableSite(
+                    offset,
+                    variable,
+                    reader.Code,
+
+                    // The other operand, which is the number a compare is against and the
+                    // variable a copy is into. Raw, because which it is depends on the command.
+                    rom.ReadU16(offset + 1 + (reader.At == 0 ? 2 : 0)),
+                    ReadsAsAScript(rom, Rom.BaseAddress + (uint)offset),
+                    covered is not null && offset < covered.Length && covered[offset] != Nobody));
+            }
+        }
+
+        return [.. sites.OrderBy(s => s.Offset).ThenBy(s => s.How)];
+    }
+
+    /// <summary>
+    /// The same sweep on the image backwards — how many reads bytes with these statistics make
+    /// by accident, counted in places (206).
+    /// </summary>
+    public static (int Sites, int ReadsAsScript, int Places) ReadNoiseFloor(Rom rom, int variable)
+    {
+        byte[] backwards = rom.Span.ToArray();
+
+        Array.Reverse(backwards);
+
+        var nowhere = new Rom(backwards);
+
+        IReadOnlyList<VariableSite> found = Reads(nowhere, variable);
+
+        List<int> reads = [.. found.Where(s => s.ReadsAsAScript).Select(s => s.Offset)];
+
+        return (
+            found.Count,
+            reads.Count,
+            reads.Count - HowClustered.Clumped(nowhere, reads) + HowClustered.In(nowhere, reads).Count);
+    }
+
     /// <summary>
     /// Everywhere in the file something asks which party slot knows a move.
     /// <para>

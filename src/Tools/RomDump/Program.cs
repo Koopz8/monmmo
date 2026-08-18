@@ -212,6 +212,7 @@ public static class Program
         if (options.InTheImage.Count > 0) WriteInTheImage(rom, options.InTheImage);
         if (options.ClimbFrom.Count > 0) WriteClimb(rom, options.ClimbFrom);
         if (options.WhoWrites.Count > 0) WriteWhoWrites(rom, options.WhoWrites);
+        if (options.WhoReads.Count > 0) WriteWhoReads(rom, options.WhoReads);
         if (options.Stops.Count > 0) WriteStops(rom, options.Stops);
         if (options.Fights) WriteFights(rom);
         if (options.WhoKnows) WriteWhoKnows(rom);
@@ -8408,6 +8409,72 @@ public static class Program
         };
     }
 
+    /// <summary>
+    /// Every place in the whole image that LOOKS at a variable — <c>--who-writes</c>'s mirror.
+    /// <para>
+    /// <b>This project has had one side of this since 184.</b> "Nothing sets this" has been
+    /// askable for eleven milestones and "nothing reads this" has not, so a variable written
+    /// once and never looked at has read exactly like a variable that gates something. 214's
+    /// last piece of ceiling turned out to be one of the first kind and it took a hand-grep to
+    /// say so.
+    /// </para>
+    /// </summary>
+    private static void WriteWhoReads(Rom rom, IReadOnlyList<int> variables)
+    {
+        Console.WriteLine();
+        Console.WriteLine("WHO READS THESE");
+        Console.WriteLine();
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        List<SetsAFlag> scripts = [.. library.All().SelectMany(EveryScriptOn)];
+
+        int[] covered = EverywhereInTheImage.Opened(rom, scripts);
+
+        Console.WriteLine(
+            $"  a three-byte pattern turns up by accident about {EverywhereInTheImage.ByChance(rom, 3):0.0}"
+            + " time(s) in an image this size, per command — which is the error bar below");
+
+        foreach (int which in variables)
+        {
+            IReadOnlyList<VariableSite> sites = EverywhereInTheImage.Reads(rom, which, covered);
+            IReadOnlyList<VariableSite> writes = EverywhereInTheImage.Writes(rom, which, covered);
+
+            List<VariableSite> real = [.. sites.Where(s => s.ReadsAsAScript)];
+
+            (int floor, int floorReads, int floorPlaces) =
+                EverywhereInTheImage.ReadNoiseFloor(rom, which);
+
+            Console.WriteLine();
+            Console.WriteLine(
+                $"  0x{which:X4} — {sites.Count} site(s) look at it, {real.Count} of them read as"
+                + $" script, {real.Count(s => s.Opened)} of those the map scan opened");
+            Console.WriteLine(
+                $"    the same sweep on this file REVERSED finds {floor} site(s), {floorReads}"
+                + $" reading as script, {floorPlaces} place(s)");
+            Console.WriteLine(
+                $"    and {writes.Count(s => s.ReadsAsAScript)} place(s) write it"
+                + $" ({writes.Count} raw)");
+
+            if (real.Count == 0)
+            {
+                Console.WriteLine(
+                    "    NOTHING IN THE FILE LOOKS AT IT. Whatever is put in it is put there and"
+                    + " never asked about — by any script, anywhere in sixteen megabytes.");
+            }
+
+            foreach (VariableSite site in real.Take(16))
+            {
+                Console.WriteLine(
+                    $"      0x{site.Offset:X6}  {ScriptCommands.NameOf(site.How)}"
+                    + $"  other operand 0x{site.Value:X4}"
+                    + (site.Opened ? "  the map scan opened this" : "  NEVER OPENED BY THE MAP SCAN"));
+            }
+
+            if (real.Count > 16) Console.WriteLine($"      ... and {real.Count - 16} more");
+        }
+    }
+
     private static void WriteWhoWrites(Rom rom, IReadOnlyList<int> variables)
     {
         Console.WriteLine();
@@ -12159,6 +12226,9 @@ public static class Program
         /// <summary>Variables to hunt through the whole file, the way flags already are.</summary>
         public IReadOnlyList<int> WhoWrites { get; private init; } = [];
 
+        /// <summary>Variables to ask the whole image who LOOKS at.</summary>
+        public IReadOnlyList<int> WhoReads { get; private init; } = [];
+
         /// <summary>Commands to show every stopped read of, with the bytes around each.</summary>
         public IReadOnlyList<byte> Stops { get; private init; } = [];
 
@@ -12351,6 +12421,7 @@ public static class Program
             var inTheImage = new List<int>();
             var climbFrom = new List<uint>();
             var whoWrites = new List<int>();
+            var whoReads = new List<int>();
             var stops = new List<byte>();
             bool boat = false;
             var surf = false;
@@ -12649,6 +12720,15 @@ public static class Program
 
                         break;
                     }
+                    case "--who-reads":
+                    {
+                        foreach (string named in Next(args, ref i, "--who-reads").Split(','))
+                        {
+                            if (TryNumber(named, out int looked)) whoReads.Add(looked);
+                        }
+
+                        break;
+                    }
                     case "--who-writes":
                     {
                         foreach (string named in Next(args, ref i, "--who-writes").Split(','))
@@ -12902,6 +12982,7 @@ public static class Program
                 InTheImage = inTheImage,
                 ClimbFrom = climbFrom,
                 WhoWrites = whoWrites,
+                WhoReads = whoReads,
                 Stops = stops,
                 Fights = fights,
                 WhoKnows = whoKnows,
