@@ -6930,7 +6930,28 @@ public static class Program
 
             Console.WriteLine(
                 $"      {these.Sum(z => z.Asked),4} of the places, across {these.Count} routine(s):"
-                + $" {Meaning(was)}");
+                + $" {Meaning(was)}"
+                + (was is SpecialCalls.ZeroWas.NeverTested
+                    ? ""
+                    : $" — and {these.Sum(z => z.TakenByZero)} of their"
+                      + $" {these.Sum(z => z.Branches)} branching site(s) in the whole file are"
+                      + " taken by nought"));
+
+            // AND THE ONES THAT MATTER, NAMED, WHATEVER THE RANKING SAYS.
+            //
+            // The list above is the eight the run asked most often, and the routines whose
+            // silence actually decides something are asked twice between them — so the ranking
+            // hides the only part of this that is a ceiling. A filter that keeps output
+            // readable must never decide which question gets asked.
+            if (was is not (SpecialCalls.ZeroWas.AnAssertion or SpecialCalls.ZeroWas.Both)) continue;
+
+            Console.WriteLine(
+                "            "
+                + string.Join(
+                    ", ",
+                    these.Select(z => $"0x{z.Routine:X3} asked {z.Asked}x, {z.TakenByZero} of its"
+                                      + $" {z.Branches} branching site(s) taken by nought"
+                                      + $" (tested against {string.Join("/", z.Tested.Order())})")));
         }
 
         Console.WriteLine();
@@ -7797,18 +7818,19 @@ public static class Program
 
     /// <summary>What a routine's answer is compared against, in one phrase.</summary>
     private static string Silence(SpecialCalls.WhatZeroDid what) =>
-        what.Tested.Count == 0
-            ? "its answer is never looked at"
-            : $"compared against {string.Join(", ", what.Tested.Order())} — {Meaning(what.Was)}";
+        what.Branches == 0
+            ? "nothing branches on its answer"
+            : $"compared against {string.Join(", ", what.Tested.Order())};"
+              + $" nought takes {what.TakenByZero} of its {what.Branches} branch(es) — {Meaning(what.Was)}";
 
     private static string Meaning(SpecialCalls.ZeroWas was) => was switch
     {
-        SpecialCalls.ZeroWas.NeverTested => "the answer decides nothing",
+        SpecialCalls.ZeroWas.NeverTested => "nothing branches on the answer",
         SpecialCalls.ZeroWas.AnAssertion =>
-            "ZERO IS THE VALUE TESTED, so the run's silence TAKES the branch — it said yes",
+            "NOUGHT TAKES EVERY BRANCH, so the run's silence decides it — it said yes",
         SpecialCalls.ZeroWas.ARefusal =>
-            "zero is never the value tested, so it falls through like any other wrong answer",
-        _ => "tested against zero at some sites and something else at others",
+            "nought takes no branch, so it falls through like any other wrong answer",
+        _ => "nought takes some of the branches and not others",
     };
 
     /// <summary>

@@ -91,6 +91,19 @@ public static class SpecialCalls
         0x46, 0x47,     // giveitem, and the one shaped like it
         0x7C,           // findmove
         0x09, 0x08,     // callstd, gotostd — a standard routine answers too
+
+        // AND A PLAIN CALL, which is the same fault one step out (214).
+        //
+        // callstd was already here because a standard routine answers. An ordinary call is
+        // a jump into a block this scan is not reading, and that block can do anything at
+        // all — including calling a special of its own. On this cartridge it does: SEVEN
+        // ISLAND's `special 0x0028 ; call 0x081A4EAF ; compare 0x800D 0` credited the
+        // compare to 0x0028, and 0x081A4EAF is three commands long and the first of them is
+        // `special 0x005D`. The answer being read belongs to a routine two levels away.
+        //
+        // Stopping here loses attributions rather than inventing them, which is the only
+        // direction this can safely be wrong in.
+        0x04,           // call
     ];
 
     /// <summary>
@@ -272,6 +285,19 @@ public static class SpecialCalls
     }
 
     /// <summary>What the script then compares the answer against, and how it branches.</summary>
+    /// <summary>
+    /// What the script compares a call's answer against, in the few commands after it.
+    /// <para>
+    /// Exposed so the barrier list can be tested against a handful of bytes rather than against
+    /// a whole world. The rule it guards is not a small one: <b>getting it wrong credits one
+    /// routine with another's reply</b>, and it has now done that twice — once through
+    /// <c>0xA0</c> and once, at 214, through an ordinary <c>call</c>.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<(int Value, byte Condition)> WhatIsComparedAfter(
+        List<ScriptCommand> commands, int at, int answer = 0x800D) =>
+        [.. After(commands, at, answer)];
+
     private static List<(int, byte)> After(List<ScriptCommand> commands, int at, int answer)
     {
         var compared = new List<(int, byte)>();
@@ -392,23 +418,21 @@ public static class SpecialCalls
     /// <summary>What answering nought amounted to at the places a run actually asked.</summary>
     public enum ZeroWas
     {
-        /// <summary>Nothing ever compares this routine's answer, so nought decides nothing.</summary>
+        /// <summary>Nothing ever branches on this routine's answer, so nought decides nothing.</summary>
         NeverTested,
 
         /// <summary>
-        /// Every comparison is against something other than nought, so nought falls through —
-        /// and so would every other value the file never tests. <b>The run declined to answer
-        /// and the decline cost nothing that any other wrong answer would not have cost.</b>
+        /// Nought takes none of the branches. <b>The run declined to answer and the decline cost
+        /// nothing that any other wrong answer would not have cost.</b>
         /// </summary>
         ARefusal,
 
         /// <summary>
-        /// Every comparison is against nought, so the default TAKES the branch at every site.
-        /// <b>The run did not decline; it said yes.</b>
+        /// Nought takes every branch. <b>The run did not decline; it said yes, everywhere.</b>
         /// </summary>
         AnAssertion,
 
-        /// <summary>Compared against nought at some sites and something else at others.</summary>
+        /// <summary>Nought takes some of the branches and not others.</summary>
         Both,
     }
 
@@ -417,7 +441,16 @@ public static class SpecialCalls
     /// </summary>
     /// <param name="Asked">How many places the RUN asked it — not how many exist in the file.</param>
     /// <param name="Tested">Every value the file compares its answer against.</param>
-    public sealed record WhatZeroDid(int Routine, int Asked, ZeroWas Was, IReadOnlyList<int> Tested);
+    /// <param name="Branches">
+    /// How many of this routine's sites in the whole file branch on the answer at all.
+    /// <b>The denominator the asked-count does not have.</b> A routine asked eighty-eight times
+    /// whose answer is branched on at two sites is a routine whose silence can matter twice —
+    /// counting the eighty-eight as places where the silence took a branch is the same mistake
+    /// as counting sites where a bucket wants places.
+    /// </param>
+    /// <param name="TakenByZero">How many of those branches nought takes.</param>
+    public sealed record WhatZeroDid(
+        int Routine, int Asked, ZeroWas Was, IReadOnlyList<int> Tested, int Branches, int TakenByZero);
 
     /// <summary>
     /// The join nobody has made: which routines a run could not answer, against what the file
@@ -444,17 +477,32 @@ public static class SpecialCalls
 
         foreach ((int routine, int times) in asked)
         {
-            IReadOnlyList<int> tested =
-                byRoutine.TryGetValue(routine, out Profile? profile) ? profile.AnswersSeen : [];
+            byRoutine.TryGetValue(routine, out Profile? profile);
 
+            IReadOnlyList<int> tested = profile?.AnswersSeen ?? [];
+
+            int branches = profile?.Branches ?? 0;
+            int taken = profile?.BranchesTakenByZero ?? 0;
+
+            // WHAT NOUGHT DOES, NOT WHAT IT IS COMPARED AGAINST.
+            //
+            // The first version of this classified on the values alone — nought is an
+            // assertion where the file tests against nought, a refusal otherwise. That is
+            // wrong and the instrument caught it by printing both numbers side by side: the
+            // "nought is never the value tested" bucket reported thirty-nine of its six hundred
+            // and ninety branches taken by nought. `compare 0x800D, 1 ; if LESS` is taken by
+            // nought and does not test nought. The condition is half the question and the
+            // values are the other half; Profile has already done it properly.
             found.Add(new WhatZeroDid(
                 routine,
                 times,
-                tested.Count == 0 ? ZeroWas.NeverTested
-                : tested.All(v => v == 0) ? ZeroWas.AnAssertion
-                : tested.All(v => v != 0) ? ZeroWas.ARefusal
+                branches == 0 ? ZeroWas.NeverTested
+                : taken == 0 ? ZeroWas.ARefusal
+                : taken == branches ? ZeroWas.AnAssertion
                 : ZeroWas.Both,
-                tested));
+                tested,
+                branches,
+                taken));
         }
 
         return [.. found.OrderByDescending(z => z.Asked).ThenBy(z => z.Routine)];
