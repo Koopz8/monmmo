@@ -102,14 +102,22 @@ region does is not claimed. What is READ is that it exists and that it loads bot
 
 ```
     the limit of this reading: a routine that computes an id from a base would hold the BASE and
-    not the id, and nothing here would see it. 0x4000 is loaded 56 time(s) against a reversed 0,
-    so that is not an empty worry — "held by nothing" is not "read by nothing"
+    not the id, and nothing here would see it.
 ```
 
-`0x4000` is loaded fifty-six times. A routine walking a range of variables from that base reads
-every one of the seven and this instrument sees nothing. **The seven are variables this game
-writes, no script looks at, no map header consults and no instruction loads** — which is a
-sharper claim than 245's and is still not "dead".
+A routine walking a range of variables from a base reads every one of the seven and this
+instrument sees nothing. **The seven are variables this game writes, no script looks at, no map
+header consults and no instruction loads** — which is a sharper claim than 245's and is still not
+"dead".
+
+> **CORRECTED AT 247.** This section originally quoted "0x4000 is loaded 56 times against a
+> reversed 0, so that is not an empty worry". **Fifty-six is the count WITHOUT the load
+> requirement** — the very filter this milestone spent its length arguing for — and the line was
+> edited to use the load without the run being repeated. The number the command prints is **1**.
+> It is trap 16 committed in the milestone that quotes trap 16, and trap 21 as well: the sentence
+> about what a number is keyed on was written without going and looking at the key. The
+> base-relative worry is real and thinner than stated, which is the direction that flatters the
+> hedge rather than the finding.
 
 ## The breaks, predicted before running
 

@@ -48,7 +48,7 @@ public sealed class AReadThatIsNotACommandTests
     [Fact]
     public void AnArrivalConditionLooksAtTheVariableItNames()
     {
-        IReadOnlyCollection<int> looked = WhenAMapRunsSomething.LookedAt(
+        IReadOnlyCollection<int> looked = ReadsThatAreNotCommands.LookedAt(
         [
             Condition(0x407C, 1, 0x08160000),
             Condition(0x4075, 2, 0x08160100),
@@ -69,14 +69,14 @@ public sealed class AReadThatIsNotACommandTests
     [Fact]
     public void AHeaderEntryThatRunsNothingIsNotARead()
     {
-        IReadOnlyCollection<int> looked = WhenAMapRunsSomething.LookedAt(
+        IReadOnlyCollection<int> looked = ReadsThatAreNotCommands.LookedAt(
         [
             Condition(0x407C, 1, 0x08160000),
             Terminator(),
         ]);
 
         Assert.Equal([0x407C], [.. looked]);
-        Assert.False(WhenAMapRunsSomething.IsARead(Terminator()));
+        Assert.False(ReadsThatAreNotCommands.IsARead(Terminator()));
     }
 
     // -------------------------------------------------- and what it does to the deaf list
@@ -125,5 +125,102 @@ public sealed class AReadThatIsNotACommandTests
     public void TheRawReadingIsCorrectedTheSameWay()
     {
         Assert.Empty(Deaf(0x407C, 0x407C).WrittenAndNeverReadRaw);
+    }
+
+    // --------------------------------------------------- and the second copy, found at 247
+
+    private static MapTrigger Square(int variable, int value, uint runs) =>
+        new(0, 0, variable, value, runs);
+
+    /// <summary>
+    /// THE SECOND COPY OF THE SAME FAULT: a trigger's condition names a variable too.
+    /// </summary>
+    /// <remarks>
+    /// 246 found the header. 247 went looking for another record with the same shape and there
+    /// was one, on a different list, missed by the same reasoning — and it is the bigger of the
+    /// two: it takes the deaf list from 19 to 5.
+    /// </remarks>
+    [Fact]
+    public void ATriggerConditionLooksAtTheVariableItNames()
+    {
+        IReadOnlyCollection<int> looked = ReadsThatAreNotCommands.LookedAt(
+        [
+            Square(0x4088, 3, 0x08163000),
+            Square(0x400F, 1, 0x08163100),
+        ]);
+
+        Assert.Equal([0x400F, 0x4088], [.. looked.Order()]);
+    }
+
+    /// <summary>
+    /// A DECOY: a trigger with no script names nothing, and this cartridge has not one of them.
+    /// </summary>
+    /// <remarks>
+    /// <b>All 228 triggers in this game have a script and a variable in the story's own band</b>,
+    /// which the output prints, so neither half of the rule fires on the real image. That makes
+    /// both of these fixtures decoys by this project's own definition, and a decoy is the stated
+    /// alternative to deleting a guard nothing can fail. They are kept rather than deleted
+    /// because the rule is what makes the sweep's population defensible: without it, a record
+    /// that runs nothing would put its variable field into a reader's list, and nothing about
+    /// the count would look wrong.
+    /// </remarks>
+    [Fact]
+    public void ATriggerThatRunsNothingIsNotARead()
+    {
+        Assert.Empty(ReadsThatAreNotCommands.LookedAt([Square(0x4088, 3, 0)]));
+        Assert.False(ReadsThatAreNotCommands.IsARead(Square(0x4088, 3, 0)));
+    }
+
+    /// <summary>
+    /// AND THE OTHER DECOY: a trigger whose variable field is nought names nothing.
+    /// </summary>
+    /// <remarks>
+    /// Nought is used rather than a band boundary because a band is READ in this project and not
+    /// asserted. On this cartridge the field is in <c>0x4000+</c> at all 228 triggers, so this
+    /// rule fires nowhere and the distribution is printed beside the count saying so.
+    /// </remarks>
+    [Fact]
+    public void ATriggerWithNoVariableIsNotARead()
+    {
+        Assert.Empty(ReadsThatAreNotCommands.LookedAt([Square(0, 0, 0x08163000)]));
+        Assert.False(ReadsThatAreNotCommands.IsARead(Square(0, 0, 0x08163000)));
+    }
+
+    /// <summary>
+    /// And the distribution the rule is checked against is a real reading, not a restatement —
+    /// it counts every trigger, including the ones the rule throws away.
+    /// </summary>
+    /// <remarks>
+    /// A rule with a number in it that nobody can check is a number nothing computes (231). If
+    /// this only reported what the rule kept, "0x4000+ at all of them" would be true by
+    /// construction and would say nothing about the cartridge.
+    /// </remarks>
+    [Fact]
+    public void TheFieldDistributionCountsTheTriggersTheRuleThrowsAway()
+    {
+        IReadOnlyList<(int From, int Triggers)> held = ReadsThatAreNotCommands.WhatTheFieldHolds(
+        [
+            Square(0x4088, 3, 0x08163000),
+            Square(0x4089, 1, 0x08163100),
+            Square(0, 0, 0x08163200),
+            Square(0x408A, 1, 0),
+        ]);
+
+        Assert.Equal([(0x0000, 1), (0x4000, 3)], [.. held]);
+    }
+
+    /// <summary>
+    /// And both kinds are gathered under names, so a subtraction can always say what did the
+    /// reading.
+    /// </summary>
+    [Fact]
+    public void BothKindsAreGatheredUnderTheirOwnNames()
+    {
+        IReadOnlyDictionary<string, IReadOnlyCollection<int>> of = ReadsThatAreNotCommands.Of(
+            [Condition(0x407C, 1, 0x08160000)],
+            [Square(0x4088, 3, 0x08163000)]);
+
+        Assert.Equal([0x407C], [.. of[ReadsThatAreNotCommands.OnArrival]]);
+        Assert.Equal([0x4088], [.. of[ReadsThatAreNotCommands.OnASquare]]);
     }
 }

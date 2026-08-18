@@ -372,8 +372,10 @@ on exactly it. **2 of the 9 are held that way** — `0x4026` and `0x403E`, five 
 all inside `0x0CCE38`-`0x0CD02C` — **and 7 are held by nothing in the file at all**. The word
 ALONE is a weak filter and the denominator is printed to say so: 41 of 90 against a reversed 27,
 which the instruction takes to 29 against 4. And the limit is printed too — a routine computing an
-id from a base holds the BASE, and `0x4000` is loaded 56 times against a reversed 0, so **"held by
-nothing" is not "read by nothing"**.
+id from a base holds the BASE — `0x4000` is loaded **1** time against a reversed 0, so a
+base-relative reader is possible and thinly evidenced. **"Held by nothing" is not "read by
+nothing".** (246's document said 56 here; 56 is the count WITHOUT the load requirement and no
+instrument prints it — corrected at 247.)
 
 ** They share the number space, so `--trace 0x003F`
 answers — "nothing the run executed touched it" — about something else entirely. What moved a

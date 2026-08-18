@@ -8931,32 +8931,45 @@ public static class Program
 
         MapLibrary library = MapLibrary.Open(rom);
 
-        // THE READ THAT IS NOT A COMMAND. A map runs a script on arrival when a variable holds
-        // a value, and that condition is two halfwords in the map's own header — a look at a
-        // variable with no command anywhere near it. Every sweep in this project walks a script
-        // stream, so none of them has ever counted one, and 245 reported 0x407C as consulted
-        // nowhere in sixteen megabytes while nineteen maps were consulting it on arrival.
-        var onArrival = new Dictionary<int, List<string>>();
+        // THE READS THAT ARE NOT COMMANDS. A map runs a script on arrival when a variable holds
+        // a value, and a square fires when a variable holds a value, and both conditions are two
+        // halfwords in one of the map's own records — a look at a variable with no command
+        // anywhere near it. Every sweep in this project walks a script stream, so none of them
+        // has ever counted one: 245 reported 0x407C as consulted nowhere in sixteen megabytes
+        // while nineteen maps were consulting it on arrival, and 247 found the second copy of the
+        // same reasoning by going looking for one.
+        var whoLooks = new Dictionary<string, Dictionary<int, List<string>>>
+        {
+            [ReadsThatAreNotCommands.OnArrival] = [],
+            [ReadsThatAreNotCommands.OnASquare] = [],
+        };
 
         foreach (LoadedMap map in library.All())
         {
-            foreach (MapEntryScript entry in map.OnEntry.Where(WhenAMapRunsSomething.IsARead))
-            {
-                if (!onArrival.TryGetValue(entry.Variable, out List<string>? maps))
-                    onArrival[entry.Variable] = maps = [];
+            string id = WorldExporter.MapId(map.Bank, map.Number);
 
-                maps.Add(WorldExporter.MapId(map.Bank, map.Number));
-            }
+            foreach (MapEntryScript entry in map.OnEntry.Where(ReadsThatAreNotCommands.IsARead))
+                Note(ReadsThatAreNotCommands.OnArrival, entry.Variable, id);
+
+            foreach (MapTrigger trigger in map.Triggers.Where(ReadsThatAreNotCommands.IsARead))
+                Note(ReadsThatAreNotCommands.OnASquare, trigger.Variable, id);
+        }
+
+        void Note(string who, int variable, string mapId)
+        {
+            Dictionary<int, List<string>> of = whoLooks[who];
+
+            if (!of.TryGetValue(variable, out List<string>? maps)) of[variable] = maps = [];
+
+            maps.Add(mapId);
         }
 
         BothNamespaces scan = TwoNamespacesOneNumber.Of(
             rom, library.All().SelectMany(EveryScriptOn).Select(s => s.Address)) with
         {
-            LookedAtBySomethingElse = new Dictionary<string, IReadOnlyCollection<int>>
-            {
-                ["a map header, on arrival"] =
-                    WhenAMapRunsSomething.LookedAt(library.All().SelectMany(m => m.OnEntry)),
-            },
+            LookedAtBySomethingElse = ReadsThatAreNotCommands.Of(
+                library.All().SelectMany(m => m.OnEntry),
+                library.All().SelectMany(m => m.Triggers)),
         };
 
         Console.WriteLine(
@@ -8964,8 +8977,35 @@ public static class Program
             + $" number(s) as a FLAG and {scan.Variables.Count} as a VARIABLE");
 
         Console.WriteLine(
-            $"  and {onArrival.Count} number(s) are looked at by a map header on arrival, which is"
-            + " a read and is not a command — no sweep in this project counted one before 246");
+            $"  and {scan.LookedAtOutsideTheCommands.Count} number(s) are looked at without a"
+            + " command being involved at all — a read no sweep in this project counted before 246:");
+
+        foreach ((string who, IReadOnlyCollection<int> looked) in scan.LookedAtBySomethingElse)
+        {
+            Console.WriteLine(
+                $"    {who}: {looked.Count} variable(s) at"
+                + $" {whoLooks[who].Sum(v => v.Value.Count)} place(s) on"
+                + $" {whoLooks[who].SelectMany(v => v.Value).Distinct().Count()} map(s)");
+        }
+
+        // AND WHAT A TRIGGER'S VARIABLE FIELD ACTUALLY HOLDS, because "nought names nothing" is
+        // a rule with a number in it and a rule nobody can check is a number nothing computes.
+        List<MapTrigger> everyTrigger = [.. library.All().SelectMany(m => m.Triggers)];
+
+        foreach ((string which, IEnumerable<MapTrigger> of) in new (string, IEnumerable<MapTrigger>)[]
+                 {
+                     ($"all {everyTrigger.Count}", everyTrigger),
+                     ($"the {everyTrigger.Count(t => t.ScriptAddress != 0)} with a script",
+                         everyTrigger.Where(t => t.ScriptAddress != 0)),
+                 })
+        {
+            Console.WriteLine(
+                $"    what a trigger's variable field holds, over {which}: "
+                + string.Join(
+                    ",  ",
+                    ReadsThatAreNotCommands.WhatTheFieldHolds(of)
+                        .Select(b => $"0x{b.From:X4}+ {b.Triggers}")));
+        }
 
         IReadOnlyList<SharedNumber> shared = scan.Shared;
 
@@ -9061,20 +9101,27 @@ public static class Program
 
         Console.WriteLine(
             byTheHeaderOnly.Count == 0
-                ? "    and NONE of them is read by a map header on arrival, so 245's"
+                ? "    and NONE of them is read by anything but a command, so 245's"
                   + " commands-only reading and this one agree"
                 : $"    {deafByCommand.Count} by the commands alone, which is what 245 printed —"
-                  + $" {byTheHeaderOnly.Count} of those are read by a map header on arrival and"
-                  + " by nothing else:");
+                  + $" {byTheHeaderOnly.Count} of those are read by something that is not a"
+                  + " command, and by nothing else:");
 
         foreach (int variable in byTheHeaderOnly)
         {
-            List<string> maps = onArrival[variable];
+            // WHICH KIND OF NON-COMMAND READER, named. A subtraction that cannot say what did
+            // the reading is a number the reader has to take on trust.
+            string by = string.Join(
+                " and ",
+                whoLooks.Where(w => w.Value.ContainsKey(variable))
+                    .Select(w =>
+                        $"{w.Value[variable].Count} x {w.Key}"
+                        + $" on {w.Value[variable].Distinct().Count()} map(s)"
+                        + $" ({string.Join(", ", w.Value[variable].Distinct().Take(5))}"
+                        + (w.Value[variable].Distinct().Count() > 5 ? ", ..." : "")
+                        + ")"));
 
-            Console.WriteLine(
-                $"      0x{variable:X4} — {maps.Count} arrival condition(s) on"
-                + $" {maps.Distinct().Count()} map(s): {string.Join(", ", maps.Distinct().Take(6))}"
-                + (maps.Distinct().Count() > 6 ? ", ..." : ""));
+            Console.WriteLine($"      0x{variable:X4} — {by}");
         }
 
         // AND WHICH KIND OF NEVER, which the count above cannot say. "No script the map scan
@@ -9104,7 +9151,7 @@ public static class Program
         // names a variable in an operand; compiled code cannot, because a sixteen-bit constant
         // does not fit in a THUMB instruction — it goes in an aligned literal pool. So an
         // aligned word equal to the id, at bytes no script occupies, is the code holding it.
-        if (nowhereAtAll.Count > 0)
+        if (deaf.Count > 0)
         {
             List<SetsAFlag> scripts = [.. library.All().SelectMany(EveryScriptOn)];
 
@@ -9112,9 +9159,11 @@ public static class Program
 
             Console.WriteLine();
             Console.WriteLine(
-                "    and of those, which the game's own CODE holds as a four-byte-aligned word an"
-                + " instruction LOADS — the only way a compiled routine can name a variable, and"
-                + " the difference between dead space and a variable read by address:");
+                $"    and for all {deaf.Count}, which the game's own CODE holds as a"
+                + " four-byte-aligned word an instruction LOADS — the only way a compiled routine"
+                + " can name a variable, and the difference between dead space and a variable read"
+                + " by address. Asked of the boundary ones too, because \"something in sixteen"
+                + " megabytes decodes as a compare\" is a weak filter and a load is not:");
 
             // EVERY variable the map scan writes, in one pass, so the answer for the few has a
             // denominator. "Two of nine are held by compiled code" means one thing if half the
@@ -9130,7 +9179,7 @@ public static class Program
 
             var held = 0;
 
-            foreach (int variable in nowhereAtAll)
+            foreach (int variable in deaf)
             {
                 int code = InCode(variable);
 
@@ -9140,6 +9189,7 @@ public static class Program
                     $"      0x{variable:X4} — {code} word(s) an instruction loads"
                     + $" ({words[variable].Count - code} that nothing loads or a script owns)"
                     + $"    REVERSED: {floors[variable]}"
+                    + (nowhereAtAll.Contains(variable) ? "" : "   [+ read as script past the boundary]")
                     + (code == 0
                         ? ""
                         : "  <- "
@@ -9150,13 +9200,24 @@ public static class Program
             }
 
             Console.WriteLine(
-                $"    so {held} of the {nowhereAtAll.Count} are held by compiled code and"
-                + $" {nowhereAtAll.Count - held} are held by nothing in the file at all");
+                $"    so {held} of the {deaf.Count} are held by compiled code and"
+                + $" {deaf.Count - held} are held by nothing in the file at all");
+
+            // AND THE ONE SENTENCE THE WHOLE CHAIN WAS FOR. 245 called twelve of these variables
+            // ones the cartridge never consults. Every reader found since is a KIND of reader
+            // nobody had enumerated, not a place nobody had looked.
+            List<int> nothingAtAll =
+                [.. nowhereAtAll.Where(v => InCode(v) == 0)];
 
             Console.WriteLine(
-                "    those last are as far as reading the cartridge takes this: a variable this"
-                + " game writes, no script looks at, no map header consults and no instruction"
-                + " loads");
+                nothingAtAll.Count == 0
+                    ? "    so NOTHING this cartridge writes goes unconsulted: every one of the"
+                      + $" {every.Count} is read by a command, a map header, a trigger, or an"
+                      + " instruction"
+                    : $"    {nothingAtAll.Count} are consulted by nothing this project can find: "
+                      + string.Join(", ", nothingAtAll.Select(v => $"0x{v:X4}"))
+                      + " — no script looks at them, no map header or trigger consults them and no"
+                      + " instruction loads them");
 
             // THE DENOMINATOR, and the reversal beside it — AT EVERY THRESHOLD, because one hit
             // and three hits are not the same claim and a single cut cannot say where the signal
@@ -9177,10 +9238,13 @@ public static class Program
 
             Console.WriteLine(
                 "    the limit of this reading: a routine that computes an id from a base would"
-                + " hold the BASE and not the id, and nothing here would see it. 0x4000 is loaded"
+                + " hold the BASE and not the id, and nothing here would see it. It is printed"
+                + " rather than argued about: 0x4000 is loaded"
                 + $" {EverywhereInTheImage.HeldAsAWord(rom, 0x4000, covered).Count(w => w.HeldByCode)}"
-                + $" time(s) against a reversed {EverywhereInTheImage.HeldAsAWordFloor(rom, 0x4000)},"
-                + " so that is not an empty worry — \"held by nothing\" is not \"read by nothing\"");
+                + $" time(s) against a reversed {EverywhereInTheImage.HeldAsAWordFloor(rom, 0x4000)}"
+                + " — thin, so a base-relative reader is possible and there is not much sign of"
+                + " one. 246 quoted 56 here and 56 is the count WITHOUT the load requirement,"
+                + " which is a number no instrument in this repository prints");
         }
 
         Console.WriteLine();
@@ -10239,6 +10303,32 @@ public static class Program
 
         int[] covered = EverywhereInTheImage.Opened(rom, scripts);
 
+        // WHO LOOKS WITHOUT A COMMAND. Counted per variable so the answer below can name maps
+        // rather than a total.
+        var onArrival = new Dictionary<int, List<string>>();
+        var onASquare = new Dictionary<int, List<string>>();
+
+        foreach (LoadedMap map in library.All())
+        {
+            string id = WorldExporter.MapId(map.Bank, map.Number);
+
+            foreach (MapEntryScript entry in map.OnEntry.Where(ReadsThatAreNotCommands.IsARead))
+            {
+                if (!onArrival.TryGetValue(entry.Variable, out List<string>? of))
+                    onArrival[entry.Variable] = of = [];
+
+                of.Add(id);
+            }
+
+            foreach (MapTrigger trigger in map.Triggers.Where(ReadsThatAreNotCommands.IsARead))
+            {
+                if (!onASquare.TryGetValue(trigger.Variable, out List<string>? of))
+                    onASquare[trigger.Variable] = of = [];
+
+                of.Add(id);
+            }
+        }
+
         Console.WriteLine(
             $"  a three-byte pattern turns up by accident about {EverywhereInTheImage.ByChance(rom, 3):0.0}"
             + " time(s) in an image this size, per command — which is the error bar below");
@@ -10284,6 +10374,16 @@ public static class Program
                 "    written and never read: "
                 + string.Join(", ", deaf.Take(16).Select(v => $"0x{v:X4} x{written[v]}"))
                 + (deaf.Count > 16 ? $", +{deaf.Count - 16} more" : ""));
+
+            // AND WHAT THIS POPULATION CANNOT SEE. It is a sweep for compare commands, so a map
+            // header and a trigger are invisible to it (247). The aggregate is already below its
+            // own floor; this says which KIND of thing it is blind to as well as how noisy it is.
+            // The number is smaller than --namespaces' because the population is: this list is
+            // every variable the whole image writes, not the ninety the map scan writes.
+            Console.WriteLine(
+                $"    and this list is SCRIPT COMMANDS ONLY: {deaf.Count(v => onArrival.ContainsKey(v) || onASquare.ContainsKey(v))}"
+                + " of them are read by a map header or a trigger, which no command sweep can"
+                + " see — 247");
         }
 
         foreach (int which in variables)
@@ -10323,11 +10423,38 @@ public static class Program
                     + " --namespaces (244)");
             }
 
-            if (real.Count == 0)
+            // AND THE READERS THAT ARE NOT COMMANDS, because this command printed "NOTHING IN
+            // THE FILE LOOKS AT IT" about a variable nineteen maps consult, and went on printing
+            // it after 246 fixed --namespaces. A sweep for compare commands cannot see a map
+            // header or a trigger, and the sentence below was about the sweep.
+            int arrivals = onArrival.GetValueOrDefault(which)?.Count ?? 0;
+            int squares = onASquare.GetValueOrDefault(which)?.Count ?? 0;
+
+            Console.WriteLine(
+                $"    and WITHOUT A COMMAND: {arrivals} map header(s) run something on arrival"
+                + $" when it holds a value, and {squares} square(s) fire on one — 247");
+
+            // AND WHETHER COMPILED CODE HOLDS THE NUMBER, which is the third kind of reader and
+            // the only one available to a routine (246).
+            int loads = EverywhereInTheImage.HeldAsAWord(rom, which, covered).Count(w => w.HeldByCode);
+
+            Console.WriteLine(
+                $"    and the game's own CODE loads it as an aligned literal {loads} time(s),"
+                + $" against {EverywhereInTheImage.HeldAsAWordFloor(rom, which)} in the REVERSED"
+                + " image — 246");
+
+            if (real.Count == 0 && arrivals == 0 && squares == 0 && loads == 0)
             {
                 Console.WriteLine(
-                    "    NOTHING IN THE FILE LOOKS AT IT. Whatever is put in it is put there and"
-                    + " never asked about — by any script, anywhere in sixteen megabytes.");
+                    "    NOTHING THIS PROJECT CAN ENUMERATE LOOKS AT IT: no script command, no"
+                    + " map header, no trigger and no instruction. A routine computing the id"
+                    + " from a base would still not be seen.");
+            }
+            else if (real.Count == 0)
+            {
+                Console.WriteLine(
+                    "    no script command anywhere in sixteen megabytes looks at it — and"
+                    + " something above does, which is the whole reason that is now two lines");
             }
 
             foreach (VariableSite site in real.Take(16))
