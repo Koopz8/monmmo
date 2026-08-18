@@ -6,12 +6,12 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **The headline number for "how much of this game the robot's silence decides" was counting the
-  same address over and over.** One script can hang off nineteen maps; it was being counted
-  nineteen times. Corrected: **25 places, not 212**.
-- **There is no factor to divide by.** In the same table, one routine is 747 reads of 26
-  addresses and the next is 234 of 234. So both numbers are printed now, never one.
-- Three separate readings of the cartridge now agree about the same single address — one of them
-  a hand-grep from five milestones ago.
-- **Four milestones running, a passing sabotage test meant the rule sat inside a sweep no test
-  can reach.** That has a cause now, and the guidance says to split the rule out first.
+- **The shared list of "every script in the game" was missing two of its five kinds** — and it
+  was built three milestones ago specifically to stop that class of mistake. Everything moved
+  onto it was reading four fifths of the game.
+- **Twenty routines nobody had ever seen**, once the two kinds were put back. One of them decides
+  eight places on its own — more than everything previously known put together.
+- Last milestone's headline correction was right about the correction and wrong about the number.
+  Both are restated.
+- **New instrument: how many times each command is read versus how many places it is.** Only 11
+  of 108 commands come out the same. One is read 66 times per address.
