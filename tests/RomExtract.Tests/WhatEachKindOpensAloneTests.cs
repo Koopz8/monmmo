@@ -133,16 +133,23 @@ public sealed class WhatEachKindOpensAloneTests
         List<WhatTheScanOpens.AKind> rows = WhatTheScanOpens.Assemble(
             new Dictionary<string, WhatTheScanOpens.Gathered>
             {
+                // The two sets are DIFFERENT SHAPES on purpose: two places alone against one
+                // routine alone. A fixture where both columns come out the same number cannot
+                // tell them apart, and a break that computed one from the other passed against
+                // exactly that.
                 ["person"] = new(1584, 1250, 39446, [0x1000, 0x2000], [0x188, 0x194]),
-                ["on load"] = new(234, 163, 2770, [0x2000, 0x3000], [0x0A7, 0x194]),
+                ["on load"] = new(234, 163, 2770, [0x2000, 0x3000, 0x4000], [0x0A7, 0x194]),
             });
 
         WhatTheScanOpens.AKind onLoad = Assert.Single(rows.Where(r => r.Kind == "on load"));
 
-        Assert.Equal(2, onLoad.Places);
-        Assert.Equal(1, onLoad.Only);
+        Assert.Equal(3, onLoad.Places);
+        Assert.Equal(2, onLoad.Only);
         Assert.Equal(2, onLoad.Routines);
         Assert.Equal([0x0A7], onLoad.RoutinesOnly);
+
+        // Two places alone and one routine alone — the columns are two questions, not one.
+        Assert.NotEqual(onLoad.Only, onLoad.RoutinesOnly.Count);
 
         // And the row carries what was gathered rather than recomputing it.
         Assert.Equal(234, onLoad.Entries);
