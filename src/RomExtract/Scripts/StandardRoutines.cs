@@ -127,16 +127,9 @@ public static class StandardRoutines
         {
             List<ScriptCommand> commands = ScriptReader.ReadAll(rom, address);
 
-            for (int i = 0; i + 2 < commands.Count; i++)
+            for (int i = 0; i < commands.Count; i++)
             {
-                if (commands[i].Code != ScriptCommands.CallStandard) continue;
-                if (commands[i].Arguments.Length < 1) continue;
-
-                // Immediately after, and branched on. A compare with nothing after it changes no
-                // path and says nothing about what anybody answered.
-                if (commands[i + 1].Code != Compare) continue;
-                if (commands[i + 1].Word() != answer) continue;
-                if (commands[i + 2].Code is not (ScriptCommands.GotoIf or ScriptCommands.CallIf)) continue;
+                if (!AsksTheQuestionHere(commands, i, answer)) continue;
 
                 int index = commands[i].Arguments[0];
 
@@ -144,19 +137,18 @@ public static class StandardRoutines
 
                 at.Add(commands[i].Offset);
 
-                switch (SpecialCalls.WhatAnsweredBefore(commands, i, answer).Left)
+                if (ProvesItAnswers(commands, i, answer))
                 {
-                    case SpecialCalls.LeftBehind.Nothing:
-                        nothing[index] = nothing.GetValueOrDefault(index) + 1;
-                        break;
-
-                    case SpecialCalls.LeftBehind.WentSomewhereElse:
-                        unsaid[index] = unsaid.GetValueOrDefault(index) + 1;
-                        break;
-
-                    default:
-                        somebody[index] = somebody.GetValueOrDefault(index) + 1;
-                        break;
+                    nothing[index] = nothing.GetValueOrDefault(index) + 1;
+                }
+                else if (SpecialCalls.WhatAnsweredBefore(commands, i, answer).Left
+                         == SpecialCalls.LeftBehind.WentSomewhereElse)
+                {
+                    unsaid[index] = unsaid.GetValueOrDefault(index) + 1;
+                }
+                else
+                {
+                    somebody[index] = somebody.GetValueOrDefault(index) + 1;
                 }
             }
         }
@@ -174,6 +166,38 @@ public static class StandardRoutines
                 .ThenByDescending(a => a.Places),
         ];
     }
+
+    /// <summary>
+    /// Whether this site is one that can say anything at all: a <c>callstd</c> with a compare on
+    /// the answer variable immediately after it, <b>branched on</b>.
+    /// <para>
+    /// A compare with nothing after it changes no path and says nothing about what anybody
+    /// answered — the same rule the routine table has used since it was written, here because a
+    /// site that cannot say anything must not be counted as saying nothing.
+    /// </para>
+    /// </summary>
+    public static bool AsksTheQuestionHere(List<ScriptCommand> commands, int at, int answer = 0x800D) =>
+        at >= 0
+        && at + 2 < commands.Count
+        && commands[at].Code == ScriptCommands.CallStandard
+        && commands[at].Arguments.Length >= 1
+        && commands[at + 1].Code == Compare
+        && commands[at + 1].Word() == answer
+        && commands[at + 2].Code is ScriptCommands.GotoIf or ScriptCommands.CallIf;
+
+    /// <summary>
+    /// Whether this site <b>proves</b> the standard routine answers: it asks the question, and
+    /// the walk back finds nothing in front of it that could have answered instead.
+    /// <para>
+    /// <b>Both halves, and the second is the whole argument.</b> A compare has to be reading
+    /// something; where nothing else wrote the variable, the <c>callstd</c> is the only candidate
+    /// left. A site with a <c>special</c> in front of it proves nothing either way and must not
+    /// be counted — those are precisely the sites this verdict is then applied to.
+    /// </para>
+    /// </summary>
+    public static bool ProvesItAnswers(List<ScriptCommand> commands, int at, int answer = 0x800D) =>
+        AsksTheQuestionHere(commands, at, answer)
+        && SpecialCalls.WhatAnsweredBefore(commands, at, answer).Left == SpecialCalls.LeftBehind.Nothing;
 
     /// <summary>
     /// Every run of at least <paramref name="atLeast"/> consecutive word-aligned pointers into

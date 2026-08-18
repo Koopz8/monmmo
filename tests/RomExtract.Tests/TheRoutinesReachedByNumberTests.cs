@@ -99,10 +99,43 @@ public sealed class TheRoutinesReachedByNumberTests
         Assert.Equal(
             SpecialCalls.LeftBehind.Nothing,
             SpecialCalls.WhatAnsweredBefore(commands, 2).Left);
+
+        Assert.True(StandardRoutines.ProvesItAnswers(commands, 2));
     }
 
     /// <summary>
-    /// AND A ROUTINE IN FRONT OF IT IS an answer, so that site says nothing about the standard
+    /// WHICH SITES CAN SAY ANYTHING AT ALL: a compare straight after, and something branching on
+    /// it. A compare nothing branches on changes no path, and counting it would be counting a
+    /// site that cannot speak as a site that said nothing.
+    /// </summary>
+    [Fact]
+    public void ACompareNothingBranchesOnIsNotASiteThatSaysAnything()
+    {
+        byte[] image = Blank();
+
+        Put(image, 0x1000, Lock);
+        Put(image, 0x1001, CallStandard, 0x05);
+        Put(image, 0x1003, Compare, 0x0D, 0x80, 0x01, 0x00);
+        Put(image, 0x1008, End);
+
+        List<ScriptCommand> commands = ScriptReader.Read(new Rom(image), Rom.BaseAddress + 0x1000);
+
+        Assert.False(StandardRoutines.AsksTheQuestionHere(commands, 1));
+        Assert.False(StandardRoutines.ProvesItAnswers(commands, 1));
+
+        // And with a branch after it, the same bytes do say something.
+        Put(image, 0x1008, GotoIf, 0x01);
+        Address(image, 0x100A, 0x1000);
+        Put(image, 0x100E, End);
+
+        List<ScriptCommand> branching = ScriptReader.Read(new Rom(image), Rom.BaseAddress + 0x1000);
+
+        Assert.True(StandardRoutines.AsksTheQuestionHere(branching, 1));
+        Assert.True(StandardRoutines.ProvesItAnswers(branching, 1));
+    }
+
+    /// <summary>
+    /// AND A ROUTINE IN FRONT OF IT is an answer, so that site says nothing about the standard
     /// routine — which is the case the cartridge's twelve unresolved sites are, and exactly the
     /// case the verdict must not be derived from.
     /// </summary>
@@ -125,6 +158,10 @@ public sealed class TheRoutinesReachedByNumberTests
         Assert.Equal(
             SpecialCalls.LeftBehind.ARoutine,
             SpecialCalls.WhatAnsweredBefore(commands, 2).Left);
+
+        // It asks the question and answers it the other way: this site proves nothing.
+        Assert.True(StandardRoutines.AsksTheQuestionHere(commands, 2));
+        Assert.False(StandardRoutines.ProvesItAnswers(commands, 2));
     }
 
     /// <summary>
