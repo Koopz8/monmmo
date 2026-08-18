@@ -123,6 +123,28 @@ public static class WhatTheScanOpens
 
     private const byte ClearFlag = 0x2A;
 
+    /// <summary>
+    /// The routine a command asks, or null — the two opcodes name it in different places.
+    /// </summary>
+    public static int? RoutineAsked(ScriptCommand command) => command.Code switch
+    {
+        SpecialCalls.Special when command.Arguments.Length >= 2 => command.Word(),
+        SpecialCalls.SpecialVar when command.Arguments.Length >= 4 => command.Word(2),
+        _ => null,
+    };
+
+    /// <summary>
+    /// The flag a command moves, or null.
+    /// <para>
+    /// <b>Both halves.</b> A flag this game turns off is as much a story step as one it turns on
+    /// — three flags in the middle of it are only ever cleared, which milestone 73 was about —
+    /// and <c>0x0070</c>, whose only two movers in sixteen megabytes are the two arms of one
+    /// branch, would read as having one mover if the clear were not counted.
+    /// </para>
+    /// </summary>
+    public static int? FlagMoved(ScriptCommand command) =>
+        command.Code is SetFlag or ClearFlag && command.Arguments.Length >= 2 ? command.Word() : null;
+
     /// <summary>Which of the five kinds a script's name says it is.</summary>
     public static string KindOf(string what) =>
         what.StartsWith("on ", StringComparison.Ordinal)
@@ -163,16 +185,9 @@ public static class WhatTheScanOpens
                 reads[kind] = reads.GetValueOrDefault(kind) + 1;
                 opened.Add(command.Offset);
 
-                if (command.Code == SpecialCalls.Special && command.Arguments.Length >= 2)
-                    asked.Add(command.Word());
+                if (RoutineAsked(command) is { } routine) asked.Add(routine);
 
-                if (command.Code == SpecialCalls.SpecialVar && command.Arguments.Length >= 4)
-                    asked.Add(command.Word(2));
-
-                // Both halves: a flag this game turns off is as much a story step as one it
-                // turns on, and three flags in the middle of it are only ever cleared.
-                if (command.Code is SetFlag or ClearFlag && command.Arguments.Length >= 2)
-                    moved.Add(command.Word());
+                if (FlagMoved(command) is { } flag) moved.Add(flag);
             }
         }
 

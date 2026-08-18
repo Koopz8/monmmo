@@ -164,6 +164,39 @@ public sealed class WhatEachKindOpensAloneTests
     }
 
     /// <summary>
+    /// BOTH HALVES OF A FLAG. A flag this game turns off is as much a story step as one it turns
+    /// on, and <c>0x0070</c> — whose only two movers in sixteen megabytes are the two arms of one
+    /// branch on a routine no run can answer — would read as having one mover if the clear were
+    /// not counted.
+    /// </summary>
+    [Fact]
+    public void AFlagTurnedOffCountsAsMuchAsOneTurnedOn()
+    {
+        Assert.Equal(0x0070, WhatTheScanOpens.FlagMoved(new ScriptCommand(0, 0x29, [0x70, 0x00])));
+        Assert.Equal(0x0070, WhatTheScanOpens.FlagMoved(new ScriptCommand(0, 0x2A, [0x70, 0x00])));
+
+        // And a command that moves no flag says so.
+        Assert.Null(WhatTheScanOpens.FlagMoved(new ScriptCommand(0, 0x25, [0xA7, 0x00])));
+        Assert.Null(WhatTheScanOpens.FlagMoved(new ScriptCommand(0, 0x29, [0x70])));
+    }
+
+    /// <summary>
+    /// The two opcodes that ask a routine name it in DIFFERENT PLACES — the second word for the
+    /// one that is told where to put the answer.
+    /// </summary>
+    [Fact]
+    public void TheTwoWaysOfAskingARoutineNameItInDifferentPlaces()
+    {
+        Assert.Equal(0x0A7, WhatTheScanOpens.RoutineAsked(new ScriptCommand(0, 0x25, [0xA7, 0x00])));
+
+        Assert.Equal(
+            0x180,
+            WhatTheScanOpens.RoutineAsked(new ScriptCommand(0, 0x26, [0x0D, 0x80, 0x80, 0x01])));
+
+        Assert.Null(WhatTheScanOpens.RoutineAsked(new ScriptCommand(0, 0x29, [0x70, 0x00])));
+    }
+
+    /// <summary>
     /// And the kinds are told apart by name, including the two whose names are two words.
     /// </summary>
     [Theory]
