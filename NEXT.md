@@ -6,16 +6,14 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **The last branch the robot's silence still decided turned out to decide nothing.** One
-  place in the whole cartridge, after a fight on SECTION 52 — and the arm it takes writes
-  `0x4059`. Of fifty-nine matching byte pairs in sixteen megabytes, exactly one is in a
-  command position, and it is that write. **One writer, no readers.**
-- Saying so needed an instrument that should have existed eleven milestones ago:
-  `--who-writes` has been here since 184 and there has never been a `--who-reads`. A variable
-  written once and never looked at has read exactly like one that gates something.
-- The rule that makes it a real question rather than the same one twice: **the source of a
-  copy is a read and the destination is a write.** Count both and "nothing reads this" can
-  never be true of anything.
-- The tempting aggregate — "650 variables are written and never read" — is **below its own
-  floor**: the same count on the reversed image is 1070. The instrument prints that and
-  refuses to quote the 650.
+- **The list was sorted by the wrong number.** The routines the robot cannot answer were
+  ranked by how often it bumped into them. Ranked instead by how much its silence actually
+  decides, the order is nearly backwards: two routines asked **once and twice** carry
+  **39 of the 44** branches at stake, and the one asked fifty-four times carries **one**.
+- The truncation to eight was hiding both of them.
+- Read, they are the same seven commands: *ask, compare against two, take the LESS arm, say
+  something, return nought.* That is why the silence takes their branches without nought
+  being a value either is tested against.
+- And they are **subroutines** — so the silence does not stop at the branch, it becomes their
+  return value and goes to whoever called them. Following a call to attribute an answer is
+  the one thing this project has never built, and it is now the next thing.

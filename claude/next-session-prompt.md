@@ -1,7 +1,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-254`, 2867 tests green.
+`claude-255`, 2867 tests green.
 
 Standing rules — do not break these:
 
@@ -101,8 +101,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-215-one-writer-and-nobody-listening.md` first, then
-`214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
+Read `claude/milestone-216-ranked-by-the-wrong-number.md` first, then
+`215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
 **Twenty faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
@@ -235,6 +235,7 @@ the 12 STRENGTH boulders are SEAFOAM and VICTORY ROAD, and their flags split THR
 766 places call 63 routines the widest run cannot answer; 187 have an answer nothing branches on
 of 1055 branching sites in the file, nought takes 212 — and 0x188's one place comes to nothing
 0x4059 has one writer and NO readers anywhere; 0x4055 has 21 readers against a floor of 0
+0x083 and 0x084 are asked twice between them and carry 39 of the ceiling's 44 branches
 2 of those gates hold NOBODY — 0x084A and 0x084B, the ferry, with no setter anywhere
 ```
 
@@ -252,14 +253,18 @@ of 1055 branching sites in the file, nought takes 212 — and 0x188's one place 
    anyway, which is the `#130` at 71 the party ends with. **The floor is clean**: 1 place asks,
    nothing comes of it, so the floor's party of six is entirely earned. Whether that deserves a
    `--pay` lever or a located payout table is a DECISION and it is deliberately not made.
-3. **The six mixed routines, which are what is left of the routine ceiling.** 215 read
-   `0x188`'s one place — `1.93` SECTION 52, after a trainerbattle — and the arm nought takes
-   writes `0x4059`, which **nothing anywhere in the file reads**. So that half comes to nothing.
-   What remains is the mixed bucket: 61 places at the widest setting, **44 of their 68 branches
-   taken by nought**, across six routines. **`0x194`** is the big one — 747 sites, the most of
-   anything, and nought takes 1 of its 18 branches. None has been read.
-   `--who-reads` is new and is the cheapest way to finish any of them: it says whether whatever
-   an arm writes is ever looked at.
+3. **Who calls `0x081BB79C` and `0x081BBB1E`, and what they do with the nought.** 216 read the
+   two routines that carry 39 of the ceiling's 44 branches — `0x083` and `0x084`, asked once and
+   twice by the run and ranked last by the old ordering. Both are the same seven commands:
+   *ask, compare against 2, take the LESS arm, say something, return nought.* **They are
+   subroutines and the silence becomes their return value**, so the run's nought does not stop
+   at the branch — it propagates to whoever called them, and both are shared across many maps
+   (`5.5`, `6.6`, `7.4`, …).
+   **Nothing in this project follows a call to attribute an answer.** 214 added the barrier that
+   stops the scan doing it wrongly; following one properly is the instrument this needs and it
+   does not exist. That is the job.
+   Also unread: **`0x0153`**, asked inside both of them, a second unanswerable routine within the
+   first and counted nowhere.
    Also owed and cheap: **seven boulder flags with no setter anywhere** (whatever drops a
    boulder into a hole is not script), **`0x0805`** which the STRENGTH script sets and shares
    across all twelve boulders, and **`0x0053`** holding 31 people across the SILPH CO. floors
