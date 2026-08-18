@@ -192,12 +192,19 @@ public enum WhatRanIt
 }
 
 /// <summary>One sign the walk stood in front of, and how many times it read it.</summary>
+/// <remarks>
+/// Identified by its SQUARE. Two signs on one map can be written on the same block and two maps
+/// can share one — 519 sign scripts sit at 360 addresses — so the address names a script and the
+/// square names a sign. 224 is the milestone about counting one when you meant the other.
+/// </remarks>
 /// <param name="MapId">The map it is on.</param>
+/// <param name="Square">Which wall.</param>
 /// <param name="Address">The block behind it.</param>
 /// <param name="Times">How many times over the whole run, across every pass.</param>
-public sealed record RanASign(string MapId, uint Address, int Times)
+public sealed record RanASign(string MapId, GridPosition Square, uint Address, int Times)
 {
-    public override string ToString() => $"{MapId}  0x{Address:X8}  x{Times}";
+    public override string ToString() =>
+        $"{MapId} ({Square.X},{Square.Y})  0x{Address:X8}  x{Times}";
 }
 
 /// <summary>
@@ -1229,10 +1236,10 @@ public static class Autoplayer
         var flagMoves = new List<MovedAFlag>();
 
         // Every sign the walk stood in front of, and how many times over the whole run. By
-        // (map, address) and not by address: 519 sign scripts sit at 360 addresses, so a
-        // shared block read on two maps is two signs read and one address, and 224's whole
-        // lesson was that those are different numbers.
-        var signsRead = new Dictionary<(string MapId, uint Address), int>();
+        // (map, SQUARE), which is the only key with one entry per sign: 519 sign scripts sit at
+        // 360 addresses, so keying on the address makes a shared block one sign however many
+        // walls it is written on — and 224's whole lesson was that those are different numbers.
+        var signsRead = new Dictionary<(string MapId, GridPosition Square), (uint At, int Times)>();
 
         var won = 0;
         var lost = 0;
@@ -1323,11 +1330,11 @@ public static class Autoplayer
                     // measured what they cost in flags; which of them the walk ever stood in
                     // front of was owed from that milestone and could not be asked, because
                     // nothing the run executed remembered which list it came off.
-                    if (what.From == WhatRanIt.ASign)
+                    if (what.From == WhatRanIt.ASign && what.At is { } onTheWall)
                     {
-                        if (!signsRead.TryGetValue((map.Id, what.Address), out int already))
-                            signsRead[(map.Id, what.Address)] = 1;
-                        else signsRead[(map.Id, what.Address)] = already + 1;
+                        if (!signsRead.TryGetValue((map.Id, onTheWall), out (uint At, int Times) already))
+                            signsRead[(map.Id, onTheWall)] = (what.Address, 1);
+                        else signsRead[(map.Id, onTheWall)] = (already.At, already.Times + 1);
                     }
 
                     // In the order it happened, which is the entire point of the thing.
@@ -1935,7 +1942,7 @@ public static class Autoplayer
             SignsRead =
             [
                 .. signsRead
-                    .Select(s => new RanASign(s.Key.MapId, s.Key.Address, s.Value))
+                    .Select(s => new RanASign(s.Key.MapId, s.Key.Square, s.Value.At, s.Value.Times))
                     .OrderBy(s => s.MapId, StringComparer.Ordinal)
                     .ThenBy(s => s.Address),
             ],
@@ -2533,7 +2540,7 @@ public static class Autoplayer
             if (!sign.HasScript) continue;
 
             if (Beside(map.Id, sign.Square).Any(stood.Contains))
-                yield return new Runnable(sign.ScriptAddress, 0, WhatRanIt.ASign);
+                yield return new Runnable(sign.ScriptAddress, 0, WhatRanIt.ASign, At: sign.Square);
         }
     }
 
@@ -2547,7 +2554,8 @@ public static class Autoplayer
     /// would delete them from the world for the rest of the run.
     /// </para>
     /// </summary>
-    private sealed record Runnable(uint Address, int TakenAway, WhatRanIt From, int LocalId = 0);
+    private sealed record Runnable(
+        uint Address, int TakenAway, WhatRanIt From, int LocalId = 0, GridPosition? At = null);
 
     /// <summary>One square that way.</summary>
     private static GridPosition Step(GridPosition from, Direction way) => way switch

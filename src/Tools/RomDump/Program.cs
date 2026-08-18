@@ -8845,6 +8845,15 @@ public static class Program
     /// exactly that confusion.
     /// </para>
     /// </remarks>
+    /// <summary>Why a sign went unread, in words.</summary>
+    private static string Unread(UnreadBecause why) => why switch
+    {
+        UnreadBecause.NothingCouldStandBesideIt =>
+            "NOTHING COULD EVER STAND BESIDE IT — not a reach problem, a fact about the file",
+        UnreadBecause.OnAMapItNeverReached => "on a map the run never reached",
+        _ => "it reached the map and never got to that wall",
+    };
+
     /// <summary>Why a run stopped, in the words the playthrough itself uses.</summary>
     private static string WhyItStopped(StoppedBecause stopped) => stopped switch
     {
@@ -8914,6 +8923,33 @@ public static class Program
                     .GroupBy(m => m.From)
                     .OrderByDescending(g => g.Count())
                     .Select(g => $"{g.Key} {g.Count()}")));
+
+        // AND WHY THE REST DID NOT RUN, which the line at the top cannot say. "215 of 519"
+        // reads the same whether the run is a few rooms short or three hundred signs are on
+        // walls nothing can walk up to, and those are opposite findings.
+        IReadOnlyList<UnreadSign> unread =
+            WhySignsWentUnread.Of(world, played.SignsRead, [.. played.Reached]);
+
+        Console.WriteLine($"      and the {unread.Count} it did not read:");
+
+        foreach ((UnreadBecause why, int signs) in WhySignsWentUnread.Counted(unread))
+            Console.WriteLine($"        {signs,4}  {Unread(why)}");
+
+        foreach (UnreadBecause why in new[]
+                 {
+                     UnreadBecause.NothingCouldStandBesideIt,
+                     UnreadBecause.ItNeverGotToThatWall,
+                 })
+        {
+            List<UnreadSign> these = [.. unread.Where(u => u.Why == why)];
+
+            if (these.Count == 0) continue;
+
+            Console.WriteLine(
+                $"          {Unread(why)}: "
+                + string.Join(", ", these.Take(8))
+                + (these.Count > 8 ? $", +{these.Count - 8} more" : ""));
+        }
 
         // AND THE CONTROL: the same run with the fourth list switched off, subtracted here
         // rather than remembered from a milestone document.
