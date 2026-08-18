@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-280`, 3031 tests green.
+`claude-281`, 3038 tests green.
 
 Standing rules — do not break these:
 
@@ -186,9 +186,18 @@ Traps worth carrying:
     comparison has to be made a particular way, grep for the other comparisons of the same thing
     in that file before you commit.** There were two, and they now share one definition.
 
+19. **A control the reader cannot re-run is not a control** (241). 239 measured what putting
+    signs into the walk was worth by running the playthrough twice, one commit apart, and
+    writing the two tables side by side. Every number in it was right — 241's control
+    reproduces 183/153, 243/231 and 381/294 exactly — and nobody without that commit built
+    could have found out. **A before-and-after across two builds is a measurement with no
+    instrument.** The fix was a parameter and one extra run inside the same command, which is
+    the same shape as the reversed-image floor this project measures every reading against.
+
 ## Where things are
 
-Read `claude/milestone-240-a-gate-the-run-shut-itself.md` first, then `239`, `238`, `237`,
+Read `claude/milestone-241-a-control-that-fits-in-one-process.md` first, then `240`, `239`,
+`238`, `237`,
 `236`, `235`, `234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
 **Twenty-three faults closed and every one was in this project, not on the cartridge.** A walk that
@@ -249,7 +258,15 @@ dotnet run -c Release --project src/Tools/RomDump -- firered.gba --the-floor
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --read-from 0x081BE06F
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --field-effects
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --slots 0x9D,0x7F,0x82
+dotnet run -c Release --project src/Tools/RomDump -- firered.gba --play --signs
 ```
+
+`--play --signs` is the fourth list with **its own control in the same process**: which sign
+scripts ran, at how many addresses, on how many maps, then THE SAME RUN WITH SIGNS SWITCHED OFF
+and the two subtracted. It reproduces 239's before-numbers off one build — 183/153, 243/231,
+381/294 — which is what a control is for. Signs are worth **0 maps at every lever setting** and
+7 / 3 / 2 flags. Keyed by (map, address): one block read in two towns is two signs and one
+address, which is 224 in the run rather than in the scan.
 
 **`--trace N` watches a VARIABLE, not a flag.** They share the number space, so `--trace 0x003F`
 answers — "nothing the run executed touched it" — about something else entirely. What moved a
@@ -441,6 +458,10 @@ BUT THE RUN ALSO TAKES FLAGS BACK: 164 ever on at the floor against the 160 it s
   costs 0 maps at all six settings, and only that direction can be non-empty — the walk is
   monotone in flags, asserted in TheFlagsItTookBackTests rather than believed
 702 signs: 519 a script at 360 addresses on 143 maps, 183 a hidden item — `--export-world` (239)
+  215 of the 519 RUN at the floor (214 addresses, 79 maps); 328 at the widest (327, 134) — 241
+  the floor's seven: 0x0031, 0x0032, 0x0233, 0x0234, 0x0235, 0x026D, 0x0834; TWO gate and each
+    holds one person — 3.43 p1 and 30.0 p2. Only 2 of the 7 were moved by a sign ITSELF
+  every control stops with "nothing more opened", so signs ARE what makes the run cycle (241)
   the RUN could not see ONE of them until 239, because MapData carried no sign list at all
   they move NO map count at any lever setting — not one square of this game is behind a sign
 those 110 are 35 no opener, 30 never run, 16 never picked up, 15 obstacles, 7 boundary, 7 TAKEN
@@ -528,10 +549,11 @@ the raw 0x9C sweep is 11446 sites in BOTH images and the REVERSAL READS ON MORE 
 **START HERE — what 239 and 240 opened, and the numbering below is unchanged so item references
 still work.**
 
-* **Which signs actually ran, and what the seven flags at the floor are.** The floor went 153 to
-  160 at 239 and its gating count 121 to 123, so two of the seven gate something and nothing has
-  said which. `--play` prints every flag move with its script since 240, so this is now a read
-  rather than a build. **Still the cheapest thing on this list.**
+* ~~Which signs actually ran, and what the seven flags at the floor are.~~ **CLOSED AT 241** —
+  `--play --signs`. What is left of it: **why** the seven are what they are (which sign opens
+  which of the two people), and the **191 sign scripts that run at no setting** — reach, or a
+  square nothing can stand beside, not separated. And `1.114 0x08163F5A`, read 154 times in one
+  run, which nobody has asked is a wide sign or a wide walk.
 * **`0x026C` and `0x0807`** — the two that actually make the run go round (240). Set on one map,
   cleared on another, holding nothing. `--read-from` on the four addresses is one command.
 * **`0x4001` is a flag in the run and a variable in the doors reading**, 63 of those. The same
