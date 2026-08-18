@@ -54,6 +54,34 @@ public sealed class MapLibrary
     /// <summary>Every map, loaded. Only for reports — this decompresses the lot.</summary>
     public IEnumerable<LoadedMap> All() => _byId.Values.Select(Load);
 
+    /// <summary>
+    /// Every script the maps hang off anything: people, triggers and signs, with the map and a
+    /// name for where it hangs.
+    /// <para>
+    /// <b>One list.</b> Scans in this repository have rolled their own version of this before
+    /// and disagreed about what belongs in it, which is a fault the project has closed once
+    /// already. A fourth copy was about to be written for 221; this is it instead. A scan that
+    /// reads fewer scripts than another scan comes back with a smaller number and nothing says
+    /// why.
+    /// </para>
+    /// </summary>
+    public IEnumerable<(string MapId, string What, uint Address)> EveryScript()
+    {
+        foreach (LoadedMap map in All())
+        {
+            string mapId = WorldExporter.MapId(map.Bank, map.Number);
+
+            foreach (MapObject person in map.Objects.Where(o => o.HasScript))
+                yield return (mapId, $"person {person.LocalId}", person.ScriptAddress);
+
+            foreach (MapTrigger trigger in map.Triggers.Where(t => t.HasScript))
+                yield return (mapId, $"trigger ({trigger.X},{trigger.Y})", trigger.ScriptAddress);
+
+            foreach (MapSign sign in map.Signs.Where(s => s.HasScript))
+                yield return (mapId, $"sign ({sign.X},{sign.Y})", sign.ScriptAddress);
+        }
+    }
+
     /// <summary>Loads a map by its <c>bank.map</c> address, or null when there is none.</summary>
     public LoadedMap? TryLoad(string mapId) =>
         _byId.TryGetValue(mapId, out (int Bank, int Map, MapHeaderRecord Header) found) ? Load(found) : null;

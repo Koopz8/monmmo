@@ -139,7 +139,7 @@ public static class SpecialCalls
     {
         var found = new List<SpecialCall>();
 
-        foreach ((string mapId, string what, uint address) in Scripts(library))
+        foreach ((string mapId, string what, uint address) in library.EveryScript())
         {
             List<ScriptCommand> commands = ScriptReader.ReadAll(rom, address);
 
@@ -176,7 +176,7 @@ public static class SpecialCalls
     {
         var found = new Dictionary<byte, List<SpecialCall>>();
 
-        foreach ((string mapId, string what, uint address) in Scripts(library))
+        foreach ((string mapId, string what, uint address) in library.EveryScript())
         {
             List<ScriptCommand> commands = ScriptReader.ReadAll(rom, address);
 
@@ -302,7 +302,7 @@ public static class SpecialCalls
     {
         var found = new List<AnsweredThroughACall>();
 
-        foreach ((string mapId, string what, uint address) in Scripts(library))
+        foreach ((string mapId, string what, uint address) in library.EveryScript())
         {
             List<ScriptCommand> commands = ScriptReader.ReadAll(rom, address);
 
@@ -543,39 +543,13 @@ public static class SpecialCalls
         return (left, who);
     }
 
-    private static IEnumerable<(string MapId, string What, uint Address)> Scripts(MapLibrary library)
-    {
-        foreach (LoadedMap map in library.All())
-        {
-            string mapId = WorldExporter.MapId(map.Bank, map.Number);
-
-            foreach (MapObject person in map.Objects.Where(o => o.HasScript))
-                yield return (mapId, $"person {person.LocalId}", person.ScriptAddress);
-
-            foreach (MapTrigger trigger in map.Triggers.Where(t => t.HasScript))
-                yield return (mapId, $"trigger ({trigger.X},{trigger.Y})", trigger.ScriptAddress);
-
-            foreach (MapSign sign in map.Signs.Where(s => s.HasScript))
-                yield return (mapId, $"sign ({sign.X},{sign.Y})", sign.ScriptAddress);
-        }
-    }
 
     public static List<SpecialCall> All(Rom rom, MapLibrary library)
     {
         var found = new List<SpecialCall>();
 
-        foreach (LoadedMap map in library.All())
+        foreach ((string mapId, string what, uint address) in library.EveryScript())
         {
-            string mapId = WorldExporter.MapId(map.Bank, map.Number);
-
-            List<(string What, uint Address)> scripts =
-            [
-                .. map.Objects.Where(o => o.HasScript).Select(o => ($"person {o.LocalId}", o.ScriptAddress)),
-                .. map.Triggers.Where(t => t.HasScript).Select(t => ($"trigger ({t.X},{t.Y})", t.ScriptAddress)),
-                .. map.Signs.Where(s => s.HasScript).Select(s => ($"sign ({s.X},{s.Y})", s.ScriptAddress)),
-            ];
-
-            foreach ((string what, uint address) in scripts)
             {
                 List<ScriptCommand> commands = ScriptReader.ReadAll(rom, address);
 

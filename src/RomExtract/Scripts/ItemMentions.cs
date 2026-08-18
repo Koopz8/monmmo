@@ -50,18 +50,8 @@ public static class ItemMentions
     {
         var found = new List<ItemSite>();
 
-        foreach (LoadedMap map in library.All())
+        foreach ((string mapId, string what, uint address) in library.EveryScript())
         {
-            string mapId = WorldExporter.MapId(map.Bank, map.Number);
-
-            List<(string What, uint Address)> scripts =
-            [
-                .. map.Objects.Where(o => o.HasScript).Select(o => ($"person {o.LocalId}", o.ScriptAddress)),
-                .. map.Triggers.Where(t => t.HasScript).Select(t => ($"trigger ({t.X},{t.Y})", t.ScriptAddress)),
-                .. map.Signs.Where(s => s.HasScript).Select(s => ($"sign ({s.X},{s.Y})", s.ScriptAddress)),
-            ];
-
-            foreach ((string what, uint address) in scripts)
             {
                 foreach (ScriptCommand command in ScriptReader.ReadAll(rom, address))
                 {

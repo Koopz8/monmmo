@@ -86,7 +86,7 @@ public static class SoundCues
     {
         var found = new List<SoundCue>();
 
-        foreach ((string mapId, string what, uint address) in Scripts(library))
+        foreach ((string mapId, string what, uint address) in library.EveryScript())
         {
             foreach (ScriptCommand command in ScriptReader.ReadAll(rom, address))
             {
@@ -119,7 +119,7 @@ public static class SoundCues
     {
         var counted = new Dictionary<byte, int>();
 
-        foreach ((_, _, uint address) in Scripts(library))
+        foreach ((_, _, uint address) in library.EveryScript())
         {
             foreach (ScriptCommand command in ScriptReader.ReadAll(rom, address))
             {
@@ -147,7 +147,7 @@ public static class SoundCues
         var plays = 0;
         var paired = 0;
 
-        foreach ((_, _, uint address) in Scripts(library))
+        foreach ((_, _, uint address) in library.EveryScript())
         {
             List<ScriptCommand> commands = ScriptReader.ReadAll(rom, address);
 
@@ -165,20 +165,4 @@ public static class SoundCues
     }
 
     /// <summary>Every script on every map, with where it came from.</summary>
-    private static IEnumerable<(string MapId, string What, uint Address)> Scripts(MapLibrary library)
-    {
-        foreach (LoadedMap map in library.All())
-        {
-            string mapId = WorldExporter.MapId(map.Bank, map.Number);
-
-            foreach (MapObject person in map.Objects.Where(o => o.HasScript))
-                yield return (mapId, $"person {person.LocalId}", person.ScriptAddress);
-
-            foreach (MapTrigger trigger in map.Triggers.Where(t => t.HasScript))
-                yield return (mapId, $"trigger ({trigger.X},{trigger.Y})", trigger.ScriptAddress);
-
-            foreach (MapSign sign in map.Signs.Where(s => s.HasScript))
-                yield return (mapId, $"sign ({sign.X},{sign.Y})", sign.ScriptAddress);
-        }
-    }
 }
