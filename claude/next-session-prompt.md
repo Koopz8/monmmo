@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-279`, 3020 tests green.
+`claude-280`, 3031 tests green.
 
 Standing rules — do not break these:
 
@@ -178,12 +178,20 @@ Traps worth carrying:
     the sets, not their sizes: a pass that clears one flag and sets another has the same count
     and is a different state, and getting that wrong stops a run with somewhere left to go.
 
+18. **Writing a rule down is not applying it** (240). 239 put that last sentence in
+    `WhereItHasBeen`'s documentation and left the settle test THREE LINES ABOVE IT comparing six
+    counts — how many flags, how many moves, how big the party — so a pass that cleared one flag
+    and set another matched all six and stopped the run. The rule and its violation were in the
+    same screen of the same file, added in the same commit. **When you write down why a
+    comparison has to be made a particular way, grep for the other comparisons of the same thing
+    in that file before you commit.** There were two, and they now share one definition.
+
 ## Where things are
 
-Read `claude/milestone-239-the-fourth-list.md` first, then `238`, `237`,
+Read `claude/milestone-240-a-gate-the-run-shut-itself.md` first, then `239`, `238`, `237`,
 `236`, `235`, `234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
-**Twenty-two faults closed and every one was in this project, not on the cartridge.** A walk that
+**Twenty-three faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
 script" list; a list ranked by a count instead of by what it costs; a party that could not gain
 a level; a roadmap line that called a fix a cost; a continuation that carried flags and not
@@ -195,7 +203,9 @@ which skipped a `checkflag` at all eight gyms; and the floor table at the top of
 stale in five of six rows for thirteen milestones while every sentence written about it stayed
 true (207); and at 239 **the exported map record carrying no signs at all**, so the walk went
 over a world with 519 sign scripts it could not see — 224's fault standing in the other half of
-the project, and the settle test that broke the moment they went in.
+the project, and the settle test that broke the moment they went in; and at 240 **that settle
+test itself, made of six counts** — so a pass that cleared one flag and set another matched all
+six and stopped the run, three lines below the documentation saying why it must not.
 
 `175-reading-the-file-not-the-world` is the instrument set (`--in-the-image`, `--climb`, the
 reversal control). `184` adds `--who-writes`. `187`/`188` are the two wrong widths and
@@ -240,6 +250,12 @@ dotnet run -c Release --project src/Tools/RomDump -- firered.gba --read-from 0x0
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --field-effects
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --slots 0x9D,0x7F,0x82
 ```
+
+**`--trace N` watches a VARIABLE, not a flag.** They share the number space, so `--trace 0x003F`
+answers — "nothing the run executed touched it" — about something else entirely. What moved a
+FLAG during a run is printed by `--play` itself since 240: every set and clear with its map, its
+script and its pass, and the ones that move BOTH ways with the ones that do it inside one pass
+called out separately, because those are what make a run go round.
 
 `--slots N[,N]` asks one question of any command that takes a byte and a word: **is the byte an
 index?** Runs of it counted in byte positions, whether every run counts 0,1,2 from nought, and a
@@ -374,10 +390,12 @@ the differences, printed by subtracting two of those same six rows:
 
 --play stops because a pass opened nothing new. THE OTHER FIVE STOP BECAUSE THE STATE CAME BACK
 TO ONE IT HAD ALREADY BEEN IN — a CYCLE, not a fixed point (239). That is a third answer and not
-a failure: a two-cycle has opened everything it will ever open. `9.6`'s fifteen signs share a
-block that sets AND CLEARS 0x0001, so a walk that stands in front of all fifteen every pass
-flips one flag on and off forever. Do not fold it into "nothing more opened" — a run that
-settles and a run that oscillates are different facts about the world.
+a failure: a two-cycle has opened everything it will ever open. Do not fold it into "nothing
+more opened" — a run that settles and a run that oscillates are different facts about the world.
+WHAT MAKES IT GO ROUND is NOT 9.6's 0x0001, which 239 read off the scripts and asserted about a
+run: 0x0001 does not move at all in the --say-yes rows and those cycle. It is 0x026C and 0x0807
+— scratch flags set on one map and cleared on another, whose value at the END of a pass depends
+on which map the walk reached last (240).
 ```
 
 **381 of 425 no longer needs `--surf`** — and it was 390 until 193 stopped the run playing each
@@ -416,10 +434,17 @@ doors announce themselves in 0x4001 x63, 0x8008 x25, 0x8004 x23, 0x4002 x6 — T
 the floor is asked for money in ONE place and it is the coin counter; 8 at --say-yes and above
 the widest run sets 212 of the 322 gating flags — 110 gates it never opens; 199 at the floor
   the floor's own gating count went 121 -> 123 at 239 and the widest run's 212/110 did not move
+BUT THE RUN ALSO TAKES FLAGS BACK: 164 ever on at the floor against the 160 it stops with (240)
+  4 / 6 / 4 / 10 / 9 / 6 taken back at the six settings; 3 of the floor's 4 are on at the start
+  and NO script in the run sets them — one script each turns them off (1.57, 10.16, 14.3)
+  a set flag HIDES somebody, so clearing one is how the cartridge puts people INTO the world
+  costs 0 maps at all six settings, and only that direction can be non-empty — the walk is
+  monotone in flags, asserted in TheFlagsItTookBackTests rather than believed
 702 signs: 519 a script at 360 addresses on 143 maps, 183 a hidden item — `--export-world` (239)
   the RUN could not see ONE of them until 239, because MapData carried no sign list at all
   they move NO map count at any lever setting — not one square of this game is behind a sign
-those 110 are 35 with no opener, 31 never run, 17 never picked up, 15 obstacles, 12 past the boundary
+those 110 are 35 no opener, 30 never run, 16 never picked up, 15 obstacles, 7 boundary, 7 TAKEN
+  BACK (240) — the sixth bucket, first in the order, and it took from THREE of the other five
 35 and 15 are the same at every lever setting, which is how a property of the FILE has to behave
 3 scripts hold 27 gating flags: CUT and ROCK SMASH (15, 2 scripts), STRENGTH (12, 1) — CHECKED
   [62 gates / 240 people / 146 trees and rocks / 158 objects: NOTHING PRINTS THESE ANY MORE]
@@ -500,18 +525,20 @@ the raw 0x9C sweep is 11446 sites in BOTH images and the REVERSAL READS ON MORE 
 
 ## The next task, precisely
 
-**START HERE — what 239 opened, and the numbering below is unchanged so item references still
-work.** Signs are in the run now, and four things follow directly:
+**START HERE — what 239 and 240 opened, and the numbering below is unchanged so item references
+still work.**
 
 * **Which signs actually ran, and what the seven flags at the floor are.** The floor went 153 to
-  160 and its gating count 121 to 123, so two of the seven gate something and nothing has said
-  which. `--trace 0xNNNN` takes a flag; that is one command per flag.
-* **`9.6`'s puzzle.** Fifteen doors, `0x8004` against `0x8008`, `0x0001` and `0x0002` as its own
-  state. It is why five of the six rows now report a cycle. Read far enough to explain the
-  cycle and no further — it is a slot-machine-adjacent minigame, not a gate.
-* **Whether the union still equals the final pass.** 190 measured them equal at every lever
-  setting, and that was a fact about a one-way run. With a two-cycle they can differ by a flag,
-  and nothing has re-measured it. This is cheap and it is exactly trap 17's second half.
+  160 at 239 and its gating count 121 to 123, so two of the seven gate something and nothing has
+  said which. `--play` prints every flag move with its script since 240, so this is now a read
+  rather than a build. **Still the cheapest thing on this list.**
+* **`0x026C` and `0x0807`** — the two that actually make the run go round (240). Set on one map,
+  cleared on another, holding nothing. `--read-from` on the four addresses is one command.
+* **`0x4001` is a flag in the run and a variable in the doors reading**, 63 of those. The same
+  number in two namespaces and nothing has said which reading is wrong, or whether both are
+  right about different commands.
+* **`9.6`'s puzzle** — fifteen doors, `0x8004` against `0x8008`. Read far enough to say what it
+  is; it is NOT why the run cycles, whatever 239 said.
 * **`3.57 sign (9,43)`** — the LEMONADE example that has been quoted in this prompt for
   milestones as something the run could not reach. It can now.
 
@@ -845,6 +872,9 @@ the other, and nothing about a single green run says which. 207 writes the 2x2 d
 ## Open, and honestly owed
 
 * Held items are a sixth way a thing changes hands and `Everywhere` does not know.
+* ~~Whether the union differs from the final pass.~~ **MEASURED AT 240**: it does, at every one
+  of the six settings — by 4 to 10 flags — and 190's "equal everywhere" was a fact about a run
+  that could not clear one. It costs nought maps at all six.
 * ~~The playthrough never runs signs.~~ **CLOSED AT 239** — and it was never a choice: `MapData`
   carried no sign list at all, so there was nothing for the walk to skip. Still owed off it:
   which signs ran, what the floor's seven new flags are, and `3.57 sign (9,43)`, which asks for
