@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-291`, 3106 tests green.
+`claude-292`, 3114 tests green.
 
 Standing rules — do not break these:
 
@@ -337,15 +337,32 @@ Traps worth carrying:
     whatever the code happened to have, and the fixture supplied the same short list. It asserts
     five BY NAME now, so "five ways" cannot be satisfied by any five commands.
 
+36. **WHEN A TABLE IS WRONG, STOP READING TABLES AND SWEEP** (252). 251 found `copyvar` missing
+    from both write tables and 252 asked whether there was a third. Reading the lists again could
+    not answer that — so `--operands` scores EVERY halfword-aligned operand of EVERY command by
+    244's rule and lets the cartridge sort them. It found two more, and **both were already
+    written down elsewhere in this repository**: `specialvar`'s destination is read as the answer
+    variable in five files, and `0x42`'s width comment says out loud that it takes two variables.
+    **A fact this project already knows in prose is not a fact its tables know.** Grep for the
+    knowledge as well as for the list.
+
+37. **NAMING A THING AND KNOWING WHICH WAY IT GOES ARE TWO MEASUREMENTS** (252). Written-ness says
+    an operand names a variable; it says nothing about read or write. The direction test is
+    whether the NEXT command compares that very number, floor 1.5% over 30766 places — and its
+    positive control (`copyvar`'s destination, a write established separately at 251) lands at 65%
+    BETWEEN the two unknowns at 91% and 75%. **A test whose known-good case falls in the middle of
+    its own findings is one that did not need arranging.** `0x42 arg2` scores 12% and is left out
+    of both tables, reported as open rather than guessed.
+
 ## Where things are
 
-Read `claude/milestone-251-the-operand-in-neither-table.md` first, then `250`, `249`, `248`,
+Read `claude/milestone-252-stop-reading-the-table.md` first, then `251`, `250`, `249`, `248`,
 `247`, `246`, `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
 `238`, `237`,
 `236`, `235`, `234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
-**Twenty-eight faults closed and every one was in this project, not on the cartridge.** A walk that
+**Twenty-nine faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
 script" list; a list ranked by a count instead of by what it costs; a party that could not gain
 a level; a roadmap line that called a fix a cost; a continuation that carried flags and not
@@ -374,7 +391,9 @@ of those 183 and collecting none**, which is what 239 left when it put signs int
 "nothing writes this variable" bucket is 43 on the trigger list; and at 251 **`copyvar` missing
 from BOTH of this repository's write tables** — the other half of the same copying pair was in
 both, one line away — so sixteen variables read as written by nothing and every reading operand's
-written-ness was short.
+written-ness was short; and at 252 **two MORE write operands in neither table** — `specialvar`'s
+destination, which five files already read as the answer variable, and `0x42 arg0`, whose own
+width comment calls it a command taking two variables.
 
 `246` is the read that is not a command, and the literal-pool test for whether compiled code holds
 a number — both live inside `--namespaces`, which is now the fullest single instrument in the
@@ -425,7 +444,19 @@ dotnet run -c Release --project src/Tools/RomDump -- firered.gba --play --signs
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --play --moved 0x003F
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --namespaces
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --buried
+dotnet run -c Release --project src/Tools/RomDump -- firered.gba --operands
 ```
+
+`--operands` is the answer to "is there a third table" and it does not read one (252). Every
+halfword-aligned operand of every command the map scan reads, scored by how much of what it names
+something WRITES — 244's rule, which needs no band boundary. **The spread is bimodal with a
+chasm**: 83 operands under 10%, 3 between, 10 above 90%, nothing in the middle, so the half-way
+threshold does no work and the histogram says so. **Three of the ten were in neither table** and
+all three were already known elsewhere in the repository. It also asks WHICH WAY separately —
+whether the next command compares that very number — against a floor of **453 of 30766 places,
+1.5%**: `0x26 arg0` 91%, `0x42 arg0` 75%, and `0x19 arg0` (a write 251 established independently)
+**65%, the positive control landing between the two unknowns**. `0x42 arg2` is 12% and is the one
+candidate still open: it names a variable and which way is not read.
 
 `--buried` reads the four bytes a buried sign keeps where every other sign keeps a script pointer
 (248): an item id, an INDEX and a count with one spare bit. **All 183 item ids resolve to a name
@@ -845,6 +876,15 @@ still work.**
   all of them `0x405F`, and 42 of those can never fire. What is left is the **82 conditions (56
   distinct) waiting on a value nobody writes** — the bigger of the two middle buckets in distinct
   terms, and nothing has opened it.
+* **The operand sweep's three unfinished halves** (252). `--operands` found two write operands in
+  neither table; what it has NOT done:
+  * **the mirror** — 252 found writers by seeding on writers. Seeding on the READERS and hunting
+    an operand that reads is the same instrument pointed the other way, and 251's fault could as
+    easily be on that side.
+  * **the whole image** — `--operands` asks the map scan, which is 0.6% of the file.
+  * **`0x42` still has no name.** Eight places, each a `compare` away from saying what it
+    computed; `--read-from` on those eight is one command. And **`0x42 arg2`'s direction** is the
+    one candidate the sweep still reports.
 * **Whether a dropped trigger hides a reader** (247). `MapLinkExtractor` drops trigger records
   whose square is off the map before anything sees them. That understates the readers, which is
   the safe direction, and nobody has printed how many.
