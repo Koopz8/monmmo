@@ -6,16 +6,16 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **"396 places call routines it could not answer — every one took the zero arm" is mostly
-  not true, and the mistake is the word "arm".** For **201 of those 396 the cartridge never
-  branches on the answer at all**. Of the rest, 158 are places nought takes no branch.
-- Two instruments were wrong on the way, and both were caught by an instrument printing two
-  numbers that could not both be true:
-- **A plain `call` was not a barrier.** SEVEN ISLAND's `special 0x0028 ; call ... ; compare`
-  credited the compare to `0x0028`; the thing called is three commands long and the first is
-  `special 0x005D`. **42 of 1097 attributions were reading somebody else's answer.**
-- **And "does nought matter" is about the branch, not the compared value.** `compare 1 ; if
-  LESS` is taken by nought and does not test nought — one routine is tested against 1 and 2
-  and nought takes nineteen of its twenty-one branches.
-- What is left of that ceiling is **one routine, branched on at two sites in the whole
-  cartridge**. Eight breaks, eight catches.
+- **The last branch the robot's silence still decided turned out to decide nothing.** One
+  place in the whole cartridge, after a fight on SECTION 52 — and the arm it takes writes
+  `0x4059`. Of fifty-nine matching byte pairs in sixteen megabytes, exactly one is in a
+  command position, and it is that write. **One writer, no readers.**
+- Saying so needed an instrument that should have existed eleven milestones ago:
+  `--who-writes` has been here since 184 and there has never been a `--who-reads`. A variable
+  written once and never looked at has read exactly like one that gates something.
+- The rule that makes it a real question rather than the same one twice: **the source of a
+  copy is a read and the destination is a write.** Count both and "nothing reads this" can
+  never be true of anything.
+- The tempting aggregate — "650 variables are written and never read" — is **below its own
+  floor**: the same count on the reversed image is 1070. The instrument prints that and
+  refuses to quote the 650.

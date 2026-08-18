@@ -1,7 +1,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-253`, 2858 tests green.
+`claude-254`, 2867 tests green.
 
 Standing rules — do not break these:
 
@@ -101,8 +101,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-214-the-third-ceiling-is-mostly-not-one.md` first, then
-`213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
+Read `claude/milestone-215-one-writer-and-nobody-listening.md` first, then
+`214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
 **Twenty faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
@@ -144,13 +144,19 @@ dotnet run -c Release --project src/Tools/RomDump -- firered.gba --entries
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --counters
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --in-the-image 0x003E,0x003F
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --who-writes 0x4055
+dotnet run -c Release --project src/Tools/RomDump -- firered.gba --who-reads 0x4055
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --play --say-yes --in-order --trace 0x4055
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --stops 0xC0
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --script-map 6.2
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --routines
 ```
 
-`--in-the-image` scans all 16 MiB for the bytes that move a flag, says of every hit whether the
+`--who-reads` is `--who-writes`'s mirror and is eleven milestones late: it finds every
+`compare`, `comparevars` and copy-from that looks at a variable, with the reversed-image floor
+beside it. **The source of a copy is a read and the destination is a write** — counting both
+would make every write a read as well. Its aggregate ("650 in the save's band are written and
+never read") is BELOW its own floor of 1070 and the instrument says so; only the per-variable
+answers mean anything. `--in-the-image` scans all 16 MiB for the bytes that move a flag, says of every hit whether the
 map scan ever decoded that byte, and climbs to whatever names it. `--who-writes` is its mirror
 for variables — **and both of them answer about the IMAGE, down every arm of every branch.** A
 run takes one arm. `--trace 0xNNNN` is the same question asked of the RUN: every write and
@@ -227,7 +233,8 @@ those 110 are 35 with no opener, 31 never run, 17 never picked up, 15 obstacles,
 3 scripts hold 27 gating flags and 158 objects: CUT, ROCK SMASH, STRENGTH
 the 12 STRENGTH boulders are SEAFOAM and VICTORY ROAD, and their flags split THREE ways
 766 places call 63 routines the widest run cannot answer; 187 have an answer nothing branches on
-of 1055 branching sites in the file, nought takes 212 — and 0x188's two are the run's whole ceiling
+of 1055 branching sites in the file, nought takes 212 — and 0x188's one place comes to nothing
+0x4059 has one writer and NO readers anywhere; 0x4055 has 21 readers against a floor of 0
 2 of those gates hold NOBODY — 0x084A and 0x084B, the ferry, with no setter anywhere
 ```
 
@@ -245,13 +252,14 @@ of 1055 branching sites in the file, nought takes 212 — and 0x188's two are th
    anyway, which is the `#130` at 71 the party ends with. **The floor is clean**: 1 place asks,
    nothing comes of it, so the floor's party of six is entirely earned. Whether that deserves a
    `--pay` lever or a located payout table is a DECISION and it is deliberately not made.
-3. **`0x188`'s two sites, which are the whole of what is left of the routine ceiling.** 214 cut
-   it four ways on what nought DOES rather than what it is compared against: at the widest lever
-   setting 187 of 766 places have an answer nothing branches on, 430 are places nought takes no
-   branch, 61 are mixed, and **88 are `0x188` — one routine, branched on at exactly TWO sites in
-   the whole cartridge, and nought takes both**. Read those two sites. `--specials` names them.
-   Next after that: **`0x194`** — 747 sites, the most of anything, asked 54 times by the widest
-   run, and nought takes **1 of its 18** branches. Which one has not been asked.
+3. **The six mixed routines, which are what is left of the routine ceiling.** 215 read
+   `0x188`'s one place — `1.93` SECTION 52, after a trainerbattle — and the arm nought takes
+   writes `0x4059`, which **nothing anywhere in the file reads**. So that half comes to nothing.
+   What remains is the mixed bucket: 61 places at the widest setting, **44 of their 68 branches
+   taken by nought**, across six routines. **`0x194`** is the big one — 747 sites, the most of
+   anything, and nought takes 1 of its 18 branches. None has been read.
+   `--who-reads` is new and is the cheapest way to finish any of them: it says whether whatever
+   an arm writes is ever looked at.
    Also owed and cheap: **seven boulder flags with no setter anywhere** (whatever drops a
    boulder into a hole is not script), **`0x0805`** which the STRENGTH script sets and shares
    across all twelve boulders, and **`0x0053`** holding 31 people across the SILPH CO. floors
