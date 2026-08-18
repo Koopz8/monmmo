@@ -132,26 +132,56 @@ public sealed class PrintingTheBytesTests
     // ------------------------------------------------------------------ each block once
 
     /// <summary>
-    /// THE DISCRIMINATION for the walk: two arms landing on ONE address is one block, not two.
-    /// Both arms of a branch reaching the same place is everywhere on this cartridge, and
-    /// printing that block twice would say the reading found two of something.
+    /// THE DISCRIMINATION for the walk: a block TWO DIFFERENT BLOCKS reach is read once.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The first version of this fixture put both arms of one branch on one target and came back
+    /// GREEN when the seen-set was removed — because a block already refuses to list the same
+    /// target twice, so the duplicate never reached the walk at all. That is fixture-lie 10:
+    /// <b>ask where in the fixture the thing you are asserting about actually is</b>.
+    /// </para>
+    /// <para>
+    /// Two arms, two different blocks, and both of them ending on ONE third block. That is the
+    /// diamond this cartridge is full of and the only shape the seen-set decides.
+    /// </para>
+    /// </remarks>
     [Fact]
-    public void ABlockTwoArmsBothReachIsReadOnce()
+    public void ABlockTwoDifferentBlocksReachIsReadOnce()
     {
-        // if EQUAL goto 0x08000200 ; goto 0x08000200        (both arms, one target)
         ABlockRead.Block[] blocks =
         [
             .. ABlockRead.From(
                 Image(
-                    (0x100, [.. GotoIf(1, 0x08000200), .. Goto(0x08000200)]),
-                    (0x200, [0x6B, 0x02])),
+                    (0x100, [.. GotoIf(1, 0x08000200), .. Goto(0x08000300)]),
+                    (0x200, Goto(0x08000400)),
+                    (0x300, Goto(0x08000400)),
+                    (0x400, [0x6B, 0x02])),
                 0x08000100),
         ];
 
-        Assert.Equal(2, blocks.Length);
-        Assert.Equal(0x08000100u, blocks[0].Address);
-        Assert.Equal(0x08000200u, blocks[1].Address);
+        Assert.Equal(
+            [0x08000100u, 0x08000200u, 0x08000300u, 0x08000400u],
+            blocks.Select(b => b.Address));
+    }
+
+    /// <summary>
+    /// And a block that hands back to one already read does not go round for ever — the other
+    /// half, and the reason the walk needs the set rather than a depth limit.
+    /// </summary>
+    [Fact]
+    public void AndABlockThatHandsBackDoesNotGoRoundForEver()
+    {
+        ABlockRead.Block[] blocks =
+        [
+            .. ABlockRead.From(
+                Image(
+                    (0x100, Goto(0x08000200)),
+                    (0x200, Goto(0x08000100))),
+                0x08000100),
+        ];
+
+        Assert.Equal([0x08000100u, 0x08000200u], blocks.Select(b => b.Address));
     }
 
     /// <summary>
