@@ -7,9 +7,15 @@ namespace PokeMmo.RomExtract.Scripts;
 /// <summary>
 /// One call into the game's own code, and what the script around it expects back.
 /// </summary>
+/// <param name="At">
+/// The byte position of the call. <b>Sites are not places</b> — one script hanging off nineteen
+/// maps is nineteen records at one address, and until 223 everything derived from these records
+/// counted the records.
+/// </param>
 public sealed record SpecialCall(
     string MapId,
     string What,
+    int At,
     int Routine,
     int? AnswersInto,
     IReadOnlyList<(int Variable, int Value)> Arguments,
@@ -150,6 +156,7 @@ public static class SpecialCalls
                 found.Add(new SpecialCall(
                     mapId,
                     what,
+                    commands[i].Offset,
                     code,
                     0x800D,
                     Before(commands, i),
@@ -191,7 +198,8 @@ public static class SpecialCalls
                     found[code] = calls = [];
 
                 calls.Add(new SpecialCall(
-                    mapId, what, code, 0x800D, Before(commands, i), After(commands, i, 0x800D), forks));
+                    mapId, what, commands[i].Offset, code, 0x800D,
+                    Before(commands, i), After(commands, i, 0x800D), forks));
             }
         }
 
@@ -569,6 +577,7 @@ public static class SpecialCalls
                     found.Add(new SpecialCall(
                         mapId,
                         what,
+                        command.Offset,
                         routine,
                         command.Code == SpecialVar ? command.Word() : null,
                         Before(commands, i),
@@ -714,15 +723,28 @@ public static class SpecialCalls
     /// 0 and 1 alone answers yes or no.
     /// </para>
     /// </summary>
+    /// <param name="Calls">How many records — one per script that reads the byte position.</param>
+    /// <param name="Places">
+    /// How many BYTE POSITIONS those records are. <b>Sites are not places.</b> One script hanging
+    /// off nineteen maps is nineteen records at one address, and every number this project has
+    /// quoted about routines was records until 223.
+    /// </param>
+    /// <param name="Branches">Branched-on compares, counted per record.</param>
+    /// <param name="BranchPlaces">Byte positions with at least one branched-on compare.</param>
+    /// <param name="BranchesTakenByZero">Those compares that nought takes, counted per record.</param>
+    /// <param name="PlacesTakenByZero">Byte positions with at least one compare nought takes.</param>
     public sealed record Profile(
         int Routine,
         int Calls,
+        int Places,
         int Maps,
         bool Answers,
         IReadOnlyList<int> ArgumentSlots,
         IReadOnlyList<int> AnswersSeen,
         int Branches,
-        int BranchesTakenByZero)
+        int BranchPlaces,
+        int BranchesTakenByZero,
+        int PlacesTakenByZero)
     {
         /// <summary>
         /// Where a routine nobody has written stands in for one nobody can read.
@@ -737,7 +759,7 @@ public static class SpecialCalls
         public bool ZeroIsMisleading => BranchesTakenByZero > 0;
 
         public override string ToString() =>
-            $"0x{Routine:X4}  {Calls,4} calls on {Maps,3} maps  " +
+            $"0x{Routine:X4}  {Calls,4} calls at {Places,4} place(s) on {Maps,3} maps  " +
             (ArgumentSlots.Count == 0
                 ? "no arguments".PadRight(24)
                 : $"args {string.Join(",", ArgumentSlots.Select(a => $"0x{a:X4}"))}".PadRight(24)) +
@@ -745,7 +767,8 @@ public static class SpecialCalls
                 ? $"answer tested against {string.Join(",", AnswersSeen)}".PadRight(30) +
                   (Branches == 0
                       ? ""
-                      : $"zero branches away at {BranchesTakenByZero}/{Branches}")
+                      : $"zero branches away at {BranchesTakenByZero}/{Branches}"
+                        + $" — {PlacesTakenByZero}/{BranchPlaces} place(s)")
                 : "answer never looked at");
     }
 
@@ -783,8 +806,21 @@ public static class SpecialCalls
     /// as counting sites where a bucket wants places.
     /// </param>
     /// <param name="TakenByZero">How many of those branches nought takes.</param>
+    /// <param name="BranchPlaces">
+    /// The same as <paramref name="Branches"/> in BYTE POSITIONS. A block hanging off nineteen
+    /// maps is read nineteen times, so these two are not the same number and only one of them
+    /// is about the cartridge.
+    /// </param>
+    /// <param name="PlacesTakenByZero">The same as <paramref name="TakenByZero"/>, in byte positions.</param>
     public sealed record WhatZeroDid(
-        int Routine, int Asked, ZeroWas Was, IReadOnlyList<int> Tested, int Branches, int TakenByZero);
+        int Routine,
+        int Asked,
+        ZeroWas Was,
+        IReadOnlyList<int> Tested,
+        int Branches,
+        int TakenByZero,
+        int BranchPlaces,
+        int PlacesTakenByZero);
 
     /// <summary>
     /// The join nobody has made: which routines a run could not answer, against what the file
@@ -836,7 +872,9 @@ public static class SpecialCalls
                 : ZeroWas.Both,
                 tested,
                 branches,
-                taken));
+                taken,
+                profile?.BranchPlaces ?? 0,
+                profile?.PlacesTakenByZero ?? 0));
         }
 
         // RANKED BY WHAT NOUGHT DECIDES, NOT BY HOW OFTEN IT WAS ASKED.
@@ -862,14 +900,21 @@ public static class SpecialCalls
             .Select(g => new Profile(
                 g.Key,
                 g.Count(),
+                g.Select(c => c.At).Distinct().Count(),
                 g.Select(c => c.MapId).Distinct().Count(),
                 g.Any(c => c.Compared.Count > 0),
                 [.. g.SelectMany(c => c.Arguments).Select(a => a.Variable).Distinct().Order()],
                 [.. g.SelectMany(c => c.Compared).Select(c => c.Value).Distinct().Order()],
                 g.SelectMany(c => c.Compared).Count(c => c.Condition != 0xFF),
+                g.Where(c => c.Compared.Any(v => v.Condition != 0xFF))
+                    .Select(c => c.At).Distinct().Count(),
                 g.SelectMany(c => c.Compared)
                     .Count(c => c.Condition != 0xFF &&
-                                ScriptState.Accepts(c.Condition, ScriptState.Compare(0, c.Value)))))
+                                ScriptState.Accepts(c.Condition, ScriptState.Compare(0, c.Value))),
+                g.Where(c => c.Compared.Any(v =>
+                        v.Condition != 0xFF &&
+                        ScriptState.Accepts(v.Condition, ScriptState.Compare(0, v.Value))))
+                    .Select(c => c.At).Distinct().Count()))
             .OrderByDescending(p => p.Calls),
     ];
 }

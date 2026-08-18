@@ -19,8 +19,8 @@ namespace PokeMmo.RomExtract.Tests;
 /// </summary>
 public class ScriptedMachineTests
 {
-    private static SpecialCall Call(string map, string what, int routine) =>
-        new(map, what, routine, null, [], [], []);
+    private static SpecialCall Call(string map, string what, int routine, int at = 0) =>
+        new(map, what, at, routine, null, [], [], []);
 
     /// <summary>
     /// A script whose routines nobody else calls is reported; one sharing everything is

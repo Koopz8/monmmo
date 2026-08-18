@@ -39,7 +39,7 @@ public sealed class WhatTheSilenceAmountedToTests
 
     private static SpecialCalls.Profile Profile(
         int routine, IReadOnlyList<int> tested, int branches, int takenByNought) =>
-        new(routine, 1, 1, tested.Count > 0, [], tested, branches, takenByNought);
+        new(routine, 1, 1, 1, tested.Count > 0, [], tested, branches, branches, takenByNought, takenByNought);
 
     private static IReadOnlyList<SpecialCalls.Profile> Profiles() =>
     [

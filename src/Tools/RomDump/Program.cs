@@ -4465,7 +4465,8 @@ public static class Program
         List<SpecialCalls.Profile> profiles = SpecialCalls.Profiles(calls);
 
         Console.WriteLine(
-            $"  {calls.Count} calls to {profiles.Count} different routines; " +
+            $"  {calls.Count} calls at {profiles.Sum(p => p.Places)} byte position(s) to " +
+            $"{profiles.Count} different routines; " +
             $"{profiles.Count(p => p.Answers)} of them are asked a question, " +
             $"{profiles.Count(p => p.ArgumentSlots.Count > 0)} are given arguments");
 
@@ -4476,7 +4477,9 @@ public static class Program
         Console.WriteLine(
             $"  {profiles.Count(p => p.ZeroIsMisleading)} routines branch away on the zero they " +
             $"are getting by default, at " +
-            $"{profiles.Sum(p => p.BranchesTakenByZero)} of {profiles.Sum(p => p.Branches)} branching sites");
+            $"{profiles.Sum(p => p.BranchesTakenByZero)} of {profiles.Sum(p => p.Branches)} branching sites "
+            + $"— which are {profiles.Sum(p => p.PlacesTakenByZero)} of {profiles.Sum(p => p.BranchPlaces)} "
+            + "byte position(s), and that is the number about the cartridge");
 
         Console.WriteLine();
 
@@ -6942,7 +6945,9 @@ public static class Program
                     ? ""
                     : $" — and {these.Sum(z => z.TakenByZero)} of their"
                       + $" {these.Sum(z => z.Branches)} branching site(s) in the whole file are"
-                      + " taken by nought"));
+                      + " taken by nought, which is"
+                      + $" {these.Sum(z => z.PlacesTakenByZero)} of {these.Sum(z => z.BranchPlaces)}"
+                      + " byte position(s)"));
 
             // AND THE ONES THAT MATTER, NAMED, WHATEVER THE RANKING SAYS.
             //
@@ -6958,6 +6963,7 @@ public static class Program
                     ", ",
                     these.Select(z => $"0x{z.Routine:X3} asked {z.Asked}x, {z.TakenByZero} of its"
                                       + $" {z.Branches} branching site(s) taken by nought"
+                                      + $" — {z.PlacesTakenByZero} of {z.BranchPlaces} place(s)"
                                       + $" (tested against {string.Join("/", z.Tested.Order())})")));
         }
 
@@ -8048,7 +8054,8 @@ public static class Program
         what.Branches == 0
             ? "nothing branches on its answer"
             : $"compared against {string.Join(", ", what.Tested.Order())};"
-              + $" nought takes {what.TakenByZero} of its {what.Branches} branch(es) — {Meaning(what.Was)}";
+              + $" nought takes {what.TakenByZero} of its {what.Branches} branch(es)"
+              + $" at {what.PlacesTakenByZero} of {what.BranchPlaces} place(s) — {Meaning(what.Was)}";
 
     private static string Meaning(SpecialCalls.ZeroWas was) => was switch
     {
