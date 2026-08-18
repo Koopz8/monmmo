@@ -6,12 +6,11 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **Thirty-eight of the forty unclaimed answers now have an owner.** Where a call provably
-  leaves the answer variable alone, the reading walks back past it — and the call in the way
-  turns out to be four bytes that move one argument slot into another.
-- **And two of this project's own instruments were found contradicting each other.** One says
-  routine `0x01C` is branched on nineteen times; the other says it is never branched on. Same
-  nineteen places. The older one has never had the safety check the newer one learned at 214.
-- The confident one is right here — and right by luck, because nothing checked.
-- Four breaks. One came back green because the line being broken was a second copy of a rule
-  nothing could reach.
+- **Two readings of the same bytes, and only one of them had the safety check.** The newer one
+  stops when something else might have answered the question first. The older one — the one
+  every routine number in this project was read off — never stopped at all.
+- **Seventeen of sixty-three routines had no clean reading at all.** Every branch they were
+  credited with was read across something that may have answered instead. Branched-on goes 63 to 46.
+- One compare was being credited to two routines at once, at bytes read by hand five milestones ago.
+- **And the table counted reads, not places**: 1037 sites are 411 addresses.
+- Five breaks, five catches — one fixture was testing the window instead of the rule.

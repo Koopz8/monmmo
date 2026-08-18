@@ -1,7 +1,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-258`, 2882 tests green.
+`claude-259`, 2894 tests green.
 
 Standing rules — do not break these:
 
@@ -101,8 +101,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-219-walking-back-where-the-call-touched-nothing.md` first, then
-`218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
+Read `claude/milestone-220-the-other-arm-of-the-barrier.md` first, then
+`219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
 **Twenty faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
@@ -151,6 +151,12 @@ dotnet run -c Release --project src/Tools/RomDump -- firered.gba --stops 0xC0
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --script-map 6.2
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --routines
 ```
+
+`--routines` has the barrier now (220) and prints what it does not credit: the sites whose
+compare is only past a `call`, another `special`, a `callstd` or a `0xA0`, in their own section
+with the values they were being credited with. **It also prints branches as sites AND as byte
+positions**, because a block hanging off two triggers is read twice and only one of those two
+numbers is about the cartridge.
 
 `--through-a-call` follows a `call` one level and says what it leaves in the answer variable:
 a routine's answer, a number the block says out loud, another variable, or nothing. **A literal
@@ -250,7 +256,9 @@ of 1055 branching sites in the file, nought takes 212 — and 0x188's one place 
 40 leave the answer alone and 9 jump somewhere the reading does not follow — those are different
 of the 40, 38 read 0x01C's or 0x01D's answer across a call that is `copyvar 0x8012, 0x8013`
 11 of the 336 have NO owner: 2 behind a jump here and 9 from 218
---routines says 0x01C has 19 branches and --special 0x1C says it is never branched on — same sites
+--routines had NO barrier until 220: 145 sites across 24 routines were read past something
+17 of 63 routines were branched on ONLY that way; branched-on is 46 now
+the branch table is 1037 sites at 411 byte positions — 0x187 is 376 reads of 72 addresses
 the 57 are TWO blocks, each a yes/no turning on 0x083 or 0x084 and then 0x153
 2 of those gates hold NOBODY — 0x084A and 0x084B, the ferry, with no setter anywhere
 ```
@@ -269,18 +277,20 @@ the 57 are TWO blocks, each a yes/no turning on 0x083 or 0x084 and then 0x153
    anyway, which is the `#130` at 71 the party ends with. **The floor is clean**: 1 place asks,
    nothing comes of it, so the floor's party of six is entirely earned. Whether that deserves a
    `--pay` lever or a located payout table is a DECISION and it is deliberately not made.
-3. **`SpecialContracts` HAS NO BARRIER, and nobody has measured what that costs.** This is the
-   top of the list. `--routines` — the instrument every piece of routine work in this project
-   has been read off — walks four commands forward from a `special` and stops at nothing but a
-   `setvar` to the answer variable. Not a `call`, not a `specialvar`, not `callstd`, not `0xA0`.
-   `SpecialCalls` learned that barrier at 214, when it caught the scan crediting `0x0028` with
-   `0x005D`'s reply, and the other arm was never re-run against it. The two now contradict each
-   other out loud: `--routines` gives `0x01C` nineteen branches, `--special 0x1C` says it is
-   never branched on, **and they are the same nineteen sites**. 219's walk-back says
-   `--routines` is right there — the call in between is `copyvar 0x8012, 0x8013 ; return` — and
-   right by luck, because nothing checked. Give `SpecialContracts` the same barrier list and
-   print how many of its branch counts and compared-against values move. That number is the
-   error bar on every routine sentence in this file.
+3. **The seventeen routines whose every branch was read across a barrier** (220). Giving
+   `SpecialContracts` the list `SpecialCalls` has had since 214 took branched-on from 63 to 46
+   and put 145 sites across 24 routines into "the compare is past something that may have
+   answered instead". `--through-a-call` is the instrument that says what that something leaves,
+   and 219 already answered the two biggest: `0x01C` and `0x01D`, nineteen sites each, with
+   `copyvar 0x8012, 0x8013 ; return` in the way, which cannot have answered. `0x0A5` at eight
+   sites and `0x138` at six are next. **`0x0156` is the one to read first** — its two sites are
+   the same compare `0x0188` gets, at the very bytes 215 read by hand, so the table was crediting
+   one compare to two routines.
+   And **`0x0188`'s other ten**: 215 called it the last of the run's ceiling on the strength of
+   one clean site, and ten more of its sites have a compare past a barrier.
+   **Every routine sentence in this project quoted sites, not places.** The branch table is 1037
+   sites at 411 byte positions, and `0x0187` is 376 reads of 72 addresses. Which of the older
+   numbers were about the cartridge is now askable.
    Still owed from 218 and cheap: **`0x081A77B0`**, where the jumping arm goes from nineteen
    places — one level further than the rule allows, so it wants its own reading. And
    **`0x0153`**, which is half of every one of the fifty-seven decisions and whose own sites
@@ -395,6 +405,13 @@ the rule being broken was a `Where` inside `Program.cs`, which no test can reach
 `Attempt.HandedOverTwice` and was caught on the second attempt. **That is the sixth time the
 same structural fault has been fixed by moving a rule about the world out of the printer.** If
 a break passes, suspect the fixture — or where the rule lives — before the code.
+
+**A rule fixed in one arm and left standing in the other** (220, and 173, and 207). Two
+readings in this repository scanned forward from a `special` for the same compare for the same
+reason; one was given a barrier at 214 and the other had none, and they contradicted each other
+out loud for six milestones without anybody asking both. **When you fix a reading, grep for who
+else reads that shape** — and prefer exposing the one list to copying it, because a copy is how
+they came apart.
 
 **A guard nothing can reach is not a guard** (219). The walk back past a call had a `case Call`
 arm of its own sitting immediately above a barrier check that already contained `call` — two
