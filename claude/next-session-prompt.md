@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-293`, 3117 tests green.
+`claude-294`, 3124 tests green.
 
 Standing rules — do not break these:
 
@@ -370,10 +370,24 @@ Traps worth carrying:
     misleading version is printed beside the good one. A sweep that has only ever come back empty
     has not been shown to be able to come back full.
 
+40. **A NUMBER WITH NO MEANING GETS ONE FROM WHAT IT IS COMPARED AGAINST** (254). `0x42`'s eight
+    compares are against 6, 7, 9, 9, 18, 24 and 50 — seven numbers and no finding. Put each one
+    beside the WIDTH AND HEIGHT of the map its script is on, both of which this project reads for
+    all 425 maps already, and twenty-four on a map twenty-four tall stops being a row. **When a
+    value will not say what it is, look for a bound the cartridge already gave you and ask which
+    side of it the value falls on.** Only two of the six discriminate and that is enough.
+
+41. **A DISCRIMINATION IS WORTH WHAT ITS NEGATIVE CONTROLS COST IT** (254). The same
+    column-or-row test asked of `specialvar`'s answer variable (326 compared places) and
+    `copyvar`'s destination (116) comes back naming NEITHER — every value fits both bounds. Those
+    two are in the output permanently. **Run a new discrimination against the things you already
+    know it should not fire on, and print the result beside the finding**, or "it fits" is a
+    sentence about arithmetic rather than about the cartridge.
+
 ## Where things are
 
-Read `claude/milestone-253-the-mirror.md` first, then `252`, `251`, `250`, `249`, `248`,
-`247`, `246`, `245`, `244`, `243`,
+Read `claude/milestone-254-a-column-read-off-the-maps.md` first, then `253`, `252`, `251`,
+`250`, `249`, `248`, `247`, `246`, `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
 `238`, `237`,
 `236`, `235`, `234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
@@ -481,6 +495,14 @@ on its 149 values turns "is this a variable?" into "is this number small?". **Co
 correction is DERIVED from `NameValues`, not written down — it produces ONE**, `0x42 arg2`, which
 252 already had. Both counts and all three seed widths (111 / 82 / 231) stay in the output.
 **So BOTH TABLES ARE COMPLETE on this cartridge**, and the instrument would say so if they were not.
+
+**And 254 named `0x42`**: it prints every candidate's places with the script that opened each, and
+puts the value the next command compares against **the map's own width and height** — read for all
+425 maps already. Twenty-four on SEAFOAM (38x24) and fifty on PATTERN BUSH (60x32) cannot be rows.
+**6 of 6 could be a column, 4 a row, 2 ONLY a column: `0x42 arg0` is an X.** The negative controls
+are the point — `specialvar`'s answer (324/324 both, 0 only-a-column) and `copyvar`'s destination
+(115/115, 0) come back UNNAMED, and a test that named those would name anything. `0x42 arg2` has
+ONE compared place and is reported as unsettled. **Whose square it is, is not read.**
 
 `--buried` reads the four bytes a buried sign keeps where every other sign keeps a script pointer
 (248): an item id, an INDEX and a count with one spare bit. **All 183 item ids resolve to a name
@@ -905,9 +927,10 @@ still work.**
   * ~~the mirror~~ **RUN AT 253**: corrected, it finds nothing new, so **both tables are
     complete**. Uncorrected it finds 27, which is why the correction is printed beside it.
   * **the whole image** — `--operands` asks the map scan, which is 0.6% of the file.
-  * **`0x42` still has no name.** Eight places, each a `compare` away from saying what it
-    computed; `--read-from` on those eight is one command. And **`0x42 arg2`'s direction** is the
-    one candidate the sweep still reports.
+  * ~~`0x42` still has no name.~~ **READ AT 254: it leaves a SQUARE**, and its first operand is
+    the column — off the maps' own widths and heights, with two negative controls that come back
+    unnamed. What is left: **whose** square (226's shape, and eight places is thin for it),
+    `0x42 arg2` (one compared place, names nothing), and a name in `ScriptCommands`.
 * **Whether a dropped trigger hides a reader** (247). `MapLinkExtractor` drops trigger records
   whose square is off the map before anything sees them. That understates the readers, which is
   the safe direction, and nobody has printed how many.
