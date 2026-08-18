@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-289`, 3101 tests green.
+`claude-290`, 3105 tests green.
 
 Standing rules — do not break these:
 
@@ -297,15 +297,31 @@ Traps worth carrying:
     door in this game stand behind a thing you can only dig up — and the answer bounds what the
     walk's inability costs, which the list never could.
 
+31. **AN EMPTY BUCKET IS A FACT ABOUT THE LIST IT WAS ASKED OF** (250). 229 reported "0 arrival
+    conditions name a variable NOTHING in the scan writes at all" and it was true. Asked of the
+    other list that asks the same question — a trigger's condition, which 247 established is the
+    same two halfwords on a different record — the same bucket holds **43**. A bucket that comes
+    back empty is the most persuasive output an instrument produces and the easiest to leave
+    unexamined, because there is nothing in it to be suspicious of. **When a classification has an
+    empty bucket, find the other population the same classification applies to and run it there
+    before quoting the nought.**
+
+32. **PREDICTING THE BREAK COUNT TESTS YOUR MODEL OF THE FIXTURES, NOT ONLY THE CODE** (250). A
+    break was predicted to kill 2 and killed 1, and the guard was right — the second test names
+    the shared reading rather than the caller that reaches it, so it could not have noticed. The
+    wrong thing was the prediction. That is still worth the ten seconds: a prediction that misses
+    tells you which fixture does not cover what you thought, which is the same information a green
+    break gives and cheaper.
+
 ## Where things are
 
-Read `claude/milestone-249-nothing-is-a-wall-with-a-shovel.md` first, then `248`, `247`, `246`,
-`245`, `244`, `243`,
+Read `claude/milestone-250-the-bucket-that-was-empty-on-one-list.md` first, then `249`, `248`,
+`247`, `246`, `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
 `238`, `237`,
 `236`, `235`, `234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
-**Twenty-six faults closed and every one was in this project, not on the cartridge.** A walk that
+**Twenty-seven faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
 script" list; a list ranked by a count instead of by what it costs; a party that could not gain
 a level; a roadmap line that called a fix a cost; a continuation that carried flags and not
@@ -329,7 +345,9 @@ the deaf list was 26 when the true answer is that NOTHING this cartridge writes 
 and at 248 **183 buried items whose four bytes nothing had ever read**, each remembered by an
 index and therefore by a flag nothing in the file names — so every flag count in this project is
 a count of flags something NAMES and is short by up to 183; and at 249 **the run standing on 182
-of those 183 and collecting none**, which is what 239 left when it put signs into the walk.
+of those 183 and collecting none**, which is what 239 left when it put signs into the walk; and at
+250 **`--arrivals` asking its question of only one of the two lists that ask it** — its empty
+"nothing writes this variable" bucket is 43 on the trigger list.
 
 `246` is the read that is not a command, and the literal-pool test for whether compiled code holds
 a number — both live inside `--namespaces`, which is now the fullest single instrument in the
@@ -486,9 +504,20 @@ which is the kind of thing a hand-kept table rounds off.
 `--the-scan` is the error bar on every map-scan number: reads against byte positions for **every**
 command code, and a per-kind table with the ALONE columns — what each of the five kinds of script
 reaches, asks and moves that no other kind does. `--two-commands` measures what `0x63` and `0x65`
-take, with floors. `--arrivals` reads the condition on every script a map runs on arrival — **a
-variable AND a value** — and asks whether any `setvar` in the scan ever writes that value. Nought
-name a variable nothing writes; **28 of 69 want a value nobody writes**. Only a `setvar` says what
+take, with floors. `--arrivals` reads the condition on every script a map runs on arrival AND on every SQUARE (250)
+— **a variable AND a value** — and asks whether any `setvar` in the scan ever writes that value.
+Both lists go through one reading and each condition says which asked, because 250 exists entirely
+because one of them had never been asked.
+**ON ARRIVAL**: 350 conditions, 69 distinct, 58 scripts — 0 name a variable nothing writes, 28 of
+69 want a value nobody writes. **ON A SQUARE**: 228 conditions, 128 distinct on 128 scripts (every
+square has its own) — **43 name a variable NOTHING writes**, all of them `0x405F`, and 82 want a
+value nobody writes.
+**`0x405F` is written by NOTHING** — no setvar in the scan, no place in sixteen megabytes, and no
+literal the code loads (246's blind spot with an address on it). A variable nothing writes holds
+nought, so **1 of the 43 is armed from the start and 42 can never fire**; they are 43 squares on
+`3.42` ROUTE 23 and `28.0` ROUTE 22 across 8 scripts, the run reaches both maps, and `--in-order`
+costs +0 maps at every setting so nothing is behind them. It is read twice, both
+`comparevars 0x405F, 0x4001`. Only a `setvar` says what
 value it writes, so a condition satisfiable through a `copyvar` reads as satisfiable by nothing:
 that overstates the boundary rather than understating it, which is the safe direction.
 
@@ -782,9 +811,10 @@ still work.**
     front of it.
   * **The eight unused indices** — 7, 16, 40, 43, 44, 45, 46, 124, four of them consecutive — and
     **the spare bit**, set by 6 records whose every other field is ordinary.
-* **The trigger's other half** (247). `--arrivals` asks whether anything writes the VALUE a header
-  condition wants — 28 of 69 want a value nobody writes. Nobody has asked it of a trigger's 228
-  conditions, and it is the same instrument pointed at a different list.
+* ~~The trigger's other half.~~ **ASKED AT 250**: 43 of the 228 name a variable NOTHING writes,
+  all of them `0x405F`, and 42 of those can never fire. What is left is the **82 conditions (56
+  distinct) waiting on a value nobody writes** — the bigger of the two middle buckets in distinct
+  terms, and nothing has opened it.
 * **Whether a dropped trigger hides a reader** (247). `MapLinkExtractor` drops trigger records
   whose square is off the map before anything sees them. That understates the readers, which is
   the safe direction, and nobody has printed how many.
