@@ -109,9 +109,17 @@ Traps worth carrying:
     milestone that discovers the true number is not the act that corrects the block — 228 wrote
     "its 264 was right" in its own document and left `258` standing here.
 
+15. **A number nothing computes cannot even be wrong** (231). Trap 8 says a number with no
+    denominator cannot come back empty. This is one turn further on: `936`, `45`, `62`, `240`,
+    `146` and `158` were quoted in this file and **no instrument in the repository printed any of
+    them**. They read like measurements, they were quoted like measurements, and nothing could
+    have contradicted them. `936` turned out to be right after six milestones of being
+    uncheckable, which is the least satisfying way for an audit to end and the only honest one.
+    **Before quoting a number, know which command prints it.** If none does, that is the finding.
+
 ## Where things are
 
-Read `claude/milestone-230-three-flags-behind-a-prize-counter.md` first, then
+Read `claude/milestone-231-a-number-nothing-computes.md` first, then `230`, then
 `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
 **Twenty faults closed and every one was in this project, not on the cartridge.** A walk that
@@ -193,7 +201,11 @@ compare is reading what N left.** `0x05` has 152 such sites and `0x00` has two. 
 from sites where nothing else could have answered and applied to sites where something could,
 which is the opposite direction and not circular.
 
-`--routines` has the barrier now (220) and prints what it does not credit: the sites whose
+`--routines` prints **calls AND call places per routine** since 231 — the places-not-reads rule
+asked of a routine number rather than of a command code, which nothing had ever done. It is 936
+byte positions for 4461 calls, and 60 of the 178 routines answer differently depending which you
+ask for; `0x0AB` is 97 calls at ONE address. It also has the barrier (220) and prints what it does
+not credit: the sites whose
 compare is only past a `call`, another `special`, a `callstd` or a `0xA0`, in their own section
 with the values they were being credited with. **It also prints branches as sites AND as byte
 positions**, because a block hanging off two triggers is read twice and only one of those two
@@ -279,6 +291,12 @@ sets. CERULEAN CAVE is closed: the run now reaches it, off the SAPPHIRE thread.
 
 ## Where the reading stands
 
+**AUDITED LINE BY LINE AT 231, against a run of every instrument.** 45 lines checked: 39 were
+right, 4 were wrong (fixed here), and 4 quote numbers **no instrument in this repository prints
+any more** — those are marked. A number nothing computes cannot come back wrong, which is worse
+than a number that is stale. If you change what an instrument reads, re-run it and fix this block
+in the same commit; the alternative is what 230 and 231 spent a session undoing.
+
 ```
 2915 scripts on 425 maps, reaching 3888 blocks
 227 of them do nothing but hand over; 22 scenes are one scene entered several ways
@@ -296,13 +314,15 @@ the floor is asked for money in ONE place and it is the coin counter; 8 at --say
 the widest run sets 212 of the 322 gating flags — 110 gates it never opens; 201 at the floor
 those 110 are 35 with no opener, 31 never run, 17 never picked up, 15 obstacles, 12 past the boundary
 35 and 15 are the same at every lever setting, which is how a property of the FILE has to behave
-62 gates no walk opens hold 240 people; 146 of them are CUT trees and ROCK SMASH rocks
-3 scripts hold 27 gating flags and 158 objects: CUT, ROCK SMASH, STRENGTH
+3 scripts hold 27 gating flags: CUT and ROCK SMASH (15, 2 scripts), STRENGTH (12, 1) — CHECKED
+  [62 gates / 240 people / 146 trees and rocks / 158 objects: NOTHING PRINTS THESE ANY MORE]
 the 12 STRENGTH boulders are SEAFOAM and VICTORY ROAD, and their flags split THREE ways
-766 places call 63 routines the widest run cannot answer; 187 have an answer nothing branches on
-of 1055 branching sites in the file, nought takes 212 — and 0x188's one place comes to nothing
+766 places call 63 routines the widest run cannot answer; 186 have an answer nothing branches on
+--routines: 1118 branching sites at 437 byte positions in the file; 48 routines are branched on
+0x188's one place comes to nothing
 0x4059 has one writer and NO readers anywhere; 0x4055 has 21 readers against a floor of 0
-0x083 and 0x084 are asked twice between them and carry 39 of the ceiling's 44 branches
+0x083 and 0x084 are asked THREE times between them (1 and 2) and carry 39 of the 64 branches
+  nought takes in the widest run's mixed bucket — 3 of its 19 byte positions of 44
 336 places read an answer through a call: 225 belong to 6 routines, 57 turn on an arm
 40 leave the answer alone and 9 jump somewhere the reading does not follow — those are different
 of the 40, 38 read 0x01C's or 0x01D's answer across a call that is `copyvar 0x8012, 0x8013`
@@ -323,13 +343,15 @@ neither is NAMED: what they take is read, what they do is still a guess
 350 arrival conditions at 69 distinct (variable, value, script) on 58 scripts across 61 maps
 28 of the 69 want a value NO setvar in the scan writes; 0 name a variable nothing writes at all
 0x406F: 20 maps want 1/2/3/5/6/7/8 and the only writer in the scan writes 0, at 3 places
-178 routines called at 936 places; the ceiling is 45 of 437 byte positions
+178 routines called 4461 times at 936 byte positions — 936 was RIGHT and NOTHING PRINTED IT
+  until 231; 118 of the 178 are called once per byte position and 60 are not
 the run's silence decides at 11 byte positions: 0x188 (1) and 0x0A3 (8), 0x0D5, 0x189
 --routines: 148 sites have a compare past something, 81 with nothing else — 38 come back,
    40 were somebody else's, 3 not said
 callstd 0x05 and 0x00 ANSWER — 153 and 2 sites have nothing in front that could have instead
 5660 callstd/gotostd askings at 2791 places, of 9 numbers; the table is NOT found
-0x194 is 747 calls at 26 places; 0x039 is 234 at 234 — the inflation runs 1x to 67x
+0x194 is 1066 calls at 34 places; 0x039 is 234 at 234; the worst is 0x0AB at 97 calls at ONE
+  place — the ROUTINE inflation runs 1x to 97x, worse than any command code's 67x
 0x01C's nineteen sites are ONE address; 219 called them nineteen places
 the 57 are TWO blocks, each a yes/no turning on 0x083 or 0x084 and then 0x153
 2 of those gates hold NOBODY — 0x084A and 0x084B, the ferry, with no setter anywhere
@@ -339,7 +361,12 @@ of 199's three widths, 0xB3 and 0xB4 are in SERIES and 0xC1 opens no flag at any
 
 ## The next task, precisely
 
-1. **AUDIT THE "Where the reading stands" BLOCK, LINE BY LINE, AGAINST ITS OWN INSTRUMENTS.**
+1. **DONE AT 231 — 45 lines, 39 right, 4 wrong, 4 uncomputable.** What is left of it: the three
+   numbers nothing prints (`62 gates hold 240 people`, `146 trees and rocks`, `158 objects`) and
+   `the ceiling is 45 of 437 byte positions`. Each needs an instrument or deleting; they are
+   marked in the block. And **`0x0AB`**, which 231 turned up on the way: **97 calls at ONE byte
+   position**, branched on there, never read — the largest inflation in the file and one address
+   to go and look at. The history for reference:
    230 did the floor-row bisect (answer: milestone **199**, one commit, +3 at all six settings,
    announced in its own commit message) and then found the bigger thing: that block, and two
    items of this list, entered the prompt at **`f8d4f15fe`, "the next session's prompt with 190
