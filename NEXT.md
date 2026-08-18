@@ -6,11 +6,11 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **Now measured: what each kind of script reaches that nothing else does.** The two kinds last
-  milestone found missing open **2491 places nothing else reaches** — one in ten of the whole
-  scan. That column is what would have caught the mistake three milestones earlier.
-- **And the routine that was hiding in them is the fan club.** Eight fans, each asked whether
-  they're a fan of you; the room also asks all eight on arrival and, when the answer is silence,
-  runs an unnamed command on every one of them.
-- Those two commands have known widths and no meaning — read from the shape of their neighbours
-  thirty-eight milestones ago. They are the next thing to name.
+- **Two instructions that have had a size but no meaning for thirty-nine milestones now have
+  measured arguments.** One takes a person and a square on that person's own map; the other takes
+  a person and one of the handful of values the game uses for how somebody moves.
+- **The evidence is the floors, not the hits.** "Every site names a real person" sounds
+  conclusive and means nothing — read the wrong word instead and a fifth still agree. The square
+  reading stands because chance would give 0.45 hits and there are 26.
+- **They are still not named.** What they take is read off the cartridge; what they do is a guess,
+  and this does not make one. Five breaks, five catches.

@@ -1,7 +1,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-264`, 2934 tests green.
+`claude-265`, 2941 tests green.
 
 Standing rules — do not break these:
 
@@ -101,8 +101,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-225-what-each-kind-opens-alone.md` first, then
-`224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
+Read `claude/milestone-226-a-person-and-a-square.md` first, then
+`225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
 **Twenty faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
@@ -274,6 +274,9 @@ ONLY 11 of 108 command codes are read once per byte position — --the-scan says
 by kind: person 15966 places alone, sign 3015, trigger 2134, on load 1324, on arrival 1167
 the two kinds the shared list lost open 2491 places nothing else reaches — 1 in 10 of 24491
 0x0A3 is the FAN CLUB on 14.9: eight fans in 0x8004, and the map's on-load asks it eight times
+0x63 takes a person and a SQUARE — 26 of 126 hit that person's own square against a floor of 0.45
+0x65 takes a person and a MOVEMENT TYPE — 54 of 105 the person's own against a floor of 22.7
+neither is NAMED: what they take is read, what they do is still a guess
 178 routines called at 936 places; the ceiling is 45 of 437 byte positions
 the run's silence decides at 11 byte positions: 0x188 (1) and 0x0A3 (8), 0x0D5, 0x189
 --routines: 148 sites have a compare past something, 81 with nothing else — 38 come back,
@@ -307,12 +310,14 @@ the 57 are TWO blocks, each a yes/no turning on 0x083 or 0x084 and then 0x153
    **And check the enumerator before the count.** 224 found the shared script list — created at
    221 to end this very fault — reading three of the five kinds, so 221, 222 and 223 all ran on
    four fifths of the cartridge's scripts. Their findings survived; their numbers did not.
-   **`0x0A3` is read now** (225): the fan club on `14.9`, eight fans numbered in `0x8004`, asked
-   once by each fan and eight more times by the map's own on-load chain at `0x0816F163`. Its
-   nought arms call `0x63 ; 0x65 ; return` — **two commands whose widths this project derived at
-   187 and whose meanings it never named**, both taking a person id on that map. So the run's
-   silence runs an unnamed per-person command on all eight fans on arrival. `0x63`, `0x65` and
-   the `special 0x00A7` that opens the chain are the cheap next reads.
+   **`0x0A3` is read** (225): the fan club on `14.9`, eight fans numbered in `0x8004`, asked once
+   by each fan and eight more times by the map's own on-load chain at `0x0816F163`. **`0x63` and
+   `0x65` are measured** (226, `--two-commands`): `0x63` takes a person and a square in that
+   person's own coordinate system (26 of 126 hit their exact square against a chance floor of
+   **0.45**), `0x65` takes a person and a movement type (54 of 105 the person's own against a
+   floor of **22.7**). **Neither is named** — what they take is READ, what they do is still a
+   guess, and naming them would need the game's own code. **`special 0x00A7`**, which opens the
+   chain, is the cheap next read.
    Also owed: **the standard-routine table** (222 hunted it — 24 candidates against a floor of 0,
    no way to choose because a pointer to `nop ; end` passes "reads as a script"; untried rules
    are that entries be distinct and longer than two bytes). **`callstd 0x05`'s 251 "not said"
