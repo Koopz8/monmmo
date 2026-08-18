@@ -177,26 +177,46 @@ public sealed class TheOtherArmOfTheBarrierTests
     /// learned <c>call</c> at 214 and this one did not, because there was nothing to learn
     /// through. Every code the one reading stops at, the other stops at.
     /// </para>
+    /// <para>
+    /// <b>Each barrier is written at its own width and the fixture checks where it landed.</b>
+    /// The first version padded every code to five bytes, which for the one-byte
+    /// <c>callstd</c> and the no-argument <c>0xA0</c> pushed the compare out of the four-command
+    /// window entirely — so those two rows passed with the barrier removed. They were testing
+    /// the window, not the list.
+    /// </para>
     /// </summary>
     [Theory]
-    [InlineData(Special)]
-    [InlineData(Call)]
-    [InlineData(0x09)] // callstd
-    [InlineData(0xA0)]
-    public void EveryCodeTheOtherArmStopsAtStopsThisOneToo(byte barrier)
+    [InlineData(Special, 2)]
+    [InlineData(Call, 4)]
+    [InlineData(0x09, 1)]   // callstd
+    [InlineData(0xA0, 0)]
+    public void EveryCodeTheOtherArmStopsAtStopsThisOneToo(byte barrier, int width)
     {
         Assert.True(SpecialCalls.AnswersItself(barrier));
 
         byte[] image = Blank();
 
         Put(image, 0x1000, Special, 0x1C, 0x00);
-        Put(image, 0x1003, barrier, 0x00, 0x00, 0x00, 0x00);
-        Put(image, 0x1008, Compare, 0x0D, 0x80, 0x01, 0x00);
-        Put(image, 0x100D, GotoIf, 0x01);
-        Address(image, 0x100F, 0x1000);
-        Put(image, 0x1013, End);
+        Put(image, 0x1003, barrier);
+
+        for (var i = 0; i < width; i++) image[0x1004 + i] = 0x00;
+
+        int compare = 0x1004 + width;
+
+        Put(image, compare, Compare, 0x0D, 0x80, 0x01, 0x00);
+        Put(image, compare + 5, GotoIf, 0x01);
+        Address(image, compare + 7, 0x1000);
+        Put(image, compare + 11, End);
+
+        // WHERE THE THING BEING ASSERTED ABOUT ACTUALLY IS. Without this the row passes for
+        // any reason at all, including the compare being somewhere nothing looks.
+        List<ScriptCommand> commands = ScriptReader.Read(new Rom(image), Rom.BaseAddress + 0x1000);
+
+        Assert.Equal(barrier, commands[1].Code);
+        Assert.Equal(Compare, commands[2].Code);
 
         Assert.Empty(Read(image).Direct);
+        Assert.Equal(new[] { 1 }, Read(image).Beyond);
     }
 
     /// <summary>
