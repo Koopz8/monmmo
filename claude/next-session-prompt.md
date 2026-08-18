@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-296`, 3141 tests green.
+`claude-297`, 3154 tests green.
 
 Standing rules — do not break these:
 
@@ -414,15 +414,49 @@ Traps worth carrying:
     every pass as it began. **A criterion that admits more than the thing you are explaining has
     something missing, and the count of what it admits is the size of what.**
 
+46. **A CLASSIFICATION OF A TOTAL THAT MIXES TWO POPULATIONS CANNOT COME BACK DIFFERENT FOR THEM**
+    (257). This is trap 31 one level in. 250 exists because `--arrivals` asked one of its two
+    condition lists a question, got nought, and quoted the nought; 255 then split the middle
+    bucket four ways and printed the split of the two lists ADDED TOGETHER. Asked of each list:
+    the one-hop copy idiom is worth **76 of the arrival list's 282 and NOUGHT of the square
+    list's 82**, and the counter is worth **nought of the arrival list and all three** of what the
+    square list gained. Neither mechanism touches both. 255's "a fifth of it was wrong, and the
+    cause is one two-command idiom" is true of the total and is a sentence about ONE list — 21.7%
+    is the average of 27.0% and 3.7%, which are about different things. **A mechanism that is a
+    rounding error in the total can be the whole of one list's answer.**
+
+47. **A VERDICT IS WORTH WHAT ITS DOES-NOT-KNOW COLUMN IS SMALL** (257). "N conditions can never
+    fire" is the sentence this reading exists to produce and NEITHER list can support one: 6
+    against an error bar of 192 on the arrival list, 8 against 42 on the square list. The command
+    prints the comparison rather than leaving it to be made. **Print the count you cannot read
+    beside the count you can, every time, or the second one is a sentence about the reading
+    wearing a sentence about the cartridge.**
+
+48. **A LOAD-BEARING ASSUMPTION GETS MARKED OR IT BECOMES A READING** (257). 250 wrote "a variable
+    nothing writes holds nought" in prose. Nothing in this repository has read what the save's
+    variable block holds before a script writes it — it is MODELLED — and it decides **72 of the
+    square list's 228** conditions, the difference between armed at the start and dead. The
+    column says MODELLED in the output now, beside three that say READ. **An assumption that
+    changes a headline is not a footnote.**
+
+49. **SIX MILESTONES CARRIED A SENTENCE THE COMMIT AFTER IT HAD ALREADY DISPROVED** (257).
+    250 said `0x405F` is written by NOTHING and 42 of its 43 squares can never fire. **251 put
+    `copyvar`'s destination into both write tables** — and `0x405F` is filled by four
+    `copyvar 0x405F, 0x4001` sites on `3.42`, all of which the map scan opens, with `0x4001` set
+    to all eight values those squares want. The sentence was copied forward through 251, 252,
+    253, 254, 255 and 256. This is trap 14 with the worst possible timing: **the milestone that
+    disproves a line is usually the very next one, and it is the one least likely to re-read it.**
+
 ## Where things are
 
-Read `claude/milestone-256-three-is-odd.md` first, then `255`, `254`, `253`, `252`, `251`,
+Read `claude/milestone-257-the-same-four-answers-asked-of-each-list.md` first, then `256`,
+`255`, `254`, `253`, `252`, `251`,
 `250`, `249`, `248`, `247`, `246`, `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
 `238`, `237`,
 `236`, `235`, `234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
-**Twenty-nine faults closed and every one was in this project, not on the cartridge.** A walk that
+**Thirty faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
 script" list; a list ranked by a count instead of by what it costs; a party that could not gain
 a level; a roadmap line that called a fix a cost; a continuation that carried flags and not
@@ -453,7 +487,12 @@ from BOTH of this repository's write tables** — the other half of the same cop
 both, one line away — so sixteen variables read as written by nothing and every reading operand's
 written-ness was short; and at 252 **two MORE write operands in neither table** — `specialvar`'s
 destination, which five files already read as the answer variable, and `0x42 arg0`, whose own
-width comment calls it a command taking two variables.
+width comment calls it a command taking two variables; and at 257 **255's four-way split reported
+of the two condition lists ADDED TOGETHER** — the one-hop copy correction is 27.0% of one list and
+NOUGHT of the other, the counter is the reverse, and 21.7% is the average of two numbers about
+different things; and, in the same reading, **250's `0x405F` headline, disproved by 251 and
+carried forward through six milestones** — 42 squares filed as "can never fire" are filled by four
+`copyvar 0x405F, 0x4001` sites the map scan opens.
 
 `246` is the read that is not a command, and the literal-pool test for whether compiled code holds
 a number — both live inside `--namespaces`, which is now the fullest single instrument in the
@@ -519,7 +558,8 @@ whether the next command compares that very number — against a floor of **453 
 candidate still open: it names a variable and which way is not read.
 
 **And the MIRROR at 253**: seeded on the READERS — which is what finds an operand naming a variable
-nothing in the scan writes, `0x405F`'s shape — it produces **27 candidates run the obvious way**,
+no `setvar` in the scan writes, `0x405F`'s shape (something DOES copy into it, four times — 257) —
+it produces **27 candidates run the obvious way**,
 headed by `giveitem`'s item id at 100%, because the reader list contains `0x1A arg2` and seeding
 on its 149 values turns "is this a variable?" into "is this number small?". **Corrected — and the
 correction is DERIVED from `NameValues`, not written down — it produces ONE**, `0x42 arg2`, which
@@ -638,13 +678,23 @@ which is the kind of thing a hand-kept table rounds off.
 `--the-scan` is the error bar on every map-scan number: reads against byte positions for **every**
 command code, and a per-kind table with the ALONE columns — what each of the five kinds of script
 reaches, asks and moves that no other kind does. `--two-commands` measures what `0x63` and `0x65`
-take, with floors. **`--arrivals` also measures its own caveat now** (255). The middle bucket — "a variable something
-writes, but nobody writes THAT VALUE" — is 364 conditions / 84 distinct across both lists, and it
-is answered off `setvar` alone. Split four ways: **76 / 4 ARE written** through
-`setvar src, N ; copyvar dest, src` (one hop, the command IMMEDIATELY before, no barrier list);
-**3 / 3** a counter reaches (`addvar`'s step is a literal); **192 / 10** copied from a source this
-cannot read, which is the caveat's real remainder; **93 / 67** where the bucket means what it says.
-So a fifth of it by condition count was wrong, and the cause is one two-command idiom.
+take, with floors. **`--arrivals` measures its own caveat (255) AND asks it of each list separately
+(257).** The middle bucket — "a variable something writes, but nobody writes THAT VALUE" — is 364
+conditions / 84 distinct across both lists, and it is answered off `setvar` alone. Split four ways:
+**76 / 4 ARE written** through `setvar src, N ; copyvar dest, src` (one hop, the command
+IMMEDIATELY before, no barrier list); **3 / 3** a counter reaches (`addvar`'s step is a literal);
+**192 / 10** copied from a source this cannot read, which is the caveat's real remainder; **93 /
+67** where the bucket means what it says. That is 21.7% — **and it is the average of two numbers
+about different things.** Per list:
+
+```
+  ON ARRIVAL  282 conditions:  76 written /  0 counted / 192 unread copy / 14 neither  -> 27.0%
+  ON A SQUARE  82 conditions:   0 written /  3 counted /   0 unread copy / 79 neither  ->  3.7%
+```
+
+**Neither mechanism touches both lists.** The idiom 255 is named for is worth everything on one
+and nought on the other; the counter is the reverse; and the square list has NO unreadable copies
+at all, so on that list this reading has no unknowns of that kind.
 
 `--arrivals` reads the condition on every script a map runs on arrival AND on every SQUARE (250)
 — **a variable AND a value** — and asks whether any `setvar` in the scan ever writes that value.
@@ -654,14 +704,36 @@ because one of them had never been asked.
 69 want a value nobody writes. **ON A SQUARE**: 228 conditions, 128 distinct on 128 scripts (every
 square has its own) — **43 name a variable NOTHING writes**, all of them `0x405F`, and 82 want a
 value nobody writes.
-**`0x405F` is written by NOTHING** — no setvar in the scan, no place in sixteen megabytes, and no
-literal the code loads (246's blind spot with an address on it). A variable nothing writes holds
-nought, so **1 of the 43 is armed from the start and 42 can never fire**; they are 43 squares on
-`3.42` ROUTE 23 and `28.0` ROUTE 22 across 8 scripts, the run reaches both maps, and `--in-order`
-costs +0 maps at every setting so nothing is behind them. It is read twice, both
-`comparevars 0x405F, 0x4001`. Only a `setvar` says what
-value it writes, so a condition satisfiable through a `copyvar` reads as satisfiable by nothing:
-that overstates the boundary rather than understating it, which is the safe direction.
+**And the VERDICT on every condition, with the column that says how much is not read** (257):
+
+```
+                    something     armed at      NOTHING CAN     does not know
+                    writes it     the start     produce it      (a copy it cannot read)
+                    READ          MODELLED      READ            READ
+    on arrival        144             8             6             192   of 350
+    on a square       106            72             8              42   of 228
+```
+
+**71 of the square list's 82 want NOUGHT** — every variable holds nought before anything writes
+it, so most of that bucket is armed at the start and something has to write the variable to turn
+it OFF. The name reads as unsatisfiable and means the opposite. **The ARMED column is MODELLED**
+and says so in the output: nothing here has read what the save's variable block holds at the
+start, 250 asserted it in prose without marking it, and it decides 72 of 228.
+**NEITHER LIST CAN SUPPORT A COUNT OF DEAD CONDITIONS**: 6 against an error bar of 192, and 8
+against 42. The command prints the comparison.
+**`0x405F` is NOT written by nothing — 250's headline was disproved by 251 and carried anyway.**
+It is filled by **four `copyvar 0x405F, 0x4001` sites on `3.42`**, all opened by the map scan
+(`0x1A7958`, `0x1A7967`, `0x1A7AA1`, …), and `0x4001` is set to all eight values these squares
+want. No `setvar` writes it and the code loads it as an aligned literal 0 times, both still true.
+The command before each copy is not a `setvar`, so 255's one-hop rule correctly declines a value —
+which makes the honest verdict **DOES NOT KNOW, not CANNOT**, and moves 42 out of the dead column
+into the error bar. They are 43 squares on `3.42` ROUTE 23 and `28.0` ROUTE 22 across 8 scripts,
+the run reaches both maps, and `--in-order` costs +0 maps at every setting so nothing is behind
+them. It is read twice, both `comparevars 0x405F, 0x4001`.
+Only a `setvar` says what value it writes, so a condition satisfiable through a `copyvar` reads as
+satisfiable by nothing: that overstates the boundary rather than understating it, which is the
+safe direction — and `--arrivals` now NAMES the source of every unresolved copy, because
+`copyvar`'s second operand is in the bytes even when the value is not.
 
 `--standard` is the routines reached by NUMBER. It counts what the maps ask for, hunts the table
 by shape with a reversed-image floor beside it — **24 candidates in the file and 0 in the
@@ -879,6 +951,15 @@ neither is NAMED: what they take is read, what they do is still a guess
 28 of the 69 want a value NO setvar in the scan writes; 0 name a variable nothing writes at all
 0x406F: 20 maps want 1/2/3/5/6/7/8; the writers write 0, 3 AND 6 — 3 and 6 through
   `setvar 0x8004, N ; copyvar 0x406F, 0x8004`, which 229 never followed (corrected at 255)
+the middle bucket per LIST (257): arrival 282 = 76/0/192/14, square 82 = 0/3/0/79 — the one-hop
+  idiom is 27.0% of one list and NOUGHT of the other, the counter the reverse, neither on both
+the verdict per list (257): arrival 144 written / 8 armed / 6 dead / 192 unread, of 350;
+  square 106 / 72 / 8 / 42, of 228. The ARMED column is MODELLED and the output says so
+71 of the square list's 82 want NOUGHT and are armed at the start — the bucket's name means the
+  opposite of what it says for most of that list; 8 of 228 are ones nothing can produce
+NEITHER list can support a count of dead conditions: 6 against 192, and 8 against 42
+0x405F is copied from 0x4001 at 4 sites on 3.42, all opened by the map scan — 250's "42 can never
+  fire" was disproved by 251's write-table fix and carried for six milestones (257)
 178 routines called 4461 times at 936 byte positions — 936 was RIGHT and NOTHING PRINTED IT
   until 231; 118 of the 178 are called once per byte position and 60 are not
 the run's silence decides at 11 byte positions: 0x188 (1) and 0x0A3 (8), 0x0D5, 0x189
@@ -963,10 +1044,20 @@ still work.**
     front of it.
   * **The eight unused indices** — 7, 16, 40, 43, 44, 45, 46, 124, four of them consecutive — and
     **the spare bit**, set by 6 records whose every other field is ordinary.
-* ~~The trigger's other half.~~ **ASKED AT 250**: 43 of the 228 name a variable NOTHING writes,
-  all of them `0x405F`, and 42 of those can never fire. What is left is the **82 conditions (56
-  distinct) waiting on a value nobody writes** — the bigger of the two middle buckets in distinct
-  terms, and nothing has opened it.
+* ~~The trigger's other half.~~ **ASKED AT 250 and FINISHED AT 257.** 43 of the 228 name a
+  variable NOTHING writes, all of them `0x405F` — and 250's "42 of those can never fire" is wrong:
+  251 put `copyvar`'s destination in the write tables and four `copyvar 0x405F, 0x4001` sites on
+  `3.42` fill it, so the verdict is DOES NOT KNOW. ~~The 82 waiting on a value nobody writes.~~
+  **OPENED AT 257**: 255's one-hop correction is worth NOUGHT of them, a counter reaches 3, and
+  **71 of the 82 want NOUGHT and are armed from the start** — the bucket's name means the opposite
+  of what it says for most of that list. What is left of it:
+  * **The eight the square list cannot produce** and the **six** on the arrival list. Both are
+    small enough to read individually and nobody has.
+  * **The 42 in the error bar.** `--trace 0x4001` is the instrument: what `0x405F` gets is
+    whatever `0x4001` held at the moment of the copy, which is a fact about a run.
+  * **The MODELLED nought.** That a variable holds nought before anything writes it decides 72 of
+    the square list's 228 and has never been read. Reading it means reading compiled code — the
+    same wall `--buried`'s base hunt hit at 248.
 * **The operand sweep's three unfinished halves** (252). `--operands` found two write operands in
   neither table; what it has NOT done:
   * ~~the mirror~~ **RUN AT 253**: corrected, it finds nothing new, so **both tables are
