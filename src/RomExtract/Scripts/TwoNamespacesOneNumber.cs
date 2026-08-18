@@ -79,6 +79,56 @@ public sealed record BothNamespaces(
             .Select(o => o.Operand),
     ];
 
+    /// <summary>
+    /// Numbers a writing operand names and no LOOKING operand ever does — written and never
+    /// read, asked of a population where the question has an answer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>184 built one half of this and 214 needed the other.</b> The whole-image version says
+    /// 650 written and never read against 1070 in the reversed image — the same order of number,
+    /// so the aggregate is what these bytes do by accident and only the per-variable answers
+    /// mean anything. Over the map scan the population is one this project can stand behind.
+    /// </para>
+    /// <para>
+    /// The value-naming operands are left out, or a variable nothing looks at is hidden the
+    /// moment somebody hands its number to a routine as a literal.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<int> WrittenAndNeverLookedAt
+    {
+        get
+        {
+            IReadOnlyList<string> values = NameValues;
+
+            HashSet<int> looked =
+            [
+                .. ByOperand
+                    .Where(o => !Writing.Contains(o.Key) && !values.Contains(o.Key))
+                    .SelectMany(o => o.Value.Keys),
+            ];
+
+            return [.. Written.Where(n => !looked.Contains(n)).Order()];
+        }
+    }
+
+    /// <summary>
+    /// And the same with the value-naming operands counted as looks — how many the raw reading
+    /// would have hidden.
+    /// </summary>
+    public IReadOnlyList<int> WrittenAndNeverReadRaw
+    {
+        get
+        {
+            HashSet<int> looked =
+            [
+                .. ByOperand.Where(o => !Writing.Contains(o.Key)).SelectMany(o => o.Value.Keys),
+            ];
+
+            return [.. Written.Where(n => !looked.Contains(n)).Order()];
+        }
+    }
+
     /// <summary>The numbers used in both, most-named first — counting every operand.</summary>
     public IReadOnlyList<SharedNumber> Shared => SharedOf(Variables);
 

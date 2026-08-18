@@ -171,6 +171,68 @@ public sealed class AnOperandThatNamesAValueTests
         Assert.Equal(0x4050, real.Number);
     }
 
+    // ------------------------------------------------- written and never looked at
+
+    /// <summary>
+    /// THE THING 214 NEEDED: a variable something writes and no LOOKING operand ever names.
+    /// </summary>
+    [Fact]
+    public void AVariableWrittenAndNeverLookedAtIsReported()
+    {
+        BothNamespaces both = Of(Image((0x100,
+        [
+            .. SetVar(0x4050, 1),
+            .. SetVar(0x4051, 1),
+            .. Compare(0x4051, 2),
+            End,
+        ])));
+
+        Assert.Equal([0x4050], [.. both.WrittenAndNeverLookedAt]);
+    }
+
+    /// <summary>
+    /// THE DISCRIMINATION: being handed to a routine as a LITERAL is not being looked at, so a
+    /// deaf variable stays deaf however many times its number appears as a value.
+    /// </summary>
+    /// <remarks>
+    /// Without this, one script passing the literal 0x4050 to a routine silently answers "no,
+    /// something reads it" — which is the direction that makes a finding disappear rather than
+    /// appear, and is therefore the one nothing would ever notice.
+    /// </remarks>
+    [Fact]
+    public void BeingHandedToARoutineAsALiteralIsNotBeingLookedAt()
+    {
+        BothNamespaces both = Of(Image((0x100,
+        [
+            .. SetVar(0x4050, 1),
+            .. SetVar(0x8004, 1),
+            .. CopyIfNotZero(0x8004, 0x4050),
+            .. CopyIfNotZero(0x8004, 0x0005),
+            .. CopyIfNotZero(0x8004, 0x0006),
+            .. CopyIfNotZero(0x8004, 0x0007),
+            End,
+        ])));
+
+        // 0x1A arg2 names four numbers here and one of them is written, which is under half —
+        // so it names values, and 0x4050 is deaf despite appearing as one.
+        Assert.Contains(0x4050, both.WrittenAndNeverLookedAt);
+
+        // And the raw reading loses it, which is what makes the line above worth printing.
+        Assert.DoesNotContain(0x4050, both.WrittenAndNeverReadRaw);
+    }
+
+    /// <summary>
+    /// And it is about what is WRITTEN: a number nothing writes is not a variable written and
+    /// never looked at, however absent it is from every reading operand.
+    /// </summary>
+    [Fact]
+    public void ANumberNothingWritesIsNotAVariableWrittenAndNeverLookedAt()
+    {
+        BothNamespaces both = Of(Image((0x100, [.. SetFlag(0x0025), End])));
+
+        Assert.Empty(both.WrittenAndNeverLookedAt);
+    }
+
     // ------------------------------------------------------------------------- the shape
 
     /// <summary>

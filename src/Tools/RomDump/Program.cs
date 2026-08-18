@@ -9013,6 +9013,39 @@ public static class Program
 
         foreach (SharedNumber one in real.Take(20)) Console.WriteLine($"    {one}");
 
+        // AND WRITTEN AND NEVER LOOKED AT, asked of the map scan where it has an answer.
+        IReadOnlyList<int> deaf = scan.WrittenAndNeverLookedAt;
+        IReadOnlyList<int> deafRaw = scan.WrittenAndNeverReadRaw;
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  {deaf.Count} of the {scan.Written.Count} variable(s) the map scan WRITES are"
+            + " never looked at by any operand that names a variable"
+            + $" — {deafRaw.Count} if the value-naming operand(s) are counted as looks, so"
+            + $" {deaf.Count - deafRaw.Count} were hidden by a literal");
+
+        // AND WHICH KIND OF NEVER, which the count above cannot say. "No script the map scan
+        // opened looks at it" and "nothing in sixteen megabytes looks at it" are opposite
+        // findings: the first is the code boundary and the second is a variable the cartridge
+        // writes and never consults. 214 found one of the second kind by hand-grepping.
+        IReadOnlyDictionary<int, int> anywhere = EverywhereInTheImage.EveryVariableRead(rom);
+
+        List<int> pastTheBoundary = [.. deaf.Where(anywhere.ContainsKey)];
+        List<int> nowhereAtAll = [.. deaf.Where(v => !anywhere.ContainsKey(v))];
+
+        Console.WriteLine(
+            $"    {pastTheBoundary.Count} are looked at somewhere the map scan never opened —"
+            + " past the code boundary, not unread: "
+            + string.Join(", ", pastTheBoundary.Take(14).Select(v => $"0x{v:X4}"))
+            + (pastTheBoundary.Count > 14 ? $", +{pastTheBoundary.Count - 14} more" : ""));
+
+        Console.WriteLine(
+            nowhereAtAll.Count == 0
+                ? "    and NONE is unread across the whole image — every one of them is the"
+                  + " boundary rather than a variable nothing consults"
+                : $"    and {nowhereAtAll.Count} are looked at NOWHERE IN SIXTEEN MEGABYTES: "
+                  + string.Join(", ", nowhereAtAll.Select(v => $"0x{v:X4}")));
+
         Console.WriteLine();
         Console.WriteLine("  and the raw version, which is the one that needed checking:");
 
