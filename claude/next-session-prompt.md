@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-288`, 3096 tests green.
+`claude-289`, 3101 tests green.
 
 Standing rules — do not break these:
 
@@ -282,9 +282,24 @@ Traps worth carrying:
     with both the overlap and the two singletons, because "12 and 12" without the "and 0" is two
     numbers that might be about different records.
 
+29. **A SET DIFFERENCE NEEDS THE BASE RATE OF THE THING BEING DIFFERENCED** (249). "21 of the 65
+    buried items are named by no script" reads as a finding and is not one: a bit under half of
+    every item in this game is named by no script at all, so 65 drawn at random would leave about
+    30 — the buried kinds are BETTER covered than average and the 21 is BELOW its own floor. This
+    is trap 8 in a shape that does not look like a byte scan: **any "N of these are missing from
+    that" needs the share of a random N that would also be missing**, computed and printed
+    alongside, or it is a number with no denominator wearing a denominator's clothes.
+
+30. **THE NEGATIVE WAS THE FINDING** (249). The interesting result was not the list of what is
+    only underground; it was that **nought of the nine items any script asks for has no other
+    source**. A reading that can only produce a list produces one whether or not there is
+    anything there. Ask the question whose "no" is worth as much as its "yes" — here, does any
+    door in this game stand behind a thing you can only dig up — and the answer bounds what the
+    walk's inability costs, which the list never could.
+
 ## Where things are
 
-Read `claude/milestone-248-what-is-buried.md` first, then `247`, `246`,
+Read `claude/milestone-249-nothing-is-a-wall-with-a-shovel.md` first, then `248`, `247`, `246`,
 `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
 `238`, `237`,
@@ -313,7 +328,8 @@ two halfwords on a map's third list, 228 of them naming 42 variables, and no swe
 the deaf list was 26 when the true answer is that NOTHING this cartridge writes goes unconsulted;
 and at 248 **183 buried items whose four bytes nothing had ever read**, each remembered by an
 index and therefore by a flag nothing in the file names — so every flag count in this project is
-a count of flags something NAMES and is short by up to 183.
+a count of flags something NAMES and is short by up to 183; and at 249 **the run standing on 182
+of those 183 and collecting none**, which is what 239 left when it put signs into the walk.
 
 `246` is the read that is not a command, and the literal-pool test for whether compiled code holds
 a number — both live inside `--namespaces`, which is now the fullest single instrument in the
@@ -376,6 +392,13 @@ line wide enough, 14883 candidate bases, 889 loaded by an instruction against a 
 **Twelve records name NO item and carry counts of 10/20/40/100** where the other 171 carry one —
 the same twelve both ways, nought either way — and all twelve are on `10.14`, which holds 5 of the
 5 coin chains 208 found.
+**And what is only underground** (249): 65 distinct items are buried and 21 are named by no script
+— which is BELOW the floor of 30.3 the base rate gives, printed beside it. The finding is the
+NEGATIVE: 9 items are asked for by a script, 3 of those are buried, and **NOUGHT is asked for AND
+has no other source**, so the run's total inability to dig costs it no reach at all. It also runs
+the six settings and prints how much the walk stands on: **182 of 183 at the widest, on 78 of 79
+maps, and it collects none of them** — the one it never even stands on is `1.62 (35,5)`, an ELIXIR
+at index 33.
 
 `--play --signs` is the fourth list with **its own control in the same process**: which sign
 scripts ran, at how many addresses, on how many maps, **why each of the rest did not** (three
@@ -749,9 +772,14 @@ still work.**
     889 loaded against a reversed 84). Settling it means reading the routine that handles a buried
     item, which means reading COMPILED CODE — a thing this project has never done and which is a
     decision rather than a milestone. 246's literal-pool test is as far as the data goes.
-  * **The run never picks any of them up.** The buried kind have no script, so 183 items on 79
-    maps lie on the ground that no lever setting collects. Nobody has printed how many of the 79
-    the run reaches.
+  * ~~The run never picks any of them up.~~ **MEASURED AT 249**: the widest walk stands on 182
+    of the 183, on 78 of the 79 maps, and collects none — 101/122/122/182/182/182 across the six
+    settings, printed by `--buried`. The one it never stands on is `1.62 (35,5)`, an ELIXIR.
+    Making it collect them is a change to the RUN and a decision: 249 showed it moves no reach,
+    so it would move only what the party ends with.
+  * ~~Is anything only underground?~~ **ASKED AT 249.** 21 kinds are, which is below the base
+    rate's 30.3, and **nothing that is asked for has no other source** — no wall has a shovel in
+    front of it.
   * **The eight unused indices** — 7, 16, 40, 43, 44, 45, 46, 124, four of them consecutive — and
     **the spare bit**, set by 6 records whose every other field is ordinary.
 * **The trigger's other half** (247). `--arrivals` asks whether anything writes the VALUE a header
