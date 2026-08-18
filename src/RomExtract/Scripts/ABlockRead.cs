@@ -95,14 +95,15 @@ public static class ABlockRead
                 reaches.Add(target);
         }
 
-        byte? stoppedOn = ScriptReader.StoppedAt(rom, address);
-        int? stoppedAt = ScriptReader.StoppedAtOffset(rom, address);
-
+        // Both halves come from ScriptReader, which already returns nothing from either when a
+        // read ends properly. A `stoppedOn is null ? null : stoppedAt` guard here looked like a
+        // rule and was a second statement of one that already held — breaking it changed nothing
+        // because nothing reached it, which is 219 again.
         return new Block(
             address,
             [.. commands.Select(c => new Line(c.Offset, c.Code, c.Arguments))],
-            stoppedOn,
-            stoppedOn is null ? null : stoppedAt,
+            ScriptReader.StoppedAt(rom, address),
+            ScriptReader.StoppedAtOffset(rom, address),
             reaches);
     }
 
