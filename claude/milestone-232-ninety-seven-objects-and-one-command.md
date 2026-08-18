@@ -61,14 +61,15 @@ it.
 
 ```
   0x27 at 98 byte position(s) the map scan opens
-    68 of them follow a `special` IMMEDIATELY, across 41 distinct routines
+    68 of them follow a `special` IMMEDIATELY, across 41 distinct routines   <- 36, CORRECTED AT 235
     17 follow 0x39, 9 a setvar, 3 a 0x9C, 1 a conditional
 
   the floor: 576 of 24491 byte positions are a `special` — 2.35%,
              so chance would put 2.3 of the 98 there, not 68
 ```
 
-**Thirty times chance, and spread across forty-one routines rather than one routine's habit.**
+**Thirty times chance, and spread across thirty-six routines rather than one routine's habit.**
+(This document said forty-one. It is 36 — see `milestone-235`; nothing computed 41.)
 `0x27` is a command that belongs after a routine call. What it *does* is not read here and this
 milestone does not guess — 226's discipline: what it takes and where it sits are READ, what it
 means needs the game's own code.

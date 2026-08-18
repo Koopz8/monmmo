@@ -156,7 +156,7 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-234-the-same-boundary-asked-a-different-way.md` first, then `233`,
+Read `claude/milestone-235-waiting-is-about-the-routine.md` first, then `234`, `233`,
 `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
 **Twenty faults closed and every one was in this project, not on the cartridge.** A walk that
@@ -412,6 +412,11 @@ of 199's three widths, 0xB3 and 0xB4 are in SERIES and 0xC1 opens no flag at any
 the obstacle scripts carry 49 CUT / 97 ROCK SMASH / 54 STRENGTH objects, on 21 / 15 / 15 maps
 0x0AB is ONE byte position, 0x081BE07C, reached by those 97 — and all it decides is one 0x27
 0x27 is 98 byte positions and 68 of them follow a special, against a floor of 2.35% (2.3 of 98)
+those 68 are 36 routines, NOT 41 — 232 wrote 41 and nothing ever computed it (235)
+nought of the 98 follow a specialvar; every one of the 68 follows a plain special
+22 of the 36 are asked in ONE place; of the other 14, THIRTEEN are waited for at EVERY place
+  and 68 of the 82 multi-place routines at NONE — expected under per-site sprinkling: 0.21
+0x194 is the only exception: waited at 1 of its 34 places
 0x9C is 7 byte positions and SEVEN distinct words — a column; 3 of them are the obstacle scripts
 exactly ONE conditional in the map scan has a 0x27 its target lacks, and it is 0x0AB's
 0x9C is dofieldeffect, named in ONE place since 233 and privately in EverywhereInTheImage since 191
@@ -432,9 +437,10 @@ the raw 0x9C sweep is 11446 sites in BOTH images and the REVERSAL READS ON MORE 
 1. **`0x0AB` IS READ (232) and the block audit is DONE (231).** What is left of the audit: What is left of it: the three
    numbers nothing prints (`62 gates hold 240 people`, `146 trees and rocks`, `158 objects`) and
    `the ceiling is 45 of 437 byte positions`. Each needs an instrument or deleting; they are
-   marked in the block. The next cheap reads are the **41 routines a `0x27` follows** (232, the
-   other half of the waiting question) and **`0x011E`**, the routine `10.14`'s nineteen shared
-   signs ask. `--read-from` makes both one command each. The history for reference:
+   marked in the block. The next cheap reads are **`0x194`** — the one routine waited for at some
+   of its places and not all, 1 of 34, and which one is unread — and **`0x011E`**, the routine
+   `10.14`'s nineteen shared signs ask. `--read-from` makes both one command each. The history for
+   reference:
    230 did the floor-row bisect (answer: milestone **199**, one commit, +3 at all six settings,
    announced in its own commit message) and then found the bigger thing: that block, and two
    items of this list, entered the prompt at **`f8d4f15fe`, "the next session's prompt with 190
