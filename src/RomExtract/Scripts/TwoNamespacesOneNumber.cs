@@ -65,7 +65,8 @@ public sealed record BothNamespaces(
         [.. LookedAtBySomethingElse.SelectMany(o => o.Value).Distinct()];
 
     /// <summary>Operands that put something INTO a variable rather than looking at one.</summary>
-    public static readonly string[] Writing = ["0x16 arg0", "0x17 arg0", "0x18 arg0", "0x1A arg0"];
+    public static readonly string[] Writing =
+        ["0x16 arg0", "0x17 arg0", "0x18 arg0", "0x19 arg0", "0x1A arg0"];
 
     /// <summary>Every number any writing operand names.</summary>
     public IReadOnlyCollection<int> Written =>
@@ -80,6 +81,34 @@ public sealed record BothNamespaces(
     /// which three are ever written is not naming variables at all. This asserts no boundary
     /// from outside the file — it asks the file about itself.
     /// </remarks>
+    /// <summary>
+    /// The numbers a reading operand names that NOTHING writes, per operand.
+    /// </summary>
+    /// <remarks>
+    /// <b>The working behind the percentage.</b> A reading operand at 95% is one number short of
+    /// naming only variables, and which number that is decides whether the shortfall is the
+    /// cartridge or the write table. At 251 it was the write table: <c>0x19 arg0</c> was in
+    /// neither list, so every variable only a <c>copyvar</c> ever writes read as one nothing
+    /// writes — and the percentages went to 93, 98 and 100 when it went in. A percentage nobody
+    /// can open is a number that can only be believed.
+    /// </remarks>
+    public IReadOnlyList<(string Operand, IReadOnlyList<int> Numbers)> NamedButNeverWritten
+    {
+        get
+        {
+            IReadOnlyCollection<int> written = Written;
+
+            return
+            [
+                .. ByOperand.Where(o => !Writing.Contains(o.Key))
+                    .Select(o => (
+                        Operand: o.Key,
+                        Numbers: (IReadOnlyList<int>)[.. o.Value.Keys.Where(n => !written.Contains(n)).Order()]))
+                    .OrderBy(o => o.Operand, StringComparer.Ordinal),
+            ];
+        }
+    }
+
     public IReadOnlyList<(string Operand, int Written, int Numbers)> WrittenPerOperand
     {
         get
@@ -286,7 +315,7 @@ public static class TwoNamespacesOneNumber
 
     /// <summary>Commands that put something INTO a variable, and where the id sits.</summary>
     private static readonly (byte Code, int At)[] Writers =
-        [(0x16, 0), (0x17, 0), (0x18, 0), (0x1A, 0)];
+        [(0x16, 0), (0x17, 0), (0x18, 0), (0x19, 0), (0x1A, 0)];
 
     /// <summary>
     /// Commands that LOOK at one. Both operands of <c>comparevars</c>, and the source of the

@@ -30,9 +30,13 @@ public sealed record FlagSite(int Offset, int Flag, bool Sets, bool ReadsAsAScri
 /// <summary>
 /// One place in the whole image where a number is put into one of the story's own variables.
 /// </summary>
-/// <param name="How">Which command — <c>setvar</c>, <c>addvar</c>, <c>subvar</c>, <c>copyvarifnotzero</c>.</param>
+/// <param name="How">
+/// Which command — <c>setvar</c>, <c>addvar</c>, <c>subvar</c>, and BOTH halves of the copying
+/// pair. <c>copyvar</c> was in neither this list nor the reading one until 251, so every variable
+/// only a copy ever writes read as a variable nothing writes.
+/// </param>
 /// <param name="Value">
-/// The second word. A number for everything but the copying one, where it names another
+/// The second word. A number for everything but the copying pair, where it names another
 /// variable and what is in it is not knowable from here — said out loud rather than printed as
 /// though it were a value.
 /// </param>
@@ -41,8 +45,13 @@ public sealed record VariableSite(
 {
     public uint Address => Rom.BaseAddress + (uint)Offset;
 
-    /// <summary>True when this is the one command whose second word is not a number.</summary>
-    public bool Copies => How == 0x1A;
+    /// <summary>True when the second word is a variable id rather than a number.</summary>
+    /// <remarks>
+    /// <b>Both halves of the copying pair, since 251.</b> It was <c>0x1A</c> alone, which printed
+    /// a <c>copyvar</c>'s source variable as though it were the value written — and could not,
+    /// before 251, because <c>copyvar</c> was not in the write table at all.
+    /// </remarks>
+    public bool Copies => How is 0x19 or 0x1A;
 
     public override string ToString() =>
         Copies
@@ -323,7 +332,7 @@ public static class EverywhereInTheImage
     }
 
     /// <summary>The four commands that put a number in a variable, in the order they were derived.</summary>
-    private static readonly byte[] Writers = [0x16, 0x17, 0x18, 0x1A];
+    private static readonly byte[] Writers = [0x16, 0x17, 0x18, 0x19, 0x1A];
 
     /// <summary>Where in a command's arguments a variable being READ sits.</summary>
     /// <param name="Code">The command.</param>

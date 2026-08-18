@@ -90,24 +90,58 @@ public sealed class OneNumberTwoNamespacesTests
     }
 
     /// <summary>
-    /// THE DISCRIMINATION: <c>copyvar</c> names two variables and only the SOURCE is a read.
-    /// Counting the destination as well makes every write a read and every copied-into variable
-    /// look like one something looks at.
+    /// THE DISCRIMINATION: <c>copyvar</c>'s SOURCE is a read and its DESTINATION is a write.
+    /// Counting the destination as a read makes every write a read and every copied-into
+    /// variable look like one something looks at.
     /// </summary>
     /// <remarks>
-    /// Both halves are asserted, because a rule that counted neither operand would pass a test
-    /// that only checked the destination was absent.
+    /// <para>
+    /// <b>This test asserted the destination was named by NOTHING until 251</b>, and the write
+    /// table agreed with it: <c>0x19 arg0</c> was in neither the writer list nor the reader list
+    /// of either of this repository's two write tables, while <c>0x1A arg0</c> — the other half
+    /// of the same copying pair, one line away — was in both as a write. The comment said
+    /// "counting the destination makes every write a read", which is true of the READER list and
+    /// was applied to the writer list as well.
+    /// </para>
+    /// <para>
+    /// What settles it is this instrument's own rule, not an argument: <b>a variable something
+    /// looks at is a variable something writes.</b> With the destination counted, every reading
+    /// operand's written-ness rises toward 100% — <c>0x22 arg0</c> from 75% to 100%,
+    /// <c>0x21 arg0</c> from 95% to 98%, <c>0x19 arg2</c> from 86% to 93% — and the operand that
+    /// names values stays at 2%. The shortfalls were variables nothing but a <c>copyvar</c>
+    /// writes.
+    /// </para>
     /// </remarks>
     [Fact]
-    public void CopyVarNamesBothItsOperandsAndTheyAreCountedOnce()
+    public void CopyVarsSourceIsAReadAndItsDestinationIsAWrite()
     {
         BothNamespaces both = Of(
             Image((0x100, [.. CopyVar(0x4060, 0x4061), End])), 0x08000100);
 
-        // The source is read; the destination is named by the same command and this sweep does
-        // not care which side it was — what it must not do is count one command twice.
+        // Both operands name a variable, once each — what this must not do is count one command
+        // twice for one operand.
         Assert.Equal(1, both.Variables.GetValueOrDefault(0x4061));
-        Assert.Equal(0, both.Variables.GetValueOrDefault(0x4060));
+        Assert.Equal(1, both.Variables.GetValueOrDefault(0x4060));
+
+        // And which side each was, which is the half a bare count cannot say.
+        Assert.Contains(0x4060, both.Written);
+        Assert.DoesNotContain(0x4061, both.Written);
+    }
+
+    /// <summary>
+    /// And the two halves of the copying pair are treated the SAME — the fault 251 found was
+    /// one of them being a write and the other being nothing, in adjacent entries of one table.
+    /// </summary>
+    [Fact]
+    public void BothHalvesOfTheCopyingPairWriteTheirDestination()
+    {
+        BothNamespaces copy = Of(Image((0x100, [.. CopyVar(0x4060, 0x4061), End])), 0x08000100);
+
+        BothNamespaces ifNotZero = Of(
+            Image((0x100, [0x1A, 0x60, 0x40, 0x61, 0x40, End])), 0x08000100);
+
+        Assert.Contains(0x4060, copy.Written);
+        Assert.Contains(0x4060, ifNotZero.Written);
     }
 
     /// <summary>And <c>comparevars</c> looks at BOTH of its operands, which is a different rule.</summary>

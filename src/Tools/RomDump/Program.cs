@@ -9496,11 +9496,23 @@ public static class Program
         Console.WriteLine();
         Console.WriteLine("    and of what each READING operand names, how much is ever written:");
 
+        IReadOnlyList<(string Operand, IReadOnlyList<int> Numbers)> shortfall = scan.NamedButNeverWritten;
+
         foreach ((string operand, int written, int numbers) in scan.WrittenPerOperand)
         {
+            // AND WHICH NUMBERS THE SHORTFALL IS, up to a handful. A percentage nobody can open
+            // is a number that can only be believed, and at 251 opening this one was how the
+            // missing write operand was found: every variable only a copyvar ever writes read as
+            // a variable nothing writes.
+            IReadOnlyList<int> missing =
+                shortfall.FirstOrDefault(o => o.Operand == operand).Numbers ?? [];
+
             Console.WriteLine(
                 $"      {operand}: {written} of {numbers} number(s) are written somewhere"
-                + $" — {(numbers == 0 ? 0 : 100.0 * written / numbers):F0}%");
+                + $" — {(numbers == 0 ? 0 : 100.0 * written / numbers):F0}%"
+                + (missing.Count is > 0 and <= 6
+                    ? "   the rest: " + string.Join(", ", missing.Select(n => $"0x{n:X4}"))
+                    : ""));
         }
 
         IReadOnlyList<string> values = scan.NameValues;
@@ -10853,7 +10865,11 @@ public static class Program
             // names in the map scan — three of those 149 are ever written anywhere, against
             // 86% to 100% for every other reading operand (244). A site of that kind counted
             // here is a literal counted as a look, and the number above cannot say so itself.
-            int literals = real.Count(s => s.Copies);
+            // 0x1A ALONE, not both halves of the copying pair. 244's finding is about
+            // copyvarifnotzero's second word specifically — it names a value at 145 of its 149
+            // numbers — and copyvar's source is 93% written, which is a real variable read. Since
+            // 251 Copies means "the second word is a variable id", so this asks the command.
+            int literals = real.Count(s => s.How == 0x1A);
 
             if (literals > 0)
             {
