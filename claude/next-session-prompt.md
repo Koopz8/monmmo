@@ -1,7 +1,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-261`, 2912 tests green.
+`claude-262`, 2919 tests green.
 
 Standing rules — do not break these:
 
@@ -101,8 +101,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-222-the-routines-reached-by-number.md` first, then
-`221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
+Read `claude/milestone-223-a-count-of-reads.md` first, then
+`222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
 **Twenty faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
@@ -275,6 +275,8 @@ callstd 0x05 and 0x00 ANSWER — 152 and 2 sites have nothing in front that coul
 5457 callstd/gotostd askings at 2719 places, of 9 numbers; the table is NOT found
 17 of 63 routines were branched on ONLY that way — 2 come back, 10 are not theirs, 5 unknown
 the branch table is 1037 sites at 411 byte positions — 0x187 is 376 reads of 72 addresses
+--specials agrees: 3509 calls at 861 places, and the ceiling is 25 of 411 places (was 212 of 1055)
+0x194 is 747 calls at 26 places; 0x039 is 234 at 234 — the inflation runs 1x to 29x in one table
 0x01C's nineteen sites are ONE address; 219 called them nineteen places
 the 57 are TWO blocks, each a yes/no turning on 0x083 or 0x084 and then 0x153
 2 of those gates hold NOBODY — 0x084A and 0x084B, the ferry, with no setter anywhere
@@ -294,26 +296,22 @@ the 57 are TWO blocks, each a yes/no turning on 0x083 or 0x084 and then 0x153
    anyway, which is the `#130` at 71 the party ends with. **The floor is clean**: 1 place asks,
    nothing comes of it, so the floor's party of six is entirely earned. Whether that deserves a
    `--pay` lever or a located payout table is a DECISION and it is deliberately not made.
-3. **The standard-routine table, with a filter that is not "ends the way blocks end".** 222
-   hunted it and got 24 candidates against a floor of 0, and could not choose because most of
-   them are runs of pointers to `nop ; end`. Two rules that have not been tried: the entries
-   should be **distinct** (a table indexed by nine numbers that returns one block distinguishes
-   nothing) and should be **longer than two bytes**. Finding it would say what all nine numbers
-   do rather than just that two of them answer.
-   **`callstd 0x05`'s 250 "not said" sites.** 152 clean sites already settle that it answers, so
-   these change no verdict — but they are 250 places where 219's walk back gives up, and what it
-   is giving up on has not been looked at.
-   **`0x0188`'s last three**, behind a block that jumps away. 215 called it the last of the run's
-   ceiling on the strength of one clean site at one byte position.
-   **Every routine sentence in this project quoted sites, not places.** The branch table is 1037
-   sites at 411 byte positions; `0x0187` is 376 reads of 72 addresses and `0x01C` is nineteen
-   reads of ONE. Which of the older numbers were about the cartridge is now askable and mostly
-   unasked. **This is the biggest owed thing on the list.**
-   Still owed and cheap: **`0x081A77B0`**, where 218's jumping arm goes from nineteen sites, and
-   **`0x0153`**, half of every one of the fifty-seven decisions, whose own sites nobody has
-   looked at. Also owed: **seven boulder flags with no setter anywhere**, **`0x0805`** which the
-   STRENGTH script sets across all twelve boulders, and **`0x0053`** holding 31 people across the
-   SILPH CO. floors with no setter — the doors are open (176, 181) and the people are still held.
+3. **The rest of the project's numbers, in places rather than reads.** 220 corrected
+   `--routines` and 223 corrected `--specials` and `--play`'s ceiling; the two now agree at **411
+   branching byte positions** from independent code, and the ceiling headline went from "212 of
+   1055 branching sites" to **25 of 411 places**. The inflation is not a factor to divide by —
+   `0x0194` is 747 reads of 26 addresses and `0x0039` is 234 of 234, ranked next to each other.
+   **Every other map-scan sweep in this project has the same question waiting**: flags, moves,
+   items, doors, anything that counts `(map, script, offset)` records. `--who-writes` and
+   `--in-the-image` already answer about byte positions; most of the rest do not.
+   Also owed: **the standard-routine table** (222 hunted it — 24 candidates against a floor of 0,
+   no way to choose because a pointer to `nop ; end` passes "reads as a script"; untried rules
+   are that entries be distinct and longer than two bytes). **`callstd 0x05`'s 250 "not said"
+   sites** — 152 clean ones already settle that it answers, but 250 is where 219's walk back
+   gives up and nobody has looked at what it gives up on. **`0x0188`'s last three**, behind a
+   block that jumps away. **`0x081A77B0`**, where 218's jumping arm goes. **`0x0153`**, half of
+   every one of the fifty-seven decisions. **Seven boulder flags with no setter**, **`0x0805`**,
+   and **`0x0053`** holding 31 people across the SILPH CO. floors.
 
 4. **Money, for real this time — and the prices are READ now.** Three drinks at 200/300/350 and
    a POKé DOLL at 1000, plus 208's ¥20 a coin and fifteen coin prices, all READ, all at counters
@@ -428,8 +426,11 @@ out loud for six milestones without anybody asking both. **When you fix a readin
 else reads that shape** — and prefer exposing the one list to copying it, because a copy is how
 they came apart.
 
-**A green break THREE milestones running meant the RULE was in the wrong place, not the guard**
-(219, 221, 222). At 222 it happened twice in one milestone: both rules the verdict rests on lived
+**A green break FOUR milestones running meant the RULE was in the wrong place, not the guard**
+(219, 221, 222, 223). This is no longer a coincidence and it has a cause: this project puts its
+rules inside whole-world sweeps — a function that needs a `MapLibrary` and sixteen megabytes —
+and a whole-world sweep is exactly what a fixture cannot reach. **Before writing a rule inside a
+sweep, ask what a test would have to build to reach it**, and split it out first. At 222 it happened twice in one milestone: both rules the verdict rests on lived
 inside a function that needs a whole cartridge, so no fixture could reach either. **When a break
 is green, ask where the rule lives BEFORE you suspect the fixture** — on this evidence that is
 the likelier of the two, and the note below has had it the other way round since 190.

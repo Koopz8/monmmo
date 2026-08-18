@@ -6,12 +6,12 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **Some of the game's routines are called by number, not by address**, and the table of numbers
-  has never been found. Hunting it turned up 24 candidates and no way to choose — because the
-  test being used ("does this look like a script?") accepts two bytes of nothing.
-- **So the question got answered from the other end.** Where a script calls one of these and then
-  immediately checks the answer, and nothing before it could have supplied one, the answer must
-  be the routine's. Two of the nine are pinned down that way, one with 152 witnesses.
-- Ten unexplained places become three. Six breaks, six catches.
-- **Three milestones running, a passing sabotage test meant the rule was somewhere no test could
-  reach it** — not that the test was weak. That guidance is now the other way round.
+- **The headline number for "how much of this game the robot's silence decides" was counting the
+  same address over and over.** One script can hang off nineteen maps; it was being counted
+  nineteen times. Corrected: **25 places, not 212**.
+- **There is no factor to divide by.** In the same table, one routine is 747 reads of 26
+  addresses and the next is 234 of 234. So both numbers are printed now, never one.
+- Three separate readings of the cartridge now agree about the same single address — one of them
+  a hand-grep from five milestones ago.
+- **Four milestones running, a passing sabotage test meant the rule sat inside a sweep no test
+  can reach.** That has a cause now, and the guidance says to split the rule out first.
