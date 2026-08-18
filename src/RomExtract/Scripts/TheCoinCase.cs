@@ -159,7 +159,7 @@ public static class TheCoinCase
                 offset,
                 code,
                 rom.ReadU16(offset + 1),
-                ReadsAsAScript(rom, offset),
+                ScriptReader.ReadsAsAScript(rom, Rom.BaseAddress + (uint)offset),
                 covered is not null
                 && offset < covered.Length
                 && covered[offset] != EverywhereInTheImage.Nobody));
@@ -441,22 +441,12 @@ public static class TheCoinCase
         for (var offset = 0; offset + 6 <= rom.Length; offset++)
         {
             if (rom.ReadU8(offset) != code) continue;
-            if (!ReadsAsAScript(rom, offset)) continue;
+            if (!ScriptReader.ReadsAsAScript(rom, Rom.BaseAddress + (uint)offset)) continue;
 
             yield return offset;
         }
     }
 
-    /// <summary>
-    /// The same weak filter the rest of this project uses: a block that ends the way blocks end.
-    /// </summary>
-    private static bool ReadsAsAScript(Rom rom, int offset)
-    {
-        List<ScriptCommand> commands = ScriptReader.Read(rom, Rom.BaseAddress + (uint)offset);
-
-        return commands.Count > 0
-               && commands[^1].Code is ScriptCommands.End or ScriptCommands.Return or ScriptCommands.Goto;
-    }
 
     /// <summary>
     /// Whether anything in the file compares two variables and then takes one of them away —

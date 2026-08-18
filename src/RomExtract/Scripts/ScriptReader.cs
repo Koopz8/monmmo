@@ -1245,6 +1245,28 @@ public static class ScriptReader
     /// <summary>Instructions read before giving up, as a guard against a runaway.</summary>
     private const int MaxCommands = 512;
 
+    /// <summary>
+    /// The weak filter this project uses everywhere it sweeps the image: a block that ends the
+    /// way blocks end.
+    /// <para>
+    /// <b>Weak on purpose, and said so.</b> It rejects a run of bytes that derails and accepts
+    /// plenty of noise — sixteen megabytes hold a great many byte runs that happen to end in an
+    /// <c>end</c>. It raises a floor; it is never evidence on its own, which is why every sweep
+    /// that uses it prints a reversed-image count beside its answer.
+    /// </para>
+    /// <para>
+    /// One copy. There were two, in <c>TheCoinCase</c> and <c>EverywhereInTheImage</c>, and a
+    /// third was about to be written — the same shape of fault 221 closed for the script list.
+    /// </para>
+    /// </summary>
+    public static bool ReadsAsAScript(Rom rom, uint address)
+    {
+        List<ScriptCommand> commands = Read(rom, address);
+
+        return commands.Count > 0
+               && commands[^1].Code is ScriptCommands.End or ScriptCommands.Return or ScriptCommands.Goto;
+    }
+
     public static List<ScriptCommand> Read(Rom rom, uint address, int maxCommands = MaxCommands)
     {
         var commands = new List<ScriptCommand>();

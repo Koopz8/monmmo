@@ -35,7 +35,17 @@ public static class WhoTheCompareBelongsTo
         /// </summary>
         ACommandThatAnswers,
 
-        /// <summary>A <c>callstd</c> or <c>gotostd</c>: a standard routine this project has never read.</summary>
+        /// <summary>
+        /// A <c>callstd</c> whose number the callers show <b>does</b> answer — so it clobbered
+        /// whatever was in the variable, and the compare is its.
+        /// </summary>
+        AStandardRoutineThatAnswers,
+
+        /// <summary>
+        /// A <c>callstd</c> or <c>gotostd</c> whose number nothing in the file pins down. The
+        /// table it indexes has never been found, and 222's reading of the callers only speaks
+        /// for the numbers it saw a compare after.
+        /// </summary>
         AStandardRoutine,
 
         /// <summary>A <c>call</c> whose block leaves an answer of its own.</summary>
@@ -70,7 +80,11 @@ public static class WhoTheCompareBelongsTo
 
     /// <param name="Routine">The routine whose answer was being claimed.</param>
     /// <param name="At">The byte position of the <c>special</c>.</param>
-    /// <param name="Called">The block a <c>call</c> went to, or nought.</param>
+    /// <param name="Called">
+    /// The block a <c>call</c> went to, or — for a standard routine — the NUMBER it asked for.
+    /// Which of those it is is decided by <see cref="Was"/>, and the two are printed
+    /// differently because one of them is not an address.
+    /// </param>
     public sealed record ACompareAcross(
         string MapId,
         string What,
@@ -88,6 +102,14 @@ public static class WhoTheCompareBelongsTo
     public static List<ACompareAcross> In(Rom rom, MapLibrary library)
     {
         var found = new List<ACompareAcross>();
+
+        // Which standard routines answer, read off the callers — 222. Derived only from sites
+        // where nothing else could have answered, and applied here to sites where something
+        // could, which is the opposite direction and not circular.
+        HashSet<int> answering =
+        [
+            .. StandardRoutines.WhoAnswers(rom, library).Where(a => a.MustAnswer).Select(a => a.Index),
+        ];
 
         foreach ((string mapId, string what, uint address) in library.EveryScript())
         {
@@ -116,7 +138,7 @@ public static class WhoTheCompareBelongsTo
                 // which is which is asked of SpecialContracts rather than repeated here.
                 if (!SpecialContracts.NothingCleanHere(direct, beyond)) continue;
 
-                (InTheWay Was, uint Called)? stood = WhatStoodInTheWay(rom, commands, i);
+                (InTheWay Was, uint Called)? stood = WhatStoodInTheWay(rom, commands, i, answering);
 
                 if (stood is null) continue;
 
@@ -145,7 +167,7 @@ public static class WhoTheCompareBelongsTo
     /// </para>
     /// </summary>
     public static (InTheWay Was, uint Called)? WhatStoodInTheWay(
-        Rom rom, List<ScriptCommand> commands, int at)
+        Rom rom, List<ScriptCommand> commands, int at, IReadOnlySet<int>? answering = null)
     {
         for (int i = at + 1; i < commands.Count && i <= at + SpecialContracts.Window; i++)
         {
@@ -167,7 +189,13 @@ public static class WhoTheCompareBelongsTo
                 return (InTheWay.AnotherRoutine, 0);
 
             if (commands[i].Code is ScriptCommands.CallStandard or 0x08)
-                return (InTheWay.AStandardRoutine, 0);
+            {
+                int index = commands[i].Arguments.Length > 0 ? commands[i].Arguments[0] : -1;
+
+                return (answering?.Contains(index) == true
+                    ? InTheWay.AStandardRoutineThatAnswers
+                    : InTheWay.AStandardRoutine, (uint)Math.Max(index, 0));
+            }
 
             return (InTheWay.ACommandThatAnswers, 0);
         }
@@ -188,6 +216,7 @@ public static class WhoTheCompareBelongsTo
     {
         InTheWay.ACallThatTouchesNothing => Whose.StillThisRoutines,
         InTheWay.AStandardRoutine or InTheWay.ACallThatJumpsAway => Whose.NotSaid,
+        InTheWay.AStandardRoutineThatAnswers => Whose.SomebodyElses,
         _ => Whose.SomebodyElses,
     };
 }

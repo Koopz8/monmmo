@@ -220,7 +220,7 @@ public static class EverywhereInTheImage
                     offset,
                     flag,
                     sets,
-                    ReadsAsAScript(rom, Rom.BaseAddress + (uint)offset),
+                    ScriptReader.ReadsAsAScript(rom, Rom.BaseAddress + (uint)offset),
                     covered is not null && offset < covered.Length && covered[offset] != Nobody));
             }
         }
@@ -261,7 +261,7 @@ public static class EverywhereInTheImage
                     variable,
                     code,
                     rom.ReadU16(offset + 3),
-                    ReadsAsAScript(rom, Rom.BaseAddress + (uint)offset),
+                    ScriptReader.ReadsAsAScript(rom, Rom.BaseAddress + (uint)offset),
                     covered is not null && offset < covered.Length && covered[offset] != Nobody));
             }
         }
@@ -287,7 +287,7 @@ public static class EverywhereInTheImage
         for (int offset = 0; offset + 5 <= rom.Length; offset++)
         {
             if (!Writers.Contains(rom.ReadU8(offset))) continue;
-            if (!ReadsAsAScript(rom, Rom.BaseAddress + (uint)offset)) continue;
+            if (!ScriptReader.ReadsAsAScript(rom, Rom.BaseAddress + (uint)offset)) continue;
 
             int variable = rom.ReadU16(offset + 1);
 
@@ -363,7 +363,7 @@ public static class EverywhereInTheImage
                     // The other operand, which is the number a compare is against and the
                     // variable a copy is into. Raw, because which it is depends on the command.
                     rom.ReadU16(offset + 1 + (reader.At == 0 ? 2 : 0)),
-                    ReadsAsAScript(rom, Rom.BaseAddress + (uint)offset),
+                    ScriptReader.ReadsAsAScript(rom, Rom.BaseAddress + (uint)offset),
                     covered is not null && offset < covered.Length && covered[offset] != Nobody));
             }
         }
@@ -390,7 +390,7 @@ public static class EverywhereInTheImage
             byte code = rom.ReadU8(offset);
 
             if (Readers.All(r => r.Code != code)) continue;
-            if (!ReadsAsAScript(rom, Rom.BaseAddress + (uint)offset)) continue;
+            if (!ScriptReader.ReadsAsAScript(rom, Rom.BaseAddress + (uint)offset)) continue;
 
             foreach (Reader reader in Readers.Where(r => r.Code == code))
             {
@@ -491,7 +491,7 @@ public static class EverywhereInTheImage
             sites.Add(new MoveSite(
                 offset,
                 move,
-                ReadsAsAScript(rom, Rom.BaseAddress + (uint)offset),
+                ScriptReader.ReadsAsAScript(rom, Rom.BaseAddress + (uint)offset),
                 covered is not null && offset < covered.Length && covered[offset] != Nobody)
             {
                 Question = question,
@@ -605,7 +605,7 @@ public static class EverywhereInTheImage
             byte code = rom.ReadU8(offset);
 
             if (code is not (SetFlag or ClearFlag)) continue;
-            if (!ReadsAsAScript(rom, Rom.BaseAddress + (uint)offset)) continue;
+            if (!ScriptReader.ReadsAsAScript(rom, Rom.BaseAddress + (uint)offset)) continue;
 
             int flag = rom.ReadU16(offset + 1);
 
@@ -859,11 +859,4 @@ public static class EverywhereInTheImage
     /// middle of somebody's argument does not carry on into commands.
     /// </para>
     /// </summary>
-    private static bool ReadsAsAScript(Rom rom, uint address)
-    {
-        List<ScriptCommand> commands = ScriptReader.Read(rom, address);
-
-        return commands.Count > 0
-            && commands[^1].Code is ScriptCommands.End or ScriptCommands.Return or ScriptCommands.Goto;
-    }
 }

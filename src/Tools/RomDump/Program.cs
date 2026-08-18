@@ -203,6 +203,7 @@ public static class Program
         if (options.Sound) WriteSound(rom);
         if (options.FlagGates) WriteFlagGates(rom);
         if (options.SpecialContracts) WriteSpecialContracts(rom);
+        if (options.Standard) WriteRoutinesReachedByNumber(rom);
         if (options.Closure) WriteClosure(rom, options.RoutineAnswers, options.StartAt);
         if (options.Play)
             WritePlaythrough(
@@ -7037,6 +7038,97 @@ public static class Program
         return teaches;
     }
 
+    /// <summary>
+    /// The standard routines, which are blocks a script reaches by number. Nothing here knows
+    /// where the table is; the shape is hunted and the reversed image says whether the shape
+    /// means anything.
+    /// </summary>
+    private static void WriteRoutinesReachedByNumber(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("THE ROUTINES REACHED BY NUMBER");
+        Console.WriteLine();
+
+        List<StandardRoutines.Asked> asked = StandardRoutines.WhatIsAsked(rom, MapLibrary.Open(rom));
+
+        if (asked.Count == 0)
+        {
+            Console.WriteLine("  nothing on any map asks for one");
+
+            return;
+        }
+
+        int widest = asked.Max(a => a.Index);
+
+        Console.WriteLine(
+            $"  {asked.Sum(a => a.Sites)} asking(s) at {asked.Sum(a => a.Places)} place(s), "
+            + $"of {asked.Select(a => a.Index).Distinct().Count()} number(s), highest 0x{widest:X2}");
+
+        foreach (StandardRoutines.Asked one in asked)
+        {
+            Console.WriteLine(
+                $"    {(one.Returns ? "callstd" : "gotostd")} 0x{one.Index:X2} — "
+                + $"{one.Sites,4} time(s) at {one.Places,4} place(s)");
+        }
+
+        // WHO ANSWERS, without the table. If a script says `callstd N ; compare 0x800D` and
+        // nothing before it could have put anything there, the compare is reading what N left.
+        List<StandardRoutines.Answers> answers = StandardRoutines.WhoAnswers(rom, MapLibrary.Open(rom));
+
+        Console.WriteLine();
+        Console.WriteLine("  and which of them ANSWER, read from the callers rather than from the table:");
+
+        if (answers.Count == 0)
+        {
+            Console.WriteLine("    nowhere in the maps is one of them followed by a compare it branches on");
+        }
+
+        foreach (StandardRoutines.Answers one in answers)
+        {
+            Console.WriteLine(
+                $"    callstd 0x{one.Index:X2} — {one.Sites,3} site(s) at {one.Places,3} place(s) put a compare "
+                + "on the answer variable straight after it");
+            Console.WriteLine(
+                $"        {one.NothingBefore,3} with NOTHING before that could have answered"
+                + (one.MustAnswer ? "   <- so this one answers, whatever it is" : "")
+                + $"; {one.SomebodyBefore} with somebody; {one.NotSaid} not said");
+        }
+
+        // The table has to have room for the highest number anybody asks for. Anything shorter
+        // than that cannot be it, whatever else it looks like.
+        int atLeast = widest + 1;
+
+        List<StandardRoutines.ATable> tables = StandardRoutines.Tables(rom, atLeast);
+        List<StandardRoutines.ATable> floor = StandardRoutines.NoiseFloor(rom, atLeast);
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  runs of {atLeast}+ consecutive pointers that all land on something reading as a script:");
+        Console.WriteLine($"    {tables.Count} in this file");
+        Console.WriteLine($"    {floor.Count} in the same file REVERSED  <- the floor");
+
+        if (floor.Count >= tables.Count)
+        {
+            Console.WriteLine();
+            Console.WriteLine(
+                "  THE REVERSAL FINDS AS MANY, so this shape is what these bytes do by accident");
+            Console.WriteLine("  and no candidate here is worth reading. The table is not found this way.");
+
+            return;
+        }
+
+        foreach (StandardRoutines.ATable table in tables.OrderByDescending(t => t.Entries))
+        {
+            List<(int Index, uint At, SpecialCalls.LeftBehind Left, int Who)> leaves =
+                [.. StandardRoutines.WhatTheyLeave(rom, table).Take(atLeast)];
+
+            Console.WriteLine(
+                $"    0x{table.At:X8} — {table.Entries,4} pointer(s), "
+                + $"{leaves.Select(l => l.At).Distinct().Count()} distinct in the first {atLeast}, "
+                + $"[5] leaves {leaves[5].Left}");
+        }
+    }
+
     private static void WriteSpecialContracts(Rom rom)
     {
         Console.WriteLine();
@@ -7134,7 +7226,7 @@ public static class Program
                     Console.WriteLine(
                         $"          {was.Count(),4} — {InTheWay(was.Key)}"
                         + $"   e.g. 0x{first.Routine:X3} at {first.MapId} {first.What} 0x{first.At:X8}"
-                        + (first.Called > 0 ? $" past 0x{first.Called:X8}" : ""));
+                        + Past(first));
                 }
             }
         }
@@ -7147,6 +7239,18 @@ public static class Program
         Console.WriteLine(
             "  their answer, so a stand-in for one of those buys no ground and is not worth writing");
     }
+
+    /// <summary>
+    /// Where the thing in the way was — an address for a call, a NUMBER for a standard routine.
+    /// The two are not the same kind of thing and printing a number as an address reads as a
+    /// pointer to the bottom of the image.
+    /// </summary>
+    private static string Past(WhoTheCompareBelongsTo.ACompareAcross across) => across.Was switch
+    {
+        WhoTheCompareBelongsTo.InTheWay.AStandardRoutineThatAnswers or
+            WhoTheCompareBelongsTo.InTheWay.AStandardRoutine => $" past standard 0x{across.Called:X2}",
+        _ => across.Called > 0 ? $" past 0x{across.Called:X8}" : "",
+    };
 
     private static string Verdict(WhoTheCompareBelongsTo.Whose whose) => whose switch
     {
@@ -7161,6 +7265,8 @@ public static class Program
     {
         WhoTheCompareBelongsTo.InTheWay.AnotherRoutine => "another routine",
         WhoTheCompareBelongsTo.InTheWay.ACommandThatAnswers => "a command that answers on its own account",
+        WhoTheCompareBelongsTo.InTheWay.AStandardRoutineThatAnswers =>
+            "a standard routine the callers show DOES answer",
         WhoTheCompareBelongsTo.InTheWay.AStandardRoutine => "a standard routine, never read here",
         WhoTheCompareBelongsTo.InTheWay.ACallThatAnswers => "a call whose block leaves an answer",
         WhoTheCompareBelongsTo.InTheWay.ACallThatTouchesNothing => "a call whose block touches nothing",
@@ -12511,6 +12617,8 @@ public static class Program
 
         public bool SpecialContracts { get; private init; }
 
+        public bool Standard { get; private init; }
+
         public bool Play { get; private init; }
 
         /// <summary>Items to hunt through every script in the image, or nothing.</summary>
@@ -12715,6 +12823,7 @@ public static class Program
             bool flagGates = false;
             bool closure = false;
             bool specialContracts = false;
+            bool standard = false;
             bool fights = false;
             bool whoKnows = false;
             var coins = false;
@@ -12965,6 +13074,9 @@ public static class Program
                         break;
                     case "--routines":
                         specialContracts = true;
+                        break;
+                    case "--standard":
+                        standard = true;
                         break;
                     case "--fights":
                         fights = true;
@@ -13286,6 +13398,7 @@ public static class Program
                 FlagGates = flagGates,
                 Closure = closure,
                 SpecialContracts = specialContracts,
+                Standard = standard,
                 Play = play,
                 WhereFrom = whereFrom,
                 InTheImage = inTheImage,
