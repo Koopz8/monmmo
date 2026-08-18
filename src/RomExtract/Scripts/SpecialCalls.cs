@@ -331,30 +331,6 @@ public static class SpecialCalls
     private const byte Call = 0x04;
 
     /// <summary>
-    /// What a called block leaves in the answer variable on its straight line, and who left it.
-    /// <para>
-    /// <b>The LAST thing that puts something there, of any kind.</b> The first version of this
-    /// looked only for routines and credited <c>0x153</c> at fifty-seven places where the block
-    /// ends <c>setvar 0x800D, 1 ; return</c> — the routines inside it were asked and their
-    /// answers were thrown away, and the straight line says the answer out loud. Crediting a
-    /// routine there is the same fault the barrier was added for, one level down.
-    /// </para>
-    /// <para>
-    /// The straight line only, and one level: a <c>call</c> inside it leaves
-    /// <see cref="LeftBehind.Nothing"/> rather than being followed. Each level is another place
-    /// to be wrong.
-    /// </para>
-    /// </summary>
-    /// <summary>
-    /// What answered in the caller before a call that leaves the answer variable alone.
-    /// <para>
-    /// Walks back over commands that cannot have answered, and stops at the first that could.
-    /// A second call is one of those and it is <b>not</b> followed — that would be walking back
-    /// through a level this reading does not go into, and each level is another place to be
-    /// wrong.
-    /// </para>
-    /// </summary>
-    /// <summary>
     /// The older answer, but ONLY when the call left the variable alone.
     /// <para>
     /// <b>The condition is the whole licence.</b> Walking back is a reading when the call
@@ -369,6 +345,21 @@ public static class SpecialCalls
             ? WhatAnsweredBefore(commands, at, answer)
             : (LeftBehind.Nothing, 0);
 
+    /// <summary>
+    /// What answered in the caller before a call that leaves the answer variable alone.
+    /// <para>
+    /// Walks back over commands that cannot have answered, and stops at the first that could.
+    /// <b>Stopping uses the same barrier list as the forward scan</b> — the commands that put
+    /// their own answer in the result variable, <c>call</c> among them since 214. A second call
+    /// is therefore not followed: that would be walking back through a level this reading does
+    /// not go into, and each level is another place to be wrong.
+    /// </para>
+    /// <para>
+    /// The <c>call</c> arm was written out separately here first, immediately above a barrier
+    /// check that already contained <c>call</c>. Breaking it changed nothing, because nothing
+    /// could reach it — a guard no test can fail, so it is gone and the one list decides.
+    /// </para>
+    /// </summary>
     public static (LeftBehind Left, int Who) WhatAnsweredBefore(
         List<ScriptCommand> commands, int at, int answer = 0x800D)
     {
@@ -386,18 +377,31 @@ public static class SpecialCalls
 
                 case SetVar when commands[i].Word() == answer:
                     return (LeftBehind.ANumber, commands[i].Word(2));
-
-                // Another call, which could have answered and which this does not follow.
-                case Call:
-                    return (LeftBehind.WentSomewhereElse, 0);
             }
 
+            // Somebody else could have answered here, including another call this does not
+            // follow. Either way the walk stops and says so rather than crediting anyone.
             if (Answering.Contains(commands[i].Code)) return (LeftBehind.WentSomewhereElse, 0);
         }
 
         return (LeftBehind.Nothing, 0);
     }
 
+    /// <summary>
+    /// What a called block leaves in the answer variable on its straight line, and who left it.
+    /// <para>
+    /// <b>The LAST thing that puts something there, of any kind.</b> The first version of this
+    /// looked only for routines and credited <c>0x153</c> at fifty-seven places where the block
+    /// ends <c>setvar 0x800D, 1 ; return</c> — the routines inside it were asked and their
+    /// answers were thrown away, and the straight line says the answer out loud. Crediting a
+    /// routine there is the same fault the barrier was added for, one level down.
+    /// </para>
+    /// <para>
+    /// The straight line only, and one level: a <c>call</c> inside it leaves
+    /// <see cref="LeftBehind.Nothing"/> rather than being followed. Each level is another place
+    /// to be wrong.
+    /// </para>
+    /// </summary>
     public static (LeftBehind Left, int Who) WhatACallLeaves(Rom rom, uint address, int answer = 0x800D) =>
         WhatIsLeftInside(rom, address, answer);
 
