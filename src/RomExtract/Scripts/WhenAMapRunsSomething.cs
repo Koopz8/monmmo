@@ -163,6 +163,83 @@ public static class WhenAMapRunsSomething
     }
 
     /// <summary>
+    /// One list's conditions, counted by what this reading can say about each of them.
+    /// </summary>
+    /// <param name="Asks">Which list — <see cref="OnArrival"/> or <see cref="OnASquare"/>.</param>
+    /// <param name="Conditions">How many conditions that list has.</param>
+    /// <param name="Fire">How many get each verdict.</param>
+    /// <param name="Middle">
+    /// How many of that list's MIDDLE BUCKET get each of the four answers — the split 255 made of
+    /// the two lists added together.
+    /// </param>
+    public sealed record Verdicts(
+        string Asks,
+        int Conditions,
+        IReadOnlyDictionary<WhetherItCanFire, int> Fire,
+        IReadOnlyDictionary<HowItIsReached, int> Middle);
+
+    /// <summary>
+    /// Every condition, split by WHICH LIST ASKED and then by what can be said about it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>250's rule, one level in.</b> 250 exists because <c>--arrivals</c> asked its
+    /// "does anything write this variable at all" question of one of the two lists and reported
+    /// an empty bucket; asked of the other, the same bucket held forty-three. 255 then split the
+    /// middle bucket four ways and reported the split of the two lists ADDED TOGETHER, which is
+    /// the same shape again: a total that mixes two populations cannot come back different for
+    /// them. It does — the one-hop copy correction is worth everything on one list and nothing on
+    /// the other.
+    /// </para>
+    /// <para>
+    /// <b>Here rather than in the printer.</b> 255's four answers were lambdas inside a function
+    /// that needs a whole cartridge, so no fixture could reach the rule and no break could be
+    /// aimed at it — the fault this project fixed at 219, 221, 222 and 223 and walked back into.
+    /// Grouping by <see cref="Arrival.Asks"/> is the rule this milestone is about, so it lives
+    /// where a test can ask it directly.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<Verdicts> ByList(
+        IEnumerable<Arrival> conditions,
+        IReadOnlyDictionary<int, WhatItCanHold> canHold,
+        int ceiling)
+    {
+        var found = new List<Verdicts>();
+
+        // The order is the order the lists are named in, not the order the cartridge happens to
+        // produce them in, so two runs of this print the same table.
+        foreach (string asks in new[] { OnArrival, OnASquare })
+        {
+            List<Arrival> of = [.. conditions.Where(a => a.Asks == asks)];
+
+            if (of.Count == 0) continue;
+
+            var fire = new Dictionary<WhetherItCanFire, int>();
+            var middle = new Dictionary<HowItIsReached, int>();
+
+            foreach (WhetherItCanFire which in Enum.GetValues<WhetherItCanFire>()) fire[which] = 0;
+
+            foreach (HowItIsReached which in Enum.GetValues<HowItIsReached>()) middle[which] = 0;
+
+            foreach (Arrival one in of)
+            {
+                fire[WhatAVariableCanHold.CanItFire(
+                    canHold, one.Variable, one.Value, one.WrittenWithThis, ceiling)]++;
+
+                // The middle bucket only — the four answers are about conditions a setvar cannot
+                // satisfy, and counting the rest of the list into them would answer a different
+                // question with the same words.
+                if (one.NobodyWritesThisValue)
+                    middle[WhatAVariableCanHold.HowReached(canHold, one.Variable, one.Value, ceiling)]++;
+            }
+
+            found.Add(new Verdicts(asks, of.Count, fire, middle));
+        }
+
+        return found;
+    }
+
+    /// <summary>
     /// Every value written to every variable by the scripts the maps open, and how many BYTE
     /// POSITIONS write each.
     /// </summary>

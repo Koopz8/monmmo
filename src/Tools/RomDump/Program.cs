@@ -7544,6 +7544,11 @@ public static class Program
         int NotedAsPlaces(Func<WhenAMapRunsSomething.Arrival, bool> which) =>
             arrivals.Where(which).Select(a => (a.Variable, a.Value, a.Address)).Distinct().Count();
 
+        // WHAT EVERY VARIABLE THE SCAN WRITES CAN BE MADE TO HOLD — read once, up here, because
+        // the bucket below is named off the setvar tally alone and the copy table disagrees with
+        // it. Computing it after the block that needs it is how the disagreement stayed unsaid.
+        IReadOnlyDictionary<int, WhatItCanHold> canHold = WhatAVariableCanHold.In(rom, library);
+
         Console.WriteLine();
         // THE BUCKET THAT WAS EMPTY ON ONE LIST AND IS NOT ON THE OTHER. 229 reported "0 name a
         // variable nothing writes at all" and that was true of the list it looked at. Asked of
@@ -7567,10 +7572,16 @@ public static class Program
                 // square waiting for nought is armed from the beginning while one waiting for
                 // anything else can never fire at all. One number for both would be a bucket
                 // that is not an operation (236).
+                bool copiedInto = canHold.TryGetValue(one.Key, out WhatItCanHold? what)
+                    && what.Copied;
+
                 Console.WriteLine(
                     $"      of those, {one.Count(a => a.Value == 0)} want NOUGHT — armed from the"
                     + " start, because a variable nothing writes holds nought — and"
-                    + $" {one.Count(a => a.Value != 0)} want something else and can never fire:"
+                    + $" {one.Count(a => a.Value != 0)} want something else"
+                    + (copiedInto
+                        ? ", and this bucket is named off SETVAR and something COPIES into it:"
+                        : " and can never fire:")
                     + string.Join(
                         "",
                         one.Where(a => a.Value != 0).GroupBy(a => a.Value).OrderBy(g => g.Key)
@@ -7594,8 +7605,38 @@ public static class Program
                 Console.WriteLine(
                     $"      in the WHOLE IMAGE: {anywhere.Count(w => w.ReadsAsAScript)} place(s)"
                     + $" write it ({anywhere.Count} raw), and the game's own code loads it as an"
-                    + $" aligned literal {loads} time(s) — so whatever arms these squares is"
-                    + " neither a script nor a literal this project can find (246)");
+                    + $" aligned literal {loads} time(s)");
+
+                // AND WHERE THE COPY COMES FROM. 250 said of this bucket that whatever arms these
+                // squares is neither a script nor a literal this project can find — and one
+                // milestone later 251 put copyvar's destination into the write tables, which is
+                // where these four sites came from. Nobody re-ran the sentence.
+                if (copiedInto && what is not null)
+                {
+                    Console.WriteLine(
+                        $"      and it is COPIED INTO, from"
+                        + $" {string.Join("/", what.From.Order().Select(v => $"0x{v:X4}"))}"
+                        + " — so the bucket's own name is about setvar and this is not one."
+                        + " What the source held at the moment of the copy is a fact about a run,"
+                        + " not about the file, so the honest verdict is DOES NOT KNOW rather than"
+                        + " CANNOT");
+
+                    foreach (int source in what.From.Order())
+                    {
+                        if (!canHold.TryGetValue(source, out WhatItCanHold? held)) continue;
+
+                        int[] wanted = [.. one.Select(a => a.Value).Distinct().Order()];
+                        int covered = wanted.Count(v => held.Set.Contains(v));
+
+                        Console.WriteLine(
+                            $"        0x{source:X4} is set to"
+                            + $" {(held.Set.Count == 0 ? "nothing" : string.Join("/", held.Set.Order().Take(24)))}"
+                            + (held.Set.Count > 24 ? "/..." : "")
+                            + $" — which covers {covered} of the {wanted.Length} value(s) these"
+                            + " squares want. That is not a proof any of them fires; it is the"
+                            + " reason CANNOT was the wrong word");
+                    }
+                }
             }
         }
 
@@ -7605,8 +7646,6 @@ public static class Program
         // twenty-five milestones with no number on it. Half of it is readable: addvar's second
         // word is a literal, so a variable set to nought and added to by one can hold one, two
         // and three, and that is in the bytes.
-        IReadOnlyDictionary<int, WhatItCanHold> canHold = WhatAVariableCanHold.In(rom, library);
-
         List<WhenAMapRunsSomething.Arrival> middle =
             [.. arrivals.Where(a => a.NobodyWritesThisValue)];
 
@@ -7614,68 +7653,160 @@ public static class Program
         {
             int ceiling = Math.Max(1, arrivals.Max(a => a.Value));
 
-            // FOUR ANSWERS, in the order that decides them. A value the corrected write set
-            // already contains is SATISFIABLE and the bucket was simply wrong about it; one a
-            // counter reaches is readable too; one behind a copy from something unread is the
-            // answer this cannot give; and what is left is the boundary the bucket was named for.
-            bool Written(WhenAMapRunsSomething.Arrival a) =>
-                canHold.TryGetValue(a.Variable, out WhatItCanHold? hold) && hold.Set.Contains(a.Value);
-
-            bool Counted(WhenAMapRunsSomething.Arrival a) =>
-                !Written(a)
-                && canHold.TryGetValue(a.Variable, out WhatItCanHold? hold)
-                && hold.Steps.Count > 0
-                && hold.CanReach(a.Value, ceiling);
-
-            bool Copied(WhenAMapRunsSomething.Arrival a) =>
-                !Written(a)
-                && !Counted(a)
-                && canHold.TryGetValue(a.Variable, out WhatItCanHold? hold)
-                && hold.Copied;
+            // FOUR ANSWERS, decided in ONE PLACE. 255 decided them with four lambdas here, inside
+            // a function that needs a whole cartridge — which is the shape this project has had
+            // to fix at 219, 221, 222 and 223, because a break aimed at a rule no fixture can
+            // reach comes back green whatever it does.
+            HowItIsReached How(WhenAMapRunsSomething.Arrival a) =>
+                WhatAVariableCanHold.HowReached(canHold, a.Variable, a.Value, ceiling);
 
             int Distinct(IEnumerable<WhenAMapRunsSomething.Arrival> of) =>
                 of.Select(a => (a.Variable, a.Value, a.Address)).Distinct().Count();
 
-            List<WhenAMapRunsSomething.Arrival> written = [.. middle.Where(Written)];
-            List<WhenAMapRunsSomething.Arrival> counted = [.. middle.Where(Counted)];
-            List<WhenAMapRunsSomething.Arrival> copied = [.. middle.Where(Copied)];
-            List<WhenAMapRunsSomething.Arrival> neither =
-                [.. middle.Where(a => !Written(a) && !Counted(a) && !Copied(a))];
-
-            Console.WriteLine();
-            Console.WriteLine(
-                $"  the middle bucket is {middle.Count} condition(s), {Distinct(middle)} distinct,"
-                + " and it is answered off setvar alone. What the other kinds of write are worth,"
-                + $" counting up to {ceiling}:");
-
-            Console.WriteLine(
-                $"    {written.Count,4} condition(s), {Distinct(written),3} distinct — SOMETHING"
-                + " DOES WRITE THAT VALUE, through a copy whose source the command before it just"
-                + " set to a literal. One hop, adjacent, no barrier list. The bucket was wrong");
-            Console.WriteLine(
-                $"    {counted.Count,4} condition(s), {Distinct(counted),3} distinct — a COUNTER"
-                + " can reach it: something sets the variable and something adds to it, and"
-                + " addvar's step is a literal too");
-            Console.WriteLine(
-                $"    {copied.Count,4} condition(s), {Distinct(copied),3} distinct — something"
-                + " COPIES into it from a source this cannot read, so what it can hold is another"
-                + " variable's contents and the honest answer is that this does not know");
-            Console.WriteLine(
-                $"    {neither.Count,4} condition(s), {Distinct(neither),3} distinct — nothing"
-                + " sets it, steps it or copies into it with anything that reaches the value:"
-                + " the bucket means what it says");
-
-            foreach (IGrouping<int, WhenAMapRunsSomething.Arrival> one in written
-                         .Union(counted).Union(copied)
-                         .GroupBy(a => a.Variable).OrderBy(g => g.Key))
+            // ONE PRINTER, ASKED OF THREE POPULATIONS. The whole bucket, and then each of the two
+            // lists on its own — because a four-way split of a total that mixes two lists cannot
+            // come back DIFFERENT for them, and 250 exists entirely because one of these two had
+            // never been asked a question the other had.
+            void FourWays(string what, IReadOnlyList<WhenAMapRunsSomething.Arrival> of)
             {
-                WhatItCanHold hold = canHold[one.Key];
+                List<WhenAMapRunsSomething.Arrival> written =
+                    [.. of.Where(a => How(a) == HowItIsReached.Written)];
+                List<WhenAMapRunsSomething.Arrival> counted =
+                    [.. of.Where(a => How(a) == HowItIsReached.Counted)];
+                List<WhenAMapRunsSomething.Arrival> copied =
+                    [.. of.Where(a => How(a) == HowItIsReached.Copied)];
+                List<WhenAMapRunsSomething.Arrival> neither =
+                    [.. of.Where(a => How(a) == HowItIsReached.Neither)];
+
+                Console.WriteLine();
+                Console.WriteLine(
+                    $"  {what}: {of.Count} condition(s), {Distinct(of)} distinct,"
+                    + " answered off setvar alone. What the other kinds of write are worth,"
+                    + $" counting up to {ceiling}:");
 
                 Console.WriteLine(
-                    $"      0x{one.Key:X4} — wanted {string.Join("/", one.Select(a => a.Value).Distinct().Order())};"
-                    + $" set to {(hold.Set.Count == 0 ? "nothing" : string.Join("/", hold.Set.Order()))}"
-                    + (hold.Steps.Count > 0 ? $"; stepped by {string.Join("/", hold.Steps.Order())}" : "")
-                    + (hold.Copied ? "; COPIED INTO" : ""));
+                    $"    {written.Count,4} condition(s), {Distinct(written),3} distinct — SOMETHING"
+                    + " DOES WRITE THAT VALUE, through a copy whose source the command before it just"
+                    + " set to a literal. One hop, adjacent, no barrier list. The bucket was wrong");
+                Console.WriteLine(
+                    $"    {counted.Count,4} condition(s), {Distinct(counted),3} distinct — a COUNTER"
+                    + " can reach it: something sets the variable and something adds to it, and"
+                    + " addvar's step is a literal too");
+                Console.WriteLine(
+                    $"    {copied.Count,4} condition(s), {Distinct(copied),3} distinct — something"
+                    + " COPIES into it from a source this cannot read, so what it can hold is another"
+                    + " variable's contents and the honest answer is that this does not know");
+                Console.WriteLine(
+                    $"    {neither.Count,4} condition(s), {Distinct(neither),3} distinct — nothing"
+                    + " sets it, steps it or copies into it with anything that reaches the value:"
+                    + " the bucket means what it says");
+
+                // WHAT THE CORRECTION IS WORTH HERE, as a share of this population rather than of
+                // the total — a number with a denominator, and one that can come back nought.
+                int corrected = written.Count + counted.Count;
+
+                Console.WriteLine(
+                    $"    so the correction moves {corrected} of {of.Count} condition(s)"
+                    + $" ({(of.Count == 0 ? 0 : 100.0 * corrected / of.Count):F1}%)"
+                    + $" and {Distinct(written) + Distinct(counted)} of {Distinct(of)} distinct"
+                    + (corrected == 0
+                        ? " — NOTHING. Not one condition on this list is satisfiable through a copy"
+                          + " or a counter, so for this list the bucket meant what it said"
+                        : ""));
+
+                foreach (IGrouping<int, WhenAMapRunsSomething.Arrival> one in written
+                             .Union(counted).Union(copied)
+                             .GroupBy(a => a.Variable).OrderBy(g => g.Key))
+                {
+                    WhatItCanHold hold = canHold[one.Key];
+
+                    Console.WriteLine(
+                        $"      0x{one.Key:X4} — wanted {string.Join("/", one.Select(a => a.Value).Distinct().Order())};"
+                        + $" set to {(hold.Set.Count == 0 ? "nothing" : string.Join("/", hold.Set.Order()))}"
+                        + (hold.Steps.Count > 0 ? $"; stepped by {string.Join("/", hold.Steps.Order())}" : "")
+                        + (hold.Copied ? "; COPIED INTO" : ""));
+                }
+            }
+
+            FourWays("the middle bucket, BOTH LISTS TOGETHER", middle);
+
+            // AND THE SAME SPLIT ASKED OF EACH LIST. 250's rule, one level in: when a
+            // classification has a bucket worth reporting, find the other population the same
+            // classification applies to and run it there before quoting the total. The grouping
+            // is ByList's, not this printer's — the rule this milestone is about lives where a
+            // fixture can reach it and the printer reads its answer.
+            IReadOnlyList<WhenAMapRunsSomething.Verdicts> byList =
+                WhenAMapRunsSomething.ByList(arrivals, canHold, ceiling);
+
+            foreach (WhenAMapRunsSomething.Verdicts one in byList)
+            {
+                List<WhenAMapRunsSomething.Arrival> of =
+                    [.. middle.Where(a => a.Asks == one.Asks)];
+
+                if (of.Count == 0) continue;
+
+                FourWays($"the middle bucket, {one.Asks.ToUpperInvariant()} only", of);
+
+                // AND THE SAME FOUR NUMBERS OFF ByList, which is what the verdict table below is
+                // computed from. If these ever disagree with the four lines above, one of the two
+                // groupings is wrong and the reader can see it rather than being told.
+                Console.WriteLine(
+                    "      ByList agrees: "
+                    + string.Join(
+                        ", ",
+                        Enum.GetValues<HowItIsReached>().Select(w => $"{w} {one.Middle[w]}")));
+            }
+
+            // AND THE VERDICT ON THE WHOLE LIST, not just on its middle bucket — with the column
+            // that says how much of it is not read. "121 of this list's conditions can never
+            // fire" is a sentence about the cartridge only if the DOES NOT KNOW beside it is
+            // small; on the other list it is 192 and the same sentence would be about the
+            // reading. The two numbers are printed together or neither is worth quoting.
+            Console.WriteLine();
+            Console.WriteLine(
+                "  THE VERDICT ON EVERY CONDITION, per list — and the last column is the error bar"
+                + " on the one before it:");
+            Console.WriteLine(
+                "                    something     armed at      NOTHING CAN     does not know");
+            Console.WriteLine(
+                "                    writes it     the start     produce it      (a copy it cannot read)");
+            Console.WriteLine(
+                "                    READ          MODELLED      READ            READ");
+
+            foreach (WhenAMapRunsSomething.Verdicts one in byList)
+            {
+                Console.WriteLine(
+                    $"    {one.Asks,-14} {one.Fire[WhetherItCanFire.SomethingWritesIt],6}"
+                    + $"        {one.Fire[WhetherItCanFire.ArmedFromTheStart],6}"
+                    + $"        {one.Fire[WhetherItCanFire.NothingCan],6}"
+                    + $"          {one.Fire[WhetherItCanFire.DoesNotKnow],6}"
+                    + $"   of {one.Conditions}");
+            }
+
+            // THE COLUMN IS MODELLED AND SAYS SO. Nothing in this repository has read what the
+            // save's variable block holds before a script writes it; that every variable starts
+            // at nought is a DECISION, and 250 asserted it in prose without marking it. It is
+            // load-bearing here — it is the difference between "armed" and "can never fire" for
+            // most of the square list — so it is marked rather than folded into a reading.
+            Console.WriteLine(
+                "    the ARMED column is MODELLED: nothing here has read what a variable holds"
+                + " before a script writes it. Every other column is off the bytes");
+
+            // AND THE READING OF THE TABLE, so nobody has to do the subtraction that matters.
+            // "N conditions can never fire" is the sentence this whole reading exists to produce
+            // and NEITHER list can support one: the error bar beside it is larger in both cases,
+            // which is a fact about the reading and is the honest answer (249's negative).
+            foreach (WhenAMapRunsSomething.Verdicts one in byList)
+            {
+                int cannot = one.Fire[WhetherItCanFire.NothingCan];
+                int unknown = one.Fire[WhetherItCanFire.DoesNotKnow];
+
+                Console.WriteLine(
+                    $"    {one.Asks}: {cannot} can never fire against {unknown} this cannot read"
+                    + (unknown >= cannot
+                        ? " — the error bar is the LARGER, so no count of dead conditions can be"
+                          + " quoted off this list"
+                        : " — the error bar is the smaller, so the count means something"));
             }
         }
 
