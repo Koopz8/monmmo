@@ -6,13 +6,12 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **Fifty-seven places call one of two blocks, and each is a yes-or-no.** Read one level of
-  arms: they return nought or one, and the choice turns on two routines in sequence — the
-  same two that carry most of what the robot's silence still decides.
-- **And nine of them were never what they were reported as.** One block's arm ends by jumping
-  somewhere the reading does not follow, and the instrument had been printing that as "the
-  call left the answer alone". Those are different facts: one is about the cartridge and the
-  other is about the instrument.
-- Corrected, "the call touches nothing" drops from 49 to 40 and nine get their own line.
-- **Fourth milestone running where "nothing found" was standing in for "did not look".**
-  Four breaks, four catches.
+- **Thirty-eight of the forty unclaimed answers now have an owner.** Where a call provably
+  leaves the answer variable alone, the reading walks back past it — and the call in the way
+  turns out to be four bytes that move one argument slot into another.
+- **And two of this project's own instruments were found contradicting each other.** One says
+  routine `0x01C` is branched on nineteen times; the other says it is never branched on. Same
+  nineteen places. The older one has never had the safety check the newer one learned at 214.
+- The confident one is right here — and right by luck, because nothing checked.
+- Four breaks. One came back green because the line being broken was a second copy of a rule
+  nothing could reach.

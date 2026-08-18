@@ -1,7 +1,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-257`, 2877 tests green.
+`claude-258`, 2882 tests green.
 
 Standing rules — do not break these:
 
@@ -101,8 +101,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-218-a-jump-is-not-a-silence.md` first, then
-`217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
+Read `claude/milestone-219-walking-back-where-the-call-touched-nothing.md` first, then
+`218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
 **Twenty faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
@@ -159,7 +159,9 @@ on the straight line is a constant only when nothing anywhere in the block asks 
 and a call inside a call leaves nothing rather than being chased. `Returns` reads one level of
 ARMS as well and says what a block can leave and which routines the choice turns on — and
 **a block that ends by jumping away is reported as that, not as leaving the variable alone**,
-because those are different facts and one of them is about the instrument. `--who-reads` is `--who-writes`'s mirror and is eleven milestones late: it finds every
+because those are different facts and one of them is about the instrument. Where the call
+provably leaves the variable alone — and **only** there — it walks BACK in the caller for the
+answer the compare is really reading, stopping at the same barrier list going the other way. `--who-reads` is `--who-writes`'s mirror and is eleven milestones late: it finds every
 `compare`, `comparevars` and copy-from that looks at a variable, with the reversed-image floor
 beside it. **The source of a copy is a read and the destination is a write** — counting both
 would make every write a read as well. Its aggregate ("650 in the save's band are written and
@@ -246,6 +248,9 @@ of 1055 branching sites in the file, nought takes 212 — and 0x188's one place 
 0x083 and 0x084 are asked twice between them and carry 39 of the ceiling's 44 branches
 336 places read an answer through a call: 225 belong to 6 routines, 57 turn on an arm
 40 leave the answer alone and 9 jump somewhere the reading does not follow — those are different
+of the 40, 38 read 0x01C's or 0x01D's answer across a call that is `copyvar 0x8012, 0x8013`
+11 of the 336 have NO owner: 2 behind a jump here and 9 from 218
+--routines says 0x01C has 19 branches and --special 0x1C says it is never branched on — same sites
 the 57 are TWO blocks, each a yes/no turning on 0x083 or 0x084 and then 0x153
 2 of those gates hold NOBODY — 0x084A and 0x084B, the ferry, with no setter anywhere
 ```
@@ -264,20 +269,27 @@ the 57 are TWO blocks, each a yes/no turning on 0x083 or 0x084 and then 0x153
    anyway, which is the `#130` at 71 the party ends with. **The floor is clean**: 1 place asks,
    nothing comes of it, so the floor's party of six is entirely earned. Whether that deserves a
    `--pay` lever or a located payout table is a DECISION and it is deliberately not made.
-3. **The FORTY places whose call really does leave the answer variable alone.** 218 read the
-   57 (two blocks, each a yes/no turning on `0x083` or `0x084` and then `0x153`) and found that
-   nine of 217's forty-nine were the reading stopping at a `goto` rather than the call touching
-   nothing. Forty are real: the compare after them reads an older answer, and finding whose
-   means **walking back PAST the call in the caller**, which 214's barrier deliberately stops.
-   That is a third instrument and it is still not built.
-   Cheaper and also unread: **`0x081A77B0`**, where the jumping arm goes from nineteen places —
-   one level further than the rule allows, so it wants its own reading. And **`0x0153`**, which
-   is half of every one of the fifty-seven decisions and whose own sites nobody has looked at.
-   Also owed and cheap: **seven boulder flags with no setter anywhere** (whatever drops a
-   boulder into a hole is not script), **`0x0805`** which the STRENGTH script sets and shares
-   across all twelve boulders, and **`0x0053`** holding 31 people across the SILPH CO. floors
-   with no setter — the doors are open (176, 181) and the people are still held, which are two
-   different facts.
+3. **`SpecialContracts` HAS NO BARRIER, and nobody has measured what that costs.** This is the
+   top of the list. `--routines` — the instrument every piece of routine work in this project
+   has been read off — walks four commands forward from a `special` and stops at nothing but a
+   `setvar` to the answer variable. Not a `call`, not a `specialvar`, not `callstd`, not `0xA0`.
+   `SpecialCalls` learned that barrier at 214, when it caught the scan crediting `0x0028` with
+   `0x005D`'s reply, and the other arm was never re-run against it. The two now contradict each
+   other out loud: `--routines` gives `0x01C` nineteen branches, `--special 0x1C` says it is
+   never branched on, **and they are the same nineteen sites**. 219's walk-back says
+   `--routines` is right there — the call in between is `copyvar 0x8012, 0x8013 ; return` — and
+   right by luck, because nothing checked. Give `SpecialContracts` the same barrier list and
+   print how many of its branch counts and compared-against values move. That number is the
+   error bar on every routine sentence in this file.
+   Still owed from 218 and cheap: **`0x081A77B0`**, where the jumping arm goes from nineteen
+   places — one level further than the rule allows, so it wants its own reading. And
+   **`0x0153`**, which is half of every one of the fifty-seven decisions and whose own sites
+   nobody has looked at. Also owed: **seven boulder flags with no setter anywhere** (whatever
+   drops a boulder into a hole is not script), **`0x0805`** which the STRENGTH script sets and
+   shares across all twelve boulders, and **`0x0053`** holding 31 people across the SILPH CO.
+   floors with no setter — the doors are open (176, 181) and the people are still held, which
+   are two different facts.
+
 4. **Money, for real this time — and the prices are READ now.** Three drinks at 200/300/350 and
    a POKé DOLL at 1000, plus 208's ¥20 a coin and fifteen coin prices, all READ, all at counters
    the run reaches, against a purse of nought. `--money N` is the lever and it is MODELLED; **the
@@ -383,6 +395,13 @@ the rule being broken was a `Where` inside `Program.cs`, which no test can reach
 `Attempt.HandedOverTwice` and was caught on the second attempt. **That is the sixth time the
 same structural fault has been fixed by moving a rule about the world out of the printer.** If
 a break passes, suspect the fixture — or where the rule lives — before the code.
+
+**A guard nothing can reach is not a guard** (219). The walk back past a call had a `case Call`
+arm of its own sitting immediately above a barrier check that already contained `call` — two
+statements of one rule, and breaking the reachable-looking one changed no behaviour because
+nothing reached it. The green break was correct: there was nothing there to break. Deleting the
+arm and re-breaking the list caught it in one test and nothing else. **When a break is green,
+ask whether the line you edited is the line that decides.**
 
 And run the break against **every** test that could plausibly catch it, not just the one it was
 written for. 206's break was aimed at one of two near-identical functions while the test watched
