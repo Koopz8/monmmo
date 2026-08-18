@@ -9091,6 +9091,75 @@ public static class Program
             foreach (MapObject person in map.Objects) named.Add(person.HiddenBy);
         }
 
+        // AND WHETHER ANY OF THEM IS ONLY DOWN THERE. Every item in this game can also be
+        // handed over, sold, asked for or loaded into a routine's argument slot, and
+        // ItemMentions reads all five. An item the maps name NOWHERE ELSE is an item a player
+        // can only get by digging — and the denominator is the same question asked of every
+        // item in the table, because "buried items are named nowhere else" says nothing if most
+        // items are named nowhere at all.
+        List<int> everyItem = [.. names.Keys.Where(id => id != 0)];
+
+        List<ItemSite> mentions = ItemMentions.Of(rom, library, everyItem);
+
+        HashSet<int> mentioned = [.. mentions.Select(m => m.ItemId)];
+
+        List<int> kinds = [.. buried.Select(b => b.Item).Where(id => id != 0).Distinct().Order()];
+
+        IReadOnlyList<int> onlyBuried = WhatIsBuried.OnlyBuried(buried, mentioned);
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  {kinds.Count} distinct item(s) are buried, and {kinds.Count - onlyBuried.Count}"
+            + " of them are also named by a script the maps open — handed over, taken away,"
+            + " asked for, loaded for a routine or sold");
+
+        // THE DENOMINATOR, AND IT CUTS THE OTHER WAY. 21 items only underground sounds like a
+        // finding until the base rate is beside it: on this cartridge a bit under half of all
+        // items are named by no script at all, so 65 items picked at random would give about
+        // thirty. The buried kinds are BETTER covered elsewhere than an item picked at random,
+        // and the 21 is below what chance would produce, not above it.
+        double share = everyItem.Count == 0
+            ? 0
+            : 1.0 - ((double)everyItem.Count(mentioned.Contains) / everyItem.Count);
+
+        Console.WriteLine(
+            $"    the denominator: {everyItem.Count(mentioned.Contains)} of the"
+            + $" {everyItem.Count} item(s) in the table are named by a script at all, so"
+            + $" {kinds.Count} picked at random would leave about {kinds.Count * share:F1}"
+            + " named nowhere");
+
+        Console.WriteLine(
+            onlyBuried.Count == 0
+                ? "    and NOTHING is only underground — every buried kind has another source"
+                : $"    and {onlyBuried.Count} are named NOWHERE ELSE — buried is the only source"
+                  + " any script the maps open offers, which is"
+                  + (onlyBuried.Count < kinds.Count * share ? " BELOW" : " above")
+                  + " that floor:");
+
+        foreach (int id in onlyBuried.Take(20))
+        {
+            Console.WriteLine(
+                $"      {id,3} {NameOfItem(id)} — buried in {buried.Count(b => b.Item == id)}"
+                + $" place(s) on {buried.Where(b => b.Item == id).Select(b => b.MapId).Distinct().Count()} map(s)");
+        }
+
+        if (onlyBuried.Count > 20) Console.WriteLine($"      ... and {onlyBuried.Count - 20} more");
+
+        // AND WHETHER ANYTHING WANTS ONE, which is the half that makes it a reach question
+        // rather than an inventory.
+        HashSet<int> askedFor = [.. mentions.Where(m => m.How == "asked for").Select(m => m.ItemId)];
+
+        List<int> wanted = [.. kinds.Where(askedFor.Contains)];
+
+        Console.WriteLine(
+            $"    {askedFor.Count} item(s) are ASKED FOR by a script somewhere;"
+            + $" {wanted.Count} of those are buried"
+            + (wanted.Count == 0
+                ? ", and none of them"
+                : ": " + string.Join(", ", wanted.Select(id => $"{NameOfItem(id)}")))
+            + $" — and {onlyBuried.Count(askedFor.Contains)} are asked for AND have no other"
+            + " source, which would be a wall with a shovel in front of it");
+
         Console.WriteLine();
         Console.WriteLine(
             $"  so {buried.Count} thing(s) are remembered by a number NOTHING IN THE FILE NAMES."
@@ -9164,6 +9233,63 @@ public static class Program
                 : "  MORE THAN ONE window fits, so the gap alone cannot say where the base is."
                   + " The load count above is the only thing that narrows it, and it does not"
                   + " pick one either — this instrument comes back UNANSWERABLE and says so.");
+
+        // AND HOW MUCH OF IT THE RUN WALKS OVER. 239 put signs into the walk and the buried kind
+        // have no script, so not one of these is ever picked up at any lever setting. What that
+        // costs is a number and it is printed here rather than left as a sentence — six runs in
+        // this process, which is slow and is the price of a control the reader can re-run (241).
+        Console.WriteLine();
+        Console.WriteLine(
+            "  and what the run walks over — the buried kind have no script, so the walk collects"
+            + " NONE of them at any setting. How many it stands on:");
+
+        WorldData world = WorldExporter.Export(rom);
+        GameRules rules = RulesExporter.Export(rom);
+        MapData start = world.Find(Beginning.MapId) ?? world.Maps.First();
+        Dictionary<int, int> teaches = TeachingMachines(rom);
+
+        Dictionary<uint, uint> doorsTo = EntriesToAScene
+            .In(rom, library.All().SelectMany(EveryScriptOn), HowAScriptRuns.FirstRemembered)
+            .GroupBy(d => d.Where.Address)
+            .ToDictionary(g => g.Key, g => g.First().Leads);
+
+        foreach (TheFloorTable.Setting at in TheFloorTable.Settings)
+        {
+            var beaten = new HashSet<int>();
+            var remembered = new Dictionary<int, int>();
+
+            var reader = new HowAScriptRuns(rom, teaches, null, null, at.SayYes, beaten, remembered);
+
+            Attempt played = Autoplayer.Play(
+                world, start.Id, rules, reader.Read, null, at.Boat, 0, beaten, at.Surf,
+                remembered, at.InOrder, doorsTo);
+
+            HashSet<string> reached = [.. played.Reached];
+
+            List<Buried> standing = [.. buried.Where(b => reached.Contains(b.MapId))];
+
+            // AND THE ONES IT NEVER STANDS ON, at the widest setting only — one line, because
+            // the interesting number at the top of this table is how few there are.
+            if (at == TheFloorTable.Settings[^1])
+            {
+                foreach (Buried missed in WhatIsBuried.NeverStoodOn(buried, reached))
+                {
+                    Console.WriteLine(
+                        $"      never even stood on: {missed.MapId} ({missed.X},{missed.Y})"
+                        + $" index {missed.Third}, item {missed.Item} [{NameOfItem(missed.Item)}]");
+                }
+            }
+
+            Console.WriteLine(
+                $"    {at.Command,-42} {standing.Count,3} of {buried.Count} buried thing(s) on"
+                + $" {standing.Select(b => b.MapId).Distinct().Count(),3} of"
+                + $" {buried.Select(b => b.MapId).Distinct().Count()} map(s) it reaches,"
+                + $" {standing.Select(b => b.Item).Where(i => i != 0).Distinct().Count(),3} distinct item(s)");
+        }
+
+        Console.WriteLine(
+            "    and NONE of them is collected at any of the six, because a buried sign has no"
+            + " script and the walk runs scripts. That is the size of what 239 left.");
     }
 
     private static void WriteNamespaces(Rom rom)

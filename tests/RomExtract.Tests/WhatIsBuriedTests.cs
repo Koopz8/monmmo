@@ -185,4 +185,62 @@ public sealed class WhatIsBuriedTests
     {
         Assert.Equal(3, WhatIsBuried.Gaps([0, 5, 10, 30], 30, 4).Count);
     }
+
+    // ------------------------------------------------------------ what is only underground
+
+    private static Buried Thing(string mapId, int item) => new(mapId, 0, 0, 0, (uint)item);
+
+    /// <summary>THE THING: a buried kind no script names has no other source.</summary>
+    [Fact]
+    public void AnItemNoScriptNamesIsOnlyBuried()
+    {
+        Assert.Equal([13], [.. WhatIsBuried.OnlyBuried([Thing("1.0", 13)], [])]);
+    }
+
+    /// <summary>
+    /// And one a script DOES name is not — without this, every buried kind reads as unique to
+    /// the ground and the whole list is a restatement of what is buried.
+    /// </summary>
+    [Fact]
+    public void AnItemAScriptNamesIsNotOnlyBuried()
+    {
+        Assert.Empty(WhatIsBuried.OnlyBuried([Thing("1.0", 13)], [13]));
+    }
+
+    /// <summary>
+    /// AND ITEM NOUGHT IS NOT AN ITEM: the twelve records that name none of them would otherwise
+    /// put the item table's placeholder at the top of a list of things found only underground.
+    /// </summary>
+    [Fact]
+    public void ItemNoughtIsNotAnItem()
+    {
+        Assert.Empty(WhatIsBuried.OnlyBuried([Thing("10.14", 0)], []));
+    }
+
+    /// <summary>
+    /// And a kind buried in four places is one kind — the list is of items, and counting places
+    /// here would make a common berry look like four separate findings.
+    /// </summary>
+    [Fact]
+    public void AKindBuriedSeveralTimesIsListedOnce()
+    {
+        Assert.Equal(
+            [13],
+            [.. WhatIsBuried.OnlyBuried([Thing("1.0", 13), Thing("1.2", 13)], [])]);
+    }
+
+    // ------------------------------------------------------------- and what the run misses
+
+    /// <summary>
+    /// A buried thing is keyed by its map, because it has no script and there is nothing finer
+    /// for a walk to have run.
+    /// </summary>
+    [Fact]
+    public void WhatTheRunNeverStoodOnIsWhatIsNotOnAReachedMap()
+    {
+        IReadOnlyList<Buried> missed = WhatIsBuried.NeverStoodOn(
+            [Thing("1.0", 13), Thing("1.62", 36)], ["1.0"]);
+
+        Assert.Equal(["1.62"], [.. missed.Select(b => b.MapId)]);
+    }
 }

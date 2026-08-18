@@ -123,6 +123,42 @@ public static class WhatIsBuried
             $"{Values} value(s), {Distinct} distinct, {Low} to {High}, {Missing} gap(s) in the range";
     }
 
+    /// <summary>
+    /// The buried kinds no script anywhere names — the ones a player can only get by digging.
+    /// </summary>
+    /// <param name="buried">The records.</param>
+    /// <param name="namedElsewhere">
+    /// Every item id a script the maps open names, in any of the five ways
+    /// <c>ItemMentions</c> reads: handed over, taken away, asked for, loaded for a routine, sold.
+    /// <b>The buried records themselves must not be in it</b> — a population that counted them
+    /// would report every buried kind as having another source, and would do it silently.
+    /// </param>
+    /// <remarks>
+    /// <b>Item nought is not an item.</b> Twelve of this cartridge's 183 buried records name it,
+    /// carry a count of 10, 20, 40 or 100 where every other one carries 1, and sit on the one map
+    /// holding all five of 208's coin chains. Whatever they hand over is not in the item table,
+    /// and listing "????????" as a thing only found underground would be a reading of a
+    /// placeholder.
+    /// </remarks>
+    public static IReadOnlyList<int> OnlyBuried(
+        IEnumerable<Buried> buried, IReadOnlyCollection<int> namedElsewhere) =>
+    [
+        .. buried.Select(b => b.Item)
+            .Where(id => id != 0 && !namedElsewhere.Contains(id))
+            .Distinct()
+            .Order(),
+    ];
+
+    /// <summary>The buried things on maps that are not in <paramref name="reached"/>.</summary>
+    /// <remarks>
+    /// Keyed by map, which is all a buried record offers — it has a square and no script, so
+    /// there is nothing finer to key on and nothing for a walk to run. Standing on the map is as
+    /// close as this project can say the run gets.
+    /// </remarks>
+    public static IReadOnlyList<Buried> NeverStoodOn(
+        IEnumerable<Buried> buried, IReadOnlyCollection<string> reached) =>
+        [.. buried.Where(b => !reached.Contains(b.MapId))];
+
     /// <summary>A run of consecutive numbers nothing in the file names.</summary>
     /// <param name="From">The first number of the run.</param>
     /// <param name="Length">How many consecutive numbers it covers.</param>
