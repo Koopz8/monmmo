@@ -308,9 +308,7 @@ public static class SpecialCalls
                 // Only when the call provably leaves the variable alone. Then, and only then,
                 // the compare is reading something older and walking back to it is a reading
                 // rather than a guess.
-                (LeftBehind before, int older) = left == LeftBehind.Nothing
-                    ? WhatAnsweredBefore(commands, i, answer)
-                    : (LeftBehind.Nothing, 0);
+                (LeftBehind before, int older) = OlderAnswer(left, commands, i, answer);
 
                 found.Add(new AnsweredThroughACall(
                     mapId,
@@ -356,6 +354,21 @@ public static class SpecialCalls
     /// wrong.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// The older answer, but ONLY when the call left the variable alone.
+    /// <para>
+    /// <b>The condition is the whole licence.</b> Walking back is a reading when the call
+    /// provably touched nothing and a guess otherwise, and the difference is a rule — so it
+    /// lives here where a test can reach it rather than inside the sweep, which needs a whole
+    /// world to run.
+    /// </para>
+    /// </summary>
+    public static (LeftBehind Before, int Older) OlderAnswer(
+        LeftBehind leftByTheCall, List<ScriptCommand> commands, int at, int answer = 0x800D) =>
+        leftByTheCall == LeftBehind.Nothing
+            ? WhatAnsweredBefore(commands, at, answer)
+            : (LeftBehind.Nothing, 0);
+
     public static (LeftBehind Left, int Who) WhatAnsweredBefore(
         List<ScriptCommand> commands, int at, int answer = 0x800D)
     {

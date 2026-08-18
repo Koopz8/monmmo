@@ -340,6 +340,43 @@ public sealed class WhatACallLeavesBehindTests
     }
 
     /// <summary>
+    /// AND THE WALK BACK ONLY HAPPENS WHEN THE CALL LEFT THE VARIABLE ALONE.
+    /// <para>
+    /// That condition is the whole licence for walking back at all: it is a reading when the
+    /// call provably touched nothing and a guess otherwise. Where the call answered, the older
+    /// answer is not the one being read and claiming it would be crediting a routine with
+    /// another's reply — which is the fault this entire family of rules exists to stop.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TheWalkBackOnlyHappensWhenTheCallLeftTheVariableAlone()
+    {
+        byte[] image = Blank();
+
+        Put(image, 0x1000, Special, 0x1C, 0x00);
+        Put(image, 0x1003, Call);
+        Address(image, 0x1004, 0x1200);
+        Put(image, 0x1008, Compare, Lo(Answer), Hi(Answer), 0, 0, Return);
+        Put(image, 0x1200, Return);
+
+        List<ScriptCommand> commands = ScriptReader.Read(new Rom(image), Rom.BaseAddress + 0x1000);
+
+        int at = commands.FindIndex(c => c.Offset == 0x1003);
+
+        Assert.Equal(
+            (SpecialCalls.LeftBehind.ARoutine, 0x1C),
+            SpecialCalls.OlderAnswer(SpecialCalls.LeftBehind.Nothing, commands, at));
+
+        Assert.Equal(
+            (SpecialCalls.LeftBehind.Nothing, 0),
+            SpecialCalls.OlderAnswer(SpecialCalls.LeftBehind.ARoutine, commands, at));
+
+        Assert.Equal(
+            (SpecialCalls.LeftBehind.Nothing, 0),
+            SpecialCalls.OlderAnswer(SpecialCalls.LeftBehind.WentSomewhereElse, commands, at));
+    }
+
+    /// <summary>
     /// A block nothing can be read from leaves nothing, which is what stops an unreadable
     /// address being reported as an answer.
     /// </summary>
