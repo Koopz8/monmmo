@@ -103,7 +103,7 @@ public static class SpecialCalls
         //
         // Stopping here loses attributions rather than inventing them, which is the only
         // direction this can safely be wrong in.
-        0x04,           // call
+        Call,           // call
     ];
 
     /// <summary>
@@ -183,6 +183,181 @@ public static class SpecialCalls
     }
 
     /// <summary>Every script on every map, with where it came from.</summary>
+    /// <summary>
+    /// A compare whose answer was left behind by something inside a <c>call</c>.
+    /// </summary>
+    /// <summary>What a called block leaves in the answer variable, on its straight line.</summary>
+    public enum LeftBehind
+    {
+        /// <summary>Nothing on the straight line puts anything in it.</summary>
+        Nothing,
+
+        /// <summary>A routine's answer — the one worth crediting.</summary>
+        ARoutine,
+
+        /// <summary>
+        /// A number the block puts there itself, and nothing anywhere in it asks a routine.
+        /// <b>No ceiling at all</b> — the answer is a constant however the block is entered.
+        /// </summary>
+        ANumber,
+
+        /// <summary>
+        /// The straight line ends by saying a number out loud, but some ARM of the block asks a
+        /// routine.
+        /// <para>
+        /// <b>Which is not the same thing and the first version of this said it was.</b>
+        /// <c>0x081BBB1E</c> ends <c>setvar 0x800D, 1 ; return</c> and its LESS arm ends
+        /// <c>setvar 0x800D, 0 ; return</c> — so the block returns one or nought depending on a
+        /// routine, and calling that "no ceiling" is a bucket named for a cause with the cause
+        /// false. Trap 5, for the fourth time in this project.
+        /// </para>
+        /// </summary>
+        ANumberOnTheStraightLine,
+
+        /// <summary>Another variable's contents, which this reading does not follow.</summary>
+        AnotherVariable,
+    }
+
+    /// <param name="Left">What the called block leaves in the answer variable.</param>
+    /// <param name="Answerer">
+    /// The routine, when <see cref="Left"/> is <see cref="LeftBehind.ARoutine"/>; the number,
+    /// when it is <see cref="LeftBehind.ANumber"/>; nought otherwise.
+    /// </param>
+    /// <param name="Through">Where the call is, so the two levels can be read against each other.</param>
+    public sealed record AnsweredThroughACall(
+        string MapId,
+        string What,
+        uint Through,
+        uint Called,
+        LeftBehind Left,
+        int Answerer,
+        int Value,
+        byte Condition);
+
+    /// <summary>
+    /// The attributions milestone 214 stopped making, made properly — one level in.
+    /// <para>
+    /// <b>214 added <c>call</c> to the barrier list and lost 42 of 1097 attributions.</b> That
+    /// was the right way to be wrong: a missed reading is a reading nobody makes and a false one
+    /// goes in a doc as a fact. But the answers are still there and they belong to somebody, and
+    /// SEVEN ISLAND showed what that looks like — <c>special 0x0028 ; call 0x081A4EAF ; compare</c>,
+    /// where the called block is three commands long and the first of them is
+    /// <c>special 0x005D</c>.
+    /// </para>
+    /// <para>
+    /// <b>The rule is: the answer a call leaves behind is whatever answered LAST on its straight
+    /// line.</b> Not the first — a block that asks two things leaves the second one's answer —
+    /// and not down any branch, because a run takes one arm and this is a question about the
+    /// file.
+    /// </para>
+    /// <para>
+    /// One level, and it stops there rather than recursing. A call inside a call is reported as
+    /// answering nothing rather than being chased, because each level is another place the
+    /// reading could be wrong and this project has been caught by exactly that twice.
+    /// </para>
+    /// </summary>
+    public static List<AnsweredThroughACall> ThroughACall(Rom rom, MapLibrary library, int answer = 0x800D)
+    {
+        var found = new List<AnsweredThroughACall>();
+
+        foreach ((string mapId, string what, uint address) in Scripts(library))
+        {
+            List<ScriptCommand> commands = ScriptReader.ReadAll(rom, address);
+
+            for (var i = 0; i + 1 < commands.Count; i++)
+            {
+                if (commands[i].Code != Call) continue;
+                if (!Adjacent(commands[i], commands[i + 1])) continue;
+                if (commands[i + 1].Code != Compare) continue;
+                if (commands[i + 1].Word() != answer) continue;
+
+                byte condition = i + 2 < commands.Count &&
+                                 Adjacent(commands[i + 1], commands[i + 2]) &&
+                                 commands[i + 2].Code is GotoIf or CallIf
+                    ? commands[i + 2].Arguments[0]
+                    : (byte)0xFF;
+
+                (LeftBehind left, int who) = WhatIsLeftInside(rom, commands[i].Pointer(), answer);
+
+                found.Add(new AnsweredThroughACall(
+                    mapId,
+                    what,
+                    Rom.BaseAddress + (uint)commands[i].Offset,
+                    commands[i].Pointer(),
+                    left,
+                    who,
+                    commands[i + 1].Word(2),
+                    condition));
+            }
+        }
+
+        return found;
+    }
+
+    /// <summary>Calls a block and comes back. The barrier 214 added.</summary>
+    private const byte Call = 0x04;
+
+    /// <summary>
+    /// What a called block leaves in the answer variable on its straight line, and who left it.
+    /// <para>
+    /// <b>The LAST thing that puts something there, of any kind.</b> The first version of this
+    /// looked only for routines and credited <c>0x153</c> at fifty-seven places where the block
+    /// ends <c>setvar 0x800D, 1 ; return</c> — the routines inside it were asked and their
+    /// answers were thrown away, and the straight line says the answer out loud. Crediting a
+    /// routine there is the same fault the barrier was added for, one level down.
+    /// </para>
+    /// <para>
+    /// The straight line only, and one level: a <c>call</c> inside it leaves
+    /// <see cref="LeftBehind.Nothing"/> rather than being followed. Each level is another place
+    /// to be wrong.
+    /// </para>
+    /// </summary>
+    public static (LeftBehind Left, int Who) WhatACallLeaves(Rom rom, uint address, int answer = 0x800D) =>
+        WhatIsLeftInside(rom, address, answer);
+
+    private static (LeftBehind Left, int Who) WhatIsLeftInside(Rom rom, uint address, int answer)
+    {
+        if (address < Rom.BaseAddress || address - Rom.BaseAddress >= (uint)rom.Length)
+        {
+            return (LeftBehind.Nothing, 0);
+        }
+
+        var left = LeftBehind.Nothing;
+        var who = 0;
+
+        // Whether any ARM of it asks a routine, which is a different question from what the
+        // straight line ends with and the one that says whether a literal is really a constant.
+        bool armsAsk = ScriptReader.ReadAll(rom, address)
+            .Any(c => c.Code == Special || (c.Code == SpecialVar && c.Word() == answer));
+
+        foreach (ScriptCommand command in ScriptReader.Read(rom, address))
+        {
+            switch (command.Code)
+            {
+                case Special:
+                    (left, who) = (LeftBehind.ARoutine, command.Word());
+                    break;
+
+                case SpecialVar when command.Word() == answer:
+                    (left, who) = (LeftBehind.ARoutine, command.Word(2));
+                    break;
+
+                case SetVar when command.Word() == answer:
+                    (left, who) = (
+                        armsAsk ? LeftBehind.ANumberOnTheStraightLine : LeftBehind.ANumber,
+                        command.Word(2));
+                    break;
+
+                case 0x19 when command.Word() == answer:
+                case 0x1A when command.Word() == answer:
+                    (left, who) = (LeftBehind.AnotherVariable, command.Word(2));
+                    break;
+            }
+        }
+
+        return (left, who);
+    }
+
     private static IEnumerable<(string MapId, string What, uint Address)> Scripts(MapLibrary library)
     {
         foreach (LoadedMap map in library.All())

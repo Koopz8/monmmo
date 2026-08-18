@@ -213,6 +213,7 @@ public static class Program
         if (options.ClimbFrom.Count > 0) WriteClimb(rom, options.ClimbFrom);
         if (options.WhoWrites.Count > 0) WriteWhoWrites(rom, options.WhoWrites);
         if (options.WhoReads.Count > 0) WriteWhoReads(rom, options.WhoReads);
+        if (options.ThroughACall) WriteThroughACall(rom);
         if (options.Stops.Count > 0) WriteStops(rom, options.Stops);
         if (options.Fights) WriteFights(rom);
         if (options.WhoKnows) WriteWhoKnows(rom);
@@ -8414,6 +8415,96 @@ public static class Program
     }
 
     /// <summary>
+    /// The attributions 214 stopped making, made one level in.
+    /// <para>
+    /// Adding <c>call</c> to the answer scan's barrier list lost 42 of 1097 attributions and
+    /// that was the right way to be wrong. The answers are still there and they belong to
+    /// somebody; this says who, and how often nothing inside the call answers at all — which is
+    /// the case where the compare is reading something older still and neither reading is
+    /// right.
+    /// </para>
+    /// </summary>
+    private static void WriteThroughACall(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("WHAT ANSWERED, ONE LEVEL IN");
+        Console.WriteLine();
+
+        List<SpecialCalls.AnsweredThroughACall> found =
+            SpecialCalls.ThroughACall(rom, MapLibrary.Open(rom));
+
+        List<SpecialCalls.AnsweredThroughACall> answered =
+            [.. found.Where(a => a.Left == SpecialCalls.LeftBehind.ARoutine)];
+
+        Console.WriteLine(
+            $"  {found.Count} place(s) call a block and compare the answer variable straight after");
+
+        foreach (SpecialCalls.LeftBehind left in Enum.GetValues<SpecialCalls.LeftBehind>())
+        {
+            int howMany = found.Count(a => a.Left == left);
+
+            if (howMany == 0) continue;
+
+            Console.WriteLine($"    {howMany,4} leave {Left(left)}");
+        }
+
+        if (found.Count == 0)
+        {
+            Console.WriteLine(
+                "    nothing in this file reads an answer through a call, so the barrier the"
+                + " scan added costs it nothing.");
+
+            return;
+        }
+
+        Console.WriteLine();
+
+        foreach (IGrouping<int, SpecialCalls.AnsweredThroughACall> byRoutine in answered
+                     .GroupBy(a => a.Answerer)
+                     .OrderByDescending(g => g.Count()))
+        {
+            Console.WriteLine(
+                $"    routine 0x{byRoutine.Key:X3} answers at {byRoutine.Count()} place(s) through"
+                + $" {byRoutine.Select(a => a.Called).Distinct().Count()} block(s)"
+                + $" — e.g. {byRoutine.First().MapId} {byRoutine.First().What}"
+                + $" calls 0x{byRoutine.First().Called:X8} and compares against"
+                + $" {byRoutine.First().Value}");
+        }
+
+        List<SpecialCalls.AnsweredThroughACall> onTheLine =
+            [.. found.Where(a => a.Left == SpecialCalls.LeftBehind.ANumberOnTheStraightLine)];
+
+        if (onTheLine.Count > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine(
+                $"  {onTheLine.Count} place(s) call a block whose STRAIGHT LINE ends by saying the"
+                + $" answer out loud — {string.Join(", ", onTheLine.Select(a => a.Answerer).Distinct().Order())}"
+                + " — but an arm of the same block asks a routine.");
+            Console.WriteLine(
+                "    Those are NOT constants. 0x081BBB1E ends `setvar 0x800D, 1; return` and its"
+                + " LESS arm ends `setvar 0x800D, 0; return`, so it returns one or nought"
+                + " depending on a routine this project cannot run. Following the arms is a"
+                + " level further in than this reading goes.");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  {found.Select(a => a.Called).Distinct().Count()} distinct block(s) are called this"
+            + $" way, from {found.Select(a => a.MapId).Distinct().Count()} map(s)");
+    }
+
+    private static string Left(SpecialCalls.LeftBehind left) => left switch
+    {
+        SpecialCalls.LeftBehind.ARoutine => "a routine's answer",
+        SpecialCalls.LeftBehind.ANumber => "a number, and nothing in the block asks anything — a constant",
+        SpecialCalls.LeftBehind.ANumberOnTheStraightLine =>
+            "a number on the straight line, but an arm of the block asks a routine",
+        SpecialCalls.LeftBehind.AnotherVariable => "another variable's contents, not followed here",
+        _ => "NOTHING — the compare reads whatever was there before the call",
+    };
+
+    /// <summary>
     /// Every place in the whole image that LOOKS at a variable — <c>--who-writes</c>'s mirror.
     /// <para>
     /// <b>This project has had one side of this since 184.</b> "Nothing sets this" has been
@@ -12276,6 +12367,9 @@ public static class Program
         /// <summary>Variables to ask the whole image who LOOKS at.</summary>
         public IReadOnlyList<int> WhoReads { get; private init; } = [];
 
+        /// <summary>Whether to attribute the answers that arrive through a call.</summary>
+        public bool ThroughACall { get; private init; }
+
         /// <summary>Commands to show every stopped read of, with the bytes around each.</summary>
         public IReadOnlyList<byte> Stops { get; private init; } = [];
 
@@ -12469,6 +12563,7 @@ public static class Program
             var climbFrom = new List<uint>();
             var whoWrites = new List<int>();
             var whoReads = new List<int>();
+            var throughACall = false;
             var stops = new List<byte>();
             bool boat = false;
             var surf = false;
@@ -12767,6 +12862,10 @@ public static class Program
 
                         break;
                     }
+                    case "--through-a-call":
+                        throughACall = true;
+
+                        break;
                     case "--who-reads":
                     {
                         foreach (string named in Next(args, ref i, "--who-reads").Split(','))
@@ -13030,6 +13129,7 @@ public static class Program
                 ClimbFrom = climbFrom,
                 WhoWrites = whoWrites,
                 WhoReads = whoReads,
+                ThroughACall = throughACall,
                 Stops = stops,
                 Fights = fights,
                 WhoKnows = whoKnows,
