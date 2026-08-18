@@ -108,10 +108,20 @@ public sealed class WhatIsBuriedTests
     /// And repeated values are not one — without this, a field holding the same number a hundred
     /// times reads as an index and the whole argument for a computed flag disappears.
     /// </summary>
+    /// <remarks>
+    /// <b>The first version of this fixture was <c>[0, 1, 1, 2]</c> and the break came back
+    /// green.</b> Four values from nought with a largest of two fails the "largest is one less
+    /// than the count" rule as well, so removing the distinctness check changed nothing — the
+    /// fixture was caught by the other half and could not tell the two apart. Trap 20 and
+    /// fixture-lie 12 at once, and the count was predicted at one before the break ran, which is
+    /// the only reason the green was a finding rather than a shrug.
+    /// </remarks>
     [Fact]
     public void RepeatedValuesAreNotAnIndex()
     {
-        Assert.False(WhatIsBuried.IsADenseIndex([0, 1, 1, 2]));
+        // Four values, nought to three, so every rule but distinctness is satisfied — and one
+        // of them is repeated while another is missing.
+        Assert.False(WhatIsBuried.IsADenseIndex([0, 1, 1, 3]));
         Assert.False(WhatIsBuried.IsADenseIndex([1, 2, 3]));
     }
 
