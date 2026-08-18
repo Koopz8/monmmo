@@ -119,8 +119,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-231-a-number-nothing-computes.md` first, then `230`, then
-`229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
+Read `claude/milestone-232-ninety-seven-objects-and-one-command.md` first, then `231`,
+`230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
 **Twenty faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
@@ -173,7 +173,14 @@ dotnet run -c Release --project src/Tools/RomDump -- firered.gba --the-scan
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --two-commands
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --arrivals
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --the-floor
+dotnet run -c Release --project src/Tools/RomDump -- firered.gba --read-from 0x081BE06F
 ```
+
+`--read-from 0xADDR[,0xADDR]` prints an address: the bytes and what they read as **off the same
+command**, every block it reaches, and which byte stopped a read and where. This project's
+method section says to stop inferring and print the bytes and there was no command that printed
+them — 190, 199, 228 and 232 all hand-dumped and hand-copied a width table. It follows the four
+pointer forms only, never a fall-through, and reads each block once.
 
 `--the-floor` is the block below, read rather than remembered: six runs at the six lever
 settings in one process, printed with **the differences between them worked out by subtracting
@@ -357,16 +364,22 @@ the 57 are TWO blocks, each a yes/no turning on 0x083 or 0x084 and then 0x153
 2 of those gates hold NOBODY — 0x084A and 0x084B, the ferry, with no setter anywhere
 the floor's 150 -> 153 is milestone 199 alone: 0x026E/0x026F/0x0270 at 10.14, the prize counter
 of 199's three widths, 0xB3 and 0xB4 are in SERIES and 0xC1 opens no flag at any lever setting
+the obstacle scripts carry 49 CUT / 97 ROCK SMASH / 54 STRENGTH objects, on 21 / 15 / 15 maps
+0x0AB is ONE byte position, 0x081BE07C, reached by those 97 — and all it decides is one 0x27
+0x27 is 98 byte positions and 68 of them follow a special, against a floor of 2.35% (2.3 of 98)
+0x9C is 7 byte positions and SEVEN distinct words — a column; 3 of them are the obstacle scripts
+exactly ONE conditional in the map scan has a 0x27 its target lacks, and it is 0x0AB's
 ```
 
 ## The next task, precisely
 
-1. **DONE AT 231 — 45 lines, 39 right, 4 wrong, 4 uncomputable.** What is left of it: the three
+1. **`0x0AB` IS READ (232) and the block audit is DONE (231).** What is left of the audit: What is left of it: the three
    numbers nothing prints (`62 gates hold 240 people`, `146 trees and rocks`, `158 objects`) and
    `the ceiling is 45 of 437 byte positions`. Each needs an instrument or deleting; they are
-   marked in the block. And **`0x0AB`**, which 231 turned up on the way: **97 calls at ONE byte
-   position**, branched on there, never read — the largest inflation in the file and one address
-   to go and look at. The history for reference:
+   marked in the block. The next cheap reads are the **four `0x9C` sites that are NOT obstacle
+   scripts** — `0x003E` on `1.80`'s arrival, `0x0044` on `2.56`, and `0x0040`/`0x0045` on two
+   `10.14` signs, which is the GAME CORNER a third time — and the **41 routines a `0x27` follows**.
+   `--read-from` makes all of those one command each. The history for reference:
    230 did the floor-row bisect (answer: milestone **199**, one commit, +3 at all six settings,
    announced in its own commit message) and then found the bigger thing: that block, and two
    items of this list, entered the prompt at **`f8d4f15fe`, "the next session's prompt with 190
