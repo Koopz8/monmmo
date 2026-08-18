@@ -42,7 +42,10 @@ public sealed class TheSameSplitAskedOfEachListTests
         new Dictionary<int, WhatItCanHold>
         {
             [Written] = new(Written, [0, 3, 6], [], false),
-            [Counted] = new(Counted, [0], [1], false),
+            // A step of TEN, not of one. A counter stepped by one reaches every value in range
+            // and 258 disqualifies its answer — so 257's own fixture demonstrated "a counter
+            // can reach it" with exactly the walk that cannot say no.
+            [Counted] = new(Counted, [0], [10], false),
             [Copied] = new(Copied, [], [], true) { From = [0x4001] },
             [Neither] = new(Neither, [1], [], false),
         };
@@ -85,7 +88,7 @@ public sealed class TheSameSplitAskedOfEachListTests
             WhatAVariableCanHold.HowReached(hold, Written, 3, Ceiling));
         Assert.Equal(
             HowItIsReached.Counted,
-            WhatAVariableCanHold.HowReached(hold, Counted, 2, Ceiling));
+            WhatAVariableCanHold.HowReached(hold, Counted, 20, Ceiling));
         Assert.Equal(
             HowItIsReached.Copied,
             WhatAVariableCanHold.HowReached(hold, Copied, 5, Ceiling));
@@ -138,7 +141,7 @@ public sealed class TheSameSplitAskedOfEachListTests
             WhatAVariableCanHold.CanItFire(hold, Written, 3, 0, Ceiling));
         Assert.Equal(
             WhetherItCanFire.SomethingWritesIt,
-            WhatAVariableCanHold.CanItFire(hold, Counted, 2, 0, Ceiling));
+            WhatAVariableCanHold.CanItFire(hold, Counted, 20, 0, Ceiling));
         Assert.Equal(
             WhetherItCanFire.DoesNotKnow,
             WhatAVariableCanHold.CanItFire(hold, Copied, 5, 0, Ceiling));
@@ -198,7 +201,7 @@ public sealed class TheSameSplitAskedOfEachListTests
         [
             Asking(Written, 3, WhenAMapRunsSomething.OnArrival),
             Asking(Written, 6, WhenAMapRunsSomething.OnArrival, 0x08160010),
-            Asking(Counted, 2, WhenAMapRunsSomething.OnASquare, 0x08160020),
+            Asking(Counted, 20, WhenAMapRunsSomething.OnASquare, 0x08160020),
         ];
 
         IReadOnlyList<WhenAMapRunsSomething.Verdicts> byList =
@@ -229,7 +232,7 @@ public sealed class TheSameSplitAskedOfEachListTests
         [
             Asking(Written, 3, WhenAMapRunsSomething.OnArrival),
             Asking(Written, 5, WhenAMapRunsSomething.OnArrival, 0x08160010),
-            Asking(Counted, 2, WhenAMapRunsSomething.OnASquare, 0x08160020),
+            Asking(Counted, 20, WhenAMapRunsSomething.OnASquare, 0x08160020),
         ];
 
         IReadOnlyList<WhenAMapRunsSomething.Verdicts> byList =
@@ -275,7 +278,7 @@ public sealed class TheSameSplitAskedOfEachListTests
         [
             Satisfied(Written, 3, WhenAMapRunsSomething.OnArrival),
             Asking(Written, 5, WhenAMapRunsSomething.OnArrival, 0x08160010),
-            Asking(Counted, 2, WhenAMapRunsSomething.OnASquare, 0x08160020),
+            Asking(Counted, 20, WhenAMapRunsSomething.OnASquare, 0x08160020),
             Asking(Copied, 5, WhenAMapRunsSomething.OnASquare, 0x08160030),
             Asking(Neither, 5, WhenAMapRunsSomething.OnASquare, 0x08160040),
             Asking(Neither, 0, WhenAMapRunsSomething.OnASquare, 0x08160050),
@@ -309,7 +312,7 @@ public sealed class TheSameSplitAskedOfEachListTests
         // the other way round.
         WhenAMapRunsSomething.Arrival[] conditions =
         [
-            Asking(Counted, 2, WhenAMapRunsSomething.OnASquare),
+            Asking(Counted, 20, WhenAMapRunsSomething.OnASquare),
             Asking(Written, 3, WhenAMapRunsSomething.OnArrival, 0x08160010),
         ];
 

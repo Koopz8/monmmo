@@ -80,6 +80,59 @@ public sealed record WhatItCanHold(
 
         return false;
     }
+
+    /// <summary>
+    /// How many of the values in <c>0..ceiling</c> the counter walk reaches at all — the
+    /// denominator on every answer <see cref="CanReach"/> gives.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The number 258 exists for.</b> "A counter can reach it" reads as a finding and is one
+    /// only if the counter cannot reach everything. `0x4001` is set to forty-five different values
+    /// and stepped by one, two and four; its walk reaches <b>100 of the 100 values in 0..99</b>,
+    /// so it answers yes to every question anybody will ever ask it. `0x4002` and `0x4003` do the
+    /// same. Every variable this test has ever been given saturates, which means the three
+    /// conditions 255 credited to a counter were credited by a test that could not say no.
+    /// </para>
+    /// <para>
+    /// Saturation is an exact predicate and not a threshold: the walk either reaches every value
+    /// in range or it does not. That is deliberate — this project has been caught by a band
+    /// boundary before, and 244's written-ness rule works because it needs none.
+    /// </para>
+    /// </remarks>
+    public int HowManyItReaches(int ceiling)
+    {
+        var reached = new HashSet<int>(Set.Where(v => v >= 0 && v <= ceiling));
+
+        if (Steps.Count == 0) return reached.Count;
+
+        var todo = new Queue<int>(reached);
+
+        while (todo.Count > 0)
+        {
+            int at = todo.Dequeue();
+
+            foreach (int step in Steps)
+            {
+                foreach (int next in new[] { at + step, at - step })
+                {
+                    if (next < 0 || next > ceiling) continue;
+                    if (!reached.Add(next)) continue;
+
+                    todo.Enqueue(next);
+                }
+            }
+        }
+
+        return reached.Count;
+    }
+
+    /// <summary>
+    /// Whether the counter walk reaches EVERY value in <c>0..ceiling</c>, so that an answer of
+    /// "a counter can reach it" carries no information at all.
+    /// </summary>
+    public bool ACounterReachesEverything(int ceiling) =>
+        Steps.Count > 0 && HowManyItReaches(ceiling) == ceiling + 1;
 }
 
 /// <summary>
@@ -110,6 +163,13 @@ public enum HowItIsReached
 
     /// <summary>A counter walks to it, and <c>addvar</c>'s step is a literal.</summary>
     Counted,
+
+    /// <summary>
+    /// A counter "walks to it" and walks to every other value in range as well, so the answer
+    /// carries no information — 258. Not a threshold: the walk either covers the whole range or
+    /// it does not.
+    /// </summary>
+    CounterReachesEverything,
 
     /// <summary>A copy from a source this cannot read — the honest "does not know".</summary>
     Copied,
@@ -241,7 +301,17 @@ public static class WhatAVariableCanHold
 
         if (hold.Set.Contains(value)) return HowItIsReached.Written;
 
-        if (hold.Steps.Count > 0 && hold.CanReach(value, ceiling)) return HowItIsReached.Counted;
+        if (hold.Steps.Count > 0 && hold.CanReach(value, ceiling))
+        {
+            // AND THE DENOMINATOR ON THE ANSWER (258). A walk that reaches every value in range
+            // has said yes before it was asked, and every variable this has ever been given —
+            // 0x4001, 0x4002, 0x4003 — reaches 100 of 100. Reported as its own answer rather than
+            // folded into either neighbour, because "a counter reaches it" and "the test cannot
+            // say no" are different facts and only one of them is about the cartridge.
+            return hold.ACounterReachesEverything(ceiling)
+                ? HowItIsReached.CounterReachesEverything
+                : HowItIsReached.Counted;
+        }
 
         return hold.Copied ? HowItIsReached.Copied : HowItIsReached.Neither;
     }
@@ -285,6 +355,10 @@ public static class WhatAVariableCanHold
             case HowItIsReached.Written:
             case HowItIsReached.Counted:
                 return WhetherItCanFire.SomethingWritesIt;
+
+            // AND NOT CounterReachesEverything, which falls through on purpose (258). A walk that
+            // reaches every value in range is not evidence that anything writes this one, and
+            // 255 and 257 both quoted three conditions it had credited.
 
             // Before the copy, because holding nought is a positive fact about the start of the
             // game and "something copies into it from a source this cannot read" is an admission

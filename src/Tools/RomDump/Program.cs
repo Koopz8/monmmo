@@ -7692,6 +7692,17 @@ public static class Program
                     $"    {counted.Count,4} condition(s), {Distinct(counted),3} distinct — a COUNTER"
                     + " can reach it: something sets the variable and something adds to it, and"
                     + " addvar's step is a literal too");
+
+                // AND THE ONES THE COUNTER TEST COULD NOT HAVE SAID NO TO (258). Printed as its
+                // own line rather than inside the one above, because a walk that reaches every
+                // value in range answered before it was asked.
+                List<WhenAMapRunsSomething.Arrival> saturated =
+                    [.. of.Where(a => How(a) == HowItIsReached.CounterReachesEverything)];
+
+                Console.WriteLine(
+                    $"    {saturated.Count,4} condition(s), {Distinct(saturated),3} distinct — a"
+                    + " counter reaches it AND REACHES EVERY OTHER VALUE IN RANGE, so the answer"
+                    + " carries no information. 255 and 257 both counted these as reached");
                 Console.WriteLine(
                     $"    {copied.Count,4} condition(s), {Distinct(copied),3} distinct — something"
                     + " COPIES into it from a source this cannot read, so what it can hold is another"
@@ -7781,6 +7792,115 @@ public static class Program
                     + $"        {one.Fire[WhetherItCanFire.NothingCan],6}"
                     + $"          {one.Fire[WhetherItCanFire.DoesNotKnow],6}"
                     + $"   of {one.Conditions}");
+            }
+
+            // ---------------------------------------------------------------- 258, the ninety-nine
+            //
+            // WHAT THE SCRIPT DOES ABOUT ITS OWN VARIABLE. The record carries the condition, so
+            // the script should not have to. Writing the variable is the disarm and is ordinary;
+            // COMPARING it means the script is doing the record's job, and every condition this
+            // reading calls impossible on the square list is one of those.
+            Console.WriteLine();
+            Console.WriteLine(
+                "  WHAT EACH CONDITION'S SCRIPT DOES ABOUT THE VERY VARIABLE THE CONDITION NAMES:");
+
+            foreach (WhenAMapRunsSomething.Verdicts row in byList)
+            {
+                List<WhenAMapRunsSomething.Arrival> of =
+                    [.. arrivals.Where(a => a.Asks == row.Asks)];
+
+                var guards = new Dictionary<(int Value, int Guard), int>();
+                int writesOwn = 0;
+                int guardsOwn = 0;
+                int comparesSomething = 0;
+                int firstCompareIsSomethingElse = 0;
+                var guardAddresses = new HashSet<uint>();
+                var writeAddresses = new HashSet<uint>();
+
+                foreach (WhenAMapRunsSomething.Arrival a in of)
+                {
+                    IReadOnlyList<ScriptCommand> script = ScriptReader.ReadAll(rom, a.Address);
+
+                    if (TheScriptsOwnGuard.Writes(script, a.Variable) is not null)
+                    {
+                        writesOwn++;
+                        writeAddresses.Add(a.Address);
+                    }
+
+                    if (TheScriptsOwnGuard.FirstCompareNames(script) is { } named)
+                    {
+                        comparesSomething++;
+
+                        if (named != a.Variable) firstCompareIsSomethingElse++;
+                    }
+
+                    if (TheScriptsOwnGuard.Guard(script, a.Variable) is not { } guard) continue;
+
+                    guardsOwn++;
+                    guardAddresses.Add(a.Address);
+                    guards[(a.Value, guard)] = guards.GetValueOrDefault((a.Value, guard)) + 1;
+                }
+
+                // AND BOTH NUMBERS, because a block hung off many maps is read many times and
+                // only one of the two counts is about the cartridge (231, 241). It decides this
+                // one: the square list's eleven are eleven SCRIPTS and the arrival list's three
+                // are one script counted three times.
+                Console.WriteLine(
+                    $"    {row.Asks}: {of.Count} condition(s) — {writesOwn} WRITE their own"
+                    + $" variable at {writeAddresses.Count} address(es) (the disarm, ordinary),"
+                    + $" {guardsOwn} GUARD on it at {guardAddresses.Count} address(es)");
+                Console.WriteLine(
+                    $"      the control: {comparesSomething} open with a compare of SOME variable,"
+                    + $" and {firstCompareIsSomethingElse} of those name a different one — so"
+                    + " naming your own is not what a script does by default");
+
+                foreach (KeyValuePair<(int Value, int Guard), int> one in guards
+                             .OrderByDescending(g => g.Value).ThenBy(g => g.Key.Value))
+                {
+                    Console.WriteLine(
+                        $"      condition wants {one.Key.Value,-4} and the script guards on"
+                        + $" {one.Key.Guard,-4} (that is {one.Key.Guard - one.Key.Value:+0;-0;0})"
+                        + $"  x{one.Value}");
+                }
+            }
+
+            // AND THE VALUE ITSELF, against every other value either list names. 99 is the only
+            // one outside 0..8 bar a single 17, and the point of printing the whole column is
+            // that a reader can see the gap rather than be told about it.
+            Console.WriteLine();
+            Console.WriteLine("  EVERY VALUE EITHER LIST NAMES, and how many places in the whole");
+            Console.WriteLine("  image write it to any variable with a setvar — with the reversed");
+            Console.WriteLine("  image beside it, because a three-byte pattern turns up by accident:");
+
+            byte[] image = rom.Span.ToArray();
+            byte[] backwards = [.. image.Reverse()];
+
+            static int WritesOfValue(byte[] bytes, int value)
+            {
+                int found = 0;
+
+                for (int i = 0; i + 4 < bytes.Length; i++)
+                {
+                    if (bytes[i] != 0x16) continue;
+                    if (bytes[i + 3] != (byte)value || bytes[i + 4] != (byte)(value >> 8)) continue;
+
+                    found++;
+                }
+
+                return found;
+            }
+
+            foreach (int value in arrivals.Select(a => a.Value).Distinct().Order())
+            {
+                int onArrival = arrivals.Count(
+                    a => a.Value == value && a.Asks == WhenAMapRunsSomething.OnArrival);
+                int onASquare = arrivals.Count(
+                    a => a.Value == value && a.Asks == WhenAMapRunsSomething.OnASquare);
+
+                Console.WriteLine(
+                    $"    value {value,-4} — {onArrival,3} on arrival, {onASquare,3} on a square;"
+                    + $" {WritesOfValue(image, value),5} setvar site(s) in the image write it,"
+                    + $" {WritesOfValue(backwards, value),5} in the reversal");
             }
 
             // THE COLUMN IS MODELLED AND SAYS SO. Nothing in this repository has read what the
