@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-295`, 3135 tests green.
+`claude-296`, 3141 tests green.
 
 Standing rules — do not break these:
 
@@ -399,9 +399,24 @@ Traps worth carrying:
     copied from — which needs no list, cannot go stale, and is conservative in the safe direction.
     `0x406F`'s third copy has `special 0x014B` in front of it and is correctly left unread.
 
+44. **A DESCRIPTION OF A BEHAVIOUR IS NOT A CAUSE OF IT** (256). 240 said the run goes round
+    because two flags' "value at the end of a pass depends on which map the walk reached last".
+    That is what oscillation looks like, restated. The cause is a counting argument: a block that
+    reads a flag and writes the opposite is a toggle, and a pass running an ODD number of them
+    ends the other way round. Three signs share one such block and three is odd. **When an
+    explanation could be written without knowing anything the instrument found, it is a
+    paraphrase.** And the parity is checkable: the floor is the one setting that settles and the
+    one that reports nothing odd.
+
+45. **NECESSARY IS NOT SUFFICIENT, AND THE EXTRA NAME IS THE TELL** (256). 240's criterion was
+    "moves both ways within one pass", which is necessary — and it named TWO flags where the
+    sufficient criterion names one. `0x0807` moves both ways twice a pass at one address and ends
+    every pass as it began. **A criterion that admits more than the thing you are explaining has
+    something missing, and the count of what it admits is the size of what.**
+
 ## Where things are
 
-Read `claude/milestone-255-a-value-through-one-hop.md` first, then `254`, `253`, `252`, `251`,
+Read `claude/milestone-256-three-is-odd.md` first, then `255`, `254`, `253`, `252`, `251`,
 `250`, `249`, `248`, `247`, `246`, `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
 `238`, `237`,
@@ -746,9 +761,15 @@ TO ONE IT HAD ALREADY BEEN IN — a CYCLE, not a fixed point (239). That is a th
 a failure: a two-cycle has opened everything it will ever open. Do not fold it into "nothing
 more opened" — a run that settles and a run that oscillates are different facts about the world.
 WHAT MAKES IT GO ROUND is NOT 9.6's 0x0001, which 239 read off the scripts and asserted about a
-run: 0x0001 does not move at all in the --say-yes rows and those cycle. It is 0x026C and 0x0807
-— scratch flags set on one map and cleared on another, whose value at the END of a pass depends
-on which map the walk reached last (240).
+run: 0x0001 does not move at all in the --say-yes rows and those cycle. It is **0x026C ALONE, and
+the cause is PARITY** (256): three signs on 1.59, 1.60 and 1.61 all call one block that does
+`checkflag 0x026C` and sets it on one arm and clears it on the other — a TOGGLE — and the walk
+reads all three every pass. Three is odd, so it ends every pass the other way round. **240's
+second name, 0x0807, is wrong**: it moves both ways but TWICE a pass at one address on 2.38, so it
+ends as it began. Moving both ways is necessary; parity decides. `--play` prints the flags moved
+an odd number of times on the pass the run stopped on, and the floor table is its own control —
+five settings cycle and report one flag, the floor settles and reports NONE, because it never
+reaches those three maps.
 ```
 
 **381 of 425 no longer needs `--surf`** — and it was 390 until 193 stopped the run playing each
@@ -958,8 +979,11 @@ still work.**
 * **Whether a dropped trigger hides a reader** (247). `MapLinkExtractor` drops trigger records
   whose square is off the map before anything sees them. That understates the readers, which is
   the safe direction, and nobody has printed how many.
-* **`0x026C` and `0x0807`** — the two that actually make the run go round (240). Set on one map,
-  cleared on another, holding nothing. `--read-from` on the four addresses is one command.
+* ~~`0x026C` and `0x0807`~~ **READ AT 256**: `0x026C` alone, toggled by three signs sharing one
+  block, and three is odd. `0x0807` is not a cause. What is left: **what `0x026C` is FOR** (the
+  block asks a yes-or-no then branches on `0x8004`, which each sign sets differently — a shared
+  scene with three doors), and **whether the walk should read a sign twice at all**, since a
+  player reads one and the walk reads all three, which is what makes the count odd.
 * ~~`0x4001` is a flag in the run and a variable in the doors reading.~~ **CLOSED AT 243, and
   the follow-up CLOSED AT 244**: both readings are right, the cartridge holds `29 01 40` at
   `0x1656AA`, and it is the ONLY number used both ways — 26 of 243's 27 were a literal counted
