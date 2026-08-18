@@ -179,6 +179,71 @@ public sealed class HeldByTheGamesOwnCodeTests
         Assert.NotNull(one.LoadedFrom);
     }
 
+    // -------------------------------------------------------------------------- the floor
+
+    /// <summary>
+    /// THE CONTROL, ASKED THE SAME QUESTION: the reversed image counts words an instruction
+    /// loads, not words.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A floor measuring something easier than the measurement is not a floor — it is a number
+    /// that makes any finding look good. Without this the reversal would report every accidental
+    /// four bytes while the image reported only the loaded ones, and the comparison the whole
+    /// instrument rests on (29 against 4) would be two different questions side by side.
+    /// </para>
+    /// <para>
+    /// The fixture is built backwards on purpose: the four bytes are laid down so that
+    /// <em>reversing</em> the image puts them on a boundary, with nothing loading them. It came
+    /// out of a break that came back green — the floor was a control nothing could fail.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void TheReversedFloorCountsOnlyWordsAnInstructionLoads()
+    {
+        var data = new byte[0x1000];
+
+        // Reversing maps offset i to 0xFFF - i, so these four land on 0x400 backwards.
+        const int backwards = 0x400;
+
+        byte[] word = Word();
+
+        for (var i = 0; i < 4; i++) data[0xFFF - backwards - i] = word[i];
+
+        var rom = new Rom(data);
+
+        // Forwards it is not a word at all; backwards it is one, and nothing loads it.
+        Assert.Empty(EverywhereInTheImage.HeldAsAWord(rom, Variable));
+        Assert.Equal(0, EverywhereInTheImage.HeldAsAWordFloor(rom, Variable));
+    }
+
+    /// <summary>
+    /// And the floor is not nought by construction — a reversed word an instruction DOES load
+    /// is counted, or the test above passes on a floor that is always zero.
+    /// </summary>
+    [Fact]
+    public void TheReversedFloorCountsAWordItDoesLoad()
+    {
+        var data = new byte[0x1000];
+
+        const int backwards = 0x400;
+        const int words = 10;
+
+        byte[] word = Word();
+
+        for (var i = 0; i < 4; i++) data[0xFFF - backwards - i] = word[i];
+
+        // And the load, also laid down backwards, at the offset that reaches it.
+        int at = backwards - (words * 4) - 4;
+
+        byte[] load = Load(0, words);
+
+        for (var i = 0; i < 2; i++) data[0xFFF - at - i] = load[i];
+
+        Assert.Equal(backwards, Reaches(at, words));
+        Assert.Equal(1, EverywhereInTheImage.HeldAsAWordFloor(new Rom(data), Variable));
+    }
+
     /// <summary>
     /// And asking for many numbers at once answers each of them separately — the denominator is
     /// ninety variables and ninety passes of sixteen megabytes is ninety times the work.
