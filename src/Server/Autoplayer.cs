@@ -457,6 +457,16 @@ public enum StoppedBecause
     /// <summary>The backstop, which means something never settles.</summary>
     ItNeverSettled,
 
+    /// <summary>
+    /// The state came back to one the run had already been in, so nothing new will ever open.
+    /// </summary>
+    /// <remarks>
+    /// A third answer on purpose. Folding it into <see cref="NothingMoreOpened"/> would lose the
+    /// finding: a run that settles and a run that oscillates are different facts about the world.
+    /// See <see cref="WhereItHasBeen"/> for the one that made it necessary.
+    /// </remarks>
+    ItWentRoundInACircle,
+
     /// <summary>Every creature it had was beaten and there was nothing left to send out.</summary>
     NobodyLeftToFight,
 }
@@ -1112,6 +1122,10 @@ public static class Autoplayer
 
         StoppedBecause stopped = StoppedBecause.ItNeverSettled;
 
+        // Every state the run has been in, so a loop that oscillates can be told from one that
+        // is still opening things. The pass-to-pass test below only ever finds a fixed point.
+        var been = new WhereItHasBeen();
+
         // The pass the party first knew how to swim, or nought for never. Recorded rather than
         // recomputed at the end: "it can swim" and "it could swim in time for that to matter"
         // are different claims and only one of them is about a run.
@@ -1607,6 +1621,19 @@ public static class Autoplayer
                 && moved.Count == movedWere)
             {
                 stopped = StoppedBecause.NothingMoreOpened;
+
+                break;
+            }
+
+            // AND THE STATES THAT ARE NOT THE ONE BEFORE. Signs can clear a flag, which is the
+            // first thing this run does that takes something back, and a fixpoint over a step
+            // that is not one-way does not converge — it goes round. Everything a cycle will
+            // ever reach it has reached, so this stops and says which of the two it was.
+            if (been.SeenBefore(
+                    WhereItHasBeen.Signature(
+                        flags, moves, party.Count, bag.DistinctItems, gone.Count, moved.Count)))
+            {
+                stopped = StoppedBecause.ItWentRoundInACircle;
 
                 break;
             }
@@ -2262,6 +2289,26 @@ public static class Autoplayer
                     person.CanBeTakenAway ? person.HiddenBy : 0,
                     person.LocalId);
             }
+        }
+
+        // AND THE FOURTH LIST, which this walk could not see until the world file carried it.
+        //
+        // Last, because that is where the cartridge's own events record puts them: people,
+        // warps, triggers, then the things written on the walls.
+        //
+        // Read from a square BESIDE it and not from across a counter. `SpokenToFrom` adds the
+        // counter case, and 198 derived that for a shopkeeper standing behind one; a sign is not
+        // standing anywhere and giving it a rule about shop counters would be borrowing evidence
+        // from a different question.
+        //
+        // Nothing here can be taken off the map — a sign is not a person and has no hide flag,
+        // so the second half of a Runnable is nought and its owner has no local id.
+        foreach (MapSign sign in map.Signs)
+        {
+            if (!sign.HasScript) continue;
+
+            if (Beside(map.Id, sign.Square).Any(stood.Contains))
+                yield return new Runnable(sign.ScriptAddress, 0);
         }
     }
 

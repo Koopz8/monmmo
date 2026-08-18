@@ -80,6 +80,11 @@ public static class WorldExporter
                     Objects = standing,
                     Triggers = MapLinkExtractor.ReadTriggers(rom, header, grid.Width, grid.Height, log),
 
+                    // The fourth list, which this export has never carried. ReadSigns has been
+                    // here since the map work and nothing asked it for the world file, so the
+                    // run walked a world with no signs in it — see MapData.Signs.
+                    Signs = MapLinkExtractor.ReadSigns(rom, header, grid.Width, grid.Height, log),
+
                     // The fifth list. Only the conditions travel — the addresses stay on
                     // the cartridge, exactly as they do for a trigger.
                     OnEntry = MapScripts.OnEntry(rom, header),

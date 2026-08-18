@@ -7401,6 +7401,9 @@ public static class Program
         {
             StoppedBecause.NothingMoreOpened => "a pass opened nothing new",
             StoppedBecause.ItNeverSettled => "it hit the pass backstop, so something never settles",
+            StoppedBecause.ItWentRoundInACircle =>
+                "the state came back to one it had already been in — a CYCLE, not a fixed point,"
+                + " so nothing new will ever open",
             _ => stopped.ToString(),
         };
     }

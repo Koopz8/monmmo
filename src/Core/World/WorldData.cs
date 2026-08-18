@@ -81,6 +81,30 @@ public sealed record MapData(string Id, string Name, int Width, int Height, byte
     public IReadOnlyList<MapTrigger> Triggers { get; init; } = [];
 
     /// <summary>
+    /// Things written on this map that can be read from the square in front of them.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The fourth list, and the one the run could not see.</b> `MapSign` has existed since the
+    /// map work and the map scan has read all 519 of the scripted ones for as long as it has had
+    /// five kinds — but this record, which is what the playthrough and the server walk, carried
+    /// people, triggers and arrival scripts and no signs at all. So "the playthrough never runs
+    /// signs" was not a choice anybody made; there was nothing for it to run.
+    /// </para>
+    /// <para>
+    /// That is 224's fault — <i>check the enumerator before the count</i> — standing in the other
+    /// half of the project. 224 unified the READING onto a list that knows five kinds and nothing
+    /// compared it with the one the RUN walks.
+    /// </para>
+    /// <para>
+    /// The hidden-item records are here too and marked, because a reader that took their item id
+    /// for a script address would follow a pointer to nowhere — <see cref="MapSign.HasScript"/>
+    /// is what separates the 519 from the 183.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<MapSign> Signs { get; init; } = [];
+
+    /// <summary>
     /// What this map runs on arrival, when one of its variables says so.
     /// <para>
     /// Carried for the same reason triggers are, and with the same hole in it: no script
@@ -310,7 +334,7 @@ public sealed class WorldData
     /// <summary>Identifies the format, so a wrong or stale file fails loudly.</summary>
     private static readonly byte[] Magic = "MONWORLD"u8.ToArray();
 
-    private const int Version = 28;
+    private const int Version = 29;
 
     private readonly Dictionary<string, MapData> _maps;
 
@@ -491,6 +515,7 @@ public sealed class WorldData
             (IReadOnlyList<MapConnection> connections, IReadOnlyList<Warp> warps) = ReadLinks(reader, id);
             IReadOnlyList<MapObject> objects = ReadObjects(reader, id);
             IReadOnlyList<MapTrigger> triggers = ReadTriggers(reader);
+            IReadOnlyList<MapSign> signs = ReadSigns(reader);
             IReadOnlyList<MapEntryScript> onEntry = ReadEntryScripts(reader);
             IReadOnlyList<ScriptedDoor> doors = ReadDoors(reader, id);
             FerryDock? ferry = ReadFerry(reader);
@@ -504,6 +529,7 @@ public sealed class WorldData
                 Warps = warps,
                 Objects = objects,
                 Triggers = triggers,
+                Signs = signs,
                 OnEntry = onEntry,
                 Doors = doors,
                 Ferry = ferry,
@@ -655,6 +681,18 @@ public sealed class WorldData
             foreach (int id in trigger.Fights) writer.Write(id);
         }
 
+        // The fourth list. The script address stays on the cartridge for the same reason a
+        // trigger's does; what travels is where it is and what kind the cartridge tagged it,
+        // because the kind is what says whether there is a script behind it at all.
+        writer.Write(map.Signs.Count);
+
+        foreach (MapSign sign in map.Signs)
+        {
+            writer.Write(sign.X);
+            writer.Write(sign.Y);
+            writer.Write(sign.Kind);
+        }
+
         writer.Write(map.OnEntry.Count);
 
         foreach (MapEntryScript entry in map.OnEntry)
@@ -738,6 +776,28 @@ public sealed class WorldData
         }
 
         return entries;
+    }
+
+    private static List<MapSign> ReadSigns(BinaryReader reader)
+    {
+        int count = reader.ReadInt32();
+
+        // The busiest map in FireRed has twenty-two, and this is here to fail on a wrong file
+        // rather than allocate from a bad length.
+        if (count is < 0 or > 256) throw new InvalidDataException($"A map claims {count} signs.");
+
+        var signs = new List<MapSign>(count);
+
+        for (var i = 0; i < count; i++)
+        {
+            int x = reader.ReadInt32();
+            int y = reader.ReadInt32();
+            int kind = reader.ReadInt32();
+
+            signs.Add(new MapSign(x, y, kind, ScriptAddress: 0));
+        }
+
+        return signs;
     }
 
     private static List<MapTrigger> ReadTriggers(BinaryReader reader)
