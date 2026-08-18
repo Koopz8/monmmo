@@ -146,7 +146,16 @@ Traps worth carrying:
     milestone that discovers the true number is not the act that corrects the block — 228 wrote
     "its 264 was right" in its own document and left `258` standing here.
 
-15. **A number nothing computes cannot even be wrong** (231). Trap 8 says a number with no
+15. **A bucket is not an operation** (236). 235 reported one routine as the exception to
+    all-or-nothing: `0x194`, waited at 1 of its 34 places. It is not one operation — 31 of those
+    places set `0x8004` first, to eighteen different values. Keyed on what is actually being asked
+    there is no exception in the file: **0 of 95 multi-place askings are mixed, against 26.6 by
+    chance**. And the null moved with the question: 235 asked how many groups would be all-waited
+    (0.21, a null dominated by groups that wait for nothing) where the thing observed is that none
+    is MIXED (26.6). **Before reporting an item as an exception, check the bucket is the thing the
+    rule is about — and check the null is about the outcome you actually saw.**
+
+16. **A number nothing computes cannot even be wrong** (231). Trap 8 says a number with no
     denominator cannot come back empty. This is one turn further on: `936`, `45`, `62`, `240`,
     `146` and `158` were quoted in this file and **no instrument in the repository printed any of
     them**. They read like measurements, they were quoted like measurements, and nothing could
@@ -156,8 +165,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-235-waiting-is-about-the-routine.md` first, then `234`, `233`,
-`232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
+Read `claude/milestone-236-nineteen-askings-in-one-bucket.md` first, then `235`, `234`,
+`233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
 **Twenty faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
@@ -416,7 +425,11 @@ those 68 are 36 routines, NOT 41 — 232 wrote 41 and nothing ever computed it (
 nought of the 98 follow a specialvar; every one of the 68 follows a plain special
 22 of the 36 are asked in ONE place; of the other 14, THIRTEEN are waited for at EVERY place
   and 68 of the 82 multi-place routines at NONE — expected under per-site sprinkling: 0.21
-0x194 is the only exception: waited at 1 of its 34 places
+0x194 is the only exception BY ROUTINE — and it is not one: 31 of its 34 places set 0x8004
+  first, to 18 different values, all on TRAINER TOWER (2.1/2.2/2.10); the one wait is on 0x8004=2
+asked of (routine, 0x8004): 269 pairs, 95 in more than one place, and NOUGHT of the 95 are
+  waited at some places and not others — chance at 7.3% a place would give 26.6 (236)
+25 of the 178 routines take a 0x8004 in the run before a call; 0x194/0x173/0x174 take 18/16/16
 0x9C is 7 byte positions and SEVEN distinct words — a column; 3 of them are the obstacle scripts
 exactly ONE conditional in the map scan has a 0x27 its target lacks, and it is 0x0AB's
 0x9C is dofieldeffect, named in ONE place since 233 and privately in EverywhereInTheImage since 191
@@ -437,10 +450,10 @@ the raw 0x9C sweep is 11446 sites in BOTH images and the REVERSAL READS ON MORE 
 1. **`0x0AB` IS READ (232) and the block audit is DONE (231).** What is left of the audit: What is left of it: the three
    numbers nothing prints (`62 gates hold 240 people`, `146 trees and rocks`, `158 objects`) and
    `the ceiling is 45 of 437 byte positions`. Each needs an instrument or deleting; they are
-   marked in the block. The next cheap reads are **`0x194`** — the one routine waited for at some
-   of its places and not all, 1 of 34, and which one is unread — and **`0x011E`**, the routine
-   `10.14`'s nineteen shared signs ask. `--read-from` makes both one command each. The history for
-   reference:
+   marked in the block. The next cheap reads are **`0x011E`**, the routine `10.14`'s nineteen
+   shared signs ask, and **`0x194`'s nineteen doors** — eighteen `0x8004` values and a
+   no-argument form, all on TRAINER TOWER, none of them read. `--read-from` makes both one
+   command each. The history for reference:
    230 did the floor-row bisect (answer: milestone **199**, one commit, +3 at all six settings,
    announced in its own commit message) and then found the bigger thing: that block, and two
    items of this list, entered the prompt at **`f8d4f15fe`, "the next session's prompt with 190
