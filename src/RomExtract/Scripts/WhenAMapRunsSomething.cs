@@ -106,24 +106,42 @@ public static class WhenAMapRunsSomething
     /// one place look well covered.
     /// </remarks>
     public static IReadOnlyDictionary<int, IReadOnlyDictionary<int, int>> WhatIsWritten(
-        Rom rom, MapLibrary library)
-    {
-        var at = new Dictionary<int, Dictionary<int, HashSet<int>>>();
+        Rom rom, MapLibrary library) =>
+        Tally(Writes(rom, library));
 
+    private static IEnumerable<(int Variable, int Value, int At)> Writes(Rom rom, MapLibrary library)
+    {
         foreach ((string _, string _, uint address) in library.EveryScript())
         {
             foreach (ScriptCommand command in ScriptReader.ReadAll(rom, address))
             {
-                if (WhatIsSet(command) is not { } set) continue;
-
-                if (!at.TryGetValue(set.Variable, out Dictionary<int, HashSet<int>>? values))
-                    at[set.Variable] = values = [];
-
-                if (!values.TryGetValue(set.Value, out HashSet<int>? places))
-                    values[set.Value] = places = [];
-
-                places.Add(command.Offset);
+                if (WhatIsSet(command) is { } set) yield return (set.Variable, set.Value, command.Offset);
             }
+        }
+    }
+
+    /// <summary>
+    /// The writes gathered by variable and value, counted in BYTE POSITIONS.
+    /// <para>
+    /// Places, not reads. A block hanging off nineteen maps writes the same value at one address
+    /// nineteen times, and counting those as nineteen writers would make a variable written in
+    /// one place look well covered — which is the fault 220 and 223 spent two milestones on, in a
+    /// new instrument, the seventh time this project has walked into it.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyDictionary<int, IReadOnlyDictionary<int, int>> Tally(
+        IEnumerable<(int Variable, int Value, int At)> writes)
+    {
+        var at = new Dictionary<int, Dictionary<int, HashSet<int>>>();
+
+        foreach ((int variable, int value, int offset) in writes)
+        {
+            if (!at.TryGetValue(variable, out Dictionary<int, HashSet<int>>? values))
+                at[variable] = values = [];
+
+            if (!values.TryGetValue(value, out HashSet<int>? places)) values[value] = places = [];
+
+            places.Add(offset);
         }
 
         return at.ToDictionary(

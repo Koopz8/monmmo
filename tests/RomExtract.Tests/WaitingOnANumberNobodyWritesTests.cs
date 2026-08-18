@@ -90,6 +90,27 @@ public sealed class WaitingOnANumberNobodyWritesTests
     }
 
     /// <summary>
+    /// AND THE WRITERS ARE COUNTED IN PLACES. One address that nineteen maps' scripts run through
+    /// is one place that writes, not nineteen — the fault 220 and 223 spent two milestones on,
+    /// which this instrument would have walked into for the seventh time.
+    /// </summary>
+    [Fact]
+    public void OneAddressWrittenThroughNineteenTimesIsOnePlace()
+    {
+        IReadOnlyDictionary<int, IReadOnlyDictionary<int, int>> tally = WhenAMapRunsSomething.Tally(
+            [(0x406F, 0, 0x1BB1CA), (0x406F, 0, 0x1BB1CA), (0x406F, 0, 0x162526)]);
+
+        Assert.Equal(2, tally[0x406F][0]);
+
+        // And the values are kept apart, because the whole question is which value.
+        IReadOnlyDictionary<int, IReadOnlyDictionary<int, int>> both = WhenAMapRunsSomething.Tally(
+            [(0x4055, 1, 0x1000), (0x4055, 2, 0x2000)]);
+
+        Assert.Equal(new[] { 1, 2 }, both[0x4055].Keys.Order());
+        Assert.Equal(1, both[0x4055][1]);
+    }
+
+    /// <summary>
     /// ONLY THE WRITE WHOSE VALUE IS IN THE COMMAND. A <c>copyvar</c> or an <c>addvar</c> puts
     /// something in a variable too and what it puts there is not in the bytes, so a condition
     /// satisfied only by one of those reads as satisfied by nothing.
