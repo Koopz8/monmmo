@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-297`, 3154 tests green.
+`claude-298`, 3166 tests green.
 
 Standing rules — do not break these:
 
@@ -447,16 +447,53 @@ Traps worth carrying:
     253, 254, 255 and 256. This is trap 14 with the worst possible timing: **the milestone that
     disproves a line is usually the very next one, and it is the one least likely to re-read it.**
 
+50. **A REACHABILITY TEST THAT REACHES EVERYTHING IS NOT A TEST** (258). 255's counter answer
+    walks a variable's write set by its steps and asks whether it lands on the value. `0x4001` is
+    set to forty-five values and stepped by 1, 2 and 4, so its walk reaches **100 of the 100
+    values in 0..99**; `0x4002` and `0x4003` do the same. **Every variable it has ever been given
+    saturates**, so the three conditions 255 credited and 257 called the whole of the square
+    list's gain were credited by a test that answers yes before it is asked. Corrected, the square
+    list's correction is **nought of 82**. This is trap 8 in a shape that does not look like a
+    byte scan: the answer was printed with no denominator, and the denominator here is *how much
+    of the range the walk covers*. **Saturation is an exact predicate, not a threshold** — the
+    walk either covers the range or it does not, which is why it needs no band boundary.
+
+51. **AN OUTLIER IN A COLUMN OF SMALL NUMBERS IS A SENTINEL, NOT A VALUE** (258). Every value
+    either condition list names is 0..8, bar a single 17 — and **99, eleven times, all on the
+    square list**. Nothing in sixteen megabytes writes 99 to a variable (3 sites against a
+    reversed-image 2) and nothing compares one against it. All eleven of those scripts, at
+    **eleven distinct addresses**, open `compare <own variable>, 100` and end
+    `setvar <own variable>, 100` — where writing your own variable is ordinary (142 of 228) and
+    guarding on it is those eleven and nothing else. **The script is doing the record's job**, and
+    the eleven are exactly the eleven conditions the reading calls impossible. **Print the whole
+    column of values before deciding a bucket is a boundary.**
+
+52. **TRY TO REFUTE THE READING THAT WOULD MAKE YOUR PROBLEM GO AWAY** (258). If the condition
+    were `var <= value` rather than `var == value`, all fourteen impossible conditions would
+    become satisfiable at a stroke — which is exactly why it is worth attacking rather than
+    adopting. `3.42` runs **seven different scripts off `0x405F` at values 1..7**; any inequality
+    makes all seven live at once. Equality stands, so the eleven cannot fire, and whether the
+    engine special-cases 99 is a question about compiled code — the third milestone in a row to
+    end at that wall (248's base, 257's starting nought, this).
+
+53. **A SECOND COPY OF A LOOP IS A GUARD THAT CANNOT BE BROKEN** (258). A break that removed the
+    downward arm of the counter walk was predicted to kill nothing and killed nothing. The cause
+    was not a missing fixture: `HowManyItReaches` had been written as its own copy of `CanReach`'s
+    loop, so the one test covering the downward direction was covering **the other copy**. 224's
+    fault, fixed at 220, 224 and 251, walked back into inside the milestone that quotes the rule.
+    **When you add a second question about the same thing, share the computation before you write
+    the test** — otherwise the suite protects one copy and the break lands on the other.
+
 ## Where things are
 
-Read `claude/milestone-257-the-same-four-answers-asked-of-each-list.md` first, then `256`,
-`255`, `254`, `253`, `252`, `251`,
+Read `claude/milestone-258-ninety-nine-and-a-walk-that-reaches-everything.md` first, then `257`,
+`256`, `255`, `254`, `253`, `252`, `251`,
 `250`, `249`, `248`, `247`, `246`, `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
 `238`, `237`,
 `236`, `235`, `234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
-**Thirty faults closed and every one was in this project, not on the cartridge.** A walk that
+**Thirty-one faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
 script" list; a list ranked by a count instead of by what it costs; a party that could not gain
 a level; a roadmap line that called a fix a cost; a continuation that carried flags and not
@@ -492,7 +529,10 @@ of the two condition lists ADDED TOGETHER** — the one-hop copy correction is 2
 NOUGHT of the other, the counter is the reverse, and 21.7% is the average of two numbers about
 different things; and, in the same reading, **250's `0x405F` headline, disproved by 251 and
 carried forward through six milestones** — 42 squares filed as "can never fire" are filled by four
-`copyvar 0x405F, 0x4001` sites the map scan opens.
+`copyvar 0x405F, 0x4001` sites the map scan opens; and at 258 **a reachability walk that reaches
+every value in range** — 100 of 100 for every variable it has ever been given — so the three
+conditions 255 credited to a counter, and 257 called the whole of the square list's gain, were
+credited by a test that could not say no.
 
 `246` is the read that is not a command, and the literal-pool test for whether compiled code holds
 a number — both live inside `--namespaces`, which is now the fullest single instrument in the
@@ -688,13 +728,16 @@ IMMEDIATELY before, no barrier list); **3 / 3** a counter reaches (`addvar`'s st
 about different things.** Per list:
 
 ```
-  ON ARRIVAL  282 conditions:  76 written /  0 counted / 192 unread copy / 14 neither  -> 27.0%
-  ON A SQUARE  82 conditions:   0 written /  3 counted /   0 unread copy / 79 neither  ->  3.7%
+  ON ARRIVAL  282 conditions:  76 written / 0 counted / 0 saturated / 192 unread copy / 14 neither -> 27.0%
+  ON A SQUARE  82 conditions:   0 written / 0 counted / 3 saturated /   0 unread copy / 79 neither ->  0.0%
 ```
 
-**Neither mechanism touches both lists.** The idiom 255 is named for is worth everything on one
-and nought on the other; the counter is the reverse; and the square list has NO unreadable copies
-at all, so on that list this reading has no unknowns of that kind.
+**Neither mechanism touches both lists, and the square list gains NOTHING.** The idiom 255 is
+named for is worth everything on one and nought on the other; the square list has NO unreadable
+copies at all, so on that list this reading has no unknowns of that kind. **The counter answer is
+a FIFTH bucket now** (258): a walk that reaches every value in range has said yes before it was
+asked, and all three of the square list's were that — 257 reported 3.7% by "a different
+mechanism" and the mechanism was an artefact.
 
 `--arrivals` reads the condition on every script a map runs on arrival AND on every SQUARE (250)
 — **a variable AND a value** — and asks whether any `setvar` in the scan ever writes that value.
@@ -711,7 +754,7 @@ value nobody writes.
                     writes it     the start     produce it      (a copy it cannot read)
                     READ          MODELLED      READ            READ
     on arrival        144             8             6             192   of 350
-    on a square       106            72             8              42   of 228
+    on a square       103            72            11              42   of 228
 ```
 
 **71 of the square list's 82 want NOUGHT** — every variable holds nought before anything writes
@@ -719,8 +762,19 @@ it, so most of that bucket is armed at the start and something has to write the 
 it OFF. The name reads as unsatisfiable and means the opposite. **The ARMED column is MODELLED**
 and says so in the output: nothing here has read what the save's variable block holds at the
 start, 250 asserted it in prose without marking it, and it decides 72 of 228.
-**NEITHER LIST CAN SUPPORT A COUNT OF DEAD CONDITIONS**: 6 against an error bar of 192, and 8
+**NEITHER LIST CAN SUPPORT A COUNT OF DEAD CONDITIONS**: 6 against an error bar of 192, and 11
 against 42. The command prints the comparison.
+**AND THE SQUARE LIST'S ELEVEN ARE ONE IDIOM** (258): every one wants **99**, a value that appears
+in no `setvar` and no `compare` in sixteen megabytes while every other value either list names is
+0..8 (one 17 aside). All eleven scripts, at ELEVEN DISTINCT ADDRESSES, open
+`compare <own variable>, 100` and end `setvar <own variable>, 100` — against 142 of 228 that write
+their own variable (ordinary) and NOUGHT of the other 217 that guard on it. The script is doing
+the record's job. `--arrivals` prints that cross-tab, the control (161 square scripts open with a
+compare and 150 name a different variable), and the whole column of values with the reversed-image
+floor. **Equality stands** — `3.42` runs SEVEN scripts off `0x405F` at values 1..7, which any
+inequality would make simultaneous — so the eleven cannot fire, and whether the engine
+special-cases 99 is compiled code. The arrival list's three self-guards are ONE address on `31.0`
+counted three times, which is why both columns are printed.
 **`0x405F` is NOT written by nothing — 250's headline was disproved by 251 and carried anyway.**
 It is filled by **four `copyvar 0x405F, 0x4001` sites on `3.42`**, all opened by the map scan
 (`0x1A7958`, `0x1A7967`, `0x1A7AA1`, …), and `0x4001` is set to all eight values these squares
@@ -951,13 +1005,20 @@ neither is NAMED: what they take is read, what they do is still a guess
 28 of the 69 want a value NO setvar in the scan writes; 0 name a variable nothing writes at all
 0x406F: 20 maps want 1/2/3/5/6/7/8; the writers write 0, 3 AND 6 — 3 and 6 through
   `setvar 0x8004, N ; copyvar 0x406F, 0x8004`, which 229 never followed (corrected at 255)
-the middle bucket per LIST (257): arrival 282 = 76/0/192/14, square 82 = 0/3/0/79 — the one-hop
-  idiom is 27.0% of one list and NOUGHT of the other, the counter the reverse, neither on both
-the verdict per list (257): arrival 144 written / 8 armed / 6 dead / 192 unread, of 350;
-  square 106 / 72 / 8 / 42, of 228. The ARMED column is MODELLED and the output says so
+the middle bucket per LIST (257, corrected 258): arrival 282 = 76 written/0 counted/0 saturated/
+  192 copy/14 neither -> 27.0%; square 82 = 0/0/3/0/79 -> 0.0%. The square list gains NOTHING
+the counter walk saturates: 0x4001/0x4002/0x4003 each reach 100 of the 100 values in 0..99, so
+  255's three and 257's "all three of what the square list gained" were an artefact (258)
+the verdict per list: arrival 144 written / 8 armed / 6 dead / 192 unread, of 350;
+  square 103 / 72 / 11 / 42, of 228. The ARMED column is MODELLED and the output says so
 71 of the square list's 82 want NOUGHT and are armed at the start — the bucket's name means the
-  opposite of what it says for most of that list; 8 of 228 are ones nothing can produce
-NEITHER list can support a count of dead conditions: 6 against 192, and 8 against 42
+  opposite of what it says for most of that list; 11 of 228 are ones nothing can produce
+all 11 want 99 — a value in no setvar and no compare in the image, where every other value either
+  list names is 0..8 (one 17); their 11 scripts at 11 addresses guard on 100 and set 100 (258)
+142 of 228 square scripts WRITE their own variable at 85 addresses (ordinary); 11 GUARD on it at
+  11; the arrival list's 3 guards are ONE address on 31.0 counted three times
+equality stands: 3.42 runs SEVEN scripts off 0x405F at values 1..7, which any <= makes simultaneous
+NEITHER list can support a count of dead conditions: 6 against 192, and 11 against 42
 0x405F is copied from 0x4001 at 4 sites on 3.42, all opened by the map scan — 250's "42 can never
   fire" was disproved by 251's write-table fix and carried for six milestones (257)
 178 routines called 4461 times at 936 byte positions — 936 was RIGHT and NOTHING PRINTED IT
@@ -1051,8 +1112,15 @@ still work.**
   **OPENED AT 257**: 255's one-hop correction is worth NOUGHT of them, a counter reaches 3, and
   **71 of the 82 want NOUGHT and are armed from the start** — the bucket's name means the opposite
   of what it says for most of that list. What is left of it:
-  * **The eight the square list cannot produce** and the **six** on the arrival list. Both are
-    small enough to read individually and nobody has.
+  * ~~The eight the square list cannot produce and the six on the arrival list.~~ **READ AT 258.**
+    The square list's are ELEVEN (the counter correction moved three into them) and all eleven are
+    ONE IDIOM wanting 99. What is left of it:
+    * **Whether the engine special-cases 99.** Compiled code, and the third milestone running to
+      end at that wall. A decision, not a milestone.
+    * **The arrival list's other four** — `0x400D == 17` on `2.10`, `0x4085 == 1` on `3.9`,
+      `0x406E == 1` and `== 3` on `11.0`. No self-guard, no shared shape, four maps, unread.
+    * **What the eleven scenes are.** Seven consecutive variables on `2.35` and four across
+      `1.39`-`1.41`, in one idiom. Not read.
   * **The 42 in the error bar.** `--trace 0x4001` is the instrument: what `0x405F` gets is
     whatever `0x4001` held at the moment of the copy, which is a fact about a run.
   * **The MODELLED nought.** That a variable holds nought before anything writes it decides 72 of
