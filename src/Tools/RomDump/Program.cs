@@ -6062,6 +6062,59 @@ public static class Program
         foreach (ScriptCommand command in others)
             Console.WriteLine($"    0x{Rom.BaseAddress + (uint)command.Offset:X8}  number {command.Word(),3}   no move is asked about in that block");
 
+        // AND WHAT WAITS FOR EACH ONE, which is the same split asked a different way.
+        //
+        // The six move-driven numbers are followed by an unnamed wait; the ones no move drives
+        // are followed by a wait that NAMES A NUMBER, and names the one the effect was started
+        // with. Two readings of one boundary, and neither of them is about the other.
+        Console.WriteLine();
+        Console.WriteLine("  and what waits for each of them:");
+
+        var waits = new List<FieldEffectNumbers.AfterIt>();
+
+        foreach ((string _, string _, uint scriptAt) in library.All().SelectMany(EveryScriptOn))
+        {
+            List<ScriptCommand> block = ScriptReader.ReadAll(rom, scriptAt);
+
+            for (var i = 0; i < block.Count; i++)
+            {
+                if (block[i].Code != ScriptCommands.DoFieldEffect) continue;
+                if (waits.Any(w => w.At == block[i].Offset)) continue;
+
+                waits.Add(FieldEffectNumbers.WhatWaits(block, i));
+            }
+        }
+
+        foreach (FieldEffectNumbers.AfterIt after in waits.OrderBy(w => w.Number))
+        {
+            Console.WriteLine(
+                $"    number {after.Number,3} at 0x{Rom.BaseAddress + (uint)after.At:X8}   "
+                + after.How switch
+                {
+                    FieldEffectNumbers.Waiting.Unnamed => "an unnamed wait (0x27)",
+                    FieldEffectNumbers.Waiting.ByNumber => $"a wait NAMING {after.Waited} — the same number",
+                    FieldEffectNumbers.Waiting.ByADifferentNumber => $"a wait naming {after.Waited} — A DIFFERENT NUMBER",
+                    _ => "nothing waits for it",
+                }
+                + (driven.Contains(after.Number) ? "   [a move drives this one]" : ""));
+        }
+
+        int named = waits.Count(w => w.How == FieldEffectNumbers.Waiting.ByNumber);
+        int namedAtAll = waits.Count(w => w.How is FieldEffectNumbers.Waiting.ByNumber
+            or FieldEffectNumbers.Waiting.ByADifferentNumber);
+
+        int alphabet = waits.Select(w => w.Number).Distinct().Count();
+        int highOnly = others.Select(o => o.Word()).Distinct().Count();
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    {named} of the {namedAtAll} waits that name a number name the one the effect was started with");
+        Console.WriteLine(
+            $"      drawing from the {alphabet} number(s) these sites use, that is one in"
+            + $" {FieldEffectNumbers.Coincidence(named, alphabet):0}"
+            + $"; from the {highOnly} no move drives, one in {FieldEffectNumbers.Coincidence(named, highOnly):0}"
+            + " — the second is the conservative one and the alphabet is MODELLED either way");
+
         FieldEffectNumbers.TheSplit split =
             FieldEffectNumbers.AreTheLowest(driven, others.Select(o => o.Word()));
 

@@ -133,6 +133,85 @@ public static class FieldEffectNumbers
         return Math.Round(ways);
     }
 
+    /// <summary>What comes after a <c>dofieldeffect</c> and looks like waiting for it.</summary>
+    public enum Waiting
+    {
+        /// <summary>Nothing in the next few commands does.</summary>
+        Nothing,
+
+        /// <summary>A <c>0x27</c>, which takes no argument and so names nothing.</summary>
+        Unnamed,
+
+        /// <summary>A <c>0x9E</c> holding the SAME number the effect was started with.</summary>
+        ByNumber,
+
+        /// <summary>A <c>0x9E</c> holding a different one, which would be the interesting answer.</summary>
+        ByADifferentNumber,
+    }
+
+    /// <param name="At">Where the <c>dofieldeffect</c> is.</param>
+    /// <param name="Number">The number it takes.</param>
+    /// <param name="How">What waits for it.</param>
+    /// <param name="Waited">The number the waiter names, or nought when it names none.</param>
+    public sealed record AfterIt(int At, int Number, Waiting How, int Waited);
+
+    /// <summary>The command that waits without naming anything.</summary>
+    public const byte WaitUnnamed = 0x27;
+
+    /// <summary>The command that waits and names a number.</summary>
+    public const byte WaitByNumber = 0x9E;
+
+    /// <summary>
+    /// What waits for the <c>dofieldeffect</c> at <paramref name="index"/>, within the next few
+    /// commands of the same block.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Not just the next command.</b> One of this cartridge's four sites puts a <c>0x33</c>
+    /// between the two, so a reading that looked only at the byte after would call it nothing —
+    /// and <b>not arbitrarily far either</b>, or every block with a <c>0x27</c> anywhere in it
+    /// would count. A second <c>dofieldeffect</c> ends the window whatever is left of it, because
+    /// past that point a waiter is the next effect's, not this one's.
+    /// </para>
+    /// </remarks>
+    public static AfterIt WhatWaits(IReadOnlyList<ScriptCommand> block, int index, int within = 4)
+    {
+        ScriptCommand started = block[index];
+
+        int number = started.Arguments.Length >= 2 ? started.Word() : 0;
+
+        for (int i = index + 1; i < block.Count && i <= index + within; i++)
+        {
+            ScriptCommand command = block[i];
+
+            if (command.Code == ScriptCommands.DoFieldEffect) break;
+
+            if (command.Code == WaitUnnamed)
+                return new AfterIt(started.Offset, number, Waiting.Unnamed, 0);
+
+            if (command.Code != WaitByNumber || command.Arguments.Length < 2) continue;
+
+            return new AfterIt(
+                started.Offset,
+                number,
+                command.Word() == number ? Waiting.ByNumber : Waiting.ByADifferentNumber,
+                command.Word());
+        }
+
+        return new AfterIt(started.Offset, number, Waiting.Nothing, 0);
+    }
+
+    /// <summary>
+    /// One in how many times a run of matches this long would happen by drawing from an alphabet
+    /// this big.
+    /// </summary>
+    /// <remarks>
+    /// The alphabet is a MODELLED choice and the answer moves a lot with it, so whoever prints
+    /// this has to say which one they used. Nothing here picks it.
+    /// </remarks>
+    public static double Coincidence(int matches, int alphabet) =>
+        matches <= 0 || alphabet <= 1 ? 1 : Math.Round(Math.Pow(alphabet, matches));
+
     /// <summary>
     /// Every place in the WHOLE IMAGE that reads as this command, and how many of them read on to
     /// a proper end.

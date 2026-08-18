@@ -163,6 +163,110 @@ public sealed class TheNumberAFieldMoveTakesTests
         Assert.Equal(0, floor.ReadsOn);
     }
 
+    // ------------------------------------------------------------- what waits for it
+
+    private static ScriptCommand Started(int at, int number) =>
+        new(at, ScriptCommands.DoFieldEffect, [(byte)(number & 0xFF), (byte)(number >> 8)]);
+
+    private static ScriptCommand WaitsNaming(int at, int number) =>
+        new(at, FieldEffectNumbers.WaitByNumber, [(byte)(number & 0xFF), (byte)(number >> 8)]);
+
+    private static ScriptCommand WaitsUnnamed(int at) => new(at, FieldEffectNumbers.WaitUnnamed, []);
+
+    private static ScriptCommand Filler(int at) => new(at, 0x33, [0x57, 0x01, 0x00]);
+
+    /// <summary>
+    /// THE DISCRIMINATION: a wait that names the number the effect was started with is a
+    /// different fact from a wait that names some other number, and a reading that only noticed
+    /// the command would call them the same.
+    /// </summary>
+    [Fact]
+    public void AWaitNamingTheSameNumberIsNotAWaitNamingAnother()
+    {
+        FieldEffectNumbers.AfterIt same = FieldEffectNumbers.WhatWaits(
+            [Started(0x100, 62), WaitsNaming(0x103, 62)], 0);
+
+        Assert.Equal(FieldEffectNumbers.Waiting.ByNumber, same.How);
+        Assert.Equal(62, same.Number);
+        Assert.Equal(62, same.Waited);
+
+        FieldEffectNumbers.AfterIt other = FieldEffectNumbers.WhatWaits(
+            [Started(0x100, 62), WaitsNaming(0x103, 64)], 0);
+
+        Assert.Equal(FieldEffectNumbers.Waiting.ByADifferentNumber, other.How);
+        Assert.Equal(64, other.Waited);
+    }
+
+    /// <summary>
+    /// The waiter need not be the very next command — `2.56` puts a `0x33` between the two — and
+    /// it must not be arbitrarily far away either, or every block with a wait anywhere in it
+    /// counts. Both halves, because either one alone passes a broken window.
+    /// </summary>
+    [Fact]
+    public void TheWaiterIsNearbyAndNotAnywhere()
+    {
+        FieldEffectNumbers.AfterIt across = FieldEffectNumbers.WhatWaits(
+            [Started(0x100, 68), Filler(0x103), WaitsNaming(0x107, 68)], 0);
+
+        Assert.Equal(FieldEffectNumbers.Waiting.ByNumber, across.How);
+
+        FieldEffectNumbers.AfterIt far = FieldEffectNumbers.WhatWaits(
+            [
+                Started(0x100, 68),
+                Filler(0x103), Filler(0x107), Filler(0x10B), Filler(0x10F), Filler(0x113),
+                WaitsUnnamed(0x117),
+            ],
+            0);
+
+        Assert.Equal(FieldEffectNumbers.Waiting.Nothing, far.How);
+        Assert.Equal(0, far.Waited);
+    }
+
+    /// <summary>
+    /// And a second effect ends the window whatever is left of it: past that point a waiter is
+    /// the NEXT effect's, and crediting it to this one would find a wait for something nothing
+    /// waits for.
+    /// </summary>
+    [Fact]
+    public void ASecondEffectEndsTheWindow()
+    {
+        List<ScriptCommand> block = [Started(0x100, 2), Started(0x103, 40), WaitsUnnamed(0x106)];
+
+        Assert.Equal(FieldEffectNumbers.Waiting.Nothing, FieldEffectNumbers.WhatWaits(block, 0).How);
+        Assert.Equal(FieldEffectNumbers.Waiting.Unnamed, FieldEffectNumbers.WhatWaits(block, 1).How);
+    }
+
+    /// <summary>
+    /// The unnamed wait is the shape the three obstacle scripts use, and it names nothing — which
+    /// is why the number it "waited" for is nought rather than the effect's own.
+    /// </summary>
+    [Fact]
+    public void TheUnnamedWaitNamesNothing()
+    {
+        FieldEffectNumbers.AfterIt unnamed = FieldEffectNumbers.WhatWaits(
+            [Started(0x100, 37), WaitsUnnamed(0x103)], 0);
+
+        Assert.Equal(FieldEffectNumbers.Waiting.Unnamed, unnamed.How);
+        Assert.Equal(37, unnamed.Number);
+        Assert.Equal(0, unnamed.Waited);
+    }
+
+    /// <summary>
+    /// The coincidence is the alphabet to the power of the matches, and the alphabet is MODELLED
+    /// — three matches out of four possible numbers is one in sixty-four, and out of seven it is
+    /// one in three hundred and forty-three. Whoever prints it has to say which.
+    /// </summary>
+    [Fact]
+    public void TheCoincidenceIsTheAlphabetToThePowerOfTheMatches()
+    {
+        Assert.Equal(64, FieldEffectNumbers.Coincidence(3, 4));
+        Assert.Equal(343, FieldEffectNumbers.Coincidence(3, 7));
+
+        // Nothing matched, and an alphabet of one leaves nothing to be surprised by.
+        Assert.Equal(1, FieldEffectNumbers.Coincidence(0, 7));
+        Assert.Equal(1, FieldEffectNumbers.Coincidence(3, 1));
+    }
+
     /// <summary>And the command has ONE name, in one place, which is the whole point of 233.</summary>
     [Fact]
     public void TheCommandHasAName()
