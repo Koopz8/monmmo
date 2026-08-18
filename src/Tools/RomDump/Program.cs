@@ -205,6 +205,7 @@ public static class Program
         if (options.SpecialContracts) WriteSpecialContracts(rom);
         if (options.Standard) WriteRoutinesReachedByNumber(rom);
         if (options.TheScan) WriteWhatTheScanOpens(rom);
+        if (options.PersonCommands) WriteTwoCommands(rom);
         if (options.Closure) WriteClosure(rom, options.RoutineAnswers, options.StartAt);
         if (options.Play)
             WritePlaythrough(
@@ -7046,6 +7047,96 @@ public static class Program
     }
 
     /// <summary>
+    /// The two commands with widths and no names, measured against the maps they are on.
+    /// </summary>
+    private static void WriteTwoCommands(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("TWO COMMANDS WITH WIDTHS AND NO NAMES");
+        Console.WriteLine();
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        List<PersonCommands.Site> sites = PersonCommands.In(rom, library);
+
+        IReadOnlyDictionary<string, IReadOnlyList<(int LocalId, int Movement)>> everybody =
+            PersonCommands.Everybody(library);
+
+        if (sites.Count == 0)
+        {
+            Console.WriteLine("  the map scan opens neither of them anywhere");
+
+            return;
+        }
+
+        foreach (byte code in new[] { PersonCommands.Three, PersonCommands.Two })
+        {
+            List<PersonCommands.Site> these = [.. sites.Where(s => s.Code == code)];
+
+            if (these.Count == 0) continue;
+
+            Console.WriteLine(
+                $"  0x{code:X2} — {these.Count} read(s) at {these.Select(s => s.At).Distinct().Count()} "
+                + $"place(s) on {these.Select(s => s.MapId).Distinct().Count()} map(s)");
+
+            Console.WriteLine(
+                $"      {PersonCommands.NamesSomebody(these),4} of them name a person who is really on that map");
+            Console.WriteLine(
+                $"      {PersonCommands.TheOtherWordWould(these, everybody),4} would if the SECOND word were read as the person"
+                + "   <- the control");
+
+            if (code == PersonCommands.Three)
+            {
+                Console.WriteLine(
+                    $"      {these.Count(s => s.InsideTheMap),4} have their other two words inside that map's bounds");
+
+                List<int> away = [.. these.Where(s => s.Away is not null).Select(s => s.Away!.Value).Order()];
+
+                if (away.Count > 0)
+                {
+                    Console.WriteLine(
+                        $"      how far those words are from where the cartridge put that person:"
+                        + $" {away.Count(a => a == 0)} exactly there,"
+                        + $" {away.Count(a => a is > 0 and <= 3)} within three squares,"
+                        + $" {away.Count(a => a > 3)} further");
+                    Console.WriteLine(
+                        $"      {PersonCommands.ExactlyThereByChance(these):0.00} exactly-there would be expected"
+                        + " by chance, if the words were any square on that map   <- the floor");
+                }
+            }
+            else
+            {
+                Console.WriteLine(
+                    "      the byte after the person, and how often it is that person's own movement type:");
+
+                foreach (IGrouping<int, PersonCommands.Site> value in these
+                             .GroupBy(s => s.A)
+                             .OrderByDescending(g => g.Count()))
+                {
+                    Console.WriteLine(
+                        $"        {value.Key,3} at {value.Count(),4} site(s)"
+                        + $" — {value.Count(s => s.Movement == value.Key)} of them the person's own");
+                }
+
+                Console.WriteLine(
+                    $"      {these.Count(s => s.Movement == s.A)} are the named person's own movement type;"
+                    + $" {PersonCommands.SomebodyElsesMovement(these, everybody):0.0} would be"
+                    + " somebody else's on the same map   <- the floor");
+            }
+
+            foreach (PersonCommands.Site site in these.Take(4))
+            {
+                Console.WriteLine(
+                    $"        {site.MapId,-8} {site.What,-22} 0x{site.At:X6}  person {site.Person}"
+                    + (site.Square is { } at ? $" at ({at.X},{at.Y}) move {site.Movement}" : " — NO SUCH PERSON")
+                    + (site.Code == PersonCommands.Three ? $"  words ({site.A},{site.B})" : $"  byte {site.A}"));
+            }
+
+            Console.WriteLine();
+        }
+    }
+
+    /// <summary>
     /// The error bar on every map-scan number in this project, in one table: how many times each
     /// command is decoded against how many byte positions those reads are.
     /// </summary>
@@ -12684,6 +12775,8 @@ public static class Program
 
         public bool TheScan { get; private init; }
 
+        public bool PersonCommands { get; private init; }
+
         public bool Play { get; private init; }
 
         /// <summary>Items to hunt through every script in the image, or nothing.</summary>
@@ -12890,6 +12983,7 @@ public static class Program
             bool specialContracts = false;
             bool standard = false;
             bool theScan = false;
+            bool personCommands = false;
             bool fights = false;
             bool whoKnows = false;
             var coins = false;
@@ -13146,6 +13240,9 @@ public static class Program
                         break;
                     case "--the-scan":
                         theScan = true;
+                        break;
+                    case "--two-commands":
+                        personCommands = true;
                         break;
                     case "--fights":
                         fights = true;
@@ -13469,6 +13566,7 @@ public static class Program
                 SpecialContracts = specialContracts,
                 Standard = standard,
                 TheScan = theScan,
+                PersonCommands = personCommands,
                 Play = play,
                 WhereFrom = whereFrom,
                 InTheImage = inTheImage,
