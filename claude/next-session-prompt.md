@@ -1,7 +1,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-252`, 2853 tests green.
+`claude-253`, 2858 tests green.
 
 Standing rules — do not break these:
 
@@ -226,7 +226,8 @@ those 110 are 35 with no opener, 31 never run, 17 never picked up, 15 obstacles,
 62 gates no walk opens hold 240 people; 146 of them are CUT trees and ROCK SMASH rocks
 3 scripts hold 27 gating flags and 158 objects: CUT, ROCK SMASH, STRENGTH
 the 12 STRENGTH boulders are SEAFOAM and VICTORY ROAD, and their flags split THREE ways
-766 places call 63 routines the widest run cannot answer — and only 2 of them are a ceiling
+766 places call 63 routines the widest run cannot answer; 187 have an answer nothing branches on
+of 1055 branching sites in the file, nought takes 212 — and 0x188's two are the run's whole ceiling
 2 of those gates hold NOBODY — 0x084A and 0x084B, the ferry, with no setter anywhere
 ```
 
@@ -244,15 +245,13 @@ the 12 STRENGTH boulders are SEAFOAM and VICTORY ROAD, and their flags split THR
    anyway, which is the `#130` at 71 the party ends with. **The floor is clean**: 1 place asks,
    nothing comes of it, so the floor's party of six is entirely earned. Whether that deserves a
    `--pay` lever or a located payout table is a DECISION and it is deliberately not made.
-3. **The TWO places where the run's silence takes a branch.** 214 cut the routine ceiling four
-   ways: at the widest lever setting, of 766 places calling 63 unanswerable routines, 186 have
-   an answer nobody looks at, 433 are compared against a value that is not nought, 145 are
-   mixed, and **2 are places where zero IS the tested value and the silence says yes**. Those
-   two are the whole of what is left of that ceiling and neither has been named. Naming them is
-   the job.
-   Next after that: **`0x194`** — asked 54 times by the widest run, compared against 0 and 1,
-   and **747 sites in the file**, the most of anything. "Both" means its silence matters at some
-   sites and not others and nobody has asked which.
+3. **`0x188`'s two sites, which are the whole of what is left of the routine ceiling.** 214 cut
+   it four ways on what nought DOES rather than what it is compared against: at the widest lever
+   setting 187 of 766 places have an answer nothing branches on, 430 are places nought takes no
+   branch, 61 are mixed, and **88 are `0x188` — one routine, branched on at exactly TWO sites in
+   the whole cartridge, and nought takes both**. Read those two sites. `--specials` names them.
+   Next after that: **`0x194`** — 747 sites, the most of anything, asked 54 times by the widest
+   run, and nought takes **1 of its 18** branches. Which one has not been asked.
    Also owed and cheap: **seven boulder flags with no setter anywhere** (whatever drops a
    boulder into a hole is not script), **`0x0805`** which the STRENGTH script sets and shares
    across all twelve boulders, and **`0x0053`** holding 31 people across the SILPH CO. floors
@@ -458,6 +457,13 @@ the other, and nothing about a single green run says which. 207 writes the 2x2 d
   and only 2 at all 376 of its sites, and `0x081A7AE0` — the arm answer 2 takes — is two bytes,
   `release; end`. Answer 2 means "do nothing". The run answers nought and therefore behaves as
   it would for any answer but one. Closed (214); do not re-derive it.
+* **Whether a routine's silence matters is about the BRANCH, not the compared value.**
+  `compare 0x800D, 1 ; if LESS` is taken by nought and does not test nought — `0x084` is tested
+  against 1 and 2 and nought takes nineteen of its twenty-one branches. `Profile.BranchesTakenByZero`
+  evaluates the condition and is the number to use. Settled at 214; do not classify on values.
+* **A plain `call` is a barrier in the answer scan.** `special ; call ; compare` reads the
+  CALL's answer, not the special's — SEVEN ISLAND's `0x0028` was credited with `0x005D`'s reply
+  for as long as the scan existed. Added at 214, 42 of 1097 attributions lost. Do not remove it.
 * **The drink, the vending machine, CELADON DEPT, the ferry tickets, the badge-count routine** —
   all dead, see `claude/the-drink-and-the-boat.md`.
 
@@ -477,8 +483,12 @@ the other, and nothing about a single green run says which. 207 writes the 2x2 d
 * `StoryClosure` deliberately still has no bag, so `--can-it-be-finished` is the no-bag control.
 * No milestone docs for `StoryClosure`, `Autoplayer` or `SpecialContracts`.
 * Sound is paused: 31 unconfirmed song headers and battle music still open.
-* 201 of the floor's 396 "could not answer" places have an answer the cartridge never looks at.
-  They are reported and then explained away; they could be taken out of the ceiling line.
+* 201 of the floor's 396 "could not answer" places have an answer nothing branches on. They are
+  reported and then explained away; they could be taken out of the ceiling line.
+* Nothing in this project follows a `call` to attribute an answer. Since 214 the scan stops
+  there, so `special 0x005D` inside `0x081A4EAF` is credited with nothing either — the reading
+  is now honestly silent where it used to be confidently wrong. Following one level in would be
+  a real instrument.
 * The 5 flags that look moved and are not — `--flags` prints the count, not the list.
 * The raw whole-file sweep is noise: 3762 sites against 3675 in the reversal. Only the
   jumped-into subset is above the floor. Do not quote the raw number as a finding.

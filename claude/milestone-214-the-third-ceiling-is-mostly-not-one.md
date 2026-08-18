@@ -1,15 +1,12 @@
-# Milestone 214: the third ceiling is mostly not one
+# Milestone 214: the third ceiling is mostly not one, and two things were wrong on the way
 
 `special 0x0187` heads all three obstacle scripts, so 213 put it next. Reading it took one
-hexdump and turned into something bigger: the line `--play` has printed since the routines were
-found says **"396 place(s) call 33 routines it could not answer — every one took the zero arm"**,
-and for more than half of those places there is no arm.
+hexdump. Following it took two corrections to instruments — one old, one written this session —
+and both were caught by an instrument printing two numbers that could not both be true.
 
 ---
 
 ## What `0x0187` is asked
-
-All three obstacle scripts open the same way:
 
 ```
   25 87 01              special 0x0187
@@ -17,96 +14,124 @@ All three obstacle scripts open the same way:
   06 01 E0 7A 1A 08     if equal goto 0x081A7AE0
 ```
 
-And `0x081A7AE0` is two bytes: `6C 02` — **release, end**. Answer 2 and the obstacle does
-nothing at all.
+`0x081A7AE0` is two bytes: `6C 02` — **release, end**. Answer 2 and the obstacle does nothing.
 
-`--routines` has the shape and has always printed it: `0x187 — 376 site(s), 376 branch,
-compared against 2x376`. Three hundred and seventy-six calls and the answer is compared against
-**one value, 2, every time**.
+`--routines` has always had the shape: `0x187 — 376 site(s), 376 branch, compared against
+2x376`. Three hundred and seventy-six calls, one tested value, every time. The run's silent
+nought is not a wrong answer with consequences; the file cannot tell it from 3, 4 or 9.
 
-So the run's silent zero is not a wrong answer with consequences. It is one of every value
-except 2, and the file cannot tell it from 3, 4 or 9. At `0x0187` the run behaves exactly as it
-would with any answer but one.
+## Which made the ceiling line worth reading
 
-## Which makes "it could not answer" three different things
-
-The join has never been made. `--routines` reads the ROM and has never seen an `Attempt`; the
-run knows what it asked and nothing about what the file does with the answer. Put together:
+`--play` has printed **"N place(s) call M routines it could not answer — every one took the zero
+arm"** since milestone 200, and neither half of what that means has ever been checked. The join
+was never made: `--routines` reads the ROM and has never seen an `Attempt`; the run knows what
+it asked and nothing about what the file does with the answer.
 
 ```
---play
-  396 place(s) call 33 routines it could not answer — and the zero it answered instead is not one thing
-       201 of the places, across 24 routine(s): the answer decides nothing
-       158 of the places, across  6 routine(s): zero is never the value tested, so it falls
-                                                through like any other wrong answer
-        37 of the places, across  3 routine(s): tested against zero at some sites and something
-                                                else at others
-         0 of the places:                       ZERO IS THE VALUE TESTED
+--play                                                    --play --say-yes --boat --in-order
+  396 places, 33 routines                                   766 places, 63 routines
+    201 / 24  nothing branches on the answer                  187 / 45  nothing branches
+    158 /  6  nought takes no branch (0 of 636)               430 / 11  nought takes none (0 of 647)
+     35 /  1  nought takes EVERY branch (2 of 2)               88 /  1  every branch (2 of 2)
+      2 /  2  nought takes some and not others (2 of 4)        61 /  6  some (44 of 68)
 ```
 
-**Two hundred and one of the three hundred and ninety-six places are calls whose answer nobody
-ever looks at.** The routine does something; nothing branches on it. Those places are not a
-ceiling in any sense — they are the run stepping over a call whose return value the cartridge
-itself ignores.
+**Two hundred and one of the floor's three hundred and ninety-six places are calls whose answer
+nobody ever branches on.** There is no arm to take. A hundred and fifty-eight more are places
+where nought takes no branch at all.
 
-A hundred and fifty-eight more are compared against a value that is not nought, so the silence
-costs nothing that a wrong answer would not have cost.
+`SpecialCalls.ZeroIsMisleading` has said this in a doc comment for a long time — *"a zero is an
+answer, not an absence"* — and only `--specials` ever asked it, off the ROM, with no run in
+sight. Both halves have been in the repository the whole time and never in one sentence.
 
-At the widest lever setting the same split, of 766 places and 63 routines:
+---
+
+## The first thing that was wrong: an ordinary `call`
+
+The forward scan that decides which compare reads a routine's answer stops at anything that
+could have answered in the meantime. Its own comment says why: *"getting that wrong is not a
+small error — it credits one routine with another's reply"*, and names `0xA0` in BILL's house as
+the case it was written for.
+
+It did not stop at a plain `call`. SEVEN ISLAND:
 
 ```
-       186  the answer decides nothing
-       433  zero is never the value tested
-       145  tested against zero at some sites and something else at others
-         2  ZERO IS THE VALUE TESTED — the run's silence TAKES the branch
+  0x1709C3   25 28 00              special 0x0028
+  0x1709C6   04 AF 4E 1A 08        call 0x081A4EAF
+  0x1709CB   21 0D 80 00 00        compare 0x800D, 0
 ```
 
-**Two places.** At the floor, none. The part of this ceiling where the run's silence actively
-asserts something is two places out of seven hundred and sixty-six, and the headline has been
-reporting all of it as one number since milestone 200.
+and `0x081A4EAF` is three commands long: `special 0x005D ; 0x27 ; return`. **The answer being
+read belongs to a routine two levels away.** `0x0028` had been credited with it, and `0x0028`
+was one of the two places 214 first reported as the last of the ceiling.
 
-`SpecialCalls.ZeroIsMisleading` has existed for a long time and says this in its own doc
-comment — *"a zero is an answer, not an absence"* — but only `--specials` ever asked it, off the
-ROM, with no run in sight. The two halves have been in the repository the whole time and never
-in the same sentence.
+Adding `call` to the barrier list costs, across the cartridge:
+
+```
+  49 -> 46   routines "asked a question"
+  18 -> 17   routines branching away on the nought they get by default
+ 213 -> 212  sites where that happens, of 1097 -> 1055 branching sites in the file
+```
+
+**Forty-two of 1097 attributions were reading somebody else's answer.** Losing attributions is
+the only direction this can safely be wrong in: a missed reading is a reading nobody makes, a
+false one goes in a doc as a fact.
+
+## The second thing: the condition is half the question
+
+The first version of the new classifier sorted routines by the values their answers are compared
+against — nought is an assertion where the file tests nought, a refusal otherwise. It printed,
+in the same block:
+
+```
+  158 of the places: zero is never the value tested, so it falls through
+                     — and 39 of their 690 branching sites are taken by nought
+```
+
+Thirty-nine branches taken by nought, in the bucket named for nought never being tested. Both
+numbers cannot be true, and the wrong one was mine: `compare 0x800D, 1 ; if LESS` is taken by
+nought and does not test nought. **The condition is half the question and the values are the
+other half**, and `Profile.BranchesTakenByZero` had been doing it properly all along by
+evaluating the condition.
+
+On the cartridge the case is `0x084`: tested against 1 and 2, and nought takes **nineteen of its
+twenty-one** branches. The value-reading rule called that a refusal.
+
+Classifying on branches-taken instead makes the contradiction go away — the "nought takes no
+branch" bucket now reads 0 of 647 — which is the check, not the fix.
 
 ---
 
 ## What changed
 
-`SpecialCalls.ZeroAt` joins the run's asked-counts to the file's tested-values and returns one
-of four answers per routine: **never tested, a refusal, an assertion, or both**. `--play` prints
-it per routine and then as a split of the places.
+* `SpecialCalls.Answering` gains `0x04`, and `SpecialCalls.WhatIsComparedAfter` exposes the scan
+  so the barrier can be tested against a handful of bytes instead of a whole world.
+* `SpecialCalls.ZeroAt` joins the run's asked-counts to the file's branch-counts and answers
+  **never tested / a refusal / an assertion / both** — on what nought *does*, not on what it is
+  compared against. It carries the branching denominator, because a routine asked eighty-eight
+  times whose answer is branched on twice is a routine whose silence can matter twice.
+* `--play` prints it per routine and as a split, and **names every routine in the assertion and
+  mixed buckets whatever the ranking says** — the eight it lists are the most-asked, and the
+  routines that matter are asked once or twice. A filter that keeps output readable must never
+  decide which question gets asked.
 
-The rule lives in `SpecialCalls`, not the printer — the ninth time.
+Eight breaks, eight catches, including both directions of the barrier (a call is one; not
+everything is one) and both directions of the classifier (values are not the rule; taking some
+branches is not taking all).
 
-Four breaks, four catches:
-
-| break | caught by |
-|---|---|
-| an answer nobody tests counts as a refusal | the four-way fixture and the no-profile one |
-| zero being *among* the tested values makes it an assertion | the mixed routine |
-| a refusal is anything that is not an assertion | the mixed routine |
-| the order follows the routine number, not what the run asked | the counts test |
-
-One deliberate care: a routine the run asked that has no profile at all reads as **never
-tested**, not as an assertion. "Unknown" has to be its own answer rather than being folded into
-whichever bucket is nearest — which is the fault 211 and 212 were each caught by, avoided on
-purpose this time.
-
-2849 → 2853 tests, all green. Nothing the run does changed.
+2853 → 2858 tests, all green. Nothing the run does changed.
 
 ---
 
 ## What is still owed
 
-* **The two places where zero takes the branch.** Two routines, at the widest lever setting,
-  and they are the whole of what is left of this ceiling. Neither has been named.
-* `0x194` is asked 54 times by the widest run, is compared against 0 and 1, and has **747 sites**
-  in the file — the most of anything. Being in the "both" bucket means the run's silence matters
-  at some of its sites and not others, and which is which has not been asked.
-* `0x0187` answers 2 to mean "do nothing". What makes it answer 2 is compiled code and is not
-  readable from here — but `--answer 0x187=2` would measure what the game looks like when every
-  obstacle declines, which is a control nobody has run.
-* The 201 places whose answer is never looked at are worth removing from the ceiling line
-  entirely rather than being reported and then explained away.
+* **`0x188` is the whole of what is left.** One routine, asked 35 times at the floor and 88 at
+  the widest setting, branched on at **two** sites in the entire cartridge, and nought takes
+  both. Those two sites have not been read.
+* `0x194` has 747 sites, the most of anything, is asked 54 times by the widest run, and nought
+  takes 1 of its 18 branches. Which one has not been asked.
+* `0x0028`'s real answerer is `special 0x005D`, reached through a call. Nothing in this project
+  follows a call to attribute an answer, and now that the barrier stops there, `0x005D` is
+  credited with nothing at that site either. Following one level would be a real instrument.
+* The 201 places whose answer is never branched on could come out of the ceiling line entirely
+  rather than being reported and then explained away.
