@@ -58,6 +58,25 @@ public sealed class WhySignsWentUnreadTests
     }
 
     /// <summary>
+    /// And a sign's OWN square is solid in this cartridge — that is what a sign is — so the rule
+    /// has to be the five squares and not the one. With only its own square asked, every sign in
+    /// the game reads as one nothing could stand beside.
+    /// </summary>
+    [Fact]
+    public void ASignOnASolidSquareWithFloorNextToItCanBeStoodBeside()
+    {
+        // The sign is on the middle square, which is solid, and the near square is open.
+        var world = new WorldData(
+        [
+            Column("1.0", 0, 1, 1) with { Signs = [new MapSign(0, 1, Kind: 0, TheSign)] },
+        ]);
+
+        UnreadSign one = Assert.Single(Of(world, ["1.0"]));
+
+        Assert.Equal(UnreadBecause.ItNeverGotToThatWall, one.Why);
+    }
+
+    /// <summary>
     /// And it is a fact about the FILE, so it does not move when the run does — 211's rule, and
     /// the check that caught a bucket named for the wrong cause.
     /// </summary>
