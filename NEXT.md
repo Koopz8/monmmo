@@ -6,14 +6,14 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **The list was sorted by the wrong number.** The routines the robot cannot answer were
-  ranked by how often it bumped into them. Ranked instead by how much its silence actually
-  decides, the order is nearly backwards: two routines asked **once and twice** carry
-  **39 of the 44** branches at stake, and the one asked fifty-four times carries **one**.
-- The truncation to eight was hiding both of them.
-- Read, they are the same seven commands: *ask, compare against two, take the LESS arm, say
-  something, return nought.* That is why the silence takes their branches without nought
-  being a value either is tested against.
-- And they are **subroutines** — so the silence does not stop at the branch, it becomes their
-  return value and goes to whoever called them. Following a call to attribute an answer is
-  the one thing this project has never built, and it is now the next thing.
+- **The one thing this project had never built: following a `call` to see whose answer a
+  script is reading.** Two milestones ago the scan was taught to stop at a call rather than
+  guess — losing 42 attributions, deliberately. This gets them back and more.
+- **336 places read an answer through a call. 225 of them now have an owner** — six routines
+  that were being credited to nobody. 14 blocks, 38 maps.
+- I got the rule wrong twice, in the same shape both times. First it counted only routines,
+  and credited one at 57 places where the block **throws the routine's answer away** and ends
+  by saying the answer out loud. Then it called that literal a constant — and it isn't: the
+  same block's other arm returns a different number, so it answers one or nought depending on
+  a routine nobody can run.
+- Both fixes are in the shipped rule. Four breaks, four catches.
