@@ -81,32 +81,53 @@ public static class WhenAMapRunsSomething
 
         foreach (LoadedMap map in library.All())
         {
-            string mapId = WorldExporter.MapId(map.Bank, map.Number);
-
-            foreach (MapEntryScript entry in map.OnEntry.Where(ReadsThatAreNotCommands.IsARead))
-                found.Add(For(mapId, entry, written.GetValueOrDefault(entry.Variable)));
-
-            // THE SAME QUESTION, ASKED OF THE OTHER LIST. 247 found that a trigger's condition
-            // is a read nothing in this project counted; this is the half of --arrivals that
-            // was never pointed at it. A second private copy of this reading is how the shared
-            // script list came to be short for three milestones, so there is not one.
-            foreach (MapTrigger trigger in map.Triggers.Where(ReadsThatAreNotCommands.IsARead))
-            {
-                found.Add(
-                    For(
-                        mapId,
-                        trigger.Variable,
-                        trigger.Value,
-                        trigger.ScriptAddress,
-                        written.GetValueOrDefault(trigger.Variable))
-                        with
-                        {
-                            Asks = OnASquare,
-                        });
-            }
+            found.AddRange(
+                On(WorldExporter.MapId(map.Bank, map.Number), map.OnEntry, map.Triggers, written));
         }
 
         return found;
+    }
+
+    /// <summary>
+    /// Both of one map's conditional lists, taking the records rather than a
+    /// <see cref="MapLibrary"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The same question, asked of the other list.</b> 247 found that a trigger's condition is
+    /// a read nothing in this project counted; this is the half of <c>--arrivals</c> that was
+    /// never pointed at it. A second private copy of this reading is how the shared script list
+    /// came to be short for three milestones, so there is not one — both lists go through
+    /// <see cref="For"/> and each condition carries which asked.
+    /// </para>
+    /// <para>
+    /// Split out of the sweep so a fixture can reach it. The rule that a trigger's condition is
+    /// marked as a square's lives here, and a rule inside a function that needs a whole cartridge
+    /// is a rule no break can be aimed at.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<Arrival> On(
+        string mapId,
+        IEnumerable<MapEntryScript> entries,
+        IEnumerable<MapTrigger> triggers,
+        IReadOnlyDictionary<int, IReadOnlyDictionary<int, int>> written)
+    {
+        foreach (MapEntryScript entry in entries.Where(ReadsThatAreNotCommands.IsARead))
+            yield return For(mapId, entry, written.GetValueOrDefault(entry.Variable));
+
+        foreach (MapTrigger trigger in triggers.Where(ReadsThatAreNotCommands.IsARead))
+        {
+            yield return For(
+                mapId,
+                trigger.Variable,
+                trigger.Value,
+                trigger.ScriptAddress,
+                written.GetValueOrDefault(trigger.Variable))
+                with
+                {
+                    Asks = OnASquare,
+                };
+        }
     }
 
     /// <summary>

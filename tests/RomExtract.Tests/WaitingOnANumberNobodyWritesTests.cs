@@ -165,21 +165,39 @@ public sealed class WaitingOnANumberNobodyWritesTests
     }
 
     /// <summary>
-    /// And the two lists are told apart, or a total that mixed them would hide the one that
-    /// behaves differently — which is the whole finding.
+    /// And both lists are read, each marked with which asked — a total that mixed them would
+    /// hide the one that behaves differently, which is the whole finding.
     /// </summary>
     [Fact]
-    public void WhichListAskedIsCarried()
+    public void BothListsAreReadAndEachSaysWhichAsked()
     {
-        WhenAMapRunsSomething.Arrival header = For(0x406F, 5, (0, 3));
+        List<WhenAMapRunsSomething.Arrival> found =
+        [
+            .. WhenAMapRunsSomething.On(
+                "3.42",
+                [new MapEntryScript(0x407C, 1, 0x08160000)],
+                [new MapTrigger(0, 0, 0x405F, 4, 0x081A7800)],
+                new Dictionary<int, IReadOnlyDictionary<int, int>>()),
+        ];
 
-        WhenAMapRunsSomething.Arrival square = header with
-        {
-            Asks = WhenAMapRunsSomething.OnASquare,
-        };
+        Assert.Equal(
+            [(0x407C, WhenAMapRunsSomething.OnArrival), (0x405F, WhenAMapRunsSomething.OnASquare)],
+            [.. found.Select(a => (a.Variable, a.Asks))]);
+    }
 
-        Assert.Equal(WhenAMapRunsSomething.OnArrival, header.Asks);
-        Assert.NotEqual(header.Asks, square.Asks);
+    /// <summary>
+    /// And a record that runs nothing is not a condition on either list — the same rule 247 put
+    /// in one place, asked here of both callers at once.
+    /// </summary>
+    [Fact]
+    public void ARecordThatRunsNothingIsNotACondition()
+    {
+        Assert.Empty(
+            WhenAMapRunsSomething.On(
+                "3.42",
+                [new MapEntryScript(0, 0, 0)],
+                [new MapTrigger(0, 0, 0x405F, 4)],
+                new Dictionary<int, IReadOnlyDictionary<int, int>>()));
     }
 
     /// <summary>
