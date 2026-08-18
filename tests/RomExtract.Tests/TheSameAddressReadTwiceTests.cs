@@ -1,3 +1,4 @@
+using PokeMmo.RomExtract;
 using PokeMmo.RomExtract.Scripts;
 using Xunit;
 
@@ -121,6 +122,55 @@ public sealed class TheSameAddressReadTwiceTests
 
         Assert.Equal(1, profile.BranchPlaces);
         Assert.Equal(0, profile.PlacesTakenByZero);
+    }
+
+    /// <summary>
+    /// AND THE POSITION COMES OFF THE BYTES. Two scripts that both run the same block record the
+    /// same address, which is what makes every count above possible.
+    /// <para>
+    /// Without this the whole milestone rests on records a test wrote by hand, and the one thing
+    /// that could be wrong — that the reading files each call under where it actually is — would
+    /// be the one thing unguarded.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TheRecordIsFiledUnderTheAddressOfTheCall()
+    {
+        var image = new byte[0x20000];
+
+        Array.Fill(image, (byte)0x77);
+
+        // A block at 0x1200 that asks a routine, and two entry stubs that both call into it.
+        image[0x1200] = 0x25;
+        image[0x1201] = 0x1C;
+        image[0x1202] = 0x00;
+        image[0x1203] = 0x03;
+
+        foreach (int stub in new[] { 0x1000, 0x1100 })
+        {
+            image[stub] = 0x04;
+
+            uint target = Rom.BaseAddress + 0x1200;
+
+            for (var i = 0; i < 4; i++) image[stub + 1 + i] = (byte)(target >> (i * 8));
+
+            image[stub + 5] = 0x02;
+        }
+
+        var rom = new Rom(image);
+
+        SpecialCall first = Assert.Single(SpecialCalls.In(rom, "5.5", "person 3", Rom.BaseAddress + 0x1000));
+        SpecialCall second = Assert.Single(SpecialCalls.In(rom, "6.6", "person 3", Rom.BaseAddress + 0x1100));
+
+        Assert.Equal(0x1200, first.At);
+        Assert.Equal(first.At, second.At);
+
+        // Two records, two maps, ONE place — end to end, from bytes.
+        SpecialCalls.Profile profile = Only(first, second);
+
+        Assert.Equal(2, profile.Calls);
+        Assert.Equal(2, profile.Maps);
+        Assert.Equal(1, profile.Places);
     }
 
     /// <summary>

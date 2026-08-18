@@ -557,34 +557,55 @@ public static class SpecialCalls
         var found = new List<SpecialCall>();
 
         foreach ((string mapId, string what, uint address) in library.EveryScript())
+            found.AddRange(In(rom, mapId, what, address));
+
+        return found;
+    }
+
+    /// <summary>
+    /// The calls in one script, which is where the record's BYTE POSITION comes from.
+    /// <para>
+    /// <b>The position is the whole of 223.</b> A block hanging off nineteen maps yields nineteen
+    /// records, and until the position was recorded there was no way for anything downstream to
+    /// tell nineteen reads of one address from nineteen addresses. Every number this project
+    /// quoted about routines was the first and read as the second.
+    /// </para>
+    /// <para>
+    /// Split out so a test can hand it a handful of bytes. <see cref="All"/> needs a whole
+    /// cartridge, and a rule only reachable through one is a rule no test reaches — which is how
+    /// this went unguarded through three milestones of being corrected elsewhere.
+    /// </para>
+    /// </summary>
+    public static List<SpecialCall> In(Rom rom, string mapId, string what, uint address)
+    {
+        var found = new List<SpecialCall>();
+
+        List<ScriptCommand> commands = ScriptReader.ReadAll(rom, address);
+
+        for (int i = 0; i < commands.Count; i++)
         {
+            ScriptCommand command = commands[i];
+
+            int routine = command.Code switch
             {
-                List<ScriptCommand> commands = ScriptReader.ReadAll(rom, address);
+                Special => command.Word(),
+                SpecialVar => command.Word(2),
+                _ => -1,
+            };
 
-                for (int i = 0; i < commands.Count; i++)
-                {
-                    ScriptCommand command = commands[i];
+            if (routine < 0) continue;
 
-                    int routine = command.Code switch
-                    {
-                        Special => command.Word(),
-                        SpecialVar => command.Word(2),
-                        _ => -1,
-                    };
+            int answer = command.Code == SpecialVar ? command.Word() : 0x800D;
 
-                    if (routine < 0) continue;
-
-                    found.Add(new SpecialCall(
-                        mapId,
-                        what,
-                        command.Offset,
-                        routine,
-                        command.Code == SpecialVar ? command.Word() : null,
-                        Before(commands, i),
-                        After(commands, i, command.Code == SpecialVar ? command.Word() : 0x800D),
-                        Forks(commands, i, command.Code == SpecialVar ? command.Word() : 0x800D)));
-                }
-            }
+            found.Add(new SpecialCall(
+                mapId,
+                what,
+                command.Offset,
+                routine,
+                command.Code == SpecialVar ? command.Word() : null,
+                Before(commands, i),
+                After(commands, i, answer),
+                Forks(commands, i, answer)));
         }
 
         return found;
