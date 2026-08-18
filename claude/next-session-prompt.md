@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-282`, 3049 tests green.
+`claude-283`, 3057 tests green.
 
 Standing rules — do not break these:
 
@@ -208,9 +208,17 @@ Traps worth carrying:
     the answer is `317`. **When you write a sentence about what a number is keyed on, go and
     look at the key.**
 
+22. **A bare number is not an identity — the COMMAND is** (243). `--trace 0x003F` said "nothing
+    the run executed touched it" about a flag a script had cleared on that same run, because
+    `--trace` watches a VARIABLE and 0x003F is both. 27 numbers in the map scan are named both
+    ways against a floor of 1.71, so this is not one odd case. Every reading in this repository
+    decides by the command and is safe; every ARGUMENT on the command line is a bare number and
+    is not. **Before believing an instrument's silence about a number, check which namespace it
+    was asking about.**
+
 ## Where things are
 
-Read `claude/milestone-242-a-sign-is-a-square.md` first, then `241`, `240`, `239`,
+Read `claude/milestone-243-one-number-two-namespaces.md` first, then `242`, `241`, `240`, `239`,
 `238`, `237`,
 `236`, `235`, `234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
@@ -273,6 +281,8 @@ dotnet run -c Release --project src/Tools/RomDump -- firered.gba --read-from 0x0
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --field-effects
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --slots 0x9D,0x7F,0x82
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --play --signs
+dotnet run -c Release --project src/Tools/RomDump -- firered.gba --play --moved 0x003F
+dotnet run -c Release --project src/Tools/RomDump -- firered.gba --namespaces
 ```
 
 `--play --signs` is the fourth list with **its own control in the same process**: which sign
@@ -283,7 +293,14 @@ SIGNS SWITCHED OFF and the two subtracted. It reproduces 239's before-numbers of
 7 / 3 / 2 flags. Keyed by (map, address): one block read in two towns is two signs and one
 address, which is 224 in the run rather than in the scan.
 
-**`--trace N` watches a VARIABLE, not a flag.** They share the number space, so `--trace 0x003F`
+**`--trace N` watches a VARIABLE, not a flag — and `--moved N` is the flag half.** They share the
+number space and the cartridge really does use 27 numbers both ways (`--namespaces`, floor 1.71),
+so each command now says when the number it was handed is used in the other one. `--moved` prints
+every set and clear with its script, its map, its pass and which of the four lists ran it.
+`--namespaces` asks the map scan — 238 flags, 236 variables, 27 shared — and prints the
+whole-image version beside it (2117 / 12659 / 1182) as the noise it is.
+
+** They share the number space, so `--trace 0x003F`
 answers — "nothing the run executed touched it" — about something else entirely. What moved a
 FLAG during a run is printed by `--play` itself since 240: every set and clear with its map, its
 script and its pass, and the ones that move BOTH ways with the ones that do it inside one pass
@@ -547,6 +564,9 @@ asked of (routine, 0x8004): 269 pairs, 95 in more than one place, and NOUGHT of 
 25 of the 178 routines take a 0x8004 in the run before a call; 0x194/0x173/0x174 take 18/16/16
 0x9C is 7 byte positions and SEVEN distinct words — a column; 3 of them are the obstacle scripts
 exactly ONE conditional in the map scan has a 0x27 its target lacks, and it is 0x0AB's
+27 numbers are named BOTH as a flag and as a variable in the map scan, floor 1.71 (243)
+  0x4001 is 4 flag sites and 326 variable ones; 0x0002 is 23 and 6 and GATES eight objects
+  the whole-IMAGE version of the same question says 2117 / 12659 / 1182 — throw it away
 0x9C is dofieldeffect, named in ONE place since 233 and privately in EverywhereInTheImage since 191
 6 moves pair with 6 numbers: CUT 2, SURF 9, ROCK SMASH 37, STRENGTH 40, WATERFALL 43, DIVE 44
 the only repeated move (DIVE, twice) repeats its number — ONE agreement, not six
@@ -577,9 +597,11 @@ still work.**
   project's collision reading gets wrong. One `--read-from` and one `--script-map 10.6`.
 * **`0x026C` and `0x0807`** — the two that actually make the run go round (240). Set on one map,
   cleared on another, holding nothing. `--read-from` on the four addresses is one command.
-* **`0x4001` is a flag in the run and a variable in the doors reading**, 63 of those. The same
-  number in two namespaces and nothing has said which reading is wrong, or whether both are
-  right about different commands.
+* ~~`0x4001` is a flag in the run and a variable in the doors reading.~~ **CLOSED AT 243** —
+  both are right, the cartridge holds `29 01 40` at `0x1656AA`, and 27 numbers are used both
+  ways. What is left: whether any of the 27 is a MISREAD rather than a real double use (two of
+  `0x4001`'s four flag sites have been read), and `0x0002` — 23 flag sites, 6 variable ones,
+  gating eight objects, the largest genuine collision and unread on both sides.
 * **`9.6`'s puzzle** — fifteen doors, `0x8004` against `0x8008`. Read far enough to say what it
   is; it is NOT why the run cycles, whatever 239 said.
 * **`3.57 sign (9,43)`** — the LEMONADE example that has been quoted in this prompt for
