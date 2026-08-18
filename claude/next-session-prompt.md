@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-294`, 3124 tests green.
+`claude-295`, 3135 tests green.
 
 Standing rules — do not break these:
 
@@ -384,9 +384,24 @@ Traps worth carrying:
     know it should not fire on, and print the result beside the finding**, or "it fits" is a
     sentence about arithmetic rather than about the cartridge.
 
+42. **A DECLARED LIMITATION IS NOT A MEASURED ONE** (255). `--arrivals` said in its own
+    documentation, from 229 onwards, that a value written through a `copyvar` or an `addvar`
+    would read as written by nothing — "the direction this is allowed to be wrong in". Twenty-five
+    milestones of quoting that with no number on it. Measured: **76 of the 364 middle-bucket
+    conditions ARE written**, through `setvar 0x8004, N ; copyvar X, 0x8004`, and `addvar`'s step
+    is a literal too. **A caveat you can state you can usually measure, and until you do you do
+    not know whether it is a footnote or a fifth of the answer.**
+
+43. **ADJACENCY BEATS A BARRIER LIST** (255). Following a copy back to a literal needs to know
+    that nothing wrote the source in between. The general answer is a list of commands that count
+    as barriers, and this project has had to fix such a list twice (214, 220). The rule here is
+    that the literal must come from the command IMMEDIATELY BEFORE, in the very variable being
+    copied from — which needs no list, cannot go stale, and is conservative in the safe direction.
+    `0x406F`'s third copy has `special 0x014B` in front of it and is correctly left unread.
+
 ## Where things are
 
-Read `claude/milestone-254-a-column-read-off-the-maps.md` first, then `253`, `252`, `251`,
+Read `claude/milestone-255-a-value-through-one-hop.md` first, then `254`, `253`, `252`, `251`,
 `250`, `249`, `248`, `247`, `246`, `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
 `238`, `237`,
@@ -608,7 +623,15 @@ which is the kind of thing a hand-kept table rounds off.
 `--the-scan` is the error bar on every map-scan number: reads against byte positions for **every**
 command code, and a per-kind table with the ALONE columns — what each of the five kinds of script
 reaches, asks and moves that no other kind does. `--two-commands` measures what `0x63` and `0x65`
-take, with floors. `--arrivals` reads the condition on every script a map runs on arrival AND on every SQUARE (250)
+take, with floors. **`--arrivals` also measures its own caveat now** (255). The middle bucket — "a variable something
+writes, but nobody writes THAT VALUE" — is 364 conditions / 84 distinct across both lists, and it
+is answered off `setvar` alone. Split four ways: **76 / 4 ARE written** through
+`setvar src, N ; copyvar dest, src` (one hop, the command IMMEDIATELY before, no barrier list);
+**3 / 3** a counter reaches (`addvar`'s step is a literal); **192 / 10** copied from a source this
+cannot read, which is the caveat's real remainder; **93 / 67** where the bucket means what it says.
+So a fifth of it by condition count was wrong, and the cause is one two-command idiom.
+
+`--arrivals` reads the condition on every script a map runs on arrival AND on every SQUARE (250)
 — **a variable AND a value** — and asks whether any `setvar` in the scan ever writes that value.
 Both lists go through one reading and each condition says which asked, because 250 exists entirely
 because one of them had never been asked.
@@ -833,7 +856,8 @@ neither is NAMED: what they take is read, what they do is still a guess
 0x0070's only two movers in the image are the two arms of one branch on 0x0180, unanswerable
 350 arrival conditions at 69 distinct (variable, value, script) on 58 scripts across 61 maps
 28 of the 69 want a value NO setvar in the scan writes; 0 name a variable nothing writes at all
-0x406F: 20 maps want 1/2/3/5/6/7/8 and the only writer in the scan writes 0, at 3 places
+0x406F: 20 maps want 1/2/3/5/6/7/8; the writers write 0, 3 AND 6 — 3 and 6 through
+  `setvar 0x8004, N ; copyvar 0x406F, 0x8004`, which 229 never followed (corrected at 255)
 178 routines called 4461 times at 936 byte positions — 936 was RIGHT and NOTHING PRINTED IT
   until 231; 118 of the 178 are called once per byte position and 60 are not
 the run's silence decides at 11 byte positions: 0x188 (1) and 0x0A3 (8), 0x0D5, 0x189
