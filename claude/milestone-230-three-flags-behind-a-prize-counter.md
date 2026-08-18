@@ -1,5 +1,11 @@
 # Milestone 230: three flags behind a prize counter, and a table that reads itself
 
+> **CORRECTED AT 234.** This document calls `10.14` "the GAME CORNER". That name is not read —
+> it came from milestone 199's commit message. The export calls `10.14` CELADON CITY because bank
+> 10 is Celadon's interiors and they all carry the city's name. What is read is an 18x15 interior
+> with eleven people, of whom 5 to 10 hand something over against a coin count. See `milestone-234`.
+
+
 207 re-ran all six rows of the floor table and found five of them stale, and bisected exactly
 one: `--play --say-yes`. It left the floor row's 150 → 153 unchased and said so. This chases it,
 and then stops the class of fault rather than the instance.

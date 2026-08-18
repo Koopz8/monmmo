@@ -1,5 +1,9 @@
 # Milestone 233: the command that already had a name
 
+> **CORRECTED AT 234.** "two GAME CORNER signs" below is not read. `10.14` is an 18x15 interior in
+> Celadon; nineteen of its signs share the block that takes 64. See `milestone-234`.
+
+
 232 measured `0x9C` as an unnamed argument column: seven byte positions, seven distinct words, and
 three of them in the three obstacle scripts. It was careful not to guess what the word meant.
 

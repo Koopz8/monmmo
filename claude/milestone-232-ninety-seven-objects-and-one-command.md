@@ -1,5 +1,9 @@
 # Milestone 232: ninety-seven objects and one command
 
+> **CORRECTED AT 234.** "the GAME CORNER again" below is not a name this project read; `10.14`
+> is an interior in Celadon and the export names every one of them CELADON CITY. See `milestone-234`.
+
+
 231 built the column that found `0x0AB` — **97 calls at one byte position**, the largest routine
 inflation in this cartridge — and left it unread. This reads it, and then builds the command that
 should have existed since 190.

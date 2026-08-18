@@ -156,8 +156,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-233-the-command-that-already-had-a-name.md` first, then `232`,
-`231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
+Read `claude/milestone-234-the-same-boundary-asked-a-different-way.md` first, then `233`,
+`232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
 **Twenty faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
@@ -407,7 +407,7 @@ callstd 0x05 and 0x00 ANSWER — 153 and 2 sites have nothing in front that coul
 0x01C's nineteen sites are ONE address; 219 called them nineteen places
 the 57 are TWO blocks, each a yes/no turning on 0x083 or 0x084 and then 0x153
 2 of those gates hold NOBODY — 0x084A and 0x084B, the ferry, with no setter anywhere
-the floor's 150 -> 153 is milestone 199 alone: 0x026E/0x026F/0x0270 at 10.14, the prize counter
+the floor's 150 -> 153 is milestone 199 alone: 0x026E/0x026F/0x0270 at 10.14, persons 5-10
 of 199's three widths, 0xB3 and 0xB4 are in SERIES and 0xC1 opens no flag at any lever setting
 the obstacle scripts carry 49 CUT / 97 ROCK SMASH / 54 STRENGTH objects, on 21 / 15 / 15 maps
 0x0AB is ONE byte position, 0x081BE07C, reached by those 97 — and all it decides is one 0x27
@@ -419,6 +419,11 @@ exactly ONE conditional in the map scan has a 0x27 its target lacks, and it is 0
 the only repeated move (DIVE, twice) repeats its number — ONE agreement, not six
 the 4 numbers no move drives are 62, 64, 68, 69 and ALL SIX move numbers are below all four
   — 6 of 10, which chance would do one time in 210
+the same split again, as a different command: the six are followed by an UNNAMED wait (0x27)
+  and three of the four by a wait that NAMES the number the effect was started with (0x9E)
+0x9E is 3 byte positions in the whole map scan and all three do that — one in 64 conservatively
+62 is 1.80 SECTION 49 on arrival, 68 is 2.56 BIRTH ISLAND person 1, 64 and 69 are 10.14 signs
+0x0816C994 is ONE byte position reached from NINETEEN sign entries on 10.14
 the raw 0x9C sweep is 11446 sites in BOTH images and the REVERSAL READS ON MORE — throw it away
 ```
 
@@ -427,10 +432,9 @@ the raw 0x9C sweep is 11446 sites in BOTH images and the REVERSAL READS ON MORE 
 1. **`0x0AB` IS READ (232) and the block audit is DONE (231).** What is left of the audit: What is left of it: the three
    numbers nothing prints (`62 gates hold 240 people`, `146 trees and rocks`, `158 objects`) and
    `the ceiling is 45 of 437 byte positions`. Each needs an instrument or deleting; they are
-   marked in the block. The next cheap reads are the **four `dofieldeffect` numbers no move
-   drives** — 62 on `1.80`'s arrival script, 68 on `2.56`, and 64 and 69 on two `10.14` signs,
-   which is the GAME CORNER a third time — and the **41 routines a `0x27` follows** (232).
-   `--read-from` makes all of those one command each. The history for reference:
+   marked in the block. The next cheap reads are the **41 routines a `0x27` follows** (232, the
+   other half of the waiting question) and **`0x011E`**, the routine `10.14`'s nineteen shared
+   signs ask. `--read-from` makes both one command each. The history for reference:
    230 did the floor-row bisect (answer: milestone **199**, one commit, +3 at all six settings,
    announced in its own commit message) and then found the bigger thing: that block, and two
    items of this list, entered the prompt at **`f8d4f15fe`, "the next session's prompt with 190
@@ -736,6 +740,11 @@ the other, and nothing about a single green run says which. 207 writes the 2x2 d
   all three flags — and **`0xC1` opens nothing at any lever setting**. `0xC1` is the one adopted
   on two sites, below this project's bar of five, and said so out loud; its blast radius on the
   run is nought. Whether it should stay is a DECISION and it is deliberately not made.
+* **Calling `10.14` the GAME CORNER.** It is not a name this project read — 199's commit message
+  guessed it and 230, 232 and 233 carried it forward. The export says CELADON CITY because bank 10
+  is Celadon's interiors and the region-name table gives them all the city's name. What is READ:
+  an 18x15 interior, 11 people of whom 5-10 hand something over against a coin count, 20 signs of
+  which 19 share one block. Corrected at 234. Describe it; do not name it.
 * **The drink, the vending machine, CELADON DEPT, the ferry tickets, the badge-count routine** —
   all dead, see `claude/the-drink-and-the-boat.md`.
 
