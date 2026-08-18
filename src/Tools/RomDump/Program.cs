@@ -8944,9 +8944,81 @@ public static class Program
             $"  {shared.Count} number(s) are named BOTH ways, against a floor of {scan.Floor:F2}"
             + " if the two sets landed independently in the span they occupy");
 
+        // THE SHAPE OF EACH NAMESPACE, read rather than asserted. Which numbers are legal
+        // flags and which are legal variables is not something this project is allowed to write
+        // down from outside knowledge — so it prints where they actually fall and lets the
+        // bands show themselves.
         Console.WriteLine();
 
-        foreach (SharedNumber one in shared.Take(20)) Console.WriteLine($"    {one}");
+        foreach ((string what, IReadOnlyDictionary<int, int> of) in new[]
+                 {
+                     ("as a FLAG    ", scan.Flags),
+                     ("as a VARIABLE", scan.Variables),
+                 })
+        {
+            Console.WriteLine(
+                $"  {what}: "
+                + string.Join(
+                    ",  ",
+                    BothNamespaces.Bands(of).Select(
+                        b => $"0x{b.From:X4}+ {b.Numbers} number(s) at {b.Places} place(s)")));
+        }
+
+        // AND THE SAME SPREAD PER OPERAND, which is the only version that can say WHICH
+        // operand is dragging numbers into a band they do not belong in.
+        Console.WriteLine();
+
+        foreach ((string operand, IReadOnlyDictionary<int, int> of) in scan.ByOperand.OrderBy(o => o.Key))
+        {
+            Console.WriteLine(
+                $"    {operand}: "
+                + string.Join(
+                    ",  ",
+                    BothNamespaces.Bands(of).Select(
+                        b => $"0x{b.From:X4}+ {b.Numbers}n/{b.Places}p")));
+        }
+
+        // AND THE TEST THAT DOES NOT NEED TO KNOW WHAT A BAND IS.
+        //
+        // A variable something LOOKS AT is a variable something WRITES. If an operand names a
+        // hundred and forty-five numbers and almost none of them is ever written anywhere in
+        // the map scan, that operand is not naming variables — and this says so without
+        // asserting a single band boundary from outside the file.
+        Console.WriteLine();
+        Console.WriteLine("    and of what each READING operand names, how much is ever written:");
+
+        foreach ((string operand, int written, int numbers) in scan.WrittenPerOperand)
+        {
+            Console.WriteLine(
+                $"      {operand}: {written} of {numbers} number(s) are written somewhere"
+                + $" — {(numbers == 0 ? 0 : 100.0 * written / numbers):F0}%");
+        }
+
+        IReadOnlyList<string> values = scan.NameValues;
+
+        Console.WriteLine(
+            values.Count == 0
+                ? "      every reading operand names things the file also writes, so all of them"
+                  + " are naming variables"
+                : $"      {string.Join(", ", values)} NAME VALUES AND NOT VARIABLES — nothing"
+                  + " writes what they name, and a variable something looks at is a variable"
+                  + " something writes");
+
+        IReadOnlyList<SharedNumber> real = scan.SharedRealVariables;
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  so of the {shared.Count} named both ways, {real.Count} survive once the"
+            + $" value-naming operand(s) are left out — against the same floor of {scan.Floor:F2}");
+
+        foreach (SharedNumber one in real.Take(20)) Console.WriteLine($"    {one}");
+
+        Console.WriteLine();
+        Console.WriteLine("  and the raw version, which is the one that needed checking:");
+
+        foreach (SharedNumber one in shared.Take(8)) Console.WriteLine($"    {one}");
+
+        if (shared.Count > 8) Console.WriteLine($"    ... +{shared.Count - 8} more");
 
         if (shared.Count > 20) Console.WriteLine($"    ... +{shared.Count - 20} more");
 
@@ -10064,6 +10136,22 @@ public static class Program
             Console.WriteLine(
                 $"    and {writes.Count(s => s.ReadsAsAScript)} place(s) write it"
                 + $" ({writes.Count} raw)");
+
+            // AND HOW MANY OF THEM ARE THE OPERAND THAT NAMES VALUES.
+            //
+            // 0x1A's second word is a VALUE and not a variable at 145 of the 149 numbers it
+            // names in the map scan — three of those 149 are ever written anywhere, against
+            // 86% to 100% for every other reading operand (244). A site of that kind counted
+            // here is a literal counted as a look, and the number above cannot say so itself.
+            int literals = real.Count(s => s.Copies);
+
+            if (literals > 0)
+            {
+                Console.WriteLine(
+                    $"    CAUTION: {literals} of the {real.Count} are 0x1A's second word, which"
+                    + " names a VALUE and not a variable at 145 of its 149 numbers — see"
+                    + " --namespaces (244)");
+            }
 
             if (real.Count == 0)
             {

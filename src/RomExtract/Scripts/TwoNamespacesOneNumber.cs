@@ -19,13 +19,121 @@ public sealed record BothNamespaces(
     IReadOnlyDictionary<int, int> Variables,
     int Commands)
 {
-    /// <summary>The numbers used in both, most-named first.</summary>
-    public IReadOnlyList<SharedNumber> Shared =>
+    /// <summary>
+    /// The same variable numbers again, split by WHICH operand of which command named them.
+    /// </summary>
+    /// <remarks>
+    /// A namespace is not a thing a sweep observes — it is a thing each operand of each command
+    /// declares. Summed together they cannot say which operand is dragging a number into a band
+    /// it does not belong in, and that is the only question worth asking of an out-of-band
+    /// number.
+    /// </remarks>
+    public IReadOnlyDictionary<string, IReadOnlyDictionary<int, int>> ByOperand { get; init; } =
+        new Dictionary<string, IReadOnlyDictionary<int, int>>();
+
+    /// <summary>Operands that put something INTO a variable rather than looking at one.</summary>
+    public static readonly string[] Writing = ["0x16 arg0", "0x17 arg0", "0x18 arg0", "0x1A arg0"];
+
+    /// <summary>Every number any writing operand names.</summary>
+    public IReadOnlyCollection<int> Written =>
+        [.. ByOperand.Where(o => Writing.Contains(o.Key)).SelectMany(o => o.Value.Keys)];
+
+    /// <summary>
+    /// How much of what a reading operand names is ever written, per operand.
+    /// </summary>
+    /// <remarks>
+    /// <b>The test that does not need to know what a band is.</b> A variable something looks at
+    /// is a variable something writes; an operand naming a hundred and forty-nine numbers of
+    /// which three are ever written is not naming variables at all. This asserts no boundary
+    /// from outside the file — it asks the file about itself.
+    /// </remarks>
+    public IReadOnlyList<(string Operand, int Written, int Numbers)> WrittenPerOperand
+    {
+        get
+        {
+            IReadOnlyCollection<int> written = Written;
+
+            return
+            [
+                .. ByOperand.Where(o => !Writing.Contains(o.Key))
+                    .Select(o => (
+                        Operand: o.Key,
+                        Written: o.Value.Keys.Count(written.Contains),
+                        Numbers: o.Value.Count))
+                    .OrderBy(o => o.Operand, StringComparer.Ordinal),
+            ];
+        }
+    }
+
+    /// <summary>
+    /// Reading operands whose numbers are almost never written — the ones naming VALUES.
+    /// </summary>
+    /// <remarks>
+    /// Half is a round number and it is deliberately doing no work: on this cartridge the
+    /// operands come in at 2% and 86% to 100%, with nothing between. The percentages are
+    /// printed beside it so the gap can be seen rather than trusted.
+    /// </remarks>
+    public IReadOnlyList<string> NameValues =>
     [
-        .. Flags.Keys.Where(Variables.ContainsKey)
-            .Select(n => new SharedNumber(n, Flags[n], Variables[n]))
+        .. WrittenPerOperand.Where(o => o.Numbers > 0 && o.Written * 2 < o.Numbers)
+            .Select(o => o.Operand),
+    ];
+
+    /// <summary>The numbers used in both, most-named first — counting every operand.</summary>
+    public IReadOnlyList<SharedNumber> Shared => SharedOf(Variables);
+
+    /// <summary>
+    /// And the same, once the value-naming operands are left out of the variable side.
+    /// </summary>
+    /// <remarks>
+    /// This is the honest answer to "how many numbers does this game use both ways". The raw
+    /// version counts a literal 5 handed to a routine as a use of variable 5, and on this
+    /// cartridge that is 26 of the 27.
+    /// </remarks>
+    public IReadOnlyList<SharedNumber> SharedRealVariables
+    {
+        get
+        {
+            IReadOnlyList<string> values = NameValues;
+
+            var real = new Dictionary<int, int>();
+
+            foreach ((string operand, IReadOnlyDictionary<int, int> of) in ByOperand)
+            {
+                if (values.Contains(operand)) continue;
+
+                foreach ((int number, int places) in of)
+                    real[number] = real.GetValueOrDefault(number) + places;
+            }
+
+            return SharedOf(real);
+        }
+    }
+
+    private IReadOnlyList<SharedNumber> SharedOf(IReadOnlyDictionary<int, int> variables) =>
+    [
+        .. Flags.Keys.Where(variables.ContainsKey)
+            .Select(n => new SharedNumber(n, Flags[n], variables[n]))
             .OrderByDescending(n => n.AsAFlag + n.AsAVariable)
             .ThenBy(n => n.Number),
+    ];
+
+    /// <summary>
+    /// How the numbers of one namespace spread across the number space, in bands of
+    /// <paramref name="width"/> — the shape, so that a band can be READ rather than asserted.
+    /// </summary>
+    /// <remarks>
+    /// <b>Hardcode nothing.</b> This game's variables and flags live in bands, and this project
+    /// is not allowed to write those bands down from outside knowledge: it has to find them by
+    /// what they look like. Places as well as numbers, because one number named four hundred
+    /// times and four hundred numbers named once are the same count and not the same band.
+    /// </remarks>
+    public static IReadOnlyList<(int From, int Numbers, int Places)> Bands(
+        IReadOnlyDictionary<int, int> of, int width = 0x1000) =>
+    [
+        .. of.GroupBy(n => n.Key / width * width)
+            .Select(g => (From: g.Key, Numbers: g.Count(), Places: g.Sum(n => n.Value)))
+            .OrderBy(g => g.From),
     ];
 
     /// <summary>
@@ -96,6 +204,7 @@ public static class TwoNamespacesOneNumber
     {
         var flags = new Dictionary<int, int>();
         var variables = new Dictionary<int, int>();
+        var byOperand = new Dictionary<string, Dictionary<int, int>>();
         var seen = new HashSet<uint>();
 
         var commands = 0;
@@ -134,11 +243,22 @@ public static class TwoNamespacesOneNumber
                         int variable = command.Word(at);
 
                         variables[variable] = variables.GetValueOrDefault(variable) + 1;
+
+                        string operand = $"0x{code:X2} arg{at}";
+
+                        if (!byOperand.TryGetValue(operand, out Dictionary<int, int>? each))
+                            byOperand[operand] = each = [];
+
+                        each[variable] = each.GetValueOrDefault(variable) + 1;
                     }
                 }
             }
         }
 
-        return new BothNamespaces(flags, variables, commands);
+        return new BothNamespaces(flags, variables, commands)
+        {
+            ByOperand = byOperand.ToDictionary(
+                o => o.Key, o => (IReadOnlyDictionary<int, int>)o.Value),
+        };
     }
 }
