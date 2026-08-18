@@ -36,6 +36,15 @@ namespace PokeMmo.RomExtract.Scripts;
 /// said so. This is the error bar on every routine sentence in this project, and it comes back
 /// nought for a routine nobody reads across anything.
 /// </param>
+/// <param name="NothingClean">
+/// How many of those sites have <b>no</b> clean compare at all — nothing before the barrier.
+/// The rest have an owner already and are only reported for the extra values.
+/// <para>
+/// The two are different numbers and the difference is large: 145 sites have a compare past a
+/// barrier and 78 of them have nothing else. Saying "145 branch only past a barrier" was 220's
+/// own wording and it was wrong by 67.
+/// </para>
+/// </param>
 /// <param name="PlacesAcross">
 /// The same count for the branches past a barrier: distinct byte positions rather than script
 /// entries.
@@ -55,6 +64,7 @@ public sealed record SpecialContract(
     int Branches,
     int Places,
     int AcrossABarrier,
+    int NothingClean,
     int PlacesAcross,
     IReadOnlyDictionary<int, int> ComparedAcross,
     IReadOnlyList<string> Where)
@@ -126,6 +136,7 @@ public static class SpecialContracts
         var compared = new Dictionary<int, Dictionary<int, int>>();
         var branchesAt = new Dictionary<int, List<int>>();
         var acrossAt = new Dictionary<int, List<int>>();
+        var nothingClean = new Dictionary<int, int>();
         var comparedAcross = new Dictionary<int, Dictionary<int, int>>();
         var where = new Dictionary<int, List<string>>();
 
@@ -162,7 +173,16 @@ public static class SpecialContracts
                 // sites are, and one address hanging off two triggers is read twice.
                 if (values.Count > 0) Note(branchesAt, routine, command.Offset);
 
-                if (beyond.Count > 0) Note(acrossAt, routine, command.Offset);
+                if (beyond.Count > 0)
+                {
+                    Note(acrossAt, routine, command.Offset);
+
+                    // With nothing clean before it, the barrier is the whole of what this site
+                    // says about this routine. With a clean compare too, it has an owner and
+                    // this is only the extra values.
+                    if (values.Count == 0)
+                        nothingClean[routine] = nothingClean.GetValueOrDefault(routine) + 1;
+                }
 
                 if (!compared.TryGetValue(routine, out Dictionary<int, int>? seen))
                     compared[routine] = seen = [];
@@ -190,6 +210,7 @@ public static class SpecialContracts
                 SitesAndPlaces(branchesAt.GetValueOrDefault(routine, [])).Sites,
                 SitesAndPlaces(branchesAt.GetValueOrDefault(routine, [])).Places,
                 SitesAndPlaces(acrossAt.GetValueOrDefault(routine, [])).Sites,
+                nothingClean.GetValueOrDefault(routine),
                 SitesAndPlaces(acrossAt.GetValueOrDefault(routine, [])).Places,
                 comparedAcross.GetValueOrDefault(routine, []),
                 where.GetValueOrDefault(routine, []))),
@@ -205,7 +226,8 @@ public static class SpecialContracts
         // And the error bar, which is the number this reading did not have for six milestones.
         log?.Invoke(
             $"    {derived.Sum(d => d.AcrossABarrier)} site(s) across {derived.Count(d => d.AcrossABarrier > 0)} routine(s) "
-            + "branch on the answer only PAST something that may have answered instead, and are not counted above");
+            + $"branch on the answer PAST something that may have answered instead — {derived.Sum(d => d.NothingClean)} "
+            + "of those have no clean compare at all, and none of it is counted above");
         log?.Invoke(
             $"    {derived.Count(d => d.Branches == 0 && d.AcrossABarrier > 0)} routine(s) are branched on ONLY that way — "
             + "every branch this project credited them with was read across a call");

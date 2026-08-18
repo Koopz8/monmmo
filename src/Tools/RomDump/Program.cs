@@ -7043,8 +7043,11 @@ public static class Program
         Console.WriteLine("WHAT THE ROUTINES ARE ASKED");
         Console.WriteLine();
 
-        List<SpecialContract> contracts =
-            SpecialContracts.Derive(rom, MapLibrary.Open(rom), Console.WriteLine);
+        MapLibrary library = MapLibrary.Open(rom);
+
+        List<SpecialContract> contracts = SpecialContracts.Derive(rom, library, Console.WriteLine);
+
+        List<WhoTheCompareBelongsTo.ACompareAcross> across = WhoTheCompareBelongsTo.In(rom, library);
 
         // Branched-on first: a routine nobody branches on cannot be shutting a door, whatever
         // else it does, so it is not what a story walk is looking for.
@@ -7103,7 +7106,36 @@ public static class Program
 
                 WriteAcrossABarrier(contract);
 
+                WriteWhatWasInTheWay(across.Where(a => a.Routine == contract.Routine));
+
                 Console.WriteLine($"        {string.Join("; ", contract.Where)}");
+            }
+        }
+
+        // And the whole of it, so the three verdicts can be read as a shape rather than one
+        // routine at a time. NotSaid is printed as its own number on purpose: a reading that
+        // stopped and a fact about the cartridge are different things.
+        if (across.Count > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine(
+                $"  {across.Count} site(s) whose compare is only past a barrier, by what was in the way:");
+
+            foreach (IGrouping<WhoTheCompareBelongsTo.Whose, WhoTheCompareBelongsTo.ACompareAcross> whose
+                     in across.GroupBy(a => a.Belongs).OrderByDescending(g => g.Count()))
+            {
+                Console.WriteLine($"    {whose.Count(),4}  {Verdict(whose.Key)}");
+
+                foreach (IGrouping<WhoTheCompareBelongsTo.InTheWay, WhoTheCompareBelongsTo.ACompareAcross> was
+                         in whose.GroupBy(a => a.Was).OrderByDescending(g => g.Count()))
+                {
+                    WhoTheCompareBelongsTo.ACompareAcross first = was.First();
+
+                    Console.WriteLine(
+                        $"          {was.Count(),4} — {InTheWay(was.Key)}"
+                        + $"   e.g. 0x{first.Routine:X3} at {first.MapId} {first.What} 0x{first.At:X8}"
+                        + (first.Called > 0 ? $" past 0x{first.Called:X8}" : ""));
+                }
             }
         }
 
@@ -7114,6 +7146,36 @@ public static class Program
             $"  and {quiet} routines nothing branches on — called for their effect rather than");
         Console.WriteLine(
             "  their answer, so a stand-in for one of those buys no ground and is not worth writing");
+    }
+
+    private static string Verdict(WhoTheCompareBelongsTo.Whose whose) => whose switch
+    {
+        WhoTheCompareBelongsTo.Whose.StillThisRoutines =>
+            "the thing in the way CANNOT have answered — the compare is the routine's after all",
+        WhoTheCompareBelongsTo.Whose.SomebodyElses =>
+            "somebody else answered, and the compare was never this routine's",
+        _ => "not said — the thing in the way goes somewhere this reading does not follow",
+    };
+
+    private static string InTheWay(WhoTheCompareBelongsTo.InTheWay was) => was switch
+    {
+        WhoTheCompareBelongsTo.InTheWay.AnotherRoutine => "another routine",
+        WhoTheCompareBelongsTo.InTheWay.ACommandThatAnswers => "a command that answers on its own account",
+        WhoTheCompareBelongsTo.InTheWay.AStandardRoutine => "a standard routine, never read here",
+        WhoTheCompareBelongsTo.InTheWay.ACallThatAnswers => "a call whose block leaves an answer",
+        WhoTheCompareBelongsTo.InTheWay.ACallThatTouchesNothing => "a call whose block touches nothing",
+        _ => "a call whose block jumps away",
+    };
+
+    /// <summary>The verdicts for one routine, when there are any.</summary>
+    private static void WriteWhatWasInTheWay(IEnumerable<WhoTheCompareBelongsTo.ACompareAcross> across)
+    {
+        foreach (IGrouping<WhoTheCompareBelongsTo.InTheWay, WhoTheCompareBelongsTo.ACompareAcross> was
+                 in across.GroupBy(a => a.Was).OrderByDescending(g => g.Count()))
+        {
+            Console.WriteLine(
+                $"        {was.Count(),3} of them past {InTheWay(was.Key)} — {Verdict(WhoTheCompareBelongsTo.Belongs(was.Key))}");
+        }
     }
 
     /// <summary>
