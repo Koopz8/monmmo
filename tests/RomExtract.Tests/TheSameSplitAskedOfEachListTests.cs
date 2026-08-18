@@ -292,6 +292,36 @@ public sealed class TheSameSplitAskedOfEachListTests
     }
 
     /// <summary>
+    /// THE ROWS COME OUT IN THE ORDER THEY ARE NAMED IN, not in the order the cartridge happens
+    /// to produce them — so two runs print the same table and a diff of two outputs is about the
+    /// cartridge rather than about which map the scan reached first.
+    /// </summary>
+    /// <remarks>
+    /// <b>Added because a break predicted to kill nothing killed nothing.</b> Replacing the named
+    /// pair with the distinct values in the order they turn up passed every test in this file,
+    /// which made the ordering a rule the code stated and nothing checked. Predicting the count
+    /// first is what turned that green run into a finding rather than a shrug (246).
+    /// </remarks>
+    [Fact]
+    public void TheRowsComeOutInTheOrderTheListsAreNamedIn()
+    {
+        // The square is FIRST in the input, so anything reading the order off the data gets it
+        // the other way round.
+        WhenAMapRunsSomething.Arrival[] conditions =
+        [
+            Asking(Counted, 2, WhenAMapRunsSomething.OnASquare),
+            Asking(Written, 3, WhenAMapRunsSomething.OnArrival, 0x08160010),
+        ];
+
+        IReadOnlyList<WhenAMapRunsSomething.Verdicts> byList =
+            WhenAMapRunsSomething.ByList(conditions, CanHold(), Ceiling);
+
+        Assert.Equal(
+            [WhenAMapRunsSomething.OnArrival, WhenAMapRunsSomething.OnASquare],
+            byList.Select(v => v.Asks));
+    }
+
+    /// <summary>
     /// A LIST NOTHING ASKS IS NOT A ROW OF NOUGHTS. A cartridge whose triggers carry no condition
     /// should print one list, not two — a row of noughts reads as a measured empty bucket and
     /// this reading has already been burnt once by a bucket that was empty because nobody looked.
