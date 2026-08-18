@@ -77,21 +77,29 @@ public sealed class MapLibrary
     /// arrival list already. Reading a condition table as commands is a misread that would parse.
     /// </para>
     /// </remarks>
-    public IEnumerable<(string MapId, string What, uint Address)> EveryScript()
-    {
-        foreach (LoadedMap map in All())
-        {
-            string mapId = WorldExporter.MapId(map.Bank, map.Number);
+    public IEnumerable<(string MapId, string What, uint Address)> EveryScript() =>
+        All().SelectMany(ScriptsOn);
 
-            // Asked of the reading that already knows all five kinds, rather than listed again
-            // here. A SIXTH copy is how this list came to be short in the first place.
-            foreach (Scripts.SetsAFlag script in Scripts.WhatItIsWaitingFor.EveryScriptOn(
-                         mapId, map.Objects, map.Triggers, map.Signs, map.OnEntry, map.OnLoad))
-            {
-                yield return (script.MapId, script.What, script.Address);
-            }
-        }
-    }
+    /// <summary>
+    /// One map's scripts, all five kinds — split out so a test can hand it a map rather than a
+    /// cartridge.
+    /// <para>
+    /// The list is asked of <see cref="Scripts.WhatItIsWaitingFor.EveryScriptOn"/> rather than
+    /// written again here. <b>A sixth copy is how this list came to be short in the first
+    /// place</b>: 221 unified five private copies onto a new one that had three kinds, and every
+    /// instrument built on it read 2331 script entries where <c>--scripts</c> read 2915.
+    /// </para>
+    /// </summary>
+    public static IEnumerable<(string MapId, string What, uint Address)> ScriptsOn(LoadedMap map) =>
+        Scripts.WhatItIsWaitingFor
+            .EveryScriptOn(
+                WorldExporter.MapId(map.Bank, map.Number),
+                map.Objects,
+                map.Triggers,
+                map.Signs,
+                map.OnEntry,
+                map.OnLoad)
+            .Select(script => (script.MapId, script.What, script.Address));
 
     /// <summary>Loads a map by its <c>bank.map</c> address, or null when there is none.</summary>
     public LoadedMap? TryLoad(string mapId) =>
