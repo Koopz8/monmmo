@@ -209,6 +209,7 @@ public static class Program
         if (options.Arrivals) WriteArrivals(rom);
         if (options.TheFloor) WriteTheFloorTable(rom, options.StartAt);
         if (options.FieldEffects) WriteFieldEffects(rom);
+        if (options.Slots.Count > 0) WriteSlots(rom, options.Slots);
         if (options.ReadFrom.Count > 0) WriteBlocks(rom, options.ReadFrom);
         if (options.Closure) WriteClosure(rom, options.RoutineAnswers, options.StartAt);
         if (options.Play)
@@ -6141,6 +6142,73 @@ public static class Program
                 ? "    THE REVERSAL IS AHEAD. The raw sweep is not a finding and the only sites worth"
                   + " reading are the ones a map or a jump opens."
                 : "    the real image is ahead, which is worth looking at rather than assuming");
+    }
+
+    /// <summary>
+    /// For each command asked about: is its first byte an index?
+    /// </summary>
+    private static void WriteSlots(Rom rom, IReadOnlyList<byte> codes)
+    {
+        Console.WriteLine();
+        Console.WriteLine("A BYTE THEN A WORD");
+        Console.WriteLine();
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        var read = new HashSet<uint>();
+        var blocks = new List<List<ScriptCommand>>();
+
+        foreach ((string _, string _, uint address) in library.EveryScript())
+            if (read.Add(address)) blocks.Add(ScriptReader.ReadAll(rom, address));
+
+        foreach (byte code in codes)
+        {
+            var runs = new Dictionary<int, AByteThenAWord.Run>();
+
+            foreach (List<ScriptCommand> block in blocks) AByteThenAWord.Gather(block, code, runs);
+
+            AByteThenAWord.Reading reading = AByteThenAWord.Of(code, runs.Values);
+
+            Console.WriteLine(
+                $"  0x{code:X2} {ScriptCommands.NameOf(code)} — {reading.Places} byte position(s) in"
+                + $" {reading.Runs} run(s); the first byte takes {reading.Alphabet} distinct value(s)");
+
+            if (reading.Runs == 0)
+            {
+                Console.WriteLine("      nothing the map scan opens reads as this");
+
+                continue;
+            }
+
+            Console.WriteLine(
+                !reading.CanSayAnything
+                    ? $"      its byte is the same value at every place, so counting from nought says"
+                      + " NOTHING here — the question cannot be answered, not answered yes"
+                    : reading.AlwaysCounts
+                        ? $"      EVERY run counts 0, 1, 2 … from nought — drawing each byte from the"
+                          + $" {reading.Alphabet} value(s) it uses, that is one in {reading.OneIn:0}"
+                        : $"      {reading.Counting} of {reading.Runs} run(s) count from nought, so the byte is"
+                          + " not an index into anything");
+
+            Console.WriteLine(
+                $"      the word: {reading.Words} distinct across {reading.Places} place(s);"
+                + $" {reading.Variables} of them a variable id rather than a literal");
+
+            foreach (AByteThenAWord.Run run in runs.Values.OrderBy(r => r.At))
+            {
+                Console.WriteLine(
+                    $"        0x{Rom.BaseAddress + (uint)run.At:X8}  "
+                    + string.Join(
+                        " ; ",
+                        run.Bytes.Select((b, i) =>
+                            $"{b}, {(run.Words[i] >= AByteThenAWord.FirstVariable ? $"0x{run.Words[i]:X4}" : run.Words[i].ToString())}")));
+            }
+        }
+
+        Console.WriteLine();
+        Console.WriteLine(
+            "  the same width is not the same reading — 0x9D's byte counts and 0x82's is 1 at every"
+            + " one of its places, and asking them together is how that gets missed");
     }
 
     private static void WriteBlocks(Rom rom, IReadOnlyList<uint> addresses)
@@ -13046,6 +13114,9 @@ public static class Program
                                     what it does with them: handed over, asked for, taken
                                     away, sold, or loaded for a routine. Reads rather than
                                     runs, so a gift on a branch nobody can take still shows.
+              --slots N[,N]         for each command: is its first byte an index? Runs of it,
+                                    whether every run counts 0,1,2 from nought, and the floor
+                                    drawn from the values that byte actually takes
               --field-effects       what number dofieldeffect takes, against the move the same
                                     block asked about, with the four sites that take one with no
                                     move anywhere near them
@@ -13306,6 +13377,9 @@ public static class Program
 
         public bool FieldEffects { get; private init; }
 
+        /// <summary>Commands to ask the index question of.</summary>
+        public IReadOnlyList<byte> Slots { get; private init; } = [];
+
         /// <summary>Addresses to decode and print, or nothing.</summary>
         public IReadOnlyList<uint> ReadFrom { get; private init; } = [];
 
@@ -13519,6 +13593,7 @@ public static class Program
             bool arrivals = false;
             bool theFloor = false;
             bool fieldEffects = false;
+            var slots = new List<byte>();
             var readFrom = new List<uint>();
             bool fights = false;
             bool whoKnows = false;
@@ -13789,6 +13864,15 @@ public static class Program
                     case "--field-effects":
                         fieldEffects = true;
                         break;
+                    case "--slots":
+                    {
+                        foreach (string named in Next(args, ref i, "--slots").Split(','))
+                        {
+                            if (TryNumber(named, out int one) && one is >= 0 and <= 0xFF) slots.Add((byte)one);
+                        }
+
+                        break;
+                    }
                     case "--read-from":
                     {
                         foreach (string named in Next(args, ref i, "--read-from").Split(','))
@@ -14124,6 +14208,7 @@ public static class Program
                 Arrivals = arrivals,
                 TheFloor = theFloor,
                 FieldEffects = fieldEffects,
+                Slots = slots,
                 ReadFrom = readFrom,
                 Play = play,
                 WhereFrom = whereFrom,
