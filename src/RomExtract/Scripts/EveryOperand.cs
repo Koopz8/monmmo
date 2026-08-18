@@ -30,7 +30,7 @@ public sealed record OneOperand(byte Code, int At, int Numbers, int Places, int 
     /// <summary>The share of what it names that something writes.</summary>
     public double Share => Numbers == 0 ? 0 : (double)Written / Numbers;
 
-    public string Name => $"0x{Code:X2} arg{At}";
+    public string Name => EveryOperand.NameOf(Code, At);
 
     public override string ToString() =>
         $"{Name}: {Numbers,4} number(s) at {Places,5} place(s), {Written,4} written — {Share,6:P0}"
@@ -67,6 +67,32 @@ public sealed record OneOperand(byte Code, int At, int Numbers, int Places, int 
 public static class EveryOperand
 {
     private const byte Compare = 0x21;
+
+    /// <summary>What an operand is called, in one place so a seed can be filtered by name.</summary>
+    public static string NameOf(byte code, int at) => $"0x{code:X2} arg{at}";
+
+    /// <summary>
+    /// A seed with the operands that name VALUES taken out of it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Without this the mirror is unusable.</b> Seeding on the writers can only find operands
+    /// naming variables something writes, so 252 could not see a read of a variable only compiled
+    /// code ever writes. The obvious fix is to seed on the readers instead — and the reader list
+    /// contains <c>0x1A arg2</c>, which names 149 numbers of which three are ever written (244).
+    /// Seed on that and "is this number a variable?" becomes "is this number small?", so
+    /// <c>giveitem</c>'s item id scores a hundred per cent.
+    /// </para>
+    /// <para>
+    /// Measured on this cartridge: 27 candidates with it in, <b>one</b> with it out. Which
+    /// operands name values is not asserted here — it comes from
+    /// <see cref="BothNamespaces.NameValues"/>, which decides by how much of what each one names
+    /// is ever written.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyCollection<(byte Code, int At)> Without(
+        IEnumerable<(byte Code, int At)> operands, IReadOnlyCollection<string> namingValues) =>
+        [.. operands.Where(o => !namingValues.Contains(NameOf(o.Code, o.At)))];
 
     /// <summary>
     /// Every operand of every command the given scripts read, with its written-ness.

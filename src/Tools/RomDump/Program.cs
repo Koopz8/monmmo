@@ -9004,13 +9004,41 @@ public static class Program
 
         MapLibrary library = MapLibrary.Open(rom);
 
-        IReadOnlyList<OneOperand> all = EveryOperand.In(
-            rom,
-            library.All().SelectMany(EveryScriptOn).Select(s => s.Address),
-            TwoNamespacesOneNumber.Writers);
+        List<uint> from = [.. library.All().SelectMany(EveryScriptOn).Select(s => s.Address)];
+
+        IReadOnlyList<OneOperand> all = EveryOperand.In(rom, from, TwoNamespacesOneNumber.Writers);
 
         (byte Code, int At)[] known =
             [.. TwoNamespacesOneNumber.Writers, .. TwoNamespacesOneNumber.Readers];
+
+        // AND THE SAME SWEEP SEEDED THE OTHER TWO WAYS. Seeding on the writers can only find an
+        // operand naming a variable something WRITES — a read of a variable only compiled code
+        // ever writes scores nought and is indistinguishable from an operand naming item ids.
+        // 0x405F is exactly that shape: forty-three squares wait on it and nothing in sixteen
+        // megabytes writes it (250). So the seed is run three ways and the difference is the
+        // finding.
+        // AND THE READER SEED HAS TO LEAVE OUT THE OPERAND THAT NAMES VALUES, or the mirror is
+        // unusable: 0x1A arg2 names 149 numbers of which 3 are ever written (244), so seeding on
+        // it turns "is this number a variable?" into "is this number small?" and every operand
+        // naming item ids scores a hundred per cent. The raw version is printed too, because the
+        // size of that difference is the argument for the correction.
+        BothNamespaces scan = TwoNamespacesOneNumber.Of(rom, from);
+
+        IReadOnlyList<string> values = scan.NameValues;
+
+        IReadOnlyCollection<(byte Code, int At)> reading =
+            EveryOperand.Without(TwoNamespacesOneNumber.Readers, values);
+
+        IReadOnlyList<OneOperand> byReadersRaw =
+            EveryOperand.In(rom, from, TwoNamespacesOneNumber.Readers);
+
+        IReadOnlyList<OneOperand> byReaders = EveryOperand.In(rom, from, reading);
+
+        IReadOnlyList<OneOperand> byBoth =
+            EveryOperand.In(rom, from, [.. TwoNamespacesOneNumber.Writers, .. reading]);
+
+        double ShareIn(IReadOnlyList<OneOperand> of, OneOperand one) =>
+            of.FirstOrDefault(o => o.Code == one.Code && o.At == one.At)?.Share ?? 0;
 
         Console.WriteLine(
             $"  {all.Count} operand(s) name at least 4 number(s) between them, over every"
@@ -9077,6 +9105,66 @@ public static class Program
                 $"    {one.Name}: {one.ComparedNext} of {one.Places} — {one.ComparedShare:P0}"
                 + (known.Contains((one.Code, one.At)) ? "   <- already named" : "   <- NAMED BY NEITHER TABLE"));
         }
+
+        // THE MIRROR, which is a different question and not a re-run. An operand naming numbers
+        // the READERS read and the WRITERS do not is naming variables nothing in the scan writes
+        // — the code boundary with an operand on it — and the first seed cannot see one.
+        Console.WriteLine();
+        Console.WriteLine(
+            "  and the same sweep seeded on the READERS, and on both — an operand high on the"
+            + " readers and low on the writers names variables nothing in the scan writes, which"
+            + " the first seed cannot tell from an operand naming item ids:");
+
+        List<OneOperand> mirror =
+        [
+            .. byBoth.Where(o => o.Share >= 0.5 && !known.Contains((o.Code, o.At)))
+                .OrderByDescending(o => o.Share),
+        ];
+
+        Console.WriteLine(
+            mirror.Count == 0
+                ? "    NOTHING outside the tables scores above half on the widest seed either"
+                : $"    {mirror.Count} operand(s) score above half on the widest seed and are in"
+                  + " neither table:");
+
+        foreach (OneOperand one in mirror)
+        {
+            Console.WriteLine(
+                $"      {one.Name}: {one.Numbers} number(s) — writers {ShareIn(all, one):P0},"
+                + $" readers {ShareIn(byReaders, one):P0}, both {one.Share:P0}"
+                + (ShareIn(all, one) < 0.5 && one.Share >= 0.5
+                    ? "   <- INVISIBLE TO THE FIRST SEED"
+                    : ""));
+        }
+
+        // THE SIZE OF THAT CORRECTION, because the uncorrected mirror is the thing worth
+        // printing: it produced 27 candidates and every one of them was an operand naming small
+        // numbers scoring against 0x1A arg2's 149 values.
+        IReadOnlyList<OneOperand> rawMirror = EveryOperand.Unknown(byReadersRaw, known);
+
+        Console.WriteLine(
+            $"    with the value-naming operand(s) LEFT IN the seed it would be {rawMirror.Count}"
+            + " candidate(s) — 244's fault, met again in a new instrument, and the reason the"
+            + " reader seed is corrected before it is used");
+
+        Console.WriteLine(
+            "    the seeds: writers name "
+            + $"{all.Where(o => TwoNamespacesOneNumber.Writers.Contains((o.Code, o.At))).Sum(o => o.Numbers)}"
+            + $" number(s), the corrected readers {all.Where(o => reading.Contains((o.Code, o.At))).Sum(o => o.Numbers)}"
+            + $", the raw readers {all.Where(o => TwoNamespacesOneNumber.Readers.Contains((o.Code, o.At))).Sum(o => o.Numbers)}"
+            + " — a wider seed finds more by being wider, so the widths are printed beside the"
+            + " counts");
+
+        // AND THE CLAIM, said once and plainly, because a sweep whose whole purpose is to be able
+        // to come back empty should say so when it does.
+        Console.WriteLine();
+        Console.WriteLine(
+            unknown.Count == 0 && mirror.Count == 0
+                ? "  SO BOTH TABLES ARE COMPLETE on this cartridge: no operand outside them names"
+                  + " variables on either seed"
+                : $"  so what is left is {mirror.Union(unknown).Select(o => o.Name).Distinct().Count()}"
+                  + " operand(s) across both seeds: "
+                  + string.Join(", ", mirror.Union(unknown).Select(o => o.Name).Distinct()));
 
         Console.WriteLine();
         Console.WriteLine("  the whole table, best first:");

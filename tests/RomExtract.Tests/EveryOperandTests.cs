@@ -212,6 +212,62 @@ public sealed class EveryOperandTests
         Assert.Empty(EveryOperand.Unknown(all, [(0x16, 0), (0x42, 0)]));
     }
 
+    // ------------------------------------------------------------------------ the mirror
+
+    /// <summary>
+    /// THE THING 253 NEEDED: an operand that names VALUES is taken out of a seed before the seed
+    /// is used.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Seeding on the writers can only find operands naming variables something WRITES, so 252
+    /// could not have seen a read of a variable only compiled code ever writes. Seeding on the
+    /// readers instead is the obvious mirror — and the reader list contains <c>0x1A arg2</c>,
+    /// which names 149 numbers of which three are ever written. Seed on that and "is this number
+    /// a variable?" becomes "is this number small?", so <c>giveitem</c>'s item id scores a
+    /// hundred per cent.
+    /// </para>
+    /// <para>
+    /// Measured on the cartridge: <b>27 candidates with it in, one with it out.</b>
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void AValueNamingOperandIsTakenOutOfASeed()
+    {
+        IReadOnlyCollection<(byte Code, int At)> seed = EveryOperand.Without(
+            [(0x21, 0), (0x22, 0), (0x1A, 2)],
+            [EveryOperand.NameOf(0x1A, 2)]);
+
+        Assert.Equal([(0x21, 0), (0x22, 0)], [.. seed]);
+    }
+
+    /// <summary>
+    /// And an operand that does NOT name values stays in — the half without which the correction
+    /// empties the seed and every operand scores nought.
+    /// </summary>
+    [Fact]
+    public void AnOperandThatNamesVariablesStaysInTheSeed()
+    {
+        Assert.Equal(
+            [(0x21, 0)],
+            [.. EveryOperand.Without([(0x21, 0)], [EveryOperand.NameOf(0x1A, 2)])]);
+    }
+
+    /// <summary>
+    /// And the name a seed is filtered by is the same name an operand reports, or the filter
+    /// silently matches nothing and the correction is a no-op nobody would notice.
+    /// </summary>
+    [Fact]
+    public void TheNameASeedIsFilteredByIsTheNameAnOperandReports()
+    {
+        OneOperand one = Assert.Single(
+            Of([.. SetVar(0x8004, 1), .. SetVar(0x8008, 1), End]),
+            o => o.Code == 0x16 && o.At == 0);
+
+        Assert.Equal(EveryOperand.NameOf(0x16, 0), one.Name);
+        Assert.Empty(EveryOperand.Without([(0x16, 0)], [one.Name]));
+    }
+
     /// <summary>
     /// And the spread is printed so the threshold can be seen doing no work. A rule with a number
     /// in it that nobody can check is a number nothing computes (231).
