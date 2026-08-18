@@ -134,4 +134,75 @@ public sealed class WaitingOnANumberNobodyWritesTests
         // And a setvar too short to hold both halves says nothing.
         Assert.Null(WhenAMapRunsSomething.WhatIsSet(new ScriptCommand(0, 0x16, [0x55, 0x40])));
     }
+
+    // ------------------------------------------------- and the other list, asked at 250
+
+    /// <summary>
+    /// THE THING 250 ADDED: a trigger's condition goes through the same reading, not a copy.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A square that runs a script when a variable holds a value and a map that runs a script
+    /// when a variable holds a value are the same question, and this command had been asking one
+    /// of them since 229. Asked of the other, the bucket 229 reported as empty is not: nought
+    /// arrival conditions name a variable nothing writes and <b>forty-three squares do</b>, all
+    /// on one variable.
+    /// </para>
+    /// <para>
+    /// The reading is shared rather than copied. Five private copies of "every script on a map"
+    /// is how 221, 222 and 223 all ran on four fifths of the cartridge, and a sixth copy of this
+    /// one would be the same fault in a new place.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void ATriggersConditionGoesThroughTheSameReading()
+    {
+        WhenAMapRunsSomething.Arrival square = WhenAMapRunsSomething.For(
+            "3.42", 0x405F, 4, 0x081A7800, new Dictionary<int, int>());
+
+        Assert.True(square.NothingWritesIt);
+        Assert.Equal((0x405F, 4), (square.Variable, square.Value));
+    }
+
+    /// <summary>
+    /// And the two lists are told apart, or a total that mixed them would hide the one that
+    /// behaves differently — which is the whole finding.
+    /// </summary>
+    [Fact]
+    public void WhichListAskedIsCarried()
+    {
+        WhenAMapRunsSomething.Arrival header = For(0x406F, 5, (0, 3));
+
+        WhenAMapRunsSomething.Arrival square = header with
+        {
+            Asks = WhenAMapRunsSomething.OnASquare,
+        };
+
+        Assert.Equal(WhenAMapRunsSomething.OnArrival, header.Asks);
+        Assert.NotEqual(header.Asks, square.Asks);
+    }
+
+    /// <summary>
+    /// AND THE SPLIT THAT KEEPS 43 FROM READING AS 43: a square waiting for NOUGHT on a variable
+    /// nothing writes is armed from the beginning, and one waiting for anything else can never
+    /// fire.
+    /// </summary>
+    /// <remarks>
+    /// Zero and absent are the same thing in this game's variable space, so "nothing writes it"
+    /// and "it holds nought" are one fact — which makes the two halves of that forty-three
+    /// opposite findings. A bucket is not an operation (236).
+    /// </remarks>
+    [Fact]
+    public void ASquareWaitingForNoughtOnAnUnwrittenVariableIsArmed()
+    {
+        WhenAMapRunsSomething.Arrival armed = WhenAMapRunsSomething.For(
+            "3.42", 0x405F, 0, 0x081A7800, new Dictionary<int, int>());
+
+        WhenAMapRunsSomething.Arrival never = WhenAMapRunsSomething.For(
+            "3.42", 0x405F, 4, 0x081A7800, new Dictionary<int, int>());
+
+        Assert.Equal(0, armed.Value);
+        Assert.NotEqual(0, never.Value);
+        Assert.True(armed.NothingWritesIt && never.NothingWritesIt);
+    }
 }

@@ -48,7 +48,24 @@ public static class WhenAMapRunsSomething
         /// waiting on a number no script produces.
         /// </summary>
         public bool NobodyWritesThisValue => Written > 0 && WrittenWithThis == 0;
+
+        /// <summary>What asked — a map's header on arrival, or a square somebody walks onto.</summary>
+        /// <remarks>
+        /// <b>Two lists, one reading.</b> A trigger is a square that runs a script when a
+        /// variable holds a value; an arrival condition is a map that runs a script when a
+        /// variable holds a value. They are the same question and 247 found that out the hard
+        /// way, so this reads both rather than growing a second copy of itself — which is 224's
+        /// fault and the reason this project has a rule about unifying onto the one that knows
+        /// the most.
+        /// </remarks>
+        public string Asks { get; init; } = OnArrival;
     }
+
+    /// <summary>A map's header, when the player arrives.</summary>
+    public const string OnArrival = "on arrival";
+
+    /// <summary>A square, when the player walks onto it.</summary>
+    public const string OnASquare = "on a square";
 
     /// <summary>
     /// Every arrival condition on every map, with what the file does about the variable it names.
@@ -68,6 +85,25 @@ public static class WhenAMapRunsSomething
 
             foreach (MapEntryScript entry in map.OnEntry.Where(ReadsThatAreNotCommands.IsARead))
                 found.Add(For(mapId, entry, written.GetValueOrDefault(entry.Variable)));
+
+            // THE SAME QUESTION, ASKED OF THE OTHER LIST. 247 found that a trigger's condition
+            // is a read nothing in this project counted; this is the half of --arrivals that
+            // was never pointed at it. A second private copy of this reading is how the shared
+            // script list came to be short for three milestones, so there is not one.
+            foreach (MapTrigger trigger in map.Triggers.Where(ReadsThatAreNotCommands.IsARead))
+            {
+                found.Add(
+                    For(
+                        mapId,
+                        trigger.Variable,
+                        trigger.Value,
+                        trigger.ScriptAddress,
+                        written.GetValueOrDefault(trigger.Variable))
+                        with
+                        {
+                            Asks = OnASquare,
+                        });
+            }
         }
 
         return found;
@@ -82,17 +118,26 @@ public static class WhenAMapRunsSomething
     /// </para>
     /// </summary>
     public static Arrival For(
-        string mapId, MapEntryScript entry, IReadOnlyDictionary<int, int>? written)
+        string mapId, MapEntryScript entry, IReadOnlyDictionary<int, int>? written) =>
+        For(mapId, entry.Variable, entry.Value, entry.ScriptAddress, written);
+
+    /// <summary>The same, taking the three fields both records carry.</summary>
+    public static Arrival For(
+        string mapId,
+        int variable,
+        int value,
+        uint address,
+        IReadOnlyDictionary<int, int>? written)
     {
         IReadOnlyDictionary<int, int> values = written ?? new Dictionary<int, int>();
 
         return new Arrival(
             mapId,
-            entry.Variable,
-            entry.Value,
-            entry.ScriptAddress,
+            variable,
+            value,
+            address,
             values.Values.Sum(),
-            values.GetValueOrDefault(entry.Value),
+            values.GetValueOrDefault(value),
             values);
     }
 

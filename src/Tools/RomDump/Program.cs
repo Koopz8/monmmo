@@ -7485,7 +7485,7 @@ public static class Program
     private static void WriteArrivals(Rom rom)
     {
         Console.WriteLine();
-        Console.WriteLine("WHAT A MAP RUNS ON ARRIVAL, AND WHETHER IT CAN");
+        Console.WriteLine("WHAT RUNS WHEN A VARIABLE SAYS SO, AND WHETHER IT CAN");
         Console.WriteLine();
 
         MapLibrary library = MapLibrary.Open(rom);
@@ -7500,32 +7500,103 @@ public static class Program
             return;
         }
 
-        // Conditions and PLACES, because the same script address is hung off many maps and the
-        // condition tables repeat with it. Counting the conditions is counting reads again.
-        int distinct = arrivals.Select(a => (a.Variable, a.Value, a.Address)).Distinct().Count();
+        // SPLIT BY WHICH LIST ASKED, and the whole thing printed for each. 247 found that a
+        // trigger's condition is the same question as a map header's; this command had been
+        // asking only one of them since 229, and a total that mixed the two would hide whichever
+        // list behaves differently. It is the same reading either way — that is the point.
+        foreach (string asks in new[]
+                 {
+                     WhenAMapRunsSomething.OnArrival,
+                     WhenAMapRunsSomething.OnASquare,
+                 })
+        {
+            List<WhenAMapRunsSomething.Arrival> of = [.. arrivals.Where(a => a.Asks == asks)];
 
-        Console.WriteLine(
-            $"  {arrivals.Count} condition(s) — {distinct} distinct (variable, value, script) — on "
-            + $"{arrivals.Select(a => a.Address).Distinct().Count()} script(s), across "
-            + $"{arrivals.Select(a => a.MapId).Distinct().Count()} map(s), naming "
-            + $"{arrivals.Select(a => a.Variable).Distinct().Count()} variable(s)");
+            if (of.Count == 0) continue;
 
-        // Both numbers, because the same condition table hangs off many maps. The first is how
-        // often the cartridge asks; the second is how many different things it is asking.
+            // Conditions and PLACES, because the same script address is hung off many maps and
+            // the condition tables repeat with it. Counting the conditions is counting reads.
+            int distinct = of.Select(a => (a.Variable, a.Value, a.Address)).Distinct().Count();
+
+            Console.WriteLine();
+            Console.WriteLine(
+                $"  {asks.ToUpperInvariant()}: {of.Count} condition(s) — {distinct} distinct"
+                + $" (variable, value, script) — on {of.Select(a => a.Address).Distinct().Count()}"
+                + $" script(s), across {of.Select(a => a.MapId).Distinct().Count()} map(s), naming"
+                + $" {of.Select(a => a.Variable).Distinct().Count()} variable(s)");
+
+            int Places(Func<WhenAMapRunsSomething.Arrival, bool> which) =>
+                of.Where(which).Select(a => (a.Variable, a.Value, a.Address)).Distinct().Count();
+
+            Console.WriteLine(
+                $"    {of.Count(a => a.NothingWritesIt),4} condition(s), "
+                + $"{Places(a => a.NothingWritesIt),3} distinct — a variable NOTHING in the scan writes at all");
+            Console.WriteLine(
+                $"    {of.Count(a => a.NobodyWritesThisValue),4} condition(s), "
+                + $"{Places(a => a.NobodyWritesThisValue),3} distinct — a variable something writes,"
+                + " but nobody writes THAT VALUE");
+            Console.WriteLine(
+                $"    {of.Count(a => a.WrittenWithThis > 0),4} condition(s), "
+                + $"{Places(a => a.WrittenWithThis > 0),3} distinct — a setvar in the scan can satisfy it");
+        }
+
         int NotedAsPlaces(Func<WhenAMapRunsSomething.Arrival, bool> which) =>
             arrivals.Where(which).Select(a => (a.Variable, a.Value, a.Address)).Distinct().Count();
 
         Console.WriteLine();
-        Console.WriteLine(
-            $"    {arrivals.Count(a => a.NothingWritesIt),4} condition(s), "
-            + $"{NotedAsPlaces(a => a.NothingWritesIt),3} distinct — a variable NOTHING in the scan writes at all");
-        Console.WriteLine(
-            $"    {arrivals.Count(a => a.NobodyWritesThisValue),4} condition(s), "
-            + $"{NotedAsPlaces(a => a.NobodyWritesThisValue),3} distinct — a variable something writes, but nobody"
-            + " writes THAT VALUE");
-        Console.WriteLine(
-            $"    {arrivals.Count(a => a.WrittenWithThis > 0),4} condition(s), "
-            + $"{NotedAsPlaces(a => a.WrittenWithThis > 0),3} distinct — a setvar in the scan can satisfy it");
+        // THE BUCKET THAT WAS EMPTY ON ONE LIST AND IS NOT ON THE OTHER. 229 reported "0 name a
+        // variable nothing writes at all" and that was true of the list it looked at. Asked of
+        // the squares, it is not — and a condition on a variable no setvar in the scan touches is
+        // a scene the run's own model can never start.
+        List<WhenAMapRunsSomething.Arrival> unwritable =
+            [.. arrivals.Where(a => a is { NothingWritesIt: true, Asks: WhenAMapRunsSomething.OnASquare })];
+
+        if (unwritable.Count > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine(
+                $"  the {unwritable.Count} square(s) waiting on a variable NO setvar in the scan"
+                + $" writes — {unwritable.Select(a => a.Variable).Distinct().Count()} variable(s),"
+                + " and the arrival list has NONE of this kind:");
+
+            foreach (IGrouping<int, WhenAMapRunsSomething.Arrival> one in unwritable
+                         .GroupBy(a => a.Variable).OrderBy(g => g.Key))
+            {
+                // AND SPLIT BY THE VALUE, because a variable nothing writes holds nought, and a
+                // square waiting for nought is armed from the beginning while one waiting for
+                // anything else can never fire at all. One number for both would be a bucket
+                // that is not an operation (236).
+                Console.WriteLine(
+                    $"      of those, {one.Count(a => a.Value == 0)} want NOUGHT — armed from the"
+                    + " start, because a variable nothing writes holds nought — and"
+                    + $" {one.Count(a => a.Value != 0)} want something else and can never fire:"
+                    + string.Join(
+                        "",
+                        one.Where(a => a.Value != 0).GroupBy(a => a.Value).OrderBy(g => g.Key)
+                            .Select(g => $" {g.Key}x{g.Count()}")));
+
+                Console.WriteLine(
+                    $"    0x{one.Key:X4} — wanted {string.Join("/", one.Select(a => a.Value).Distinct().Order())},"
+                    + $" {one.Count()} square(s) on {one.Select(a => a.MapId).Distinct().Count()} map(s):"
+                    + $" {string.Join(", ", one.Select(a => a.MapId).Distinct().Take(6))}"
+                    + (one.Select(a => a.MapId).Distinct().Count() > 6 ? ", ..." : "")
+                    + $"  ({one.Select(a => a.Address).Distinct().Count()} script(s))");
+
+                // AND THE OTHER MEANING OF "NOBODY WRITES IT". The bucket above is about the
+                // map scan; whether anything in sixteen megabytes writes it is a different
+                // question with a different answer, and 245 spent a milestone on exactly that
+                // distinction. Asked here rather than left to the reader to go and run.
+                IReadOnlyList<VariableSite> anywhere = EverywhereInTheImage.Writes(rom, one.Key);
+
+                int loads = EverywhereInTheImage.HeldAsAWord(rom, one.Key).Count(w => w.HeldByCode);
+
+                Console.WriteLine(
+                    $"      in the WHOLE IMAGE: {anywhere.Count(w => w.ReadsAsAScript)} place(s)"
+                    + $" write it ({anywhere.Count} raw), and the game's own code loads it as an"
+                    + $" aligned literal {loads} time(s) — so whatever arms these squares is"
+                    + " neither a script nor a literal this project can find (246)");
+            }
+        }
 
         Console.WriteLine();
         Console.WriteLine("  by variable, worst first:");
