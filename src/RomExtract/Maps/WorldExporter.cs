@@ -339,6 +339,24 @@ public static class WorldExporter
                 $"{triggers.Count(t => t.CanBeFought)} of them a fight");
         }
 
+        // AND THE SIGNS, which the exported record carried none of until 239 and which the
+        // walk therefore could not run. A count here is what makes "519 sign scripts" a number
+        // this repository prints rather than one a milestone document remembers — and the
+        // hidden-item split is the part that matters, because for those the record holds an
+        // item id where every other holds a pointer.
+        var signs = maps.SelectMany(m => m.Signs).ToList();
+
+        if (signs.Count > 0)
+        {
+            var scripted = signs.Where(s => s.HasScript).ToList();
+
+            log?.Invoke(
+                $"  {signs.Count} signs, {scripted.Count} of them a script at " +
+                $"{scripted.Select(s => s.ScriptAddress).Distinct().Count()} address(es) across " +
+                $"{maps.Count(m => m.Signs.Any(s => s.HasScript))} maps, " +
+                $"{signs.Count(s => s.IsHiddenItem)} a hidden item");
+        }
+
         var handing = maps.SelectMany(m => m.Objects).Where(o => o.GivesMon).ToList();
 
         if (handing.Count > 0)

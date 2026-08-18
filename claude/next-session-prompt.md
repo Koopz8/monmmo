@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-268`, 2952 tests green.
+`claude-279`, 3020 tests green.
 
 Standing rules — do not break these:
 
@@ -122,7 +122,8 @@ Traps worth carrying:
     stale in five of its six rows for thirteen milestones and nothing anybody wrote about it was
     false: every *difference* it is quoted for — `--surf` costs two, `--in-order` adds two and
     one and a party member — was still exactly right, because each milestone re-ran the pair it
-    cared about and pasted the delta onto a base nobody re-ran. **A table maintained by deltas
+    cared about and pasted the delta onto a base nobody re-ran. (`--surf` costs ONE since 239,
+    printed by the command; the sentence was true for twenty-two milestones and is not now.) **A table maintained by deltas
     drifts and stays self-consistent.** The only thing that catches it is running the whole
     block, which is why the prompt says to start with `--play` — and 207 is the first session
     that read the output against the table instead of past it.
@@ -163,12 +164,26 @@ Traps worth carrying:
     uncheckable, which is the least satisfying way for an audit to end and the only honest one.
     **Before quoting a number, know which command prints it.** If none does, that is the finding.
 
+17. **A test that is right for a one-way step is silently wrong for any other** (239). The
+    playthrough decided it had finished by comparing a pass with the one before it, and that
+    finds a fixed point and nothing else. It was correct for as long as everything the run did
+    was one-way: flags got set, things got picked up, and a pass that changed nothing had
+    nothing left to change. Running the signs put the first thing in that can take something
+    BACK — `9.6`'s fifteen doors share a block that sets and CLEARS `0x0001` — and the test
+    never fired again: every `--say-yes` row ran to the twenty-four-pass backstop reporting that
+    something never settles. **When you add a way for the run to undo something, the settle test
+    is the first thing that broke.** The fix keeps every state it has been in, and reports a
+    cycle as a THIRD answer rather than folding it into "nothing more opened", because a run
+    that settles and a run that oscillates are different facts. And the state is the CONTENTS of
+    the sets, not their sizes: a pass that clears one flag and sets another has the same count
+    and is a different state, and getting that wrong stops a run with somewhere left to go.
+
 ## Where things are
 
-Read `claude/milestone-238-the-same-width-is-not-the-same-reading.md` first, then `237`,
+Read `claude/milestone-239-the-fourth-list.md` first, then `238`, `237`,
 `236`, `235`, `234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
-**Twenty faults closed and every one was in this project, not on the cartridge.** A walk that
+**Twenty-two faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
 script" list; a list ranked by a count instead of by what it costs; a party that could not gain
 a level; a roadmap line that called a fix a cost; a continuation that carried flags and not
@@ -178,7 +193,9 @@ missing (`0x1F`, `0x6F`); a map's arrival script running after every person on t
 **a beaten trainer resuming inside the fight's own script instead of the bytes after it**,
 which skipped a `checkflag` at all eight gyms; and the floor table at the top of this file,
 stale in five of six rows for thirteen milestones while every sentence written about it stayed
-true (207).
+true (207); and at 239 **the exported map record carrying no signs at all**, so the walk went
+over a world with 519 sign scripts it could not see — 224's fault standing in the other half of
+the project, and the settle test that broke the moment they went in.
 
 `175-reading-the-file-not-the-world` is the instrument set (`--in-the-image`, `--climb`, the
 reversal control). `184` adds `--who-writes`. `187`/`188` are the two wrong widths and
@@ -247,8 +264,11 @@ settings in one process, printed with **the differences between them worked out 
 two of those same six rows**. A difference is only reported for a pair exactly ONE lever apart
 and it names both rows, so no sentence about a lever can outlive the base it was measured
 against — which is precisely how the block below went stale in five of six rows while every
-sentence quoted from it stayed true. It also prints two things nobody had said: `--say-yes` costs
-two party members and a pass, and `--surf` costs two passes as well as its two flags.
+sentence quoted from it stayed true. **It earned itself at 239**: running the signs changed
+`--surf` from costing two flags to costing one, and the command printed the new difference off
+the same six runs that printed the new rows, so the sentence moved in the output rather than in
+somebody's memory. It also prints `--boat`'s flag cost as +61 or +60 depending on `--in-order`,
+which is the kind of thing a hand-kept table rounds off.
 
 `--the-scan` is the error bar on every map-scan number: reads against byte positions for **every**
 command code, and a per-kind table with the ALONE columns — what each of the five kinds of script
@@ -325,7 +345,8 @@ override: the walk crosses water on its own when the party knows the move, which
 export between them) and prints the rows AND the differences between them, subtracted from those
 same six rows.** Do not apply a delta to this block by hand — that is what put it thirteen
 milestones out of date, and 230 built the command so that the absolutes and the sentences about
-them cannot come apart. Re-measured at 207 and again at 230; unchanged.
+them cannot come apart. Re-measured at 207, at 230, and **rewritten wholesale at 239**, which is
+the first milestone in ten to move a single number in it.
 
 **RE-MEASURED AT 207, all six rows, and five of them had drifted.** The map counts were right;
 every flag count was wrong, four party sizes were wrong and one row had the wrong number of
@@ -336,14 +357,27 @@ If you change anything the run touches, re-run these six and rewrite this block;
 delta to it.
 
 ```
---play                                      183 / 153 in 6, party of 6 at 52, 11 of 103 handed twice
+--play                                      183 / 160 in 6, party of 6 at 52, 11 of 104 handed twice
                                             crossing water: nobody ever knew move 57 — a wall
---play --say-yes                            243 / 231 in 5, party of 4 at 67, 10 of 155 handed twice
---play --say-yes --in-order                 243 / 233 in 5, party of FIVE at 67, 0 of 152 handed twice
---play --say-yes --boat                     381 / 293 in 6, party of 4 at 77, 11 of 204
---play --say-yes --boat --in-order          381 / 294 in 6, party of FIVE at 77, 0 of 200
---play --say-yes --boat --surf --in-order   381 / 292 in 4, party of five at 75, 0 of 200
-                                            <- --surf still COSTS two flags
+--play --say-yes                            243 / 234 in 6, party of 4 at 67, 10 of 155 handed twice
+--play --say-yes --in-order                 243 / 236 in 6, party of FIVE at 67, 0 of 152 handed twice
+--play --say-yes --boat                     381 / 295 in 7, party of 4 at 77, 11 of 204 handed twice
+--play --say-yes --boat --in-order          381 / 296 in 7, party of FIVE at 77, 0 of 200 handed twice
+--play --say-yes --boat --surf --in-order   381 / 295 in 5, party of five at 75, 0 of 200 handed twice
+                                            <- --surf now costs ONE flag, not two (239)
+
+the differences, printed by subtracting two of those same six rows:
+  --say-yes  (MODELLED)  +60 maps, +74 flags, +0 passes, -2 party
+  --boat     (MODELLED)  +138 maps, +61 flags (+60 with --in-order on), +1 pass, +0 party
+  --in-order (stricter)  +0 maps, +2 flags (+1 with --boat on), +0 passes, +1 party
+  --surf     (override)  +0 maps, -1 flag, -2 passes, +0 party
+
+--play stops because a pass opened nothing new. THE OTHER FIVE STOP BECAUSE THE STATE CAME BACK
+TO ONE IT HAD ALREADY BEEN IN — a CYCLE, not a fixed point (239). That is a third answer and not
+a failure: a two-cycle has opened everything it will ever open. `9.6`'s fifteen signs share a
+block that sets AND CLEARS 0x0001, so a walk that stands in front of all fifteen every pass
+flips one flag on and off forever. Do not fold it into "nothing more opened" — a run that
+settles and a run that oscillates are different facts about the world.
 ```
 
 **381 of 425 no longer needs `--surf`** — and it was 390 until 193 stopped the run playing each
@@ -380,7 +414,11 @@ doors announce themselves in 0x4001 x63, 0x8008 x25, 0x8004 x23, 0x4002 x6 — T
 5 places guard a coin hand-over; every bound plus its own gift is 10000; 0 chains in the reversal
 2 places sell coins for money at 20 each — READ; 3 price lists, 15 rows, all READ
 the floor is asked for money in ONE place and it is the coin counter; 8 at --say-yes and above
-the widest run sets 212 of the 322 gating flags — 110 gates it never opens; 201 at the floor
+the widest run sets 212 of the 322 gating flags — 110 gates it never opens; 199 at the floor
+  the floor's own gating count went 121 -> 123 at 239 and the widest run's 212/110 did not move
+702 signs: 519 a script at 360 addresses on 143 maps, 183 a hidden item — `--export-world` (239)
+  the RUN could not see ONE of them until 239, because MapData carried no sign list at all
+  they move NO map count at any lever setting — not one square of this game is behind a sign
 those 110 are 35 with no opener, 31 never run, 17 never picked up, 15 obstacles, 12 past the boundary
 35 and 15 are the same at every lever setting, which is how a property of the FILE has to behave
 3 scripts hold 27 gating flags: CUT and ROCK SMASH (15, 2 scripts), STRENGTH (12, 1) — CHECKED
@@ -461,6 +499,21 @@ the raw 0x9C sweep is 11446 sites in BOTH images and the REVERSAL READS ON MORE 
 ```
 
 ## The next task, precisely
+
+**START HERE — what 239 opened, and the numbering below is unchanged so item references still
+work.** Signs are in the run now, and four things follow directly:
+
+* **Which signs actually ran, and what the seven flags at the floor are.** The floor went 153 to
+  160 and its gating count 121 to 123, so two of the seven gate something and nothing has said
+  which. `--trace 0xNNNN` takes a flag; that is one command per flag.
+* **`9.6`'s puzzle.** Fifteen doors, `0x8004` against `0x8008`, `0x0001` and `0x0002` as its own
+  state. It is why five of the six rows now report a cycle. Read far enough to explain the
+  cycle and no further — it is a slot-machine-adjacent minigame, not a gate.
+* **Whether the union still equals the final pass.** 190 measured them equal at every lever
+  setting, and that was a fact about a one-way run. With a two-cycle they can differ by a flag,
+  and nothing has re-measured it. This is cheap and it is exactly trap 17's second half.
+* **`3.57 sign (9,43)`** — the LEMONADE example that has been quoted in this prompt for
+  milestones as something the run could not reach. It can now.
 
 1. **`0x0AB` IS READ (232) and the block audit is DONE (231).** What is left of the audit: What is left of it: the three
    numbers nothing prints (`62 gates hold 240 people`, `146 trees and rocks`, `158 objects`) and
@@ -792,7 +845,10 @@ the other, and nothing about a single green run says which. 207 writes the 2x2 d
 ## Open, and honestly owed
 
 * Held items are a sixth way a thing changes hands and `Everywhere` does not know.
-* The playthrough never runs signs. `3.57 sign (9,43)` asks for a LEMONADE and takes it away.
+* ~~The playthrough never runs signs.~~ **CLOSED AT 239** — and it was never a choice: `MapData`
+  carried no sign list at all, so there was nothing for the walk to skip. Still owed off it:
+  which signs ran, what the floor's seven new flags are, and `3.57 sign (9,43)`, which asks for
+  a LEMONADE and takes it away and can now actually be reached.
 * Eleven maps have no way in at all, five of them Sevii isles with no dock in the export.
 * A way in reports only the shortest chain, so an upper-bound edge can hide a real one.
 * `Bag.PocketCapacity` was counted across the whole bag — fixed at 190 tests ago, but it shipped.
