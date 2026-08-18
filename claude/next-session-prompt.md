@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-285`, 3067 tests green.
+`claude-286`, 3082 tests green.
 
 Standing rules — do not break these:
 
@@ -232,14 +232,42 @@ Traps worth carrying:
     variable something looks at is a variable something writes, and that operand names 149
     numbers of which 3 ever are.
 
+24. **A READ IS NOT ALWAYS A COMMAND** (246). Trap 1 says the answer is often in a part of the
+    file the scan does not open. This is the same fault one level in: the scan opened the right
+    bytes and enumerated the wrong KIND of thing. Every sweep in this repository walks a script
+    stream and decides what a number is by which operand of which command named it — and a map
+    runs a script on arrival *when a variable holds a value*, which is two halfwords in the map's
+    own header, names a variable, is a read, and involves no command at all. So 245 reported
+    `0x407C` as looked at NOWHERE IN SIXTEEN MEGABYTES while nineteen maps were consulting it, and
+    `--arrivals` had been printing all 350 conditions since 229. **Before believing "nothing looks
+    at this", ask what kinds of thing can look — not just where the scan looked.** The other
+    command-enumerating readings (`--who-reads`, the flag work, `--in-the-image`) have not been
+    asked this question.
+
+25. **A FILTER THAT LOOKS CONVINCING ON THE FEW AND DIES ON THE DENOMINATOR** (246). The word
+    sweep asked only for a four-byte-aligned word equal to a variable's id. On the nine it looked
+    excellent — two hits, three hits, reversal nought. Over all ninety variables the map scan
+    writes it is **41 against a reversed 27**, which is the same order of number and is exactly
+    what 245 threw its own whole-image aggregate away for. Requiring an *instruction that reaches
+    the word* takes it to 29 against 4. **Run the weak version's denominator before believing the
+    strong-looking few** — and print the without-the-extra-condition number beside the corrected
+    one, permanently, so the reader can see which condition is doing the work.
+
+26. **PREDICTING THE BREAK COUNT TURNS A GREEN BREAK INTO A KNOWN HOLE** (246). Trap 20 says to
+    count what a break kills against what it should have killed. 246 wrote seven predictions down
+    before running any of them and got seven matches — including one predicted **0**, the reversed
+    floor, a control nothing could fail. A green break is normally hours of suspecting the fixture
+    and then the rule's location; this one was a finding the moment it came back, because the
+    prediction said so first. Two fixtures were added and the same break re-run kills exactly one.
+
 ## Where things are
 
-Read `claude/milestone-245-twelve-the-cartridge-never-consults.md` first, then `244`, `243`,
+Read `claude/milestone-246-a-read-that-is-not-a-command.md` first, then `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
 `238`, `237`,
 `236`, `235`, `234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
-**Twenty-three faults closed and every one was in this project, not on the cartridge.** A walk that
+**Twenty-four faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
 script" list; a list ranked by a count instead of by what it costs; a party that could not gain
 a level; a roadmap line that called a fix a cost; a continuation that carried flags and not
@@ -253,8 +281,14 @@ true (207); and at 239 **the exported map record carrying no signs at all**, so 
 over a world with 519 sign scripts it could not see — 224's fault standing in the other half of
 the project, and the settle test that broke the moment they went in; and at 240 **that settle
 test itself, made of six counts** — so a pass that cleared one flag and set another matched all
-six and stopped the run, three lines below the documentation saying why it must not.
+six and stopped the run, three lines below the documentation saying why it must not; and at 246
+**every variable sweep in the project enumerating COMMANDS**, so an arrival condition — two
+halfwords in a map's header naming a variable — was not a read, and seven variables were reported
+as consulted by nothing while one of them was consulted on nineteen maps.
 
+`246` is the read that is not a command, and the literal-pool test for whether compiled code holds
+a number — both live inside `--namespaces`, which is now the fullest single instrument in the
+project. `245` is the twelve. `244` is the operand that names a value.
 `175-reading-the-file-not-the-world` is the instrument set (`--in-the-image`, `--climb`, the
 reversal control). `184` adds `--who-writes`. `187`/`188` are the two wrong widths and
 `--stops`. `189` is `--trace` and the ordering. `190` is `--fights` and the handover count. `191` is
@@ -320,10 +354,26 @@ namespace and the spread PER OPERAND**, which is what caught 244: one operand he
 out-of-band number. It gives the raw shared count (27) and the corrected one (**1**, `0x4001`,
 against the same floor of 1.71), the written-ness percentages the correction rests on, and the
 whole-image version (2117 / 12659 / 1182) as the noise it is. **It also answers 184's other
-half where the question HAS an answer** (245): 26 of the 90 variables the map scan writes are
-never looked at, 14 past the code boundary and **12 looked at nowhere in sixteen megabytes**.
+half where the question HAS an answer** (245, corrected at 246): **19** of the 90 variables the
+map scan writes are never looked at, 10 past the code boundary and **9 looked at nowhere in
+sixteen megabytes**. It was 26 / 14 / 12 until 246 counted the read that is NOT a command — an
+arrival condition is two halfwords in a map's header naming a variable, and seven of the 26 were
+being read by one, `0x407C` on NINETEEN maps. The seven that moved are named in the output with
+what reads each, and the commands-only list is printed beside the corrected one so the size of
+the correction is visible rather than trusted.
 The whole-image version of that same question is 650 against a reversed-image 1070 — the same
 order of number, so only the map-scan one means anything.
+
+**And it asks whether the game's own CODE holds a number** (246), which is the only handle this
+project has on a variable no script reads. A sixteen-bit constant does not fit in a THUMB
+instruction, so it goes in a four-byte-aligned literal pool and is loaded PC-relative: an aligned
+word equal to the id, at bytes no script owns, with an `ldr rX, [pc, #imm]` whose arithmetic lands
+on exactly it. **2 of the 9 are held that way** — `0x4026` and `0x403E`, five loads between them,
+all inside `0x0CCE38`-`0x0CD02C` — **and 7 are held by nothing in the file at all**. The word
+ALONE is a weak filter and the denominator is printed to say so: 41 of 90 against a reversed 27,
+which the instruction takes to 29 against 4. And the limit is printed too — a routine computing an
+id from a base holds the BASE, and `0x4000` is loaded 56 times against a reversed 0, so **"held by
+nothing" is not "read by nothing"**.
 
 ** They share the number space, so `--trace 0x003F`
 answers — "nothing the run executed touched it" — about something else entirely. What moved a
@@ -535,10 +585,18 @@ the 12 STRENGTH boulders are SEAFOAM and VICTORY ROAD, and their flags split THR
 --routines: 1118 branching sites at 437 byte positions in the file; 48 routines are branched on
 0x188's one place comes to nothing
 0x4059 has one writer and NO readers anywhere; 0x4055 has 21 readers against a floor of 0
-26 of the 90 variables the map scan WRITES are never looked at: 14 past the boundary, 12 looked
-  at NOWHERE in the image — 0x4026, 0x403E, 0x4059, 0x405B, 0x405C, 0x405D, 0x4075, 0x407C,
-  0x407D, 0x4084, 0x4088, 0x408B, every one of them 0 sites-as-script against a floor of 0-1 (245)
+19 of the 90 variables the map scan WRITES are never looked at: 10 past the boundary, 9 looked
+  at NOWHERE in the image — 0x4026, 0x403E, 0x4059, 0x405B, 0x405C, 0x405D, 0x407D, 0x4088,
+  0x408B, every one of them 0 sites-as-script against a floor of 0-1 (245, corrected at 246)
+  it was 26 / 14 / 12 until 246: SEVEN were read by a map header on arrival, which is a read and
+  is not a command — 0x4050, 0x4063, 0x406E, 0x4075, 0x407C (NINETEEN maps), 0x4083, 0x4084
   the value-naming operand hid NOUGHT of them, measured both ways — 244's fault does not reach here
+2 of the 9 are held by compiled code — 0x4026 x2 and 0x403E x3, reversed 0, all five loads inside
+  0x0CCE38-0x0CD02C; 7 are held by nothing at all. The denominator: 29 of 90 against a reversed 4
+  (41 against 27 without the instruction, which is why the instruction is in the rule) (246)
+0x4010, 0x4026 and 0x403E are BIRTH ISLAND 2.56's on-load, three setvars in a row, and all three
+  are loaded by compiled code and read by no script — 0x4010 x4 across three regions (246)
+27 variables are named by an arrival condition; only 7 of them were on the deaf list (246)
 0x083 and 0x084 are asked THREE times between them (1 and 2) and carry 39 of the 64 branches
   nought takes in the widest run's mixed bucket — 3 of its 19 byte positions of 44
 336 places read an answer through a call: 225 belong to 6 routines, 57 turn on an arm
@@ -627,8 +685,18 @@ still work.**
   run, which nobody has asked is a wide sign or a wide walk. And **`10.6 (4,1)`** (242), the one
   sign nothing in the cartridge can stand beside — a mistake, furniture, or a square this
   project's collision reading gets wrong. One `--read-from` and one `--script-map 10.6`.
-* **What the twelve are for** (245) — dead space, read by address rather than by script, or kept
-  for a routine. Nothing distinguishes those yet.
+* ~~What the twelve are for.~~ **MOSTLY CLOSED AT 246**, and the answer was about the sweep:
+  three of the twelve are read by a map HEADER on arrival, which is a read and is not a command,
+  so no sweep in this project could see it — `0x407C` on nineteen maps. Of the nine left, two
+  (`0x4026`, `0x403E`) are held by compiled code as literal-pool words an instruction loads, and
+  **seven are held by nothing in the file at all**: `0x4059`, `0x405B`, `0x405C`, `0x405D`,
+  `0x407D`, `0x4088`, `0x408B`, each written with 1 once or twice. What is left: separating
+  "dead" from "read from a BASE" — `0x4000` is itself loaded 56 times, so a routine walking a
+  range of ids reads all seven and nothing here would see it. That is a real instrument and it is
+  not this one.
+* **Does any OTHER reading in this project miss the header read?** (246) `--who-reads`, the flag
+  work and `--in-the-image` all enumerate commands, exactly as `--namespaces` did. Nothing has
+  asked. This is the cheapest high-value read on the list.
 * **`0x026C` and `0x0807`** — the two that actually make the run go round (240). Set on one map,
   cleared on another, holding nothing. `--read-from` on the four addresses is one command.
 * ~~`0x4001` is a flag in the run and a variable in the doors reading.~~ **CLOSED AT 243, and
