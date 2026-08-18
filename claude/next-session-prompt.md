@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-290`, 3105 tests green.
+`claude-291`, 3106 tests green.
 
 Standing rules — do not break these:
 
@@ -313,15 +313,39 @@ Traps worth carrying:
     tells you which fixture does not cover what you thought, which is the same information a green
     break gives and cheaper.
 
+33. **TWO INDEPENDENT LISTS WRONG IN THE SAME PLACE CANNOT CATCH EACH OTHER** (251). 224's rule
+    is that a shared wrong list is worse than five private ones, because a shared one agrees with
+    itself. This is its companion: `copyvar`'s destination was missing from BOTH of this
+    repository's write tables, in different files, and having two of them bought nothing. The
+    other half of the same copying pair was present in both, one line away in one of them.
+    **When you find a table of opcodes, check it against the OTHER operand of the same command
+    and against the neighbouring command of the same pair**, and grep for every other table of
+    the same shape.
+
+34. **A GUARD CAN ENSHRINE THE FAULT, AND ITS COMMENT WILL SOUND RIGHT** (251). The test on
+    `copyvar` asserted the destination was named by NOTHING, on the stated grounds that counting
+    it "makes every write a read" — which is true of the READER list and was applied to the
+    writer list too. A break aimed at the write table went red against it, correctly, on a rule
+    that was wrong. **A red break confirms the guard is wired up; it says nothing about whether
+    the guard is right.** What settled it was the instrument's own rule — a variable something
+    looks at is a variable something writes — pointed at the change: every reading operand's
+    written-ness rose toward 100% and the value-naming one stayed at 2%.
+
+35. **IF THE RULE IS A LIST, THE FIXTURE NEEDS ONE OF EVERYTHING AND HAS TO NAME THEM** (251).
+    `EveryWayANumberGetsIntoAVariableIsFound` asserted `4` distinct write commands against a
+    fixture built with four of the five. The name promised everything, the count was satisfied by
+    whatever the code happened to have, and the fixture supplied the same short list. It asserts
+    five BY NAME now, so "five ways" cannot be satisfied by any five commands.
+
 ## Where things are
 
-Read `claude/milestone-250-the-bucket-that-was-empty-on-one-list.md` first, then `249`, `248`,
+Read `claude/milestone-251-the-operand-in-neither-table.md` first, then `250`, `249`, `248`,
 `247`, `246`, `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
 `238`, `237`,
 `236`, `235`, `234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
-**Twenty-seven faults closed and every one was in this project, not on the cartridge.** A walk that
+**Twenty-eight faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
 script" list; a list ranked by a count instead of by what it costs; a party that could not gain
 a level; a roadmap line that called a fix a cost; a continuation that carried flags and not
@@ -347,7 +371,10 @@ index and therefore by a flag nothing in the file names — so every flag count 
 a count of flags something NAMES and is short by up to 183; and at 249 **the run standing on 182
 of those 183 and collecting none**, which is what 239 left when it put signs into the walk; and at
 250 **`--arrivals` asking its question of only one of the two lists that ask it** — its empty
-"nothing writes this variable" bucket is 43 on the trigger list.
+"nothing writes this variable" bucket is 43 on the trigger list; and at 251 **`copyvar` missing
+from BOTH of this repository's write tables** — the other half of the same copying pair was in
+both, one line away — so sixteen variables read as written by nothing and every reading operand's
+written-ness was short.
 
 `246` is the read that is not a command, and the literal-pool test for whether compiled code holds
 a number — both live inside `--namespaces`, which is now the fullest single instrument in the
@@ -687,14 +714,17 @@ the 12 STRENGTH boulders are SEAFOAM and VICTORY ROAD, and their flags split THR
 --routines: 1118 branching sites at 437 byte positions in the file; 48 routines are branched on
 0x188's one place comes to nothing
 0x4059 has one writer and NO readers anywhere; 0x4055 has 21 readers against a floor of 0
-5 of the 90 variables the map scan WRITES are never looked at by any command: 3 past the boundary
-  (0x4010, 0x8001, 0x8002) and 2 NOWHERE in the image (0x4026, 0x403E) — and ALL FIVE are loaded
-  by compiled code, so NOTHING this cartridge writes goes unconsulted (245 -> 246 -> 247)
+7 of the 106 variables the map scan WRITES are never looked at by any command: 5 past the boundary
+  (0x4010, 0x8001, 0x8002, 0x800B, 0x8012) and 2 NOWHERE in the image (0x4026, 0x403E) — and
+  NOTHING this cartridge writes goes unconsulted (245 -> 246 -> 247, population corrected at 251)
+  it was 90 variables until 251 put copyvar's destination in the write table — 16 more
   it was 26 by the commands alone: 21 of those are read by a map header or a TRIGGER, neither of
   which is a command — 0x407C on NINETEEN maps, 0x400F on 8, 0x400E on 8, 0x4062 on 4
   the value-naming operand hid NOUGHT of them, measured both ways — 244's fault does not reach here
-the load denominator: 29 of 90 against a reversed 4 (41 against 27 WITHOUT the instruction, which
-  is why the instruction is in the rule) (246); 0x4000 itself is loaded 1 time against a reversed 0
+the load denominator: 33 of 106 against a reversed 5 (50 against 37 WITHOUT the instruction, which
+  is why the instruction is in the rule) (246, 251); 0x4000 is loaded 1 time against a reversed 0
+every READING operand's written-ness: 0x19 arg2 93%, 0x21 arg0 98%, 0x22 arg0/arg2 100%, and the
+  value-naming 0x1A arg2 at 2% — the whole shortfall is TWO numbers, 0x8013 and 0x4025 (251)
 0x4010, 0x4026 and 0x403E are BIRTH ISLAND 2.56's on-load, three setvars in a row, and all three
   are loaded by compiled code and read by no script — 0x4010 x4 across three regions (246)
 61 variables are read without a command: 27 by an arrival condition (350 places, 61 maps) and 42
