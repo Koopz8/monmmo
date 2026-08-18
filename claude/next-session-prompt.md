@@ -1,7 +1,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-267`, 2946 tests green.
+`claude-268`, 2952 tests green.
 
 Standing rules — do not break these:
 
@@ -101,8 +101,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-228-the-flags-a-map-moves-on-its-own.md` first, then
-`227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
+Read `claude/milestone-229-waiting-on-a-number-nobody-writes.md` first, then
+`228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
 **Twenty faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
@@ -151,7 +151,19 @@ dotnet run -c Release --project src/Tools/RomDump -- firered.gba --stops 0xC0
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --script-map 6.2
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --routines
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --standard
+dotnet run -c Release --project src/Tools/RomDump -- firered.gba --the-scan
+dotnet run -c Release --project src/Tools/RomDump -- firered.gba --two-commands
+dotnet run -c Release --project src/Tools/RomDump -- firered.gba --arrivals
 ```
+
+`--the-scan` is the error bar on every map-scan number: reads against byte positions for **every**
+command code, and a per-kind table with the ALONE columns — what each of the five kinds of script
+reaches, asks and moves that no other kind does. `--two-commands` measures what `0x63` and `0x65`
+take, with floors. `--arrivals` reads the condition on every script a map runs on arrival — **a
+variable AND a value** — and asks whether any `setvar` in the scan ever writes that value. Nought
+name a variable nothing writes; **28 of 69 want a value nobody writes**. Only a `setvar` says what
+value it writes, so a condition satisfiable through a `copyvar` reads as satisfiable by nothing:
+that overstates the boundary rather than understating it, which is the safe direction.
 
 `--standard` is the routines reached by NUMBER. It counts what the maps ask for, hunts the table
 by shape with a reversed-image floor beside it — **24 candidates in the file and 0 in the
@@ -282,6 +294,9 @@ neither is NAMED: what they take is read, what they do is still a guess
 0x5C trainerbattle is 794 reads at 729 places and --fights says 729 — two readings agreeing
 65 flags are moved ONLY by a map's own scripts: 54 on load, 11 on arrival — the world setting up
 0x0070's only two movers in the image are the two arms of one branch on 0x0180, unanswerable
+350 arrival conditions at 69 distinct (variable, value, script) on 58 scripts across 61 maps
+28 of the 69 want a value NO setvar in the scan writes; 0 name a variable nothing writes at all
+0x406F: 20 maps want 1/2/3/5/6/7/8 and the only writer in the scan writes 0, at 3 places
 178 routines called at 936 places; the ceiling is 45 of 437 byte positions
 the run's silence decides at 11 byte positions: 0x188 (1) and 0x0A3 (8), 0x0D5, 0x189
 --routines: 148 sites have a compare past something, 81 with nothing else — 38 come back,

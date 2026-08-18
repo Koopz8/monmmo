@@ -6,11 +6,12 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **Sixty-five of the game's flags are moved only by a map's own startup scripts** — not by a
-  person, a sign, or walking anywhere. The world setting itself up. That is what those two kinds
-  of script are for, and nobody had put it that way.
-- **The sharpest one: a single branch decides a flag outright.** One routine the robot cannot
-  answer, at one address, run on arrival at nineteen shops — and its two arms are the only two
-  things in sixteen megabytes that touch that flag.
-- Three breaks. The green one was the sixth in ten milestones with the same cause, and it mattered
-  here: the rule it hid is what makes that flag have two movers instead of one.
+- **A map's arrival script only runs when a variable holds a particular value** — and asking
+  whether anything in the game ever produces that value turns out to matter. Every one of them
+  names a variable something writes, so a cruder check would have called them all reachable.
+- **28 of 69 are waiting on a number no script ever writes.** Twenty of the maps hang on one
+  variable wanting seven different values, and the only thing that writes it writes zero.
+- That is the boundary between the scripts and the game's own code, with twenty maps' worth of
+  arrival content behind it.
+- Four breaks. The green one was the seventh with the same cause — and this time it was the
+  very fault two earlier milestones were about, walked into again in a new instrument.
