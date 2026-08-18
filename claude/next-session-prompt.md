@@ -1,7 +1,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-265`, 2941 tests green.
+`claude-266`, 2944 tests green.
 
 Standing rules — do not break these:
 
@@ -101,8 +101,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-226-a-person-and-a-square.md` first, then
-`225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
+Read `claude/milestone-227-twenty-from-the-other-direction.md` first, then
+`226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
 **Twenty faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
@@ -277,6 +277,9 @@ the two kinds the shared list lost open 2491 places nothing else reaches — 1 i
 0x63 takes a person and a SQUARE — 26 of 126 hit that person's own square against a floor of 0.45
 0x65 takes a person and a MOVEMENT TYPE — 54 of 105 the person's own against a floor of 22.7
 neither is NAMED: what they take is read, what they do is still a guess
+9 routines only the map's own script list asks, 11 only what it runs on arrival — 224's twenty
+0x0A7 is one place in the whole game, unbranched, the line before the eight fan questions
+0x5C trainerbattle is 794 reads at 729 places and --fights says 729 — two readings agreeing
 178 routines called at 936 places; the ceiling is 45 of 437 byte positions
 the run's silence decides at 11 byte positions: 0x188 (1) and 0x0A3 (8), 0x0D5, 0x189
 --routines: 148 sites have a compare past something, 81 with nothing else — 38 come back,
@@ -303,7 +306,13 @@ the 57 are TWO blocks, each a yes/no turning on 0x083 or 0x084 and then 0x153
    anyway, which is the `#130` at 71 the party ends with. **The floor is clean**: 1 place asks,
    nothing comes of it, so the floor's party of six is entirely earned. Whether that deserves a
    `--pay` lever or a located payout table is a DECISION and it is deliberately not made.
-3. **The 97 command codes whose reads and places differ.** `--the-scan` (224) is the error bar
+3. **The audit came back mostly clean** (227). `0x5C trainerbattle` is 794 reads at **729**
+   places and `--fights` reports 729 — two readings from different code agreeing. `--who-knows`
+   answers about the whole image with a floor, so `findmove`'s sixty-six never reached it, and
+   the flag work counts flags rather than sites. The two instruments that were wrong were the
+   routine tables, fixed at 220 and 223. **What is left is the small codes**, and
+   `--the-scan` prints every one of them now rather than the worst two dozen.
+   **The 97 command codes whose reads and places differ.** `--the-scan` (224) is the error bar
    for every map-scan number in this project, in one table: 90624 reads at 24491 byte positions,
    and only **11 of 108 codes** are read once per byte. `findmove` is 200 reads at THREE
    addresses. The routine tables have been corrected (220, 223); nothing else has been checked.

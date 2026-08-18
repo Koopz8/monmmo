@@ -6,11 +6,13 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **Two instructions that have had a size but no meaning for thirty-nine milestones now have
-  measured arguments.** One takes a person and a square on that person's own map; the other takes
-  a person and one of the handful of values the game uses for how somebody moves.
-- **The evidence is the floors, not the hits.** "Every site names a real person" sounds
-  conclusive and means nothing — read the wrong word instead and a fifth still agree. The square
-  reading stands because chance would give 0.45 hits and there are 26.
-- **They are still not named.** What they take is read off the cartridge; what they do is a guess,
-  and this does not make one. Five breaks, five catches.
+- **The twenty routines that appeared three milestones ago are now named, from one run instead of
+  two.** Nine are asked only by a map's own startup list, eleven only by what it runs on arrival.
+  Same rule as "what does this kind of script reach alone", asked of routines instead of bytes.
+- **One of them is a single line in the whole game**: three matching byte runs in sixteen
+  megabytes, one of them real, sitting immediately before the fan club asks whether each of eight
+  people is a fan of you.
+- **The audit of everything else came back clean** — two separate readings of the cartridge agree
+  on 729 trainer battles. A clean audit is a result.
+- Four breaks. Two green: one rule in the wrong place, one fixture that couldn't tell two columns
+  apart.
