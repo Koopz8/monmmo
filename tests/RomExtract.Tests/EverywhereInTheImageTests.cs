@@ -24,6 +24,8 @@ public class EverywhereInTheImageTests
     private const byte AddVar = 0x17;
     private const byte SubVar = 0x18;
     private const byte CopyVar = 0x19;
+    private const byte SpecialVar = 0x26;
+    private const byte TwoVariables = 0x42;
     private const byte CopyVarIfNotZero = 0x1A;
     private const byte Compare = 0x21;
     private const byte GotoIf = 0x06;
@@ -143,7 +145,9 @@ public class EverywhereInTheImageTests
         Put(image, 0xF0A, SubVar, Counter & 0xFF, Counter >> 8, 1, 0x00);
         Put(image, 0xF0F, CopyVarIfNotZero, Counter & 0xFF, Counter >> 8, 0x02, 0x40);
         Put(image, 0xF14, CopyVar, Counter & 0xFF, Counter >> 8, 0x03, 0x40);
-        Put(image, 0xF19, End);
+        Put(image, 0xF19, SpecialVar, Counter & 0xFF, Counter >> 8, 0xAA, 0x01);
+        Put(image, 0xF1E, TwoVariables, Counter & 0xFF, Counter >> 8, 0x05, 0x80);
+        Put(image, 0xF23, End);
 
         // And a writer opcode that is not one: three bytes in the middle of something, with
         // bytes after them that are not commands. Without this the sweep's filter is a rule
@@ -608,7 +612,7 @@ public class EverywhereInTheImageTests
     }
 
     /// <summary>
-    /// <b>All FIVE ways a number gets into a variable.</b> A gate is a flag or it is a variable,
+    /// <b>All SEVEN ways a number gets into a variable.</b> A gate is a flag or it is a variable,
     /// and a scan that looked only for <c>setvar</c> would find the number a story starts on and
     /// miss every step of it — which is the same fault as counting <c>setflag</c> and not
     /// <c>clearflag</c>, and that one put the whole middle of the game on the boundary list.
@@ -618,13 +622,13 @@ public class EverywhereInTheImageTests
     {
         IReadOnlyList<VariableSite> sites = EverywhereInTheImage.Writes(Rom(), Counter);
 
-        Assert.Equal(5, sites.Count(s => s.ReadsAsAScript));
-        Assert.Equal(5, sites.Select(s => s.How).Distinct().Count());
+        Assert.Equal(7, sites.Count(s => s.ReadsAsAScript));
 
-        // Named, so that "five ways" cannot be satisfied by any five commands — the fault 251
-        // found was one specific opcode missing from a list of four.
+        // Named, so that "seven ways" cannot be satisfied by any seven commands — the fault 251
+        // found was one specific opcode missing from a list of four, and 252 found two more in
+        // the list of five. The count on its own has now been wrong twice.
         Assert.Equal(
-            [SetVar, AddVar, SubVar, CopyVar, CopyVarIfNotZero],
+            [SetVar, AddVar, SubVar, CopyVar, CopyVarIfNotZero, SpecialVar, TwoVariables],
             [.. sites.Where(s => s.ReadsAsAScript).Select(s => s.How).Order()]);
     }
 
@@ -638,16 +642,21 @@ public class EverywhereInTheImageTests
     {
         IReadOnlyList<VariableSite> sites = EverywhereInTheImage.Writes(Rom(), Counter);
 
-        // BOTH halves of the copying pair, since 251 — the source is a variable id either way.
+        // BOTH halves of the copying pair since 251, and 0x42's second operand since 252 — the
+        // second word is another variable's id at all three.
         Assert.Equal(
-            [0x4002, 0x4003],
-            [.. sites.Where(s => s.Copies).Select(s => s.Value).Order()]);
-
-        Assert.Equal(
-            [CopyVar, CopyVarIfNotZero],
+            [CopyVar, CopyVarIfNotZero, TwoVariables],
             [.. sites.Where(s => s.Copies).Select(s => s.How).Order()]);
 
         Assert.DoesNotContain(sites.Where(s => !s.Copies), s => s.Value == 0x4002);
+
+        // AND specialvar's second word is neither a value nor a variable — it is the routine
+        // being asked, and a column headed "value" holding a routine number is a number nobody
+        // can act on.
+        VariableSite asks = Assert.Single(sites, s => s.How == SpecialVar);
+
+        Assert.Equal("asking routine", asks.SecondWord);
+        Assert.False(asks.Copies);
     }
 
     /// <summary>
@@ -672,7 +681,7 @@ public class EverywhereInTheImageTests
     {
         IReadOnlyDictionary<int, int> written = EverywhereInTheImage.EveryVariableWritten(Rom());
 
-        Assert.Equal(5, written[Counter]);
+        Assert.Equal(7, written[Counter]);
         Assert.False(written.ContainsKey(0x0BAD));
     }
 }

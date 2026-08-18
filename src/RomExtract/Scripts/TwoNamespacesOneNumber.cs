@@ -66,7 +66,7 @@ public sealed record BothNamespaces(
 
     /// <summary>Operands that put something INTO a variable rather than looking at one.</summary>
     public static readonly string[] Writing =
-        ["0x16 arg0", "0x17 arg0", "0x18 arg0", "0x19 arg0", "0x1A arg0"];
+        ["0x16 arg0", "0x17 arg0", "0x18 arg0", "0x19 arg0", "0x1A arg0", "0x26 arg0", "0x42 arg0"];
 
     /// <summary>Every number any writing operand names.</summary>
     public IReadOnlyCollection<int> Written =>
@@ -314,15 +314,23 @@ public static class TwoNamespacesOneNumber
     private const byte ClearFlag = 0x2A;
 
     /// <summary>Commands that put something INTO a variable, and where the id sits.</summary>
-    private static readonly (byte Code, int At)[] Writers =
-        [(0x16, 0), (0x17, 0), (0x18, 0), (0x19, 0), (0x1A, 0)];
+    /// <remarks>
+    /// <b>Seven, since 252.</b> <c>0x19 arg0</c> went in at 251 and <c>0x26 arg0</c> —
+    /// <c>specialvar</c>'s destination — and <c>0x42 arg0</c> at 252, both found by sweeping every
+    /// operand of every command rather than by reading the table again. Both were already known
+    /// elsewhere in this repository: five files read <c>specialvar</c>'s first word as the answer
+    /// variable, and <c>0x42</c>'s width comment says out loud that it is "a command taking two
+    /// variables and then being asked about one of them".
+    /// </remarks>
+    public static readonly (byte Code, int At)[] Writers =
+        [(0x16, 0), (0x17, 0), (0x18, 0), (0x19, 0), (0x1A, 0), (0x26, 0), (0x42, 0)];
 
     /// <summary>
     /// Commands that LOOK at one. Both operands of <c>comparevars</c>, and the source of the
     /// copying pair rather than the destination — a destination is a write and counting it here
     /// would make every write a read as well.
     /// </summary>
-    private static readonly (byte Code, int At)[] Readers =
+    public static readonly (byte Code, int At)[] Readers =
         [(0x21, 0), (0x22, 0), (0x22, 2), (0x19, 2), (0x1A, 2)];
 
     /// <summary>

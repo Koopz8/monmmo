@@ -47,16 +47,32 @@ public sealed record VariableSite(
 
     /// <summary>True when the second word is a variable id rather than a number.</summary>
     /// <remarks>
-    /// <b>Both halves of the copying pair, since 251.</b> It was <c>0x1A</c> alone, which printed
-    /// a <c>copyvar</c>'s source variable as though it were the value written — and could not,
-    /// before 251, because <c>copyvar</c> was not in the write table at all.
+    /// <b>Both halves of the copying pair, since 251</b>, and <c>0x42</c>'s second operand since
+    /// 252. It was <c>0x1A</c> alone, which printed a <c>copyvar</c>'s source variable as though
+    /// it were the value written — and could not, before 251, because <c>copyvar</c> was not in
+    /// the write table at all.
     /// </remarks>
-    public bool Copies => How is 0x19 or 0x1A;
+    public bool Copies => How is 0x19 or 0x1A or 0x42;
+
+    /// <summary>
+    /// What the second word actually is, which is not a value for four of the seven writers.
+    /// </summary>
+    /// <remarks>
+    /// A column headed "value" that holds a routine number for one command and another variable's
+    /// id for three others is a number nobody can act on. Said per command rather than per shape,
+    /// because the shape is what got <c>specialvar</c> printed as a value in the first place.
+    /// </remarks>
+    public string SecondWord => How switch
+    {
+        0x19 or 0x1A => "from",
+        0x26 => "asking routine",
+        0x42 => "and",
+        _ => "=",
+    };
 
     public override string ToString() =>
-        Copies
-            ? $"0x{Offset:X6} {ScriptCommands.NameOf(How)} 0x{Variable:X4} from 0x{Value:X4}"
-            : $"0x{Offset:X6} {ScriptCommands.NameOf(How)} 0x{Variable:X4}, {Value}";
+        $"0x{Offset:X6} {ScriptCommands.NameOf(How)} 0x{Variable:X4} {SecondWord} "
+        + (SecondWord == "=" ? $"{Value}" : $"0x{Value:X4}");
 }
 
 /// <summary>
@@ -332,7 +348,13 @@ public static class EverywhereInTheImage
     }
 
     /// <summary>The four commands that put a number in a variable, in the order they were derived.</summary>
-    private static readonly byte[] Writers = [0x16, 0x17, 0x18, 0x19, 0x1A];
+    /// <remarks>
+    /// <b>Seven, since 252.</b> <c>copyvar</c> went in at 251 and <c>specialvar</c> and
+    /// <c>0x42</c> at 252 — found by sweeping every operand of every command and asking which of
+    /// them name numbers something writes, rather than by reading this list again. Two lists
+    /// wrong in the same place cannot catch each other (251), and neither can three.
+    /// </remarks>
+    private static readonly byte[] Writers = [0x16, 0x17, 0x18, 0x19, 0x1A, 0x26, 0x42];
 
     /// <summary>Where in a command's arguments a variable being READ sits.</summary>
     /// <param name="Code">The command.</param>

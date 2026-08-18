@@ -211,6 +211,7 @@ public static class Program
         if (options.FieldEffects) WriteFieldEffects(rom);
         if (options.Namespaces) WriteNamespaces(rom);
         if (options.Buried) WriteBuried(rom);
+        if (options.Operands) WriteOperands(rom);
         if (options.Slots.Count > 0) WriteSlots(rom, options.Slots);
         if (options.ReadFrom.Count > 0) WriteBlocks(rom, options.ReadFrom);
         if (options.Closure) WriteClosure(rom, options.RoutineAnswers, options.StartAt);
@@ -8995,6 +8996,101 @@ public static class Program
     /// <summary>
     /// The numbers this cartridge uses in both namespaces at once.
     /// </summary>
+    private static void WriteOperands(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("EVERY OPERAND, AND WHETHER IT NAMES A VARIABLE");
+        Console.WriteLine();
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        IReadOnlyList<OneOperand> all = EveryOperand.In(
+            rom,
+            library.All().SelectMany(EveryScriptOn).Select(s => s.Address),
+            TwoNamespacesOneNumber.Writers);
+
+        (byte Code, int At)[] known =
+            [.. TwoNamespacesOneNumber.Writers, .. TwoNamespacesOneNumber.Readers];
+
+        Console.WriteLine(
+            $"  {all.Count} operand(s) name at least 4 number(s) between them, over every"
+            + " halfword-aligned position of every command the map scan reads — and each is"
+            + " scored by how much of what it names something WRITES, which is the rule 244 and"
+            + " 251 were both settled by");
+
+        Console.WriteLine(
+            $"    the {known.Length} the two tables already name: "
+            + string.Join(", ", known.Select(k => $"0x{k.Code:X2} arg{k.At}")));
+
+        // THE SPREAD FIRST, because a threshold with nothing behind it is a number that decides
+        // the answer. If this cartridge's operands come in at the two ends the threshold is
+        // doing no work; if they are spread evenly the whole method is wrong.
+        Console.WriteLine();
+        Console.WriteLine("  how the scores spread, in tenths:");
+
+        foreach ((int tenth, int operands) in EveryOperand.Spread(all))
+        {
+            Console.WriteLine(
+                $"    {tenth * 10,3}-{tenth * 10 + 9,3}%  {new string('#', Math.Min(60, operands))} {operands}");
+        }
+
+        IReadOnlyList<OneOperand> unknown = EveryOperand.Unknown(all, known);
+
+        Console.WriteLine();
+        Console.WriteLine(
+            unknown.Count == 0
+                ? "  and NOTHING outside those tables scores above half — on this cartridge the"
+                  + " two tables are complete, and that is the answer this was built to be able"
+                  + " to give"
+                : $"  and {unknown.Count} operand(s) score above half and are in NEITHER table:");
+
+        foreach (OneOperand one in unknown)
+        {
+            Console.WriteLine($"    {one}");
+            Console.WriteLine(
+                "      names: "
+                + string.Join(
+                    ", ",
+                    one.Named.Take(8).Select(n => $"0x{n.Number:X4} x{n.Places}")));
+        }
+
+        // AND THE DIRECTION TEST, WITH ITS FLOOR. Written-ness says an operand names a variable
+        // and says nothing about which way the number goes. An operand whose number is compared
+        // in the very next command left something there — which is exactly how this project
+        // already reads specialvar's answer, in five files, having never put it in a table.
+        Console.WriteLine();
+        Console.WriteLine(
+            "  and which way the number goes, from whether the NEXT command compares that very"
+            + " number — the floor is every other operand:");
+
+        double floor = all.Sum(o => o.Places) == 0
+            ? 0
+            : (double)all.Sum(o => o.ComparedNext) / all.Sum(o => o.Places);
+
+        Console.WriteLine(
+            $"    over all {all.Count} operand(s): {all.Sum(o => o.ComparedNext)} of"
+            + $" {all.Sum(o => o.Places)} place(s) — {floor:P1}");
+
+        foreach (OneOperand one in all.Where(o => o.ComparedShare > 0.25).OrderByDescending(o => o.ComparedShare))
+        {
+            Console.WriteLine(
+                $"    {one.Name}: {one.ComparedNext} of {one.Places} — {one.ComparedShare:P0}"
+                + (known.Contains((one.Code, one.At)) ? "   <- already named" : "   <- NAMED BY NEITHER TABLE"));
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("  the whole table, best first:");
+
+        foreach (OneOperand one in all.Take(30))
+        {
+            Console.WriteLine(
+                $"    {one}"
+                + (known.Contains((one.Code, one.At)) ? "   <- already named" : ""));
+        }
+
+        if (all.Count > 30) Console.WriteLine($"    ... and {all.Count - 30} more");
+    }
+
     private static void WriteBuried(Rom rom)
     {
         Console.WriteLine();
@@ -14695,6 +14791,8 @@ public static class Program
 
         public bool Buried { get; private init; }
 
+        public bool Operands { get; private init; }
+
         /// <summary>
         /// With <c>--play</c>: every time the run turned these FLAGS on or off, with the script
         /// and the pass. The flag half of <c>--trace</c>, which watches a variable.
@@ -14920,6 +15018,7 @@ public static class Program
             bool signs = false;
             bool namespaces = false;
             var buried = false;
+            var operands = false;
             var moved = new List<int>();
             var slots = new List<byte>();
             var readFrom = new List<uint>();
@@ -15200,6 +15299,9 @@ public static class Program
                         break;
                     case "--buried":
                         buried = true;
+                        break;
+                    case "--operands":
+                        operands = true;
                         break;
                     case "--moved":
                     {
@@ -15557,6 +15659,7 @@ public static class Program
                 Signs = signs,
                 Namespaces = namespaces,
                 Buried = buried,
+                Operands = operands,
                 Moved = moved,
                 Slots = slots,
                 ReadFrom = readFrom,
