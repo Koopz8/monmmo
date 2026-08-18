@@ -7078,6 +7078,20 @@ public static class Program
                 + $"   on {code.Maps,3} map(s)");
         }
 
+        // AND BY KIND, with the number that would have caught 224 at 221: what each kind opens
+        // that nothing else does.
+        Console.WriteLine();
+        Console.WriteLine("  by which of the five kinds hangs the script:");
+        Console.WriteLine();
+
+        foreach (WhatTheScanOpens.AKind kind in WhatTheScanOpens.ByKind(rom, MapLibrary.Open(rom)))
+        {
+            Console.WriteLine(
+                $"    {kind.Kind,-12} {kind.Entries,5} entry(ies) at {kind.Addresses,5} address(es), "
+                + $"{kind.Reads,6} read(s) at {kind.Places,6} place(s)"
+                + $"  — {kind.Only,5} of those places NO OTHER KIND opens");
+        }
+
         int clean = byCode.Count(c => c.Reads == c.Places);
 
         Console.WriteLine();

@@ -35,15 +35,101 @@ public static class WhatTheScanOpens
         public double Over => Places == 0 ? 0 : (double)Reads / Places;
     }
 
+    /// <param name="Kind">
+    /// Which of the five kinds hangs the script: <c>person</c>, <c>trigger</c>, <c>sign</c>,
+    /// <c>on arrival</c>, <c>on load</c>.
+    /// </param>
+    /// <param name="Only">
+    /// <b>Byte positions no other kind opens.</b> The number that says what dropping this kind
+    /// would cost, and the number that would have caught 224 at 221 — a list missing
+    /// <c>on load</c> was missing every position only <c>on load</c> reaches, and nothing
+    /// printed that.
+    /// </param>
+    public sealed record AKind(string Kind, int Entries, int Addresses, int Reads, int Places, int Only);
+
     /// <param name="Entries">Script entries the maps hang off people, triggers and signs.</param>
     /// <param name="Addresses">How many distinct addresses those entries point at.</param>
     /// <param name="Reads">Commands decoded, counting a shared block once per entry that reaches it.</param>
     /// <param name="Places">How many distinct byte positions the scan decodes at all.</param>
     public sealed record Overall(int Entries, int Addresses, int Reads, int Places);
 
+    /// <summary>Which of the five kinds a script's name says it is.</summary>
+    public static string KindOf(string what) =>
+        what.StartsWith("on ", StringComparison.Ordinal)
+            ? string.Join(" ", what.Split(' ').Take(2))
+            : what.Split(' ')[0];
+
     /// <summary>
-    /// Every command the scan decodes, by code, in reads and in places.
+    /// The same reading, split by which kind of thing hangs the script — and for each kind, the
+    /// byte positions <b>no other kind opens</b>.
     /// </summary>
+    public static List<AKind> ByKind(Rom rom, MapLibrary library)
+    {
+        var entries = new Dictionary<string, int>();
+        var addresses = new Dictionary<string, HashSet<uint>>();
+        var reads = new Dictionary<string, int>();
+        var places = new Dictionary<string, HashSet<int>>();
+
+        foreach ((string _, string what, uint address) in library.EveryScript())
+        {
+            string kind = KindOf(what);
+
+            entries[kind] = entries.GetValueOrDefault(kind) + 1;
+
+            if (!addresses.TryGetValue(kind, out HashSet<uint>? at)) addresses[kind] = at = [];
+
+            at.Add(address);
+
+            if (!places.TryGetValue(kind, out HashSet<int>? opened)) places[kind] = opened = [];
+
+            foreach (ScriptCommand command in ScriptReader.ReadAll(rom, address))
+            {
+                reads[kind] = reads.GetValueOrDefault(kind) + 1;
+                opened.Add(command.Offset);
+            }
+        }
+
+        return
+        [
+            .. entries.Keys
+                .Select(kind => new AKind(
+                    kind,
+                    entries[kind],
+                    addresses[kind].Count,
+                    reads.GetValueOrDefault(kind),
+                    places[kind].Count,
+                    OnlyHere(places.ToDictionary(e => e.Key, e => (IReadOnlyCollection<int>)e.Value), kind)))
+                .OrderByDescending(k => k.Only)
+                .ThenByDescending(k => k.Places),
+        ];
+    }
+
+    /// <summary>
+    /// Byte positions this kind opens that no other kind does — what dropping it would cost.
+    /// <para>
+    /// <b>The number that would have caught 224 at 221.</b> A shared list missing <c>on load</c>
+    /// was missing every position only <c>on load</c> reaches, and nothing anywhere printed that
+    /// figure — so the loss showed up three milestones later as twenty routines appearing out of
+    /// nowhere.
+    /// </para>
+    /// <para>
+    /// Public and taking plain collections, because the sweep it is used in needs a whole
+    /// cartridge and a rule only reachable through one is a rule no test reaches.
+    /// </para>
+    /// </summary>
+    public static int OnlyHere(IReadOnlyDictionary<string, IReadOnlyCollection<int>> places, string kind)
+    {
+        var elsewhere = new HashSet<int>();
+
+        foreach ((string other, IReadOnlyCollection<int> opened) in places)
+        {
+            if (other != kind) elsewhere.UnionWith(opened);
+        }
+
+        return places[kind].Count(at => !elsewhere.Contains(at));
+    }
+
+    /// <summary>Every command the scan decodes, by code, in reads and in places.</summary>
     public static (Overall Whole, List<ACode> ByCode) Of(Rom rom, MapLibrary library)
     {
         var reads = new Dictionary<byte, int>();
