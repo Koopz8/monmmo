@@ -218,8 +218,8 @@ public static class SpecialCalls
         AnotherVariable,
 
         /// <summary>
-        /// Nothing put anything there and the block ends by jumping somewhere else — so the
-        /// reading STOPPED rather than finding nothing.
+        /// The reading STOPPED rather than finding nothing — the block ends by jumping somewhere
+        /// else, or the walk back met something that ran and could not be accounted for.
         /// <para>
         /// <b>Those are different and conflating them is the same fault a third time.</b>
         /// "The call left the variable alone" and "the call went somewhere this reading does not
@@ -236,6 +236,18 @@ public static class SpecialCalls
     /// when it is <see cref="LeftBehind.ANumber"/>; nought otherwise.
     /// </param>
     /// <param name="Through">Where the call is, so the two levels can be read against each other.</param>
+    /// <param name="Before">
+    /// What answered in the CALLER before the call, when the call itself leaves the variable
+    /// alone.
+    /// <para>
+    /// <b>Only asked when the call provably touches nothing.</b> A call that leaves the answer
+    /// variable as it found it means the compare after it is reading whatever was there before —
+    /// so the older answer is the right attribution and walking back to it is not a guess. Where
+    /// the call DOES answer, or where the reading stopped at a jump, this is
+    /// <see cref="LeftBehind.Nothing"/> and nothing is claimed.
+    /// </para>
+    /// </param>
+    /// <param name="Older">The routine that answered before the call, or nought.</param>
     public sealed record AnsweredThroughACall(
         string MapId,
         string What,
@@ -244,7 +256,9 @@ public static class SpecialCalls
         LeftBehind Left,
         int Answerer,
         int Value,
-        byte Condition);
+        byte Condition,
+        LeftBehind Before,
+        int Older);
 
     /// <summary>
     /// The attributions milestone 214 stopped making, made properly — one level in.
@@ -291,6 +305,13 @@ public static class SpecialCalls
 
                 (LeftBehind left, int who) = WhatIsLeftInside(rom, commands[i].Pointer(), answer);
 
+                // Only when the call provably leaves the variable alone. Then, and only then,
+                // the compare is reading something older and walking back to it is a reading
+                // rather than a guess.
+                (LeftBehind before, int older) = left == LeftBehind.Nothing
+                    ? WhatAnsweredBefore(commands, i, answer)
+                    : (LeftBehind.Nothing, 0);
+
                 found.Add(new AnsweredThroughACall(
                     mapId,
                     what,
@@ -299,7 +320,9 @@ public static class SpecialCalls
                     left,
                     who,
                     commands[i + 1].Word(2),
-                    condition));
+                    condition,
+                    before,
+                    older));
             }
         }
 
@@ -324,6 +347,44 @@ public static class SpecialCalls
     /// to be wrong.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// What answered in the caller before a call that leaves the answer variable alone.
+    /// <para>
+    /// Walks back over commands that cannot have answered, and stops at the first that could.
+    /// A second call is one of those and it is <b>not</b> followed — that would be walking back
+    /// through a level this reading does not go into, and each level is another place to be
+    /// wrong.
+    /// </para>
+    /// </summary>
+    public static (LeftBehind Left, int Who) WhatAnsweredBefore(
+        List<ScriptCommand> commands, int at, int answer = 0x800D)
+    {
+        for (int i = at - 1; i >= 0; i--)
+        {
+            if (!Adjacent(commands[i], commands[i + 1])) return (LeftBehind.Nothing, 0);
+
+            switch (commands[i].Code)
+            {
+                case Special:
+                    return (LeftBehind.ARoutine, commands[i].Word());
+
+                case SpecialVar when commands[i].Word() == answer:
+                    return (LeftBehind.ARoutine, commands[i].Word(2));
+
+                case SetVar when commands[i].Word() == answer:
+                    return (LeftBehind.ANumber, commands[i].Word(2));
+
+                // Another call, which could have answered and which this does not follow.
+                case Call:
+                    return (LeftBehind.WentSomewhereElse, 0);
+            }
+
+            if (Answering.Contains(commands[i].Code)) return (LeftBehind.WentSomewhereElse, 0);
+        }
+
+        return (LeftBehind.Nothing, 0);
+    }
+
     public static (LeftBehind Left, int Who) WhatACallLeaves(Rom rom, uint address, int answer = 0x800D) =>
         WhatIsLeftInside(rom, address, answer);
 

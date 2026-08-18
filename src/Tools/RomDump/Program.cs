@@ -8471,6 +8471,31 @@ public static class Program
                 + $" {byRoutine.First().Value}");
         }
 
+        // AND THE ONES WHOSE CALL TOUCHES NOTHING, walked back to whatever answered before it.
+        //
+        // A call that leaves the answer variable as it found it means the compare after it is
+        // reading something older, so the older answer is the right attribution — the barrier
+        // 214 added stops the scan guessing, and this is the case where it does not have to.
+        List<SpecialCalls.AnsweredThroughACall> untouched =
+            [.. found.Where(a => a.Left == SpecialCalls.LeftBehind.Nothing)];
+
+        if (untouched.Count > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine(
+                $"  {untouched.Count} place(s) call a block that leaves the answer variable"
+                + " alone, so the compare is reading something older. Walking back in the caller:");
+
+            foreach (IGrouping<(SpecialCalls.LeftBehind, int), SpecialCalls.AnsweredThroughACall> what in
+                     untouched.GroupBy(a => (a.Before, a.Older)).OrderByDescending(g => g.Count()))
+            {
+                Console.WriteLine(
+                    $"      {what.Count(),4} — {Outcome(what.Key)}"
+                    + $"   e.g. {what.First().MapId} {what.First().What}"
+                    + $" at 0x{what.First().Through:X8}");
+            }
+        }
+
         List<SpecialCalls.AnsweredThroughACall> onTheLine =
             [.. found.Where(a => a.Left == SpecialCalls.LeftBehind.ANumberOnTheStraightLine)];
 

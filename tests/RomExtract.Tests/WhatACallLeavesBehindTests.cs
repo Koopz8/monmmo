@@ -31,6 +31,8 @@ public sealed class WhatACallLeavesBehindTests
     private const byte Compare = 0x21;
     private const byte GotoIf = 0x06;
     private const byte Goto = 0x05;
+    private const byte Call = 0x04;
+    private const byte Lock = 0x6A;
 
     private const int Answer = 0x800D;
     private const int SomeOtherSlot = 0x8004;
@@ -235,6 +237,106 @@ public sealed class WhatACallLeavesBehindTests
         Assert.Equal(
             new[] { 0x22 },
             SpecialCalls.Returns(new Rom(image), Rom.BaseAddress + 0x1000).Deciders);
+    }
+
+    /// <summary>
+    /// WALKING BACK, which is only allowed when the call provably leaves the variable alone.
+    /// <para>
+    /// A call that touches nothing means the compare after it reads something older, so the
+    /// older answer is the right attribution rather than a guess. 214's barrier stops the scan
+    /// guessing; this is the case where it does not have to guess.
+    /// </para>
+    /// </summary>
+    private static (SpecialCalls.LeftBehind Left, int Who) Before(byte[] image, int callAt)
+    {
+        List<ScriptCommand> commands = ScriptReader.Read(new Rom(image), Rom.BaseAddress + 0x1000);
+
+        int at = commands.FindIndex(c => c.Offset == callAt);
+
+        Assert.True(at >= 0, $"the fixture has to decode the call at 0x{callAt:X4}");
+
+        return SpecialCalls.WhatAnsweredBefore(commands, at);
+    }
+
+    /// <summary>The routine asked before the call is what the compare after it reads.</summary>
+    [Fact]
+    public void TheRoutineAskedBeforeTheCallIsWhatTheCompareReads()
+    {
+        byte[] image = Blank();
+
+        Put(image, 0x1000, Special, 0x1C, 0x00);
+        Put(image, 0x1003, Call);
+        Address(image, 0x1004, 0x1200);
+        Put(image, 0x1008, Compare, Lo(Answer), Hi(Answer), 0, 0, Return);
+        Put(image, 0x1200, Return);
+
+        Assert.Equal((SpecialCalls.LeftBehind.ARoutine, 0x1C), Before(image, 0x1003));
+    }
+
+    /// <summary>
+    /// And a command that cannot have answered is walked over rather than stopping the walk.
+    /// <para>
+    /// Without this the walk stops at the first thing it meets and the instrument reports
+    /// "nothing answered" for every call with a <c>lock</c> in front of it — which is the same
+    /// answer as being careful, and a completely different rule.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void SomethingThatCannotHaveAnsweredIsWalkedOver()
+    {
+        byte[] image = Blank();
+
+        Put(image, 0x1000, Special, 0x1C, 0x00);
+        Put(image, 0x1003, Lock);
+        Put(image, 0x1004, Call);
+        Address(image, 0x1005, 0x1200);
+        Put(image, 0x1009, Compare, Lo(Answer), Hi(Answer), 0, 0, Return);
+        Put(image, 0x1200, Return);
+
+        Assert.Equal((SpecialCalls.LeftBehind.ARoutine, 0x1C), Before(image, 0x1004));
+    }
+
+    /// <summary>
+    /// A ROUTINE ANSWERING INTO SOME OTHER SLOT STOPS THE WALK RATHER THAN BEING CREDITED.
+    /// <para>
+    /// It did not answer this compare — its answer went elsewhere — but it RAN, and nothing
+    /// here can say it left the answer variable alone. The forward scan treats a
+    /// <c>specialvar</c> as a barrier for exactly that reason, and walking back has to be at
+    /// least as careful. So this is "the reading stopped", not "nothing answered".
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ARoutineAnsweringElsewhereStopsTheWalkWithoutBeingCredited()
+    {
+        byte[] image = Blank();
+
+        Put(image, 0x1000, SpecialVar, Lo(SomeOtherSlot), Hi(SomeOtherSlot), 0x1C, 0x00);
+        Put(image, 0x1005, Call);
+        Address(image, 0x1006, 0x1200);
+        Put(image, 0x100A, Compare, Lo(Answer), Hi(Answer), 0, 0, Return);
+        Put(image, 0x1200, Return);
+
+        Assert.Equal((SpecialCalls.LeftBehind.WentSomewhereElse, 0), Before(image, 0x1005));
+    }
+
+    /// <summary>
+    /// AND A SECOND CALL STOPS THE WALK RATHER THAN BEING FOLLOWED — one level, in this
+    /// direction too.
+    /// </summary>
+    [Fact]
+    public void AnotherCallStopsTheWalkRatherThanBeingFollowed()
+    {
+        byte[] image = Blank();
+
+        Put(image, 0x1000, Call);
+        Address(image, 0x1001, 0x1300);
+        Put(image, 0x1005, Call);
+        Address(image, 0x1006, 0x1200);
+        Put(image, 0x100A, Compare, Lo(Answer), Hi(Answer), 0, 0, Return);
+        Put(image, 0x1200, Return);
+        Put(image, 0x1300, Special, 0x1C, 0x00, Return);
+
+        Assert.Equal((SpecialCalls.LeftBehind.WentSomewhereElse, 0), Before(image, 0x1005));
     }
 
     /// <summary>
