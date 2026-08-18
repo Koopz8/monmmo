@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-292`, 3114 tests green.
+`claude-293`, 3117 tests green.
 
 Standing rules — do not break these:
 
@@ -354,9 +354,25 @@ Traps worth carrying:
     its own findings is one that did not need arranging.** `0x42 arg2` scores 12% and is left out
     of both tables, reported as open rather than guessed.
 
+38. **A MIRROR IS NOT A RE-RUN, AND ITS SEED CAN BE POISONED BY AN EARLIER FINDING** (253).
+    Seeding the operand sweep on the writers can only find operands naming variables something
+    writes; seeding on the readers is a genuinely different question. But the reader list contains
+    the operand 244 identified as naming VALUES, and seeding on its 149 numbers turns "is this a
+    variable?" into "is this number small?" — 27 candidates, headed by `giveitem`'s item id at
+    100%, against **one** when it is left out. **Before you seed a test on a set, ask what is IN
+    the set** — and take the answer from a measurement (`NameValues`, decided by written-ness)
+    rather than from a name you recognise. Print both counts: the uncorrected one is the argument
+    for the correction.
+
+39. **A COMPLETENESS CLAIM IS ONLY WORTH THE INSTRUMENT'S ABILITY TO DENY IT** (253). "Both write
+    tables are complete" is now a real sentence about this cartridge — but only because
+    `--operands` found two operands at 252 and would report a third, and because its own
+    misleading version is printed beside the good one. A sweep that has only ever come back empty
+    has not been shown to be able to come back full.
+
 ## Where things are
 
-Read `claude/milestone-252-stop-reading-the-table.md` first, then `251`, `250`, `249`, `248`,
+Read `claude/milestone-253-the-mirror.md` first, then `252`, `251`, `250`, `249`, `248`,
 `247`, `246`, `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
 `238`, `237`,
@@ -457,6 +473,14 @@ whether the next command compares that very number — against a floor of **453 
 1.5%**: `0x26 arg0` 91%, `0x42 arg0` 75%, and `0x19 arg0` (a write 251 established independently)
 **65%, the positive control landing between the two unknowns**. `0x42 arg2` is 12% and is the one
 candidate still open: it names a variable and which way is not read.
+
+**And the MIRROR at 253**: seeded on the READERS — which is what finds an operand naming a variable
+nothing in the scan writes, `0x405F`'s shape — it produces **27 candidates run the obvious way**,
+headed by `giveitem`'s item id at 100%, because the reader list contains `0x1A arg2` and seeding
+on its 149 values turns "is this a variable?" into "is this number small?". **Corrected — and the
+correction is DERIVED from `NameValues`, not written down — it produces ONE**, `0x42 arg2`, which
+252 already had. Both counts and all three seed widths (111 / 82 / 231) stay in the output.
+**So BOTH TABLES ARE COMPLETE on this cartridge**, and the instrument would say so if they were not.
 
 `--buried` reads the four bytes a buried sign keeps where every other sign keeps a script pointer
 (248): an item id, an INDEX and a count with one spare bit. **All 183 item ids resolve to a name
@@ -878,9 +902,8 @@ still work.**
   terms, and nothing has opened it.
 * **The operand sweep's three unfinished halves** (252). `--operands` found two write operands in
   neither table; what it has NOT done:
-  * **the mirror** — 252 found writers by seeding on writers. Seeding on the READERS and hunting
-    an operand that reads is the same instrument pointed the other way, and 251's fault could as
-    easily be on that side.
+  * ~~the mirror~~ **RUN AT 253**: corrected, it finds nothing new, so **both tables are
+    complete**. Uncorrected it finds 27, which is why the correction is printed beside it.
   * **the whole image** — `--operands` asks the map scan, which is 0.6% of the file.
   * **`0x42` still has no name.** Eight places, each a `compare` away from saying what it
     computed; `--read-from` on those eight is one command. And **`0x42 arg2`'s direction** is the
