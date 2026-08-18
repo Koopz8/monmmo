@@ -7067,16 +7067,68 @@ public static class Program
                         ", ", contract.Compared.OrderBy(p => p.Key).Select(p => $"{p.Key}x{p.Value}")));
             }
 
+            WriteAcrossABarrier(contract);
+
             Console.WriteLine($"        {string.Join("; ", contract.Where)}");
         }
 
-        int quiet = contracts.Count(c => c.Branches == 0);
+        // The ones this reading called branched-on until 220 and no longer does. They are not
+        // "nothing branches on it" — they are "the branch is past something that may have
+        // answered instead", and folding them in with the quiet ones would bury exactly the
+        // sites worth reading next.
+        List<SpecialContract> onlyAcross =
+        [
+            .. contracts
+                .Where(c => c.Branches == 0 && c.AcrossABarrier > 0)
+                .OrderByDescending(c => c.AcrossABarrier),
+        ];
+
+        if (onlyAcross.Count > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine(
+                "  and the ones whose ONLY branch is past something that may have answered instead");
+            Console.WriteLine(
+                "  — counted as branched-on here until 220, when this reading was given the barrier");
+            Console.WriteLine(
+                "  SpecialCalls has had since 214. --through-a-call is what says whether the thing");
+            Console.WriteLine("  in the way answered, and for 0x01C and 0x01D it says it did not");
+
+            foreach (SpecialContract contract in onlyAcross)
+            {
+                Console.WriteLine(
+                    $"    0x{contract.Routine:X3}  {contract.Sites,3} site(s), "
+                    + $"{contract.AcrossABarrier,3} across a barrier, {contract.TakesArguments} argument(s)");
+
+                WriteAcrossABarrier(contract);
+
+                Console.WriteLine($"        {string.Join("; ", contract.Where)}");
+            }
+        }
+
+        int quiet = contracts.Count(c => c.Branches == 0 && c.AcrossABarrier == 0);
 
         Console.WriteLine();
         Console.WriteLine(
             $"  and {quiet} routines nothing branches on — called for their effect rather than");
         Console.WriteLine(
             "  their answer, so a stand-in for one of those buys no ground and is not worth writing");
+    }
+
+    /// <summary>
+    /// What a routine's answer is compared against only on the far side of a barrier, printed
+    /// separately from what it is compared against directly — because they are two different
+    /// claims and one of them is not about this routine yet.
+    /// </summary>
+    private static void WriteAcrossABarrier(SpecialContract contract)
+    {
+        if (contract.AcrossABarrier == 0) return;
+
+        Console.WriteLine(
+            $"        and at {contract.AcrossABarrier} site(s) compared against "
+            + string.Join(
+                ", ", contract.ComparedAcross.OrderBy(p => p.Key).Select(p => $"{p.Key}x{p.Value}"))
+            + " ONLY past something that may have answered instead");
     }
 
 

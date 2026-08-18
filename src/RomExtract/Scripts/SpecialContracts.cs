@@ -18,7 +18,23 @@ namespace PokeMmo.RomExtract.Scripts;
 /// one answers yes or no; one compared against one through eight counts something with eight
 /// of it.
 /// </param>
-/// <param name="Branches">How many sites branch on the answer at all.</param>
+/// <param name="Branches">
+/// How many sites branch on the answer at all, with nothing in between that could have
+/// answered instead.
+/// </param>
+/// <param name="AcrossABarrier">
+/// How many sites branch on the answer <b>only past something that may have answered
+/// instead</b> — a <c>call</c>, another <c>special</c>, a <c>callstd</c>. Until 220 these were
+/// counted in <see cref="Branches"/> and their values in <see cref="Compared"/>, and nothing
+/// said so. This is the error bar on every routine sentence in this project, and it comes back
+/// nought for a routine nobody reads across anything.
+/// </param>
+/// <param name="ComparedAcross">
+/// The values compared past the barrier, kept apart from <see cref="Compared"/> for the same
+/// reason. They may still belong to this routine — 219 proved nineteen of them do — but proving
+/// it takes reading what is in the way, which is <c>--through-a-call</c>'s job and not this
+/// one's.
+/// </param>
 /// <param name="Where">A few places it is called, so the bytes can be looked at.</param>
 public sealed record SpecialContract(
     int Routine,
@@ -26,6 +42,8 @@ public sealed record SpecialContract(
     int TakesArguments,
     IReadOnlyDictionary<int, int> Compared,
     int Branches,
+    int AcrossABarrier,
+    IReadOnlyDictionary<int, int> ComparedAcross,
     IReadOnlyList<string> Where)
 {
     /// <summary>
@@ -94,6 +112,8 @@ public static class SpecialContracts
         var arguments = new Dictionary<int, int>();
         var compared = new Dictionary<int, Dictionary<int, int>>();
         var branches = new Dictionary<int, int>();
+        var across = new Dictionary<int, int>();
+        var comparedAcross = new Dictionary<int, Dictionary<int, int>>();
         var where = new Dictionary<int, List<string>>();
 
         foreach ((string mapId, string what, uint address) in Scripts(library))
@@ -123,14 +143,21 @@ public static class SpecialContracts
 
                 int answer = command.Code == SpecialCalls.SpecialVar ? command.Word() : AnswerVariable;
 
-                List<int> values = ComparedAfter(commands, i, answer);
+                (List<int> values, List<int> beyond) = ComparedAfter(commands, i, answer);
 
                 if (values.Count > 0) branches[routine] = branches.GetValueOrDefault(routine) + 1;
+
+                if (beyond.Count > 0) across[routine] = across.GetValueOrDefault(routine) + 1;
 
                 if (!compared.TryGetValue(routine, out Dictionary<int, int>? seen))
                     compared[routine] = seen = [];
 
                 foreach (int value in values) seen[value] = seen.GetValueOrDefault(value) + 1;
+
+                if (!comparedAcross.TryGetValue(routine, out Dictionary<int, int>? far))
+                    comparedAcross[routine] = far = [];
+
+                foreach (int value in beyond) far[value] = far.GetValueOrDefault(value) + 1;
 
                 if (!where.TryGetValue(routine, out List<string>? places)) where[routine] = places = [];
 
@@ -146,12 +173,22 @@ public static class SpecialContracts
                 arguments.GetValueOrDefault(routine),
                 compared.GetValueOrDefault(routine, []),
                 branches.GetValueOrDefault(routine),
+                across.GetValueOrDefault(routine),
+                comparedAcross.GetValueOrDefault(routine, []),
                 where.GetValueOrDefault(routine, []))),
         ];
 
         log?.Invoke($"  {derived.Count} routines called, {derived.Sum(d => d.Sites)} times between them");
         log?.Invoke($"    {derived.Count(d => d.Branches > 0)} of them are branched on, which is what makes an answer matter");
         log?.Invoke($"    {derived.Count(d => d.LooksLikeACount)} are compared against a run from one upwards");
+
+        // And the error bar, which is the number this reading did not have for six milestones.
+        log?.Invoke(
+            $"    {derived.Sum(d => d.AcrossABarrier)} site(s) across {derived.Count(d => d.AcrossABarrier > 0)} routine(s) "
+            + "branch on the answer only PAST something that may have answered instead, and are not counted above");
+        log?.Invoke(
+            $"    {derived.Count(d => d.Branches == 0 && d.AcrossABarrier > 0)} routine(s) are branched on ONLY that way — "
+            + "every branch this project credited them with was read across a call");
 
         return derived;
     }
@@ -179,10 +216,52 @@ public static class SpecialContracts
         return handed;
     }
 
-    /// <summary>What the script compares the answer against, in the commands right after.</summary>
-    private static List<int> ComparedAfter(List<ScriptCommand> commands, int at, int answer)
+    /// <summary>
+    /// What the script compares the answer against in the commands right after — and what it
+    /// compares the answer against only on the far side of somebody else's answer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The barrier this had none of until 220.</b> Between the <c>special</c> and the
+    /// <c>compare</c> there can be a <c>call</c>, a <c>specialvar</c>, a <c>callstd</c>, a
+    /// <c>0xA0</c> — anything that puts an answer of its own in the same variable. Reading
+    /// past one of those credits this routine with somebody else's reply, which is the fault
+    /// <see cref="SpecialCalls"/> was given its barrier for at 214. This reading kept walking
+    /// for six more milestones, and the two arms disagreed out loud: <c>--routines</c> gave
+    /// <c>0x01C</c> nineteen branches while <c>--special 0x1C</c> said it was never branched
+    /// on, about the same nineteen sites.
+    /// </para>
+    /// <para>
+    /// The compares past the barrier are <b>returned rather than dropped</b>, because "this
+    /// routine is not branched on" and "this routine's answer is read across something that
+    /// may have answered instead" are different facts, and the second is the interesting one.
+    /// 219 walked one of them back and found the thing in the way was
+    /// <c>copyvar 0x8012, 0x8013 ; return</c>, which cannot have answered — so past the
+    /// barrier is where to look next, not where to stop looking.
+    /// </para>
+    /// </remarks>
+    /// <summary>
+    /// The same reading, against a handful of bytes rather than against a whole world.
+    /// <para>
+    /// <see cref="Derive"/> needs a <see cref="MapLibrary"/> and every script on every map. The
+    /// rule this milestone is about is four lines inside it, and a rule a test can only reach
+    /// through a cartridge is a rule no test reaches.
+    /// </para>
+    /// </summary>
+    public static (IReadOnlyList<int> Direct, IReadOnlyList<int> Beyond) WhatIsComparedAfter(
+        List<ScriptCommand> commands, int at, int answer = AnswerVariable)
+    {
+        (List<int> direct, List<int> beyond) = ComparedAfter(commands, at, answer);
+
+        return (direct, beyond);
+    }
+
+    private static (List<int> Direct, List<int> Beyond) ComparedAfter(
+        List<ScriptCommand> commands, int at, int answer)
     {
         var values = new List<int>();
+        var beyond = new List<int>();
+        var past = false;
 
         for (int i = at + 1; i < commands.Count && i <= at + Window; i++)
         {
@@ -192,6 +271,10 @@ public static class SpecialContracts
             // about their number rather than this routine's.
             if (commands[i].Code == SetVar && commands[i].Word() == answer) break;
 
+            // And somebody else may have ANSWERED. Everything from here on is theirs as far
+            // as this reading can tell, so it is counted apart rather than credited here.
+            if (SpecialCalls.AnswersItself(commands[i].Code)) past = true;
+
             if (commands[i].Code != Compare || commands[i].Word() != answer) continue;
 
             // Only a comparison something actually branches on. A compare with nothing after
@@ -200,10 +283,12 @@ public static class SpecialContracts
                          && Adjacent(commands[i], commands[i + 1])
                          && commands[i + 1].Code is GotoIf or CallIf;
 
-            if (forks) values.Add(commands[i].Word(2));
+            if (!forks) continue;
+
+            (past ? beyond : values).Add(commands[i].Word(2));
         }
 
-        return values;
+        return (values, beyond);
     }
 
     /// <summary>Whether one command sits immediately after another in the file.</summary>

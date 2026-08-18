@@ -107,6 +107,22 @@ public static class SpecialCalls
     ];
 
     /// <summary>
+    /// Whether a command puts an answer of its own where the answer variable is read from —
+    /// the barrier, asked from outside.
+    /// <para>
+    /// <b>There is one list and this is how the other readings reach it.</b> The list was
+    /// assembled here, over 214 and before it, because getting it wrong credits one routine
+    /// with another's reply. <see cref="SpecialContracts"/> — which is what <c>--routines</c>
+    /// prints, and what every sentence this project has written about routines was read off —
+    /// had no barrier at all until 220, and the two arms contradicted each other out loud:
+    /// <c>0x01C</c> nineteen branches there, never branched on here, the same nineteen sites.
+    /// A rule fixed in one arm and left standing in the other is this project's oldest fault
+    /// and copying the list would have been another instance of it.
+    /// </para>
+    /// </summary>
+    public static bool AnswersItself(byte code) => Answering.Contains(code);
+
+    /// <summary>
     /// The same reading, pointed at any command rather than at a special.
     /// <para>
     /// Several ordinary commands answer into the result variable too, and one of them —
