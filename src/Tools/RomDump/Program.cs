@@ -7161,7 +7161,10 @@ public static class Program
             "  in any instrument that counts it; anything above one has it waiting in all of them.");
         Console.WriteLine();
 
-        foreach (WhatTheScanOpens.ACode code in byCode.Where(c => c.Reads >= 20).Take(24))
+        // EVERY code, not the worst two dozen. A filter that keeps output readable must never
+        // decide which question gets asked, and the code somebody wants to look up is as likely
+        // to be near one as near sixty-seven.
+        foreach (WhatTheScanOpens.ACode code in byCode)
         {
             Console.WriteLine(
                 $"    0x{code.Code:X2} {ScriptCommands.NameOf(code.Code),-16} {code.Reads,5} read(s)"
@@ -7181,6 +7184,13 @@ public static class Program
                 $"    {kind.Kind,-12} {kind.Entries,5} entry(ies) at {kind.Addresses,5} address(es), "
                 + $"{kind.Reads,6} read(s) at {kind.Places,6} place(s)"
                 + $"  — {kind.Only,5} of those places NO OTHER KIND opens");
+            Console.WriteLine(
+                $"                 asks {kind.Routines,3} routine(s), {kind.RoutinesOnly.Count} of them"
+                + " asked by no other kind"
+                + (kind.RoutinesOnly.Count == 0
+                    ? ""
+                    : ": " + string.Join(", ", kind.RoutinesOnly.Take(12).Select(r => $"0x{r:X3}"))
+                      + (kind.RoutinesOnly.Count > 12 ? $" and {kind.RoutinesOnly.Count - 12} more" : "")));
         }
 
         int clean = byCode.Count(c => c.Reads == c.Places);

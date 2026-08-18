@@ -45,7 +45,20 @@ public static class WhatTheScanOpens
     /// <c>on load</c> was missing every position only <c>on load</c> reaches, and nothing
     /// printed that.
     /// </param>
-    public sealed record AKind(string Kind, int Entries, int Addresses, int Reads, int Places, int Only);
+    /// <param name="Routines">Routines asked by scripts of this kind.</param>
+    /// <param name="RoutinesOnly">
+    /// Routines <b>no other kind</b> asks. 224 recovered two kinds and twenty routines appeared;
+    /// this is the number that says so directly rather than by comparing two runs.
+    /// </param>
+    public sealed record AKind(
+        string Kind,
+        int Entries,
+        int Addresses,
+        int Reads,
+        int Places,
+        int Only,
+        int Routines,
+        IReadOnlyList<int> RoutinesOnly);
 
     /// <param name="Entries">Script entries the maps hang off people, triggers and signs.</param>
     /// <param name="Addresses">How many distinct addresses those entries point at.</param>
@@ -69,6 +82,7 @@ public static class WhatTheScanOpens
         var addresses = new Dictionary<string, HashSet<uint>>();
         var reads = new Dictionary<string, int>();
         var places = new Dictionary<string, HashSet<int>>();
+        var routines = new Dictionary<string, HashSet<int>>();
 
         foreach ((string _, string what, uint address) in library.EveryScript())
         {
@@ -82,10 +96,18 @@ public static class WhatTheScanOpens
 
             if (!places.TryGetValue(kind, out HashSet<int>? opened)) places[kind] = opened = [];
 
+            if (!routines.TryGetValue(kind, out HashSet<int>? asked)) routines[kind] = asked = [];
+
             foreach (ScriptCommand command in ScriptReader.ReadAll(rom, address))
             {
                 reads[kind] = reads.GetValueOrDefault(kind) + 1;
                 opened.Add(command.Offset);
+
+                if (command.Code == SpecialCalls.Special && command.Arguments.Length >= 2)
+                    asked.Add(command.Word());
+
+                if (command.Code == SpecialCalls.SpecialVar && command.Arguments.Length >= 4)
+                    asked.Add(command.Word(2));
             }
         }
 
@@ -98,7 +120,9 @@ public static class WhatTheScanOpens
                     addresses[kind].Count,
                     reads.GetValueOrDefault(kind),
                     places[kind].Count,
-                    OnlyHere(places.ToDictionary(e => e.Key, e => (IReadOnlyCollection<int>)e.Value), kind)))
+                    OnlyHere(places.ToDictionary(e => e.Key, e => (IReadOnlyCollection<int>)e.Value), kind),
+                    routines[kind].Count,
+                    OnlyIn(routines.ToDictionary(e => e.Key, e => (IReadOnlyCollection<int>)e.Value), kind)))
                 .OrderByDescending(k => k.Only)
                 .ThenByDescending(k => k.Places),
         ];
@@ -117,16 +141,30 @@ public static class WhatTheScanOpens
     /// cartridge and a rule only reachable through one is a rule no test reaches.
     /// </para>
     /// </summary>
-    public static int OnlyHere(IReadOnlyDictionary<string, IReadOnlyCollection<int>> places, string kind)
+    public static int OnlyHere(IReadOnlyDictionary<string, IReadOnlyCollection<int>> places, string kind) =>
+        OnlyIn(places, kind).Count;
+
+    /// <summary>
+    /// The items one kind has that no other kind has — the same rule as <see cref="OnlyHere"/>
+    /// and the thing it counts.
+    /// <para>
+    /// Asked twice: of byte positions, where it says what dropping a kind would cost, and of
+    /// routine numbers, where it says which routines only that kind ever asks. <b>One rule.</b>
+    /// The nine of <c>on load</c> and the eleven of <c>on arrival</c> are the twenty routines
+    /// 224 found by comparing two runs of the whole instrument, arrived at here directly.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<int> OnlyIn(
+        IReadOnlyDictionary<string, IReadOnlyCollection<int>> byKind, string kind)
     {
         var elsewhere = new HashSet<int>();
 
-        foreach ((string other, IReadOnlyCollection<int> opened) in places)
+        foreach ((string other, IReadOnlyCollection<int> mine) in byKind)
         {
-            if (other != kind) elsewhere.UnionWith(opened);
+            if (other != kind) elsewhere.UnionWith(mine);
         }
 
-        return places[kind].Count(at => !elsewhere.Contains(at));
+        return [.. byKind[kind].Where(at => !elsewhere.Contains(at)).Order()];
     }
 
     /// <summary>Every command the scan decodes, by code, in reads and in places.</summary>

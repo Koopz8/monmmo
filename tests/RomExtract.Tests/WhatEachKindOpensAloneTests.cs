@@ -80,6 +80,45 @@ public sealed class WhatEachKindOpensAloneTests
     }
 
     /// <summary>
+    /// AND THE SAME RULE, ASKED OF ROUTINE NUMBERS RATHER THAN BYTE POSITIONS — it is one rule
+    /// and it returns the items, not just how many.
+    /// <para>
+    /// On the cartridge: nine routines only the map's own script list asks and eleven only what
+    /// it runs on arrival — <b>the twenty 224 found by comparing two runs of the whole
+    /// instrument</b>, arrived at here directly and from a different direction.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TheSameRuleNamesWhichRoutinesOnlyOneKindAsks()
+    {
+        IReadOnlyDictionary<string, IReadOnlyCollection<int>> asked = Places(
+            ("person", [0x188, 0x194]),
+            ("on load", [0x0A7, 0x194]));
+
+        Assert.Equal([0x0A7], WhatTheScanOpens.OnlyIn(asked, "on load"));
+        Assert.Equal([0x188], WhatTheScanOpens.OnlyIn(asked, "person"));
+
+        // And the count is the same rule counted, not a second one.
+        Assert.Equal(
+            WhatTheScanOpens.OnlyIn(asked, "on load").Count,
+            WhatTheScanOpens.OnlyHere(asked, "on load"));
+    }
+
+    /// <summary>
+    /// What comes back is ORDERED, because a list of routine numbers that changes order between
+    /// runs cannot be read against the last milestone's.
+    /// </summary>
+    [Fact]
+    public void WhatOnlyOneKindHasComesBackInOrder()
+    {
+        IReadOnlyDictionary<string, IReadOnlyCollection<int>> asked = Places(
+            ("on load", [0x1B9, 0x0A7, 0x142]),
+            ("person", [0x188]));
+
+        Assert.Equal([0x0A7, 0x142, 0x1B9], WhatTheScanOpens.OnlyIn(asked, "on load"));
+    }
+
+    /// <summary>
     /// And the kinds are told apart by name, including the two whose names are two words.
     /// </summary>
     [Theory]
