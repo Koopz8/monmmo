@@ -322,6 +322,14 @@ public sealed class WhatACallLeavesBehindTests
     /// <summary>
     /// AND A SECOND CALL STOPS THE WALK RATHER THAN BEING FOLLOWED — one level, in this
     /// direction too.
+    /// <para>
+    /// This test came back green the first time it was broken, and the fixture was not the
+    /// problem. The walk had a <c>case Call</c> arm of its own sitting immediately above a
+    /// barrier check that already contained <c>call</c>, so breaking the arm changed nothing:
+    /// two statements of one rule, only one of which anything reaches. The arm is deleted and
+    /// the barrier list decides alone — and taking <c>call</c> out of that list fails this test
+    /// and nothing else in this file.
+    /// </para>
     /// </summary>
     [Fact]
     public void AnotherCallStopsTheWalkRatherThanBeingFollowed()
