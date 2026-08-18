@@ -1,5 +1,12 @@
 # Milestone 243: one number, two namespaces
 
+> **CORRECTED AT 244: `27` is `1`.** Twenty-six of them are `0x1A`'s second word, which is
+> a plain VALUE unless it happens to be a variable id — a literal 5 handed to a routine
+> counted as a look at variable 5, and 5 is also a real flag. The one that survives is
+> `0x4001`, the number that raised the question. The floor of 1.71 has not moved, so the
+> corrected finding is AT the floor: this game does not reuse numbers across the two
+> namespaces. Everything below about the method stands; the headline does not.
+
 240 printed this about a flag three scripts had just cleared:
 
 ```
