@@ -206,6 +206,7 @@ public static class Program
         if (options.Standard) WriteRoutinesReachedByNumber(rom);
         if (options.TheScan) WriteWhatTheScanOpens(rom);
         if (options.PersonCommands) WriteTwoCommands(rom);
+        if (options.Arrivals) WriteArrivals(rom);
         if (options.Closure) WriteClosure(rom, options.RoutineAnswers, options.StartAt);
         if (options.Play)
             WritePlaythrough(
@@ -7047,6 +7048,79 @@ public static class Program
     }
 
     /// <summary>
+    /// What every map runs on arrival, and whether anything in the file can satisfy the condition.
+    /// </summary>
+    private static void WriteArrivals(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("WHAT A MAP RUNS ON ARRIVAL, AND WHETHER IT CAN");
+        Console.WriteLine();
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        List<WhenAMapRunsSomething.Arrival> arrivals =
+            WhenAMapRunsSomething.In(library, WhenAMapRunsSomething.WhatIsWritten(rom, library));
+
+        if (arrivals.Count == 0)
+        {
+            Console.WriteLine("  no map runs anything on arrival");
+
+            return;
+        }
+
+        // Conditions and PLACES, because the same script address is hung off many maps and the
+        // condition tables repeat with it. Counting the conditions is counting reads again.
+        int distinct = arrivals.Select(a => (a.Variable, a.Value, a.Address)).Distinct().Count();
+
+        Console.WriteLine(
+            $"  {arrivals.Count} condition(s) — {distinct} distinct (variable, value, script) — on "
+            + $"{arrivals.Select(a => a.Address).Distinct().Count()} script(s), across "
+            + $"{arrivals.Select(a => a.MapId).Distinct().Count()} map(s), naming "
+            + $"{arrivals.Select(a => a.Variable).Distinct().Count()} variable(s)");
+
+        // Both numbers, because the same condition table hangs off many maps. The first is how
+        // often the cartridge asks; the second is how many different things it is asking.
+        int NotedAsPlaces(Func<WhenAMapRunsSomething.Arrival, bool> which) =>
+            arrivals.Where(which).Select(a => (a.Variable, a.Value, a.Address)).Distinct().Count();
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    {arrivals.Count(a => a.NothingWritesIt),4} condition(s), "
+            + $"{NotedAsPlaces(a => a.NothingWritesIt),3} distinct — a variable NOTHING in the scan writes at all");
+        Console.WriteLine(
+            $"    {arrivals.Count(a => a.NobodyWritesThisValue),4} condition(s), "
+            + $"{NotedAsPlaces(a => a.NobodyWritesThisValue),3} distinct — a variable something writes, but nobody"
+            + " writes THAT VALUE");
+        Console.WriteLine(
+            $"    {arrivals.Count(a => a.WrittenWithThis > 0),4} condition(s), "
+            + $"{NotedAsPlaces(a => a.WrittenWithThis > 0),3} distinct — a setvar in the scan can satisfy it");
+
+        Console.WriteLine();
+        Console.WriteLine("  by variable, worst first:");
+
+        foreach (IGrouping<int, WhenAMapRunsSomething.Arrival> variable in arrivals
+                     .GroupBy(a => a.Variable)
+                     .OrderByDescending(g => g.Count(a => a.WrittenWithThis == 0))
+                     .ThenByDescending(g => g.Count()))
+        {
+            WhenAMapRunsSomething.Arrival first = variable.First();
+
+            Console.WriteLine(
+                $"    0x{variable.Key:X4} — {variable.Count(),4} condition(s), "
+                + $"{variable.Select(a => (a.Value, a.Address)).Distinct().Count(),3} distinct, on "
+                + $"{variable.Select(a => a.MapId).Distinct().Count(),3} map(s)");
+            Console.WriteLine(
+                $"             wanted {string.Join("/", variable.Select(a => a.Value).Distinct().Order())}"
+                + $"; written "
+                + (first.Values.Count == 0
+                    ? "NOWHERE"
+                    : string.Join(
+                        ", ", first.Values.OrderBy(v => v.Key).Select(v => $"{v.Key} at {v.Value} place(s)")))
+                + $"; {variable.Count(a => a.WrittenWithThis == 0)} condition(s) nobody writes");
+        }
+    }
+
+    /// <summary>
     /// The two commands with widths and no names, measured against the maps they are on.
     /// </summary>
     private static void WriteTwoCommands(Rom rom)
@@ -12794,6 +12868,8 @@ public static class Program
 
         public bool PersonCommands { get; private init; }
 
+        public bool Arrivals { get; private init; }
+
         public bool Play { get; private init; }
 
         /// <summary>Items to hunt through every script in the image, or nothing.</summary>
@@ -13001,6 +13077,7 @@ public static class Program
             bool standard = false;
             bool theScan = false;
             bool personCommands = false;
+            bool arrivals = false;
             bool fights = false;
             bool whoKnows = false;
             var coins = false;
@@ -13260,6 +13337,9 @@ public static class Program
                         break;
                     case "--two-commands":
                         personCommands = true;
+                        break;
+                    case "--arrivals":
+                        arrivals = true;
                         break;
                     case "--fights":
                         fights = true;
@@ -13584,6 +13664,7 @@ public static class Program
                 Standard = standard,
                 TheScan = theScan,
                 PersonCommands = personCommands,
+                Arrivals = arrivals,
                 Play = play,
                 WhereFrom = whereFrom,
                 InTheImage = inTheImage,
