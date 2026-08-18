@@ -1,7 +1,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-263`, 2924 tests green.
+`claude-264`, 2934 tests green.
 
 Standing rules — do not break these:
 
@@ -101,8 +101,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-224-the-list-that-was-short.md` first, then
-`223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
+Read `claude/milestone-225-what-each-kind-opens-alone.md` first, then
+`224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
 **Twenty faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
@@ -271,6 +271,9 @@ of the 40, 38 read 0x01C's or 0x01D's answer across a call that is `copyvar 0x80
 11 of the 336 have NO owner: 2 behind a jump here and 9 from 218
 the map scan is 2915 entries at 1959 addresses, 90624 command reads at 24491 byte positions
 ONLY 11 of 108 command codes are read once per byte position — --the-scan says which
+by kind: person 15966 places alone, sign 3015, trigger 2134, on load 1324, on arrival 1167
+the two kinds the shared list lost open 2491 places nothing else reaches — 1 in 10 of 24491
+0x0A3 is the FAN CLUB on 14.9: eight fans in 0x8004, and the map's on-load asks it eight times
 178 routines called at 936 places; the ceiling is 45 of 437 byte positions
 the run's silence decides at 11 byte positions: 0x188 (1) and 0x0A3 (8), 0x0D5, 0x189
 --routines: 148 sites have a compare past something, 81 with nothing else — 38 come back,
@@ -304,9 +307,12 @@ the 57 are TWO blocks, each a yes/no turning on 0x083 or 0x084 and then 0x153
    **And check the enumerator before the count.** 224 found the shared script list — created at
    221 to end this very fault — reading three of the five kinds, so 221, 222 and 223 all ran on
    four fifths of the cartridge's scripts. Their findings survived; their numbers did not.
-   **`0x0A3`** is what that hid: asked four times by the widest run, its silence decides eight
-   byte positions, more than everything else in the mixed bucket together, and nobody has looked
-   at it.
+   **`0x0A3` is read now** (225): the fan club on `14.9`, eight fans numbered in `0x8004`, asked
+   once by each fan and eight more times by the map's own on-load chain at `0x0816F163`. Its
+   nought arms call `0x63 ; 0x65 ; return` — **two commands whose widths this project derived at
+   187 and whose meanings it never named**, both taking a person id on that map. So the run's
+   silence runs an unnamed per-person command on all eight fans on arrival. `0x63`, `0x65` and
+   the `special 0x00A7` that opens the chain are the cheap next reads.
    Also owed: **the standard-routine table** (222 hunted it — 24 candidates against a floor of 0,
    no way to choose because a pointer to `nop ; end` passes "reads as a script"; untried rules
    are that entries be distinct and longer than two bytes). **`callstd 0x05`'s 251 "not said"
