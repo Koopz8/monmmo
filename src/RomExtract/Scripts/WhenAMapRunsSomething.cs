@@ -51,17 +51,6 @@ public static class WhenAMapRunsSomething
     }
 
     /// <summary>
-    /// Whether one header entry is a read at all — it is, unless it runs nothing.
-    /// </summary>
-    /// <remarks>
-    /// <b>Moved to <see cref="ReadsThatAreNotCommands"/> at 247</b>, where every kind of
-    /// non-command read lives together, because 246 found this one and 247 found the trigger's by
-    /// looking for a second copy of the same reasoning. Kept here as the name this sweep uses, so
-    /// the caller counting conditions and the caller counting variables cannot come apart.
-    /// </remarks>
-    public static bool IsARead(MapEntryScript entry) => ReadsThatAreNotCommands.IsARead(entry);
-
-    /// <summary>
     /// Every arrival condition on every map, with what the file does about the variable it names.
     /// </summary>
     /// <param name="written">
@@ -77,7 +66,7 @@ public static class WhenAMapRunsSomething
         {
             string mapId = WorldExporter.MapId(map.Bank, map.Number);
 
-            foreach (MapEntryScript entry in map.OnEntry.Where(IsARead))
+            foreach (MapEntryScript entry in map.OnEntry.Where(ReadsThatAreNotCommands.IsARead))
                 found.Add(For(mapId, entry, written.GetValueOrDefault(entry.Variable)));
         }
 
