@@ -1,7 +1,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-260`, 2903 tests green.
+`claude-261`, 2912 tests green.
 
 Standing rules — do not break these:
 
@@ -101,8 +101,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-221-may-have-is-not-an-answer.md` first, then
-`220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
+Read `claude/milestone-222-the-routines-reached-by-number.md` first, then
+`221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
 **Twenty faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
@@ -150,7 +150,17 @@ dotnet run -c Release --project src/Tools/RomDump -- firered.gba --play --say-ye
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --stops 0xC0
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --script-map 6.2
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --routines
+dotnet run -c Release --project src/Tools/RomDump -- firered.gba --standard
 ```
+
+`--standard` is the routines reached by NUMBER. It counts what the maps ask for, hunts the table
+by shape with a reversed-image floor beside it — **24 candidates in the file and 0 in the
+reversal, and no way to choose between the 24**, because a pointer to `nop ; end` passes "reads
+as a script" — and then answers the question the table was wanted for from the other end: **if
+`callstd N ; compare 0x800D ; if` has nothing in front of it that could have answered, the
+compare is reading what N left.** `0x05` has 152 such sites and `0x00` has two. Derived only
+from sites where nothing else could have answered and applied to sites where something could,
+which is the opposite direction and not circular.
 
 `--routines` has the barrier now (220) and prints what it does not credit: the sites whose
 compare is only past a `call`, another `special`, a `callstd` or a `0xA0`, in their own section
@@ -260,7 +270,9 @@ of 1055 branching sites in the file, nought takes 212 — and 0x188's one place 
 of the 40, 38 read 0x01C's or 0x01D's answer across a call that is `copyvar 0x8012, 0x8013`
 11 of the 336 have NO owner: 2 behind a jump here and 9 from 218
 --routines had NO barrier until 220: 145 sites have a compare past something, 78 with nothing else
-of those 78: 38 the routine gets back, 30 were somebody else's, 10 not said (7 behind a callstd)
+of those 78: 38 the routine gets back, 37 were somebody else's, 3 not said
+callstd 0x05 and 0x00 ANSWER — 152 and 2 sites have nothing in front that could have instead
+5457 callstd/gotostd askings at 2719 places, of 9 numbers; the table is NOT found
 17 of 63 routines were branched on ONLY that way — 2 come back, 10 are not theirs, 5 unknown
 the branch table is 1037 sites at 411 byte positions — 0x187 is 376 reads of 72 addresses
 0x01C's nineteen sites are ONE address; 219 called them nineteen places
@@ -282,19 +294,21 @@ the 57 are TWO blocks, each a yes/no turning on 0x083 or 0x084 and then 0x153
    anyway, which is the `#130` at 71 the party ends with. **The floor is clean**: 1 place asks,
    nothing comes of it, so the floor's party of six is entirely earned. Whether that deserves a
    `--pay` lever or a located payout table is a DECISION and it is deliberately not made.
-3. **The five sites behind a `callstd`, which is a standard routine nobody here has read.**
-   221 resolved the seventeen: two come back (`0x01C`, `0x01D` — the call in the way is
-   `copyvar 0x8012, 0x8013 ; return`), ten were never theirs, and five are behind a standard
-   routine and stay unknown. `0x0BF`, `0x0DE`, `0x11D`, `0x177`, `0x1A0`, one site each — and
-   **seven of `0x0188`'s ten** are behind one too. Reading a standard routine would settle
-   twelve sites and is a thing this project has never attempted.
-   **And `0x0188`'s other three**: three past a command that answers on its own account, three
-   past a block that jumps away. 215 called `0x0188` the last of the run's ceiling on the
-   strength of one clean site.
+3. **The standard-routine table, with a filter that is not "ends the way blocks end".** 222
+   hunted it and got 24 candidates against a floor of 0, and could not choose because most of
+   them are runs of pointers to `nop ; end`. Two rules that have not been tried: the entries
+   should be **distinct** (a table indexed by nine numbers that returns one block distinguishes
+   nothing) and should be **longer than two bytes**. Finding it would say what all nine numbers
+   do rather than just that two of them answer.
+   **`callstd 0x05`'s 250 "not said" sites.** 152 clean sites already settle that it answers, so
+   these change no verdict — but they are 250 places where 219's walk back gives up, and what it
+   is giving up on has not been looked at.
+   **`0x0188`'s last three**, behind a block that jumps away. 215 called it the last of the run's
+   ceiling on the strength of one clean site at one byte position.
    **Every routine sentence in this project quoted sites, not places.** The branch table is 1037
    sites at 411 byte positions; `0x0187` is 376 reads of 72 addresses and `0x01C` is nineteen
-   reads of ONE. 219's "nineteen places" was nineteen times. Which of the older numbers were
-   about the cartridge is now askable and mostly unasked.
+   reads of ONE. Which of the older numbers were about the cartridge is now askable and mostly
+   unasked. **This is the biggest owed thing on the list.**
    Still owed and cheap: **`0x081A77B0`**, where 218's jumping arm goes from nineteen sites, and
    **`0x0153`**, half of every one of the fifty-seven decisions, whose own sites nobody has
    looked at. Also owed: **seven boulder flags with no setter anywhere**, **`0x0805`** which the
@@ -414,7 +428,13 @@ out loud for six milestones without anybody asking both. **When you fix a readin
 else reads that shape** — and prefer exposing the one list to copying it, because a copy is how
 they came apart.
 
-**A green break twice running meant the RULE was in the wrong place, not the guard** (219, 221).
+**A green break THREE milestones running meant the RULE was in the wrong place, not the guard**
+(219, 221, 222). At 222 it happened twice in one milestone: both rules the verdict rests on lived
+inside a function that needs a whole cartridge, so no fixture could reach either. **When a break
+is green, ask where the rule lives BEFORE you suspect the fixture** — on this evidence that is
+the likelier of the two, and the note below has had it the other way round since 190.
+
+**The same, first stated as** (219, 221):
 At 219 the line being broken was a second copy of a rule nothing could reach; at 221 it was two
 lines inside a function that needs a whole cartridge to run, so no fixture could reach it either.
 Both times the fix was to move the rule to where a test can ask it directly, and both times the

@@ -6,12 +6,12 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **"Something might have answered first" is not an answer, so this went and looked.** Of the
-  78 sites where the whole claim rested on that: 38 come back to the routine (the thing in the
-  way is four bytes that move one number to another), 30 were never its answer at all, and 10
-  stay unknown.
-- **The unknown ten are the honest part.** Seven sit behind a standard routine nobody here has
-  ever read, and calling those a "no" would have been inventing a fact to fill a hole.
-- Last milestone's own headline said 145 where it meant 78. Both numbers are printed now.
-- **One list of every script, replacing five copies of it** — a sixth was about to be written.
-- Five breaks, five catches. The green one meant the rule was somewhere no test could reach it.
+- **Some of the game's routines are called by number, not by address**, and the table of numbers
+  has never been found. Hunting it turned up 24 candidates and no way to choose — because the
+  test being used ("does this look like a script?") accepts two bytes of nothing.
+- **So the question got answered from the other end.** Where a script calls one of these and then
+  immediately checks the answer, and nothing before it could have supplied one, the answer must
+  be the routine's. Two of the nine are pinned down that way, one with 152 witnesses.
+- Ten unexplained places become three. Six breaks, six catches.
+- **Three milestones running, a passing sabotage test meant the rule was somewhere no test could
+  reach it** — not that the test was weak. That guidance is now the other way round.
