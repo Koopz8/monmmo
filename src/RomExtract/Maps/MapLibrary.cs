@@ -55,30 +55,41 @@ public sealed class MapLibrary
     public IEnumerable<LoadedMap> All() => _byId.Values.Select(Load);
 
     /// <summary>
-    /// Every script the maps hang off anything: people, triggers and signs, with the map and a
-    /// name for where it hangs.
-    /// <para>
-    /// <b>One list.</b> Scans in this repository have rolled their own version of this before
-    /// and disagreed about what belongs in it, which is a fault the project has closed once
-    /// already. A fourth copy was about to be written for 221; this is it instead. A scan that
-    /// reads fewer scripts than another scan comes back with a smaller number and nothing says
-    /// why.
-    /// </para>
+    /// Every script the maps hang off anything, with the map and a name for where it hangs.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>All FIVE kinds.</b> People, triggers and signs are the three everybody thinks of; the
+    /// other two are the scripts a map runs on arrival, and the entries in the map's own script
+    /// list. Milestone 176 added the fifth to <c>WhatItIsWaitingFor.EveryScriptOn</c> after
+    /// "nothing in the world sets this flag" turned out three times running to be a sentence
+    /// about a scan that had never opened one.
+    /// </para>
+    /// <para>
+    /// <b>And this list had three of them until 224.</b> It was created at 221 to end exactly
+    /// this fault — five scans had rolled their own copy — and it unified them onto the SHORT
+    /// version, so every instrument that uses it read 2331 entries where <c>--scripts</c> reads
+    /// 2915. A shared wrong list is worse than five private ones: it agrees with itself.
+    /// </para>
+    /// <para>
+    /// The conditional kinds of the on-load list are left out on purpose: their pointer is not a
+    /// script, it is a table of variable, value and script, and those scripts arrive through the
+    /// arrival list already. Reading a condition table as commands is a misread that would parse.
+    /// </para>
+    /// </remarks>
     public IEnumerable<(string MapId, string What, uint Address)> EveryScript()
     {
         foreach (LoadedMap map in All())
         {
             string mapId = WorldExporter.MapId(map.Bank, map.Number);
 
-            foreach (MapObject person in map.Objects.Where(o => o.HasScript))
-                yield return (mapId, $"person {person.LocalId}", person.ScriptAddress);
-
-            foreach (MapTrigger trigger in map.Triggers.Where(t => t.HasScript))
-                yield return (mapId, $"trigger ({trigger.X},{trigger.Y})", trigger.ScriptAddress);
-
-            foreach (MapSign sign in map.Signs.Where(s => s.HasScript))
-                yield return (mapId, $"sign ({sign.X},{sign.Y})", sign.ScriptAddress);
+            // Asked of the reading that already knows all five kinds, rather than listed again
+            // here. A SIXTH copy is how this list came to be short in the first place.
+            foreach (Scripts.SetsAFlag script in Scripts.WhatItIsWaitingFor.EveryScriptOn(
+                         mapId, map.Objects, map.Triggers, map.Signs, map.OnEntry, map.OnLoad))
+            {
+                yield return (script.MapId, script.What, script.Address);
+            }
         }
     }
 

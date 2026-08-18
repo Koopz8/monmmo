@@ -204,6 +204,7 @@ public static class Program
         if (options.FlagGates) WriteFlagGates(rom);
         if (options.SpecialContracts) WriteSpecialContracts(rom);
         if (options.Standard) WriteRoutinesReachedByNumber(rom);
+        if (options.TheScan) WriteWhatTheScanOpens(rom);
         if (options.Closure) WriteClosure(rom, options.RoutineAnswers, options.StartAt);
         if (options.Play)
             WritePlaythrough(
@@ -7045,6 +7046,47 @@ public static class Program
     }
 
     /// <summary>
+    /// The error bar on every map-scan number in this project, in one table: how many times each
+    /// command is decoded against how many byte positions those reads are.
+    /// </summary>
+    private static void WriteWhatTheScanOpens(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("WHAT THE MAP SCAN OPENS, IN READS AND IN PLACES");
+        Console.WriteLine();
+
+        (WhatTheScanOpens.Overall whole, List<WhatTheScanOpens.ACode> byCode) =
+            WhatTheScanOpens.Of(rom, MapLibrary.Open(rom));
+
+        Console.WriteLine(
+            $"  {whole.Entries} script entry(ies) at {whole.Addresses} distinct address(es)");
+        Console.WriteLine(
+            $"  {whole.Reads} command read(s) at {whole.Places} byte position(s)"
+            + $" — {(whole.Places == 0 ? 0 : (double)whole.Reads / whole.Places):0.0} reads per byte");
+        Console.WriteLine();
+        Console.WriteLine(
+            "  by command, worst first. A code whose two numbers are EQUAL has nothing to correct");
+        Console.WriteLine(
+            "  in any instrument that counts it; anything above one has it waiting in all of them.");
+        Console.WriteLine();
+
+        foreach (WhatTheScanOpens.ACode code in byCode.Where(c => c.Reads >= 20).Take(24))
+        {
+            Console.WriteLine(
+                $"    0x{code.Code:X2} {ScriptCommands.NameOf(code.Code),-16} {code.Reads,5} read(s)"
+                + $" at {code.Places,5} place(s)  x{code.Over:0.0}"
+                + $"   on {code.Maps,3} map(s)");
+        }
+
+        int clean = byCode.Count(c => c.Reads == c.Places);
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  {clean} of {byCode.Count} code(s) are read once per byte position, so a count of"
+            + " reads and a count of places are the same number for them");
+    }
+
+    /// <summary>
     /// The standard routines, which are blocks a script reaches by number. Nothing here knows
     /// where the table is; the shape is hunted and the reversed image says whether the shape
     /// means anything.
@@ -12626,6 +12668,8 @@ public static class Program
 
         public bool Standard { get; private init; }
 
+        public bool TheScan { get; private init; }
+
         public bool Play { get; private init; }
 
         /// <summary>Items to hunt through every script in the image, or nothing.</summary>
@@ -12831,6 +12875,7 @@ public static class Program
             bool closure = false;
             bool specialContracts = false;
             bool standard = false;
+            bool theScan = false;
             bool fights = false;
             bool whoKnows = false;
             var coins = false;
@@ -13084,6 +13129,9 @@ public static class Program
                         break;
                     case "--standard":
                         standard = true;
+                        break;
+                    case "--the-scan":
+                        theScan = true;
                         break;
                     case "--fights":
                         fights = true;
@@ -13406,6 +13454,7 @@ public static class Program
                 Closure = closure,
                 SpecialContracts = specialContracts,
                 Standard = standard,
+                TheScan = theScan,
                 Play = play,
                 WhereFrom = whereFrom,
                 InTheImage = inTheImage,
