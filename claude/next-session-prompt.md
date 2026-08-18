@@ -119,8 +119,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-232-ninety-seven-objects-and-one-command.md` first, then `231`,
-`230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
+Read `claude/milestone-233-the-command-that-already-had-a-name.md` first, then `232`,
+`231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
 **Twenty faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
@@ -174,7 +174,14 @@ dotnet run -c Release --project src/Tools/RomDump -- firered.gba --two-commands
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --arrivals
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --the-floor
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --read-from 0x081BE06F
+dotnet run -c Release --project src/Tools/RomDump -- firered.gba --field-effects
 ```
+
+`--field-effects` pairs every block that asks who knows a move with the number its `dofieldeffect`
+takes: 7 blocks, 6 moves, 6 numbers, no move with two — and it says out loud that the only direct
+evidence is the ONE repeated move repeating its number. It also prints the four numbers no move
+drives and the one-in-210 floor on them all being above all six, and the raw whole-image sweep
+beside its reversal, which is ahead.
 
 `--read-from 0xADDR[,0xADDR]` prints an address: the bytes and what they read as **off the same
 command**, every block it reaches, and which byte stopped a read and where. This project's
@@ -309,7 +316,8 @@ in the same commit; the alternative is what 230 and 231 spent a session undoing.
 227 of them do nothing but hand over; 22 scenes are one scene entered several ways
 3856 read to a proper end, 32 stopped at 19 codes
 729 trainerbattle sites on 104 maps; 27 carry a second exit, 10 of those skipped a guard
-7 places in the file ask who knows a move and are jumped into; 0 in the reversal; 4 offer
+7 places in the file ask who knows a move and are jumped into; 0 in the reversal; 5 OFFER
+7 blocks in the WHOLE IMAGE offer — the other 2 are CUT's and WATERFALL's, jumped into by nothing
 322 flags gate something; 264 are moved by a script somewhere; 233 are the code boundary
   259 of the 264 are on an arm a run could take; the other 5 are behind a switch the script decides
 9 people on or beside a door behind 5 flags — the wall list
@@ -369,6 +377,12 @@ the obstacle scripts carry 49 CUT / 97 ROCK SMASH / 54 STRENGTH objects, on 21 /
 0x27 is 98 byte positions and 68 of them follow a special, against a floor of 2.35% (2.3 of 98)
 0x9C is 7 byte positions and SEVEN distinct words — a column; 3 of them are the obstacle scripts
 exactly ONE conditional in the map scan has a 0x27 its target lacks, and it is 0x0AB's
+0x9C is dofieldeffect, named in ONE place since 233 and privately in EverywhereInTheImage since 191
+6 moves pair with 6 numbers: CUT 2, SURF 9, ROCK SMASH 37, STRENGTH 40, WATERFALL 43, DIVE 44
+the only repeated move (DIVE, twice) repeats its number — ONE agreement, not six
+the 4 numbers no move drives are 62, 64, 68, 69 and ALL SIX move numbers are below all four
+  — 6 of 10, which chance would do one time in 210
+the raw 0x9C sweep is 11446 sites in BOTH images and the REVERSAL READS ON MORE — throw it away
 ```
 
 ## The next task, precisely
@@ -376,9 +390,9 @@ exactly ONE conditional in the map scan has a 0x27 its target lacks, and it is 0
 1. **`0x0AB` IS READ (232) and the block audit is DONE (231).** What is left of the audit: What is left of it: the three
    numbers nothing prints (`62 gates hold 240 people`, `146 trees and rocks`, `158 objects`) and
    `the ceiling is 45 of 437 byte positions`. Each needs an instrument or deleting; they are
-   marked in the block. The next cheap reads are the **four `0x9C` sites that are NOT obstacle
-   scripts** — `0x003E` on `1.80`'s arrival, `0x0044` on `2.56`, and `0x0040`/`0x0045` on two
-   `10.14` signs, which is the GAME CORNER a third time — and the **41 routines a `0x27` follows**.
+   marked in the block. The next cheap reads are the **four `dofieldeffect` numbers no move
+   drives** — 62 on `1.80`'s arrival script, 68 on `2.56`, and 64 and 69 on two `10.14` signs,
+   which is the GAME CORNER a third time — and the **41 routines a `0x27` follows** (232).
    `--read-from` makes all of those one command each. The history for reference:
    230 did the floor-row bisect (answer: milestone **199**, one commit, +3 at all six settings,
    announced in its own commit message) and then found the bigger thing: that block, and two
