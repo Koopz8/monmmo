@@ -5,7 +5,7 @@
 # bundle into from-claude, fast-forward main onto it, push. Run it from anywhere inside
 # the working copy.
 #
-#   bash tools/push.sh              # newest claude-*.bundle in the repository root
+#   bash tools/push.sh              # incoming.bundle, or the newest claude-*.bundle
 #   bash tools/push.sh some.bundle  # that one
 #
 # It refuses rather than guesses: a merge that would not fast-forward stops and says so,
@@ -25,12 +25,22 @@ for lock in .git/index.lock .git/ORIG_HEAD.lock .git/HEAD.lock .git/refs/heads/*
   [ -e "$lock" ] && mv -f "$lock" ".git/stale-locks/$(basename "$lock").$(date +%s)" 2>/dev/null
 done
 
+# WHICH BUNDLE. incoming.bundle first, by name rather than by date.
+#
+# Picking the newest claude-*.bundle by mtime worked until it did not have to: OneDrive
+# rewrites mtimes on sync, and "the newest file" is then a claim about the sync rather than
+# about the handover. Every delivery now also lands as `incoming.bundle` — same bytes, fixed
+# name — so the ordinary case needs no guess at all. The dated list stays as the fallback and
+# as the archive.
 bundle="${1:-}"
+if [ -z "$bundle" ]; then
+  [ -f incoming.bundle ] && bundle=incoming.bundle
+fi
 if [ -z "$bundle" ]; then
   bundle=$(ls -t claude-*.bundle 2>/dev/null | head -1)
 fi
 
-[ -n "$bundle" ] && [ -f "$bundle" ] || { echo "no bundle to push — pass one, or drop a claude-*.bundle here"; exit 1; }
+[ -n "$bundle" ] && [ -f "$bundle" ] || { echo "no bundle to push — pass one, or drop incoming.bundle here"; exit 1; }
 
 echo "bundle:  $bundle"
 

@@ -1,3 +1,8 @@
+> **This file is the prompt.** It lives in the repo at `claude/next-session-prompt.md` and in the
+> attached Claude Project at the same path, and the two are written together. You do not have to
+> paste it — opening a session with *"read `claude/next-session-prompt.md` from the project and
+> carry on"* is enough, and it cannot go stale against the repo copy the way a paste can.
+
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
@@ -19,12 +24,44 @@ Standing rules — do not break these:
   out of the repository, out of every commit and out of the bundle. It turns one measurement
   per round trip into a dozen in one turn and it is how the actual answers get found — by
   disassembling forty bytes by hand. Ask first; do not assume.
-* You have no credentials and can't push. Deliver work as git bundles
-  (`git bundle create <file> <base>..main`), rehearsed from a clean clone at the base, sent
-  with SendUserFile. I merge with `git merge incoming` — not `--ff-only`. **Bundles sent to
-  chat do not reach my disk.** Write them straight into `~/OneDrive/Desktop/pokemmo/` with the
-  device bridge as well, or I can't merge them. Don't run `git` through the bridge in that
-  folder — it leaves a stale `index.lock` I have to delete by hand.
+* You have no credentials and can't push. Deliver work as git bundles, rehearsed from a clean
+  clone at the base. **Bundles sent to chat do not reach my disk** — write them into
+  `~/OneDrive/Desktop/pokemmo/` with the device bridge as well, or they are not delivered.
+  Write BOTH names, same bytes: `claude-<n>.bundle` for the archive and **`incoming.bundle`**,
+  so my side never depends on picking the newest file.
+  **The handover on my side is one command: `bash tools/push.sh`.** It clears the `index.lock`
+  OneDrive leaves behind, fetches the bundle into `from-claude`, **fast-forwards** main onto it
+  and pushes to `github.com/Koopz8/monmmo`. So build every bundle on the tip of my main and
+  keep it linear — if it would not fast-forward, the script stops and asks for a rebuilt one,
+  which is the right answer. Don't hand me `git merge` lines; say "run `bash tools/push.sh`".
+  Don't run `git` through the bridge inside that folder — it leaves a stale `index.lock`.
+  `tools/push.sh` is the tracked one and prefers `incoming.bundle` by name; the untracked copy
+  that used to sit in the repo root was moved to `_to_delete/` at 233 because two copies of the
+  handover script is one too many.
+
+## Getting the session running
+
+Four steps, and none of them is thinking. Ask before staging the cartridge; everything else is
+mechanical.
+
+1. `device_request_folder_access` on `~/OneDrive/Desktop/pokemmo`.
+2. `device_bash`:
+   `rm -rf /tmp/repo.git /tmp/repo.tar.gz && git clone --no-hardlinks --bare "$HOME/mnt/pokemmo" /tmp/repo.git && tar czf /tmp/repo.tar.gz -C /tmp repo.git && cp /tmp/repo.tar.gz "$HOME/mnt/pokemmo/_transfer.tar.gz"`
+   — a local clone READS the working copy and writes nothing to it, which is why it is safe
+   where running `git` in that folder is not.
+3. `device_stage_files` on `_transfer.tar.gz` and, **with permission**, `firered.gba`.
+4. In the container:
+   ```
+   mkdir -p ~/work && tar xzf /mnt/user-data/uploads/pokemmo/_transfer.tar.gz -C ~/work
+   git -c safe.directory='*' clone -q ~/work/repo.git ~/pokemmo
+   bash ~/pokemmo/tools/session-setup.sh
+   ```
+   That installs the .NET 8 SDK, puts the cartridge in place, drops the transfer remote (there
+   is no remote to push to and leaving one makes every hook ask), sets the git identity and
+   builds RomDump. It is idempotent — run it again after a resume.
+
+`_transfer.tar.gz` is scratch and lives in that folder because the bridge can only stage from
+inside it. Overwrite it rather than adding another.
 
 ## The method that works here
 
