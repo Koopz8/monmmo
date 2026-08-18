@@ -1,7 +1,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-266`, 2944 tests green.
+`claude-267`, 2946 tests green.
 
 Standing rules — do not break these:
 
@@ -101,8 +101,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-227-twenty-from-the-other-direction.md` first, then
-`226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
+Read `claude/milestone-228-the-flags-a-map-moves-on-its-own.md` first, then
+`227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
 **Twenty faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
@@ -280,6 +280,8 @@ neither is NAMED: what they take is read, what they do is still a guess
 9 routines only the map's own script list asks, 11 only what it runs on arrival — 224's twenty
 0x0A7 is one place in the whole game, unbranched, the line before the eight fan questions
 0x5C trainerbattle is 794 reads at 729 places and --fights says 729 — two readings agreeing
+65 flags are moved ONLY by a map's own scripts: 54 on load, 11 on arrival — the world setting up
+0x0070's only two movers in the image are the two arms of one branch on 0x0180, unanswerable
 178 routines called at 936 places; the ceiling is 45 of 437 byte positions
 the run's silence decides at 11 byte positions: 0x188 (1) and 0x0A3 (8), 0x0D5, 0x189
 --routines: 148 sites have a compare past something, 81 with nothing else — 38 come back,

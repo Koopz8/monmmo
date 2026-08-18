@@ -6,13 +6,11 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **The twenty routines that appeared three milestones ago are now named, from one run instead of
-  two.** Nine are asked only by a map's own startup list, eleven only by what it runs on arrival.
-  Same rule as "what does this kind of script reach alone", asked of routines instead of bytes.
-- **One of them is a single line in the whole game**: three matching byte runs in sixteen
-  megabytes, one of them real, sitting immediately before the fan club asks whether each of eight
-  people is a fan of you.
-- **The audit of everything else came back clean** — two separate readings of the cartridge agree
-  on 729 trainer battles. A clean audit is a result.
-- Four breaks. Two green: one rule in the wrong place, one fixture that couldn't tell two columns
-  apart.
+- **Sixty-five of the game's flags are moved only by a map's own startup scripts** — not by a
+  person, a sign, or walking anywhere. The world setting itself up. That is what those two kinds
+  of script are for, and nobody had put it that way.
+- **The sharpest one: a single branch decides a flag outright.** One routine the robot cannot
+  answer, at one address, run on arrival at nineteen shops — and its two arms are the only two
+  things in sixteen megabytes that touch that flag.
+- Three breaks. The green one was the sixth in ten milestones with the same cause, and it mattered
+  here: the rule it hid is what makes that flag have two movers instead of one.
