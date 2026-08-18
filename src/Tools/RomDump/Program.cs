@@ -210,6 +210,7 @@ public static class Program
         if (options.TheFloor) WriteTheFloorTable(rom, options.StartAt);
         if (options.FieldEffects) WriteFieldEffects(rom);
         if (options.Namespaces) WriteNamespaces(rom);
+        if (options.Buried) WriteBuried(rom);
         if (options.Slots.Count > 0) WriteSlots(rom, options.Slots);
         if (options.ReadFrom.Count > 0) WriteBlocks(rom, options.ReadFrom);
         if (options.Closure) WriteClosure(rom, options.RoutineAnswers, options.StartAt);
@@ -8923,6 +8924,248 @@ public static class Program
     /// <summary>
     /// The numbers this cartridge uses in both namespaces at once.
     /// </summary>
+    private static void WriteBuried(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("WHAT IS BURIED, AND WHAT REMEMBERS IT");
+        Console.WriteLine();
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        List<Buried> buried = WhatIsBuried.In(rom, library.All());
+
+        // THE CORROBORATION THE FIELD READING NEEDS. "The first halfword is an item id" is a
+        // claim about a number, and the item table is a reading this project already has: if the
+        // numbers resolve to names, the split is right, and if they resolve to nothing it is not.
+        Dictionary<int, string> names = ItemTable.Locate(rom) is { } table
+            ? ItemTable.Read(rom, table).ToDictionary(i => i.Id, i => i.Name)
+            : [];
+
+        string NameOfItem(int id) => names.GetValueOrDefault(id, "?");
+
+        Console.WriteLine(
+            $"  {buried.Count} sign record(s) of the buried kind, on"
+            + $" {buried.Select(b => b.MapId).Distinct().Count()} map(s) — the four bytes every"
+            + " other sign uses for a script pointer, printed rather than guessed at:");
+
+        foreach (Buried one in buried.Take(12))
+            Console.WriteLine($"    {one}   [{NameOfItem(one.Item)}]");
+
+        if (buried.Count > 12) Console.WriteLine($"    ... and {buried.Count - 12} more");
+
+        // AND THE SHAPE OF EACH SPLITTING. Which four-byte reading is right is not asserted:
+        // three candidates are offered and the density of each is printed, because a field
+        // holding each of 0..N-1 once is an index and a field holding flag numbers is not.
+        Console.WriteLine();
+        Console.WriteLine("  and how dense each candidate field is — an INDEX is 0..N-1 with no gaps:");
+
+        foreach ((string what, IReadOnlyCollection<int> values) in new (string, IReadOnlyCollection<int>)[]
+                 {
+                     ("the first halfword", [.. buried.Select(b => b.Item)]),
+                     ("the third byte    ", [.. buried.Select(b => b.Third)]),
+                     ("the fourth byte   ", [.. buried.Select(b => b.Fourth)]),
+                 })
+        {
+            Console.WriteLine(
+                $"    {what}: {WhatIsBuried.Density(values)}"
+                + (WhatIsBuried.IsADenseIndex(values) ? "   <- AN INDEX" : ""));
+        }
+
+        Console.WriteLine(
+            "    the fourth byte's values: "
+            + string.Join(
+                ", ",
+                buried.GroupBy(b => b.Fourth).OrderBy(g => g.Key)
+                    .Select(g => $"{g.Key} (0x{g.Key:X2}) x{g.Count()}")));
+
+        Console.WriteLine(
+            "    the 6 with the top bit set: "
+            + string.Join(
+                ", ",
+                buried.Where(b => b.Fourth >= 0x80)
+                    .Select(b => $"{b.MapId} ({b.X},{b.Y}) item {b.Item} x{b.Fourth & 0x7F}"))
+            + " — the low seven bits are a count at all 183, so the top one is something else");
+
+        Console.WriteLine(
+            "    and the same item buried in several places: "
+            + string.Join(
+                ", ",
+                buried.GroupBy(b => b.Item).Where(g => g.Count() > 1)
+                    .OrderByDescending(g => g.Count()).Take(6)
+                    .Select(g => $"{NameOfItem(g.Key)} x{g.Count()}"))
+            + " — each one needs its own memory, so the memory cannot be the item");
+
+        // AND THE ODD ONES, because a group of twelve naming item 0 is either a second kind of
+        // record read as this one or a dozen things the game buries and does not give.
+        List<Buried> blank = [.. buried.Where(b => b.Item == 0)];
+
+        if (blank.Count > 0)
+        {
+            Console.WriteLine(
+                $"    {blank.Count} name item 0, which the table calls \"{NameOfItem(0)}\": "
+                + string.Join(", ", blank.Select(b => $"{b.MapId} ({b.X},{b.Y}) index {b.Third}"))
+                + " — on "
+                + $"{blank.Select(b => b.MapId).Distinct().Count()} map(s)");
+        }
+
+        // AND WHETHER THE TWO ODDITIES ARE THE SAME ODDITY. Naming no item and carrying a count
+        // above one are two independent readings of two different bytes, and if the same records
+        // do both then whatever those twelve are, they are one kind of thing.
+        List<Buried> counted = [.. buried.Where(b => (b.Fourth & 0x7F) != 1)];
+
+        Console.WriteLine(
+            $"    {counted.Count} carry a count above one"
+            + $" ({string.Join(", ", counted.GroupBy(b => b.Fourth & 0x7F).OrderBy(g => g.Key).Select(g => $"{g.Key} x{g.Count()}"))})"
+            + $" and {counted.Count(b => b.Item == 0)} of those are the ones naming no item —"
+            + $" against {blank.Count} naming no item in total, and"
+            + $" {buried.Count(b => b.Item != 0 && (b.Fourth & 0x7F) != 1)} that carry a count"
+            + " above one AND name an item");
+
+        // AND WHICH MAP THEY ARE ON, against a reading from somewhere else entirely. 208 found
+        // five places that read a count, compare it against a bound and hand some over, every
+        // bound plus its gift summing to ten thousand. If the twelve records that name no item
+        // sit on the map those chains belong to, two instruments built for different questions
+        // are pointing at the same floor.
+        if (blank.Count > 0)
+        {
+            string where = blank[0].MapId;
+
+            HashSet<uint> onThatMap =
+            [
+                .. library.TryLoad(where) is { } theMap
+                    ? MapLibrary.ScriptsOn(theMap).Select(script => script.Address)
+                    : [],
+            ];
+
+            var reached = new HashSet<int>();
+
+            foreach (uint address in onThatMap)
+            {
+                foreach (uint block in ScriptReader.Reachable(rom, address))
+                {
+                    foreach (ScriptCommand command in ScriptReader.Read(rom, block))
+                        reached.Add(command.Offset);
+                }
+            }
+
+            IReadOnlyList<TheCoinCase.Ceiling> chains = TheCoinCase.Ceilings(rom);
+
+            Console.WriteLine(
+                $"    all {blank.Count} are on {where}, and {chains.Count(c => reached.Contains(c.Offset))}"
+                + $" of the {chains.Count} coin hand-over chain(s) 208 found are on that map's own"
+                + " scripts — two instruments built for different questions pointing at one floor");
+        }
+
+        // AND THE INDICES NOTHING USES, which is the other half of "183 of 191".
+        HashSet<int> used = [.. buried.Select(b => b.Third)];
+
+        Console.WriteLine(
+            "    the indices nothing uses: "
+            + string.Join(
+                ", ",
+                Enumerable.Range(0, buried.Max(b => b.Third) + 1).Where(n => !used.Contains(n))));
+
+        Console.WriteLine(
+            $"    and {buried.Count(b => names.ContainsKey(b.Item))} of the {buried.Count} first"
+            + $" halfwords resolve to a name in the item table's {names.Count} entries, which is"
+            + " what makes \"the first halfword is an item\" a reading rather than a guess");
+
+        // AND WHERE A COMPUTED FLAG RANGE COULD LIVE. If the third byte is an index the flag is
+        // a base plus it, and the base is in compiled code where this project cannot read it.
+        // What CAN be read is the flag number line: the range has to be a gap nothing names.
+        var named = new HashSet<int>();
+
+        foreach ((string _, string _, uint address) in library.EveryScript())
+        {
+            foreach (ScriptCommand command in ScriptReader.ReadAll(rom, address))
+            {
+                if (command.Code is 0x29 or 0x2A or 0x2B && command.Arguments.Length >= 2)
+                    named.Add(command.Word());
+            }
+        }
+
+        int fromRecords = named.Count;
+
+        foreach (LoadedMap map in library.All())
+        {
+            foreach (MapObject person in map.Objects) named.Add(person.HiddenBy);
+        }
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  so {buried.Count} thing(s) are remembered by a number NOTHING IN THE FILE NAMES."
+            + " Every flag count in this project is a count of flags something names, and these"
+            + " are not among them — a fourth kind of read that is not a command (246, 247), on"
+            + " the flag side this time.");
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  {named.Count} flag number(s) are named by a script or by a person's record"
+            + $" ({fromRecords} by a command), the highest 0x{named.Max():X4}");
+
+        int width = buried.Max(b => b.Third) + 1;
+        int ceiling = Math.Max(named.Max(), 0x0FFF);
+
+        IReadOnlyList<WhatIsBuried.Window> gaps = WhatIsBuried.Gaps(named, ceiling, width);
+
+        Console.WriteLine(
+            $"  and {gaps.Count} gap(s) of at least {width} consecutive numbers below"
+            + $" 0x{ceiling:X4} that nothing names — {width} because the largest index is"
+            + $" {width - 1}:");
+
+        foreach (WhatIsBuried.Window gap in gaps.Take(12)) Console.WriteLine($"    {gap}");
+
+        if (gaps.Count > 12) Console.WriteLine($"    ... and {gaps.Count - 12} more");
+
+        // EVERY BASE THE GAPS ALLOW, and then the one thing that can narrow them: the base is
+        // above 255 at every candidate, so it does not fit in a THUMB instruction and the game's
+        // own code has to hold it as an aligned literal it loads (246).
+        List<int> candidates =
+        [
+            .. gaps.SelectMany(g => Enumerable.Range(g.From, Math.Max(0, g.Length - width + 1))),
+        ];
+
+        Console.WriteLine(
+            $"  {candidates.Count} base(s) would fit inside one of those gaps, every one of them"
+            + " above 255 — so none of them fits in a THUMB instruction and the code must hold it"
+            + " as a literal it LOADS (246):");
+
+        IReadOnlyDictionary<int, IReadOnlyList<WordSite>> held =
+            EverywhereInTheImage.HeldAsAWord(rom, candidates);
+
+        IReadOnlyDictionary<int, int> floor = EverywhereInTheImage.HeldAsAWordFloor(rom, candidates);
+
+        int Loads(int b) => held[b].Count(w => w.HeldByCode);
+
+        foreach (int least in new[] { 1, 2, 3 })
+        {
+            Console.WriteLine(
+                $"    loaded at least {least} time(s): {candidates.Count(b => Loads(b) >= least)}"
+                + $"   REVERSED: {candidates.Count(b => floor[b] >= least)}");
+        }
+
+        List<int> best = [.. candidates.Where(b => Loads(b) >= 3).OrderByDescending(Loads).Take(10)];
+
+        foreach (int one in best)
+        {
+            Console.WriteLine(
+                $"      0x{one:X4} — loaded {Loads(one)} time(s), REVERSED {floor[one]}, covers"
+                + $" 0x{one:X4}-0x{one + width - 1:X4}  <- "
+                + string.Join(
+                    ", ",
+                    held[one].Where(w => w.HeldByCode).Take(4).Select(w => $"0x{w.Offset:X6}")));
+        }
+
+        Console.WriteLine(
+            gaps.Count == 1
+                ? "  ONE gap wide enough, so if the flag is a base plus the index the base is in"
+                  + $" it — and that is where it could be, not where it is. 0x{gaps[0].From:X4}"
+                  + " is the lowest number in the only window."
+                : "  MORE THAN ONE window fits, so the gap alone cannot say where the base is."
+                  + " The load count above is the only thing that narrows it, and it does not"
+                  + " pick one either — this instrument comes back UNANSWERABLE and says so.");
+    }
+
     private static void WriteNamespaces(Rom rom)
     {
         Console.WriteLine();
@@ -14237,6 +14480,8 @@ public static class Program
         /// </summary>
         public bool Namespaces { get; private init; }
 
+        public bool Buried { get; private init; }
+
         /// <summary>
         /// With <c>--play</c>: every time the run turned these FLAGS on or off, with the script
         /// and the pass. The flag half of <c>--trace</c>, which watches a variable.
@@ -14461,6 +14706,7 @@ public static class Program
             bool fieldEffects = false;
             bool signs = false;
             bool namespaces = false;
+            var buried = false;
             var moved = new List<int>();
             var slots = new List<byte>();
             var readFrom = new List<uint>();
@@ -14738,6 +14984,9 @@ public static class Program
                         break;
                     case "--namespaces":
                         namespaces = true;
+                        break;
+                    case "--buried":
+                        buried = true;
                         break;
                     case "--moved":
                     {
@@ -15094,6 +15343,7 @@ public static class Program
                 FieldEffects = fieldEffects,
                 Signs = signs,
                 Namespaces = namespaces,
+                Buried = buried,
                 Moved = moved,
                 Slots = slots,
                 ReadFrom = readFrom,

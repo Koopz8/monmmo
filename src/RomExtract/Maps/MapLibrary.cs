@@ -145,6 +145,7 @@ public sealed class MapLibrary
             // and both sides deriving them from the same image is the arrangement
             // collision already uses.
             Behaviours = entry.Header.Layout.ReadBehaviours(_rom),
+            EventsPointer = entry.Header.EventsPointer,
             Music = entry.Header.Music,
             Objects = MapLinkExtractor.ReadObjects(_rom, entry.Header, collision.Width, collision.Height),
             Signs = MapLinkExtractor.ReadSigns(_rom, entry.Header, collision.Width, collision.Height),

@@ -23,6 +23,16 @@ public sealed record LoadedMap(
     public byte[] Behaviours { get; init; } = [];
 
     /// <summary>
+    /// Where this map's four event lists are, so a reading can go back to the RECORDS.
+    /// <para>
+    /// Carried because 248 needed the four bytes a buried item keeps where every other sign
+    /// keeps a script pointer, and there was no way from a loaded map back to the bytes it came
+    /// from. Nought when the map has no events record at all.
+    /// </para>
+    /// </summary>
+    public uint EventsPointer { get; init; }
+
+    /// <summary>
     /// Which song plays here, by the number this map's own header carries.
     /// <para>
     /// A number rather than a name, like everything else the server holds about a map — and
