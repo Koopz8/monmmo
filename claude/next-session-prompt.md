@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-284`, 3064 tests green.
+`claude-285`, 3067 tests green.
 
 Standing rules — do not break these:
 
@@ -194,13 +194,17 @@ Traps worth carrying:
     instrument.** The fix was a parameter and one extra run inside the same command, which is
     the same shape as the reversed-image floor this project measures every reading against.
 
-20. **A break that fails LESS than it should is the same signal as one that passes** (242). The
+20. **A break that fails LESS than it should is the same signal as one that passes** (242, and
+    again at 245, where one came back fully GREEN). The
     rule "a sign is read from its own square or any of the four around it" was broken to ask
     only its own square, and one test went red where two should have. A sign's own square is
     SOLID — that is what a sign is — so the wrong rule reads every sign in the game as one
     nothing could stand beside, and the only fixture that noticed did so by accident. **Count
     what a break kills against what it should have killed.** A fixture was added, then the same
-    break re-run.
+    break re-run. **245 did it again**: computing "written and never looked at" from every
+    number a variable command names, rather than from the ones something writes, passed all ten
+    tests — the fixture was built out of flags and a flag is in neither set. **Predict how many
+    tests a break should kill before you run it.**
 
 21. **The same trap can be sprung by the milestone that quotes it** (242). 241's own document
     cites 224 — five copies of "every script on a map", counted by the wrong key — one line
@@ -230,8 +234,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-244-an-operand-that-names-a-value.md` first, then `243`, `242`, `241`,
-`240`, `239`,
+Read `claude/milestone-245-twelve-the-cartridge-never-consults.md` first, then `244`, `243`,
+`242`, `241`, `240`, `239`,
 `238`, `237`,
 `236`, `235`, `234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
@@ -315,7 +319,11 @@ lists ran it.
 namespace and the spread PER OPERAND**, which is what caught 244: one operand held every
 out-of-band number. It gives the raw shared count (27) and the corrected one (**1**, `0x4001`,
 against the same floor of 1.71), the written-ness percentages the correction rests on, and the
-whole-image version (2117 / 12659 / 1182) as the noise it is.
+whole-image version (2117 / 12659 / 1182) as the noise it is. **It also answers 184's other
+half where the question HAS an answer** (245): 26 of the 90 variables the map scan writes are
+never looked at, 14 past the code boundary and **12 looked at nowhere in sixteen megabytes**.
+The whole-image version of that same question is 650 against a reversed-image 1070 — the same
+order of number, so only the map-scan one means anything.
 
 ** They share the number space, so `--trace 0x003F`
 answers — "nothing the run executed touched it" — about something else entirely. What moved a
@@ -527,6 +535,10 @@ the 12 STRENGTH boulders are SEAFOAM and VICTORY ROAD, and their flags split THR
 --routines: 1118 branching sites at 437 byte positions in the file; 48 routines are branched on
 0x188's one place comes to nothing
 0x4059 has one writer and NO readers anywhere; 0x4055 has 21 readers against a floor of 0
+26 of the 90 variables the map scan WRITES are never looked at: 14 past the boundary, 12 looked
+  at NOWHERE in the image — 0x4026, 0x403E, 0x4059, 0x405B, 0x405C, 0x405D, 0x4075, 0x407C,
+  0x407D, 0x4084, 0x4088, 0x408B, every one of them 0 sites-as-script against a floor of 0-1 (245)
+  the value-naming operand hid NOUGHT of them, measured both ways — 244's fault does not reach here
 0x083 and 0x084 are asked THREE times between them (1 and 2) and carry 39 of the 64 branches
   nought takes in the widest run's mixed bucket — 3 of its 19 byte positions of 44
 336 places read an answer through a call: 225 belong to 6 routines, 57 turn on an arm
@@ -615,6 +627,8 @@ still work.**
   run, which nobody has asked is a wide sign or a wide walk. And **`10.6 (4,1)`** (242), the one
   sign nothing in the cartridge can stand beside — a mistake, furniture, or a square this
   project's collision reading gets wrong. One `--read-from` and one `--script-map 10.6`.
+* **What the twelve are for** (245) — dead space, read by address rather than by script, or kept
+  for a routine. Nothing distinguishes those yet.
 * **`0x026C` and `0x0807`** — the two that actually make the run go round (240). Set on one map,
   cleared on another, holding nothing. `--read-from` on the four addresses is one command.
 * ~~`0x4001` is a flag in the run and a variable in the doors reading.~~ **CLOSED AT 243, and
