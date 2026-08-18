@@ -56,9 +56,35 @@ public sealed record WhatItCanHold(
         if (Steps.Count == 0) return false;
         if (value < 0 || value > ceiling) return false;
 
-        // A bounded walk from every starting value. Bounded because a step of one reaches
-        // everything and an unbounded closure would answer yes to every question ever asked.
+        return Reachable(ceiling).Contains(value);
+    }
+
+    /// <summary>
+    /// Every value in <c>0..ceiling</c> the writes and the steps can leave in it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A bounded walk from every starting value. Bounded because a step of one reaches everything
+    /// and an unbounded closure would answer yes to every question ever asked.
+    /// </para>
+    /// <para>
+    /// <b>ONE walk, because 258 wrote a second one.</b> <see cref="HowManyItReaches"/> began life
+    /// as its own copy of this loop, and a break that removed the downward arm came back green
+    /// against a test suite that covers the downward arm — of the other copy. That is 224's fault
+    /// in miniature and this project has fixed it at 220, 224 and 251; the two questions share a
+    /// walk now, so a break can only be aimed at one of them.
+    /// </para>
+    /// <para>
+    /// <b>Both directions.</b> A <c>subvar</c> steps by the same size the other way, so a walk
+    /// that only added would answer no to every value below where it started.
+    /// </para>
+    /// </remarks>
+    public IReadOnlySet<int> Reachable(int ceiling)
+    {
         var reached = new HashSet<int>(Set.Where(v => v >= 0 && v <= ceiling));
+
+        if (Steps.Count == 0) return reached;
+
         var todo = new Queue<int>(reached);
 
         while (todo.Count > 0)
@@ -71,14 +97,13 @@ public sealed record WhatItCanHold(
                 {
                     if (next < 0 || next > ceiling) continue;
                     if (!reached.Add(next)) continue;
-                    if (next == value) return true;
 
                     todo.Enqueue(next);
                 }
             }
         }
 
-        return false;
+        return reached;
     }
 
     /// <summary>
@@ -100,32 +125,7 @@ public sealed record WhatItCanHold(
     /// boundary before, and 244's written-ness rule works because it needs none.
     /// </para>
     /// </remarks>
-    public int HowManyItReaches(int ceiling)
-    {
-        var reached = new HashSet<int>(Set.Where(v => v >= 0 && v <= ceiling));
-
-        if (Steps.Count == 0) return reached.Count;
-
-        var todo = new Queue<int>(reached);
-
-        while (todo.Count > 0)
-        {
-            int at = todo.Dequeue();
-
-            foreach (int step in Steps)
-            {
-                foreach (int next in new[] { at + step, at - step })
-                {
-                    if (next < 0 || next > ceiling) continue;
-                    if (!reached.Add(next)) continue;
-
-                    todo.Enqueue(next);
-                }
-            }
-        }
-
-        return reached.Count;
-    }
+    public int HowManyItReaches(int ceiling) => Reachable(ceiling).Count;
 
     /// <summary>
     /// Whether the counter walk reaches EVERY value in <c>0..ceiling</c>, so that an answer of

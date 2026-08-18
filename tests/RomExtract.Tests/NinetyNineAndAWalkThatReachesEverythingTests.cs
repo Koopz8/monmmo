@@ -67,6 +67,32 @@ public sealed class NinetyNineAndAWalkThatReachesEverythingTests
         Assert.False(plain.ACounterReachesEverything(Ceiling));
     }
 
+    /// <summary>
+    /// THE WALK GOES BOTH WAYS, and the COUNT has to say so as well as the yes-or-no.
+    /// </summary>
+    /// <remarks>
+    /// <b>Added because a break predicted to kill nothing killed nothing.</b> Removing the
+    /// downward arm left every test in this file green: the count's fixtures all walk upward from
+    /// nought, and the one test that covers the downward arm was asking
+    /// <see cref="WhatItCanHold.CanReach"/> — which at the time was a SECOND COPY of the same
+    /// loop. The two share one walk now and this asks the count directly. A <c>subvar</c> steps
+    /// the same size the other way, so the direction is a fact about the cartridge and not a
+    /// tidiness.
+    /// </remarks>
+    [Fact]
+    public void TheCountIncludesWhatTheWalkReachesBySubtracting()
+    {
+        // Nine and six, from nought: 0, 9, 18 … upward, and 3, 12 … only by coming back down.
+        var counter = new WhatItCanHold(0x4002, [0], [6, 9], false);
+
+        Assert.Contains(3, counter.Reachable(20));
+        Assert.Equal(counter.Reachable(20).Count, counter.HowManyItReaches(20));
+
+        // Upward alone from nought with steps of six and nine reaches 0/6/9/12/15/18 — six
+        // values. Both ways reaches those and 3, so the count must be larger than six.
+        Assert.True(counter.HowManyItReaches(20) > 6);
+    }
+
     // ------------------------------------------------- the fifth answer, and what it is not
 
     /// <summary>
