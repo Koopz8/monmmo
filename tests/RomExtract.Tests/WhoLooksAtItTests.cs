@@ -174,6 +174,58 @@ public sealed class WhoLooksAtItTests
     }
 
     /// <summary>
+    /// THE AGGREGATE, WITH THE BAND IT IS COUNTED IN.
+    /// <para>
+    /// Written-and-never-read is the pair's whole point, and across a whole image it is mostly
+    /// compiled code that happens to decode — so the count takes the band as an argument rather
+    /// than deciding one for itself.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void WrittenAndNeverReadCountsOnlyTheBandItIsGiven()
+    {
+        byte[] image = Blank();
+
+        // Written and read.
+        Block(image, 0x1000, SetVar, Lo(Other), Hi(Other), 1, 0);
+        Block(image, 0x1100, Compare, Lo(Other), Hi(Other), 1, 0);
+
+        // Written and never read.
+        Block(image, 0x1200, SetVar, Lo(Watched), Hi(Watched), 1, 0);
+
+        // Read and never written.
+        Block(image, 0x1300, Compare, 0x70, 0x40, 1, 0);
+
+        // And one outside the band, written and never read, which must not be counted.
+        Block(image, 0x1400, SetVar, 0x11, 0x80, 1, 0);
+
+        (int written, int read, int never) = EverywhereInTheImage.WrittenAndNeverRead(
+            new Rom(image), v => v is >= 0x4000 and < 0x8000);
+
+        Assert.Equal(2, written);
+        Assert.Equal(2, read);
+        Assert.Equal(1, never);
+    }
+
+    /// <summary>
+    /// AND THE FLOOR UNDER IT, which is what says whether the aggregate means anything.
+    /// <para>
+    /// On the cartridge it does not: the real image has 650 written-and-never-read in the save's
+    /// band and the reversal has 1070. The instrument says so rather than quoting the 650.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TheFloorUnderTheAggregateIsTheSameCountBackwards()
+    {
+        byte[] image = Blank();
+
+        Block(image, 0x1200, SetVar, Lo(Watched), Hi(Watched), 1, 0);
+
+        Assert.Equal(1, EverywhereInTheImage.WrittenAndNeverRead(new Rom(image), v => v >= 0x4000).NeverRead);
+        Assert.Equal(0, EverywhereInTheImage.NeverReadFloor(new Rom(image), v => v >= 0x4000).NeverRead);
+    }
+
+    /// <summary>
     /// <c>compare &lt;watched&gt;, 1 ; end</c> written back to front, so that reversing the image
     /// turns it the right way round.
     /// </summary>

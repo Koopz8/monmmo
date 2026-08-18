@@ -8435,6 +8435,49 @@ public static class Program
             $"  a three-byte pattern turns up by accident about {EverywhereInTheImage.ByChance(rom, 3):0.0}"
             + " time(s) in an image this size, per command — which is the error bar below");
 
+        // THE PAIR, WHICH IS THE FINDING — a variable a hundred places write and nobody reads
+        // is not a story counter however busy it looks.
+        IReadOnlyDictionary<int, int> written = EverywhereInTheImage.EveryVariableWritten(rom);
+        IReadOnlyDictionary<int, int> looked = EverywhereInTheImage.EveryVariableRead(rom);
+
+        // THE BAND, BECAUSE THE RAW NUMBERS ARE NOISE.
+        //
+        // Swept across all sixteen megabytes these come back 5039 written and 9997 read, and
+        // almost all of that is compiled code that happens to decode. "Reads as script" is a
+        // weak filter and this project has thrown away a whole-file count for exactly this
+        // reason before. The save's own variables are 0x4000 upwards; the raw figure is printed
+        // beside the banded one rather than instead of it, and it is not a finding.
+        bool TheSaves(int v) => v is >= 0x4000 and < 0x8000;
+
+        List<int> deaf = [.. written.Keys.Where(v => TheSaves(v) && !looked.ContainsKey(v)).Order()];
+
+        (int floorWritten, int floorRead, int floorNever) =
+            EverywhereInTheImage.NeverReadFloor(rom, TheSaves);
+
+        Console.WriteLine(
+            $"  raw, across the whole image: {written.Count} variable(s) written and"
+            + $" {looked.Count} read — which is mostly compiled code that happens to decode");
+        Console.WriteLine(
+            $"  in the save's own band (0x4000-0x7FFF): {written.Count(v => TheSaves(v.Key))}"
+            + $" written, {looked.Count(v => TheSaves(v.Key))} read, {deaf.Count} written and"
+            + " never read");
+        Console.WriteLine(
+            $"    the same band on this file REVERSED: {floorWritten} written, {floorRead} read,"
+            + $" {floorNever} never read");
+        Console.WriteLine(
+            floorNever * 2 > deaf.Count
+                ? "    WHICH IS THE SAME ORDER OF NUMBER, so the aggregate is what these bytes do"
+                  + " by accident. Only the per-variable answers below are worth anything."
+                : "    which is far short of it, so the aggregate is above the floor");
+
+        if (deaf.Count > 0)
+        {
+            Console.WriteLine(
+                "    written and never read: "
+                + string.Join(", ", deaf.Take(16).Select(v => $"0x{v:X4} x{written[v]}"))
+                + (deaf.Count > 16 ? $", +{deaf.Count - 16} more" : ""));
+        }
+
         foreach (int which in variables)
         {
             IReadOnlyList<VariableSite> sites = EverywhereInTheImage.Reads(rom, which, covered);

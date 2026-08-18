@@ -372,6 +372,71 @@ public static class EverywhereInTheImage
     }
 
     /// <summary>
+    /// Every variable read anywhere in the file, with how many places look at it.
+    /// <para>
+    /// <b><see cref="EveryVariableWritten"/>'s mirror, and the pair is the finding.</b> A
+    /// variable a hundred places write and nobody reads is not a story counter however busy it
+    /// looks, and until this existed the only way to tell was to grep by eye. It found
+    /// <c>0x4059</c> — written by the one arm of the one branch a run's silence still decides,
+    /// and looked at by nothing anywhere in sixteen megabytes.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyDictionary<int, int> EveryVariableRead(Rom rom)
+    {
+        var found = new Dictionary<int, int>();
+
+        for (var offset = 0; offset + 5 <= rom.Length; offset++)
+        {
+            byte code = rom.ReadU8(offset);
+
+            if (Readers.All(r => r.Code != code)) continue;
+            if (!ReadsAsAScript(rom, Rom.BaseAddress + (uint)offset)) continue;
+
+            foreach (Reader reader in Readers.Where(r => r.Code == code))
+            {
+                int variable = rom.ReadU16(offset + 1 + reader.At);
+
+                found[variable] = found.GetValueOrDefault(variable) + 1;
+            }
+        }
+
+        return found;
+    }
+
+    /// <summary>
+    /// The written-and-never-read count, and the same count on the image REVERSED.
+    /// <para>
+    /// <b>The control the aggregate cannot be quoted without.</b> "Reads as script" is a weak
+    /// filter and a whole-image sweep of it is mostly compiled code that happens to decode —
+    /// this project has thrown away one raw whole-file count for exactly that reason already.
+    /// If the reversal produces a similar number of written-and-never-read variables, the real
+    /// image's number is what these bytes do by accident and not what the cartridge does.
+    /// </para>
+    /// </summary>
+    /// <param name="inBand">Which variables to count, so the caller can ask about one band.</param>
+    public static (int Written, int Read, int NeverRead) WrittenAndNeverRead(
+        Rom rom, Func<int, bool> inBand)
+    {
+        IReadOnlyDictionary<int, int> written = EveryVariableWritten(rom);
+        IReadOnlyDictionary<int, int> looked = EveryVariableRead(rom);
+
+        return (
+            written.Count(v => inBand(v.Key)),
+            looked.Count(v => inBand(v.Key)),
+            written.Keys.Count(v => inBand(v) && !looked.ContainsKey(v)));
+    }
+
+    /// <summary>The same three numbers on the image backwards.</summary>
+    public static (int Written, int Read, int NeverRead) NeverReadFloor(Rom rom, Func<int, bool> inBand)
+    {
+        byte[] backwards = rom.Span.ToArray();
+
+        Array.Reverse(backwards);
+
+        return WrittenAndNeverRead(new Rom(backwards), inBand);
+    }
+
+    /// <summary>
     /// The same sweep on the image backwards — how many reads bytes with these statistics make
     /// by accident, counted in places (206).
     /// </summary>
