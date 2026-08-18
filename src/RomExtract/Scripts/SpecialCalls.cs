@@ -505,7 +505,20 @@ public static class SpecialCalls
                 taken));
         }
 
-        return [.. found.OrderByDescending(z => z.Asked).ThenBy(z => z.Routine)];
+        // RANKED BY WHAT NOUGHT DECIDES, NOT BY HOW OFTEN IT WAS ASKED.
+        //
+        // The two are not the same list and on this cartridge they are nearly opposite. 0x194
+        // is asked fifty-four times by the widest run and nought takes ONE of its eighteen
+        // branches; 0x083 and 0x084 are asked once and twice, and between them nought takes
+        // THIRTY-NINE of the mixed bucket's forty-four. A count is not a ranking (trap 3), and
+        // the question this block exists to answer is where the silence could matter.
+        return
+        [
+            .. found
+                .OrderByDescending(z => z.TakenByZero)
+                .ThenByDescending(z => z.Asked)
+                .ThenBy(z => z.Routine),
+        ];
     }
 
     public static List<Profile> Profiles(IEnumerable<SpecialCall> calls) =>

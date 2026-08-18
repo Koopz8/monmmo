@@ -6912,6 +6912,10 @@ public static class Program
         IReadOnlyList<SpecialCalls.WhatZeroDid> silence = SpecialCalls.ZeroAt(
             SpecialCalls.Profiles(SpecialCalls.All(rom, MapLibrary.Open(rom))), played.Specials);
 
+        Console.WriteLine(
+            "    ranked by how many branches nought takes, not by how often it was asked — the"
+            + " two are nearly opposite lists here");
+
         foreach (SpecialCalls.WhatZeroDid what in silence.Take(8))
         {
             Console.WriteLine(

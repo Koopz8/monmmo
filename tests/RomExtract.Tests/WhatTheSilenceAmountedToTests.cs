@@ -120,22 +120,38 @@ public sealed class WhatTheSilenceAmountedToTests
         Assert.Equal(3, what.TakenByZero);
     }
 
-    /// <summary>The order follows how often the run asked, not the routine number.</summary>
+    /// <summary>
+    /// THE ORDER IS BY WHAT NOUGHT DECIDES, NOT BY HOW OFTEN THE RUN ASKED.
+    /// <para>
+    /// On this cartridge the two are nearly opposite. <c>0x194</c> is asked fifty-four times by
+    /// the widest run and nought takes ONE of its eighteen branches; <c>0x083</c> and
+    /// <c>0x084</c> are asked once and twice, and between them nought takes thirty-nine of the
+    /// mixed bucket's forty-four. Ranking by asks puts the least important first, which is
+    /// trap 3 — a count is not a ranking.
+    /// </para>
+    /// <para>
+    /// The fixture makes the two orders disagree on purpose: the routine asked most is the one
+    /// whose silence decides least.
+    /// </para>
+    /// </summary>
     [Fact]
-    public void TheOrderFollowsWhatTheRunAsked()
+    public void TheOrderFollowsWhatNoughtDecidesAndNotWhatWasAsked()
     {
         IReadOnlyList<SpecialCalls.WhatZeroDid> found = SpecialCalls.ZeroAt(
             Profiles(),
             new Dictionary<int, int>
             {
-                [NoughtTakesNone] = 3,
-                [NoughtTakesAll] = 90,
-                [NobodyBranches] = 40,
+                [NoughtTakesNone] = 900,
+                [NoughtTakesSome] = 3,
+                [TestedAgainstOneAndTakenByNought] = 1,
             });
 
         Assert.Equal(
-            new[] { NoughtTakesAll, NobodyBranches, NoughtTakesNone },
+            new[] { TestedAgainstOneAndTakenByNought, NoughtTakesSome, NoughtTakesNone },
             found.Select(z => z.Routine));
+
+        // And the asks are still carried, so the two numbers can be read against each other.
+        Assert.Equal(new[] { 1, 3, 900 }, found.Select(z => z.Asked));
     }
 
     /// <summary>
