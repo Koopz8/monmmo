@@ -12,6 +12,16 @@ public sealed record OneOperand(byte Code, int At, int Numbers, int Places, int 
     public IReadOnlyList<(int Number, int Places)> Named { get; init; } = [];
 
     /// <summary>
+    /// Where each of its places is, so a candidate can be READ rather than only counted.
+    /// </summary>
+    /// <remarks>
+    /// A sweep that reports an operand and not its addresses hands the reader a number and a
+    /// hunt. 253 left <c>0x42</c> as the one thing the operand audit could not settle and the
+    /// next step is eight <c>--read-from</c>s; this is where the eight come from.
+    /// </remarks>
+    public IReadOnlyList<int> Where { get; init; } = [];
+
+    /// <summary>
     /// How many of its places are immediately followed by a <c>compare</c> on the very number
     /// this operand just named.
     /// </summary>
@@ -116,6 +126,7 @@ public static class EveryOperand
     {
         var named = new Dictionary<(byte Code, int At), Dictionary<int, int>>();
         var compared = new Dictionary<(byte Code, int At), int>();
+        var where = new Dictionary<(byte Code, int At), List<int>>();
         var seen = new HashSet<uint>();
 
         foreach (uint start in from)
@@ -144,6 +155,11 @@ public static class EveryOperand
                         int number = command.Word(at);
 
                         of[number] = of.GetValueOrDefault(number) + 1;
+
+                        if (!where.TryGetValue((command.Code, at), out List<int>? at_))
+                            where[(command.Code, at)] = at_ = [];
+
+                        at_.Add(command.Offset);
 
                         // AND WHETHER THE NEXT COMMAND COMPARES THAT VERY NUMBER, which is the
                         // only direction evidence available from one pass. Counted per place.
@@ -176,6 +192,7 @@ public static class EveryOperand
                 {
                     Named = [.. o.Value.OrderByDescending(n => n.Value).Select(n => (n.Key, n.Value))],
                     ComparedNext = compared.GetValueOrDefault(o.Key),
+                    Where = where.GetValueOrDefault(o.Key) ?? [],
                 })
                 .OrderByDescending(o => o.Share)
                 .ThenByDescending(o => o.Numbers),

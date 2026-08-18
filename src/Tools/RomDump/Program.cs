@@ -9004,7 +9004,11 @@ public static class Program
 
         MapLibrary library = MapLibrary.Open(rom);
 
-        List<uint> from = [.. library.All().SelectMany(EveryScriptOn).Select(s => s.Address)];
+        List<SetsAFlag> scripts = [.. library.All().SelectMany(EveryScriptOn)];
+
+        int[] covered = EverywhereInTheImage.Opened(rom, scripts);
+
+        List<uint> from = [.. scripts.Select(s => s.Address)];
 
         IReadOnlyList<OneOperand> all = EveryOperand.In(rom, from, TwoNamespacesOneNumber.Writers);
 
@@ -9080,6 +9084,19 @@ public static class Program
                 + string.Join(
                     ", ",
                     one.Named.Take(8).Select(n => $"0x{n.Number:X4} x{n.Places}")));
+
+            // AND WHERE, WITH WHO OPENED IT — because a sweep that reports an operand and not its
+            // addresses hands the reader a number and a hunt, and an address without a map is
+            // half of one.
+            foreach (int place in one.Where.Take(12))
+            {
+                Console.WriteLine(
+                    $"      0x{place:X6}  {(place < covered.Length && covered[place] != EverywhereInTheImage.Nobody ? scripts[covered[place]].ToString() : "nothing opens it")}");
+            }
+
+            if (one.Where.Count > 12) Console.WriteLine($"      ... +{one.Where.Count - 12} more");
+
+            AgainstTheMapFor(one);
         }
 
         // AND THE DIRECTION TEST, WITH ITS FLOOR. Written-ness says an operand names a variable
@@ -9104,6 +9121,40 @@ public static class Program
             Console.WriteLine(
                 $"    {one.Name}: {one.ComparedNext} of {one.Places} — {one.ComparedShare:P0}"
                 + (known.Contains((one.Code, one.At)) ? "   <- already named" : "   <- NAMED BY NEITHER TABLE"));
+
+            AgainstTheMapFor(one);
+        }
+
+        // AND WHAT THE VALUES ARE, AGAINST THE MAP THEY ARE ON. 6, 7, 9, 18, 24 and 50 say
+        // nothing on their own; fifty compared on a map fifty-six wide and twenty-six tall is a
+        // column and cannot be a row. The map's width and height are read off the cartridge for
+        // every map already, so this costs nothing but asking.
+        void AgainstTheMapFor(OneOperand one)
+        {
+            IReadOnlyList<AgainstTheMap> bounded = ANumberAgainstTheMap.In(
+                rom,
+                one.Where,
+                one.At,
+                place => place < covered.Length && covered[place] != EverywhereInTheImage.Nobody
+                    ? scripts[covered[place]].MapId
+                    : null,
+                mapId => library.TryLoad(mapId) is { } m ? (m.Collision.Width, m.Collision.Height) : null);
+
+            (int places, int columns, int rows, int only, int neither) =
+                ANumberAgainstTheMap.Verdict(bounded);
+
+            if (places == 0) return;
+
+            foreach (AgainstTheMap bound in bounded.Take(10)) Console.WriteLine($"        {bound}");
+
+            Console.WriteLine(
+                $"        of {places} compared place(s): {columns} could be a column, {rows}"
+                + $" could be a row, {only} could ONLY be a column, {neither} neither"
+                + (columns == places && only > 0
+                    ? "   <- SO THIS OPERAND IS AN X"
+                    : rows == places && columns < places
+                        ? "   <- SO THIS OPERAND IS A Y"
+                        : "   <- which does not name it"));
         }
 
         // THE MIRROR, which is a different question and not a re-run. An operand naming numbers
