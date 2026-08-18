@@ -59,6 +59,7 @@ namespace PokeMmo.RomExtract.Scripts;
 public sealed record SpecialContract(
     int Routine,
     int Sites,
+    int CallPlaces,
     int TakesArguments,
     IReadOnlyDictionary<int, int> Compared,
     int Branches,
@@ -82,6 +83,31 @@ public sealed record SpecialContract(
     public bool LooksLikeACount =>
         Compared.Count >= 3
         && Compared.Keys.Order().SequenceEqual(Enumerable.Range(1, Compared.Count));
+
+    /// <summary>
+    /// How many times this routine is asked for every byte position that asks it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The denominator this reading has never had.</b> `--the-scan` (224) says a count of
+    /// reads and a count of places are different numbers for 97 of this cartridge's 108 command
+    /// codes, and it asks that of an opcode. Nothing asked it of a ROUTINE NUMBER: `Sites` has
+    /// always been how many times a routine is called, and a block hanging off nineteen Pokémon
+    /// Centres is called nineteen times at one address.
+    /// </para>
+    /// <para>
+    /// Found by the audit at 231, because the prompt quoted "0x194 is 747 calls at 26 places"
+    /// and <b>no instrument in the repository printed the second half of it</b> — a number that
+    /// cannot come back wrong because nothing computes it.
+    /// </para>
+    /// </remarks>
+    public double CallInflation => CallPlaces == 0 ? 0 : (double)Sites / CallPlaces;
+
+    /// <summary>
+    /// True when asking how many times and asking how many places give the same answer, so
+    /// either number may be quoted. False is the ordinary case and the one that matters.
+    /// </summary>
+    public bool CalledOncePerPlace => Sites == CallPlaces;
 }
 
 /// <summary>
@@ -134,6 +160,7 @@ public static class SpecialContracts
         var sites = new Dictionary<int, int>();
         var arguments = new Dictionary<int, int>();
         var compared = new Dictionary<int, Dictionary<int, int>>();
+        var calls = new List<(int Routine, int At)>();
         var branchesAt = new Dictionary<int, List<int>>();
         var acrossAt = new Dictionary<int, List<int>>();
         var nothingClean = new Dictionary<int, int>();
@@ -160,6 +187,10 @@ public static class SpecialContracts
                 if (routine < 0) continue;
 
                 sites[routine] = sites.GetValueOrDefault(routine) + 1;
+
+                // The call itself, by byte position. Same rule as the branches below and for
+                // the same reason — see SpecialContract.CallInflation.
+                calls.Add((routine, command.Offset));
 
                 int handed = Arguments(commands, i);
 
@@ -197,11 +228,14 @@ public static class SpecialContracts
             }
         }
 
+        IReadOnlyDictionary<int, (int Calls, int Places)> perRoutine = CallsAndPlaces(calls);
+
         List<SpecialContract> derived =
         [
             .. sites.Keys.Order().Select(routine => new SpecialContract(
                 routine,
                 sites[routine],
+                perRoutine.GetValueOrDefault(routine).Places,
                 arguments.GetValueOrDefault(routine),
                 compared.GetValueOrDefault(routine, []),
                 SitesAndPlaces(branchesAt.GetValueOrDefault(routine, [])).Sites,
@@ -213,7 +247,12 @@ public static class SpecialContracts
                 where.GetValueOrDefault(routine, []))),
         ];
 
-        log?.Invoke($"  {derived.Count} routines called, {derived.Sum(d => d.Sites)} times between them");
+        log?.Invoke(
+            $"  {derived.Count} routines called, {derived.Sum(d => d.Sites)} times between them, "
+            + $"at {derived.Sum(d => d.CallPlaces)} byte position(s)");
+        log?.Invoke(
+            $"    {derived.Count(d => d.CalledOncePerPlace)} of the {derived.Count} are called once per byte "
+            + "position; for the rest a count of calls and a count of places are different numbers");
         log?.Invoke(
             $"    the branches below are {derived.Sum(d => d.Branches)} site(s) at {derived.Sum(d => d.Places)} "
             + "byte position(s) — a block hanging off two triggers is read twice");
@@ -313,6 +352,38 @@ public static class SpecialContracts
     /// for the bytes and getting one hit.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// How many times each routine is called, and how many BYTE POSITIONS those calls sit at.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Places, not calls. A block hanging off nineteen Pokémon Centres calls whatever it calls
+    /// nineteen times at one address, and quoting that as nineteen places says a routine is
+    /// asked all over the game when it is asked in one.
+    /// </para>
+    /// <para>
+    /// Split out of <see cref="Derive"/> rather than written inside it, because a rule inside a
+    /// sweep that needs a <see cref="MapLibrary"/> and sixteen megabytes is a rule no fixture can
+    /// reach — which is why the last four green breaks in this project were green.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyDictionary<int, (int Calls, int Places)> CallsAndPlaces(
+        IEnumerable<(int Routine, int At)> calls)
+    {
+        var at = new Dictionary<int, (int Calls, HashSet<int> Places)>();
+
+        foreach ((int routine, int offset) in calls)
+        {
+            if (!at.TryGetValue(routine, out (int Calls, HashSet<int> Places) seen))
+                at[routine] = seen = (0, []);
+
+            seen.Places.Add(offset);
+            at[routine] = (seen.Calls + 1, seen.Places);
+        }
+
+        return at.ToDictionary(e => e.Key, e => (e.Value.Calls, e.Value.Places.Count));
+    }
+
     public static (int Sites, int Places) SitesAndPlaces(IEnumerable<int> offsets)
     {
         var seen = new HashSet<int>();

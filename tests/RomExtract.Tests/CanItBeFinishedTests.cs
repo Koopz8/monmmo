@@ -374,11 +374,11 @@ public class StandingInForARoutineTests
     public void ARunFromOneUpwardsLooksLikeACount()
     {
         var counting = new SpecialContract(
-            0x1B5, 8, 0, new Dictionary<int, int> { [1] = 1, [2] = 1, [3] = 1, [4] = 1 }, 8, 8, 0, 0, 0,
+            0x1B5, 8, 8, 0, new Dictionary<int, int> { [1] = 1, [2] = 1, [3] = 1, [4] = 1 }, 8, 8, 0, 0, 0,
             new Dictionary<int, int>(), []);
 
         var scattered = new SpecialContract(
-            0x1B6, 3, 1, new Dictionary<int, int> { [0] = 1, [7] = 1, [40] = 1 }, 3, 3, 0, 0, 0,
+            0x1B6, 3, 3, 1, new Dictionary<int, int> { [0] = 1, [7] = 1, [40] = 1 }, 3, 3, 0, 0, 0,
             new Dictionary<int, int>(), []);
 
         Assert.True(counting.LooksLikeACount);
@@ -395,7 +395,7 @@ public class StandingInForARoutineTests
     public void ButAYesOrNoIsNot()
     {
         var yesNo = new SpecialContract(
-            0x1B7, 20, 0, new Dictionary<int, int> { [0] = 10, [1] = 10 }, 20, 20, 0, 0, 0,
+            0x1B7, 20, 20, 0, new Dictionary<int, int> { [0] = 10, [1] = 10 }, 20, 20, 0, 0, 0,
             new Dictionary<int, int>(), []);
 
         Assert.False(yesNo.LooksLikeACount);
