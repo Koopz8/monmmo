@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-287`, 3087 tests green.
+`claude-288`, 3096 tests green.
 
 Standing rules — do not break these:
 
@@ -248,8 +248,9 @@ Traps worth carrying:
     IT" about `0x407C` a milestone after `--namespaces` was fixed — same sentence, different
     sweep. **When you correct a reading, correct every reading of the same shape in the same
     commit, and put the rule in ONE place** (`ReadsThatAreNotCommands`) so a third kind reaches
-    every caller at once. The FLAG side has not been asked: 183 hidden-item signs carry a small
-    id that is very likely a flag taken from a base, and nothing reads that field.
+    every caller at once. **248 asked it of the FLAG side and found the fourth kind**: 183
+    buried signs carry an index, the flag that remembers one is a base plus it, and no command
+    anywhere names it. Every flag count in this project counts flags something NAMES.
 
 25. **A FILTER THAT LOOKS CONVINCING ON THE FEW AND DIES ON THE DENOMINATOR** (246). The word
     sweep asked only for a four-byte-aligned word equal to a variable's id. On the nine it looked
@@ -267,15 +268,29 @@ Traps worth carrying:
     and then the rule's location; this one was a finding the moment it came back, because the
     prediction said so first. Two fixtures were added and the same break re-run kills exactly one.
 
+27. **A FIELD READING NEEDS A TABLE FROM SOMEWHERE ELSE** (248). "These four bytes are an item,
+    an index and a count" is three claims about byte offsets and every one of them parses. What
+    makes it a reading is that **all 183 first halfwords resolve to a name in the item table's
+    308 entries** — a location this project built for a different question, which cannot have
+    been tuned to agree. A wrong offset does not score 183 of 183 against an independent table.
+    **When you split a record into fields, find something already in the repository that can
+    disagree with the split, and print how often it does not.**
+
+28. **TWO BYTES AGREEING EXACTLY IS WORTH MORE THAN EITHER** (248). Twelve of the 183 name no
+    item; twelve carry a count above one; they are the same twelve and there are NOUGHT of either
+    kind alone. Neither byte alone would have been more than an oddity. Printed as a cross-tab
+    with both the overlap and the two singletons, because "12 and 12" without the "and 0" is two
+    numbers that might be about different records.
+
 ## Where things are
 
-Read `claude/milestone-247-the-second-copy-and-the-list-goes-to-nought.md` first, then `246`,
+Read `claude/milestone-248-what-is-buried.md` first, then `247`, `246`,
 `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
 `238`, `237`,
 `236`, `235`, `234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
-**Twenty-five faults closed and every one was in this project, not on the cartridge.** A walk that
+**Twenty-six faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
 script" list; a list ranked by a count instead of by what it costs; a party that could not gain
 a level; a roadmap line that called a fix a cost; a continuation that carried flags and not
@@ -295,7 +310,10 @@ halfwords in a map's header naming a variable — was not a read, and seven vari
 as consulted by nothing while one of them was consulted on nineteen maps; and at 247 **the second
 copy of that same fault** — a trigger fires when a variable holds a value and that condition is
 two halfwords on a map's third list, 228 of them naming 42 variables, and no sweep counted one, so
-the deaf list was 26 when the true answer is that NOTHING this cartridge writes goes unconsulted.
+the deaf list was 26 when the true answer is that NOTHING this cartridge writes goes unconsulted;
+and at 248 **183 buried items whose four bytes nothing had ever read**, each remembered by an
+index and therefore by a flag nothing in the file names — so every flag count in this project is
+a count of flags something NAMES and is short by up to 183.
 
 `246` is the read that is not a command, and the literal-pool test for whether compiled code holds
 a number — both live inside `--namespaces`, which is now the fullest single instrument in the
@@ -345,7 +363,19 @@ dotnet run -c Release --project src/Tools/RomDump -- firered.gba --slots 0x9D,0x
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --play --signs
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --play --moved 0x003F
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --namespaces
+dotnet run -c Release --project src/Tools/RomDump -- firered.gba --buried
 ```
+
+`--buried` reads the four bytes a buried sign keeps where every other sign keeps a script pointer
+(248): an item id, an INDEX and a count with one spare bit. **All 183 item ids resolve to a name
+in the item table's 308 entries** — a location made for another question — and the third byte is
+**183 distinct values in 0..190**, eight unused (7, 16, 40, 43, 44, 45, 46, 124). The same item is
+buried in up to twelve places, so the memory cannot be the item; it is the index, and the flag is
+a base plus it. **The base hunt comes back UNANSWERABLE and says so**: 3 gaps in the flag number
+line wide enough, 14883 candidate bases, 889 loaded by an instruction against a reversed 84.
+**Twelve records name NO item and carry counts of 10/20/40/100** where the other 171 carry one —
+the same twelve both ways, nought either way — and all twelve are on `10.14`, which holds 5 of the
+5 coin chains 208 found.
 
 `--play --signs` is the fourth list with **its own control in the same process**: which sign
 scripts ran, at how many addresses, on how many maps, **why each of the rest did not** (three
@@ -713,11 +743,17 @@ still work.**
   something. Both corrections were about what counts as a READER, not about where to look.
 * ~~Does any OTHER reading miss the header read?~~ **ASKED AT 247** and the answer was yes twice
   over: the trigger record, and `--who-reads`, which was still printing "NOTHING IN THE FILE LOOKS
-  AT IT" about `0x407C`. Both fixed. **The FLAG side has NOT been asked and is the next one:**
-  **183 hidden-item signs** carry a small id where the other 519 carry a script pointer, and in
-  this family of games that id is a flag taken from a BASE — the exact blind spot 246 printed.
-  Nothing in this project reads that field. If it is a flag it is a fourth kind of non-command
-  read and it bears on the 110 gates the widest run never opens.
+  AT IT" about `0x407C`. Both fixed. **And the FLAG side at 248**: 183 buried signs carry an
+  INDEX, so the flag is a base plus it and nothing names it. What is left of that one:
+  * **The base.** Unanswerable from the number line and the load count (3 gaps, 14883 candidates,
+    889 loaded against a reversed 84). Settling it means reading the routine that handles a buried
+    item, which means reading COMPILED CODE — a thing this project has never done and which is a
+    decision rather than a milestone. 246's literal-pool test is as far as the data goes.
+  * **The run never picks any of them up.** The buried kind have no script, so 183 items on 79
+    maps lie on the ground that no lever setting collects. Nobody has printed how many of the 79
+    the run reaches.
+  * **The eight unused indices** — 7, 16, 40, 43, 44, 45, 46, 124, four of them consecutive — and
+    **the spare bit**, set by 6 records whose every other field is ordinary.
 * **The trigger's other half** (247). `--arrivals` asks whether anything writes the VALUE a header
   condition wants — 28 of 69 want a value nobody writes. Nobody has asked it of a trigger's 228
   conditions, and it is the same instrument pointed at a different list.
