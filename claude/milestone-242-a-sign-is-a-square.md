@@ -79,7 +79,7 @@ The last one is the completeness check and it is the one worth keeping: every sc
 read **or** unread, never both and never neither. A classifier that quietly drops a case reads as
 a clean answer, and nothing else here would have noticed.
 
-3038 → 3048 tests, all green. **The six rows of the floor table did not move.**
+3038 → 3049 tests, all green. **The six rows of the floor table did not move.**
 
 ---
 
