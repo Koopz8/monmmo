@@ -8480,12 +8480,22 @@ public static class Program
             Console.WriteLine(
                 $"  {onTheLine.Count} place(s) call a block whose STRAIGHT LINE ends by saying the"
                 + $" answer out loud — {string.Join(", ", onTheLine.Select(a => a.Answerer).Distinct().Order())}"
-                + " — but an arm of the same block asks a routine.");
-            Console.WriteLine(
-                "    Those are NOT constants. 0x081BBB1E ends `setvar 0x800D, 1; return` and its"
-                + " LESS arm ends `setvar 0x800D, 0; return`, so it returns one or nought"
-                + " depending on a routine this project cannot run. Following the arms is a"
-                + " level further in than this reading goes.");
+                + " — but an arm of the same block asks a routine, so they are NOT constants.");
+            Console.WriteLine("    Read one level of arms, those blocks return:");
+
+            foreach (IGrouping<uint, SpecialCalls.AnsweredThroughACall> block in onTheLine
+                         .GroupBy(a => a.Called)
+                         .OrderByDescending(g => g.Count()))
+            {
+                SpecialCalls.WhatItCanReturn can = SpecialCalls.Returns(rom, block.Key);
+
+                Console.WriteLine(
+                    $"      0x{block.Key:X8} at {block.Count(),3} place(s) — leaves"
+                    + $" {string.Join(" or ", can.Answers.Select(Outcome))}"
+                    + (can.Deciders.Count == 0
+                        ? "; nothing on its straight line chooses"
+                        : $"; the choice turns on {string.Join(", ", can.Deciders.Select(d => $"0x{d:X3}"))}"));
+            }
         }
 
         Console.WriteLine();
@@ -8494,6 +8504,17 @@ public static class Program
             + $" way, from {found.Select(a => a.MapId).Distinct().Count()} map(s)");
     }
 
+    private static string Outcome((SpecialCalls.LeftBehind Left, int Who) answer) =>
+        answer.Left switch
+        {
+            SpecialCalls.LeftBehind.ARoutine => $"routine 0x{answer.Who:X3}'s answer",
+            SpecialCalls.LeftBehind.ANumber => $"{answer.Who}",
+            SpecialCalls.LeftBehind.ANumberOnTheStraightLine => $"{answer.Who}",
+            SpecialCalls.LeftBehind.AnotherVariable => $"variable 0x{answer.Who:X4}",
+            SpecialCalls.LeftBehind.WentSomewhereElse => "whatever is left by a jump not followed here",
+            _ => "whatever was already there",
+        };
+
     private static string Left(SpecialCalls.LeftBehind left) => left switch
     {
         SpecialCalls.LeftBehind.ARoutine => "a routine's answer",
@@ -8501,6 +8522,8 @@ public static class Program
         SpecialCalls.LeftBehind.ANumberOnTheStraightLine =>
             "a number on the straight line, but an arm of the block asks a routine",
         SpecialCalls.LeftBehind.AnotherVariable => "another variable's contents, not followed here",
+        SpecialCalls.LeftBehind.WentSomewhereElse =>
+            "nothing, and the block ends by jumping somewhere this reading does not follow",
         _ => "NOTHING — the compare reads whatever was there before the call",
     };
 

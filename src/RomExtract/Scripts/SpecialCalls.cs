@@ -216,6 +216,18 @@ public static class SpecialCalls
 
         /// <summary>Another variable's contents, which this reading does not follow.</summary>
         AnotherVariable,
+
+        /// <summary>
+        /// Nothing put anything there and the block ends by jumping somewhere else — so the
+        /// reading STOPPED rather than finding nothing.
+        /// <para>
+        /// <b>Those are different and conflating them is the same fault a third time.</b>
+        /// "The call left the variable alone" and "the call went somewhere this reading does not
+        /// follow" print identically as <see cref="Nothing"/>, and only one of them is a fact
+        /// about the cartridge.
+        /// </para>
+        /// </summary>
+        WentSomewhereElse,
     }
 
     /// <param name="Left">What the called block leaves in the answer variable.</param>
@@ -315,6 +327,75 @@ public static class SpecialCalls
     public static (LeftBehind Left, int Who) WhatACallLeaves(Rom rom, uint address, int answer = 0x800D) =>
         WhatIsLeftInside(rom, address, answer);
 
+    /// <summary>
+    /// Everything a called block can leave in the answer variable, and what chooses between them.
+    /// </summary>
+    /// <param name="Answers">
+    /// Every distinct outcome, from the straight line and from each arm the straight line
+    /// branches to. A block with one entry always leaves the same thing; a block with two is a
+    /// yes-or-no.
+    /// </param>
+    /// <param name="Deciders">
+    /// The routines asked on the straight line before a branch. <b>These are what the answer
+    /// turns on</b>, and the reason a literal at the end of a straight line is not a constant.
+    /// </param>
+    public sealed record WhatItCanReturn(
+        IReadOnlyList<(LeftBehind Left, int Who)> Answers, IReadOnlyList<int> Deciders);
+
+    /// <summary>
+    /// The arms, one level, for the blocks whose straight line ends in a literal and whose arms
+    /// ask something.
+    /// <para>
+    /// 217 could say that fifty-seven places call a block that is not a constant and could not
+    /// say what it returns instead. This says: the outcomes, and the routines the choice
+    /// between them turns on.
+    /// </para>
+    /// <para>
+    /// <b>One level of arms and no further.</b> An arm that branches again is read for what its
+    /// own straight line leaves and its arms are not followed — each level is another place to
+    /// be wrong, and this project has been caught by exactly that at 214, 216 and 217.
+    /// </para>
+    /// </summary>
+    public static WhatItCanReturn Returns(Rom rom, uint address, int answer = 0x800D)
+    {
+        if (address < Rom.BaseAddress || address - Rom.BaseAddress >= (uint)rom.Length)
+        {
+            return new WhatItCanReturn([], []);
+        }
+
+        var answers = new List<(LeftBehind, int)> { WhatIsLeftInside(rom, address, answer) };
+        var deciders = new List<int>();
+
+        var asked = 0;
+
+        foreach (ScriptCommand command in ScriptReader.Read(rom, address))
+        {
+            switch (command.Code)
+            {
+                case Special:
+                    asked = command.Word();
+                    break;
+
+                case SpecialVar when command.Word() == answer:
+                    asked = command.Word(2);
+                    break;
+
+                // A branch. Whatever was asked last is what this choice turns on, and where it
+                // goes is another thing the block can leave behind.
+                case GotoIf:
+                case CallIf:
+                    if (asked != 0) deciders.Add(asked);
+
+                    answers.Add(WhatIsLeftInside(rom, command.Pointer(1), answer));
+                    break;
+            }
+        }
+
+        return new WhatItCanReturn(
+            [.. answers.Distinct().OrderBy(a => a.Item1).ThenBy(a => a.Item2)],
+            [.. deciders.Distinct().Order()]);
+    }
+
     private static (LeftBehind Left, int Who) WhatIsLeftInside(Rom rom, uint address, int answer)
     {
         if (address < Rom.BaseAddress || address - Rom.BaseAddress >= (uint)rom.Length)
@@ -330,7 +411,9 @@ public static class SpecialCalls
         bool armsAsk = ScriptReader.ReadAll(rom, address)
             .Any(c => c.Code == Special || (c.Code == SpecialVar && c.Word() == answer));
 
-        foreach (ScriptCommand command in ScriptReader.Read(rom, address))
+        List<ScriptCommand> block = ScriptReader.Read(rom, address);
+
+        foreach (ScriptCommand command in block)
         {
             switch (command.Code)
             {
@@ -353,6 +436,14 @@ public static class SpecialCalls
                     (left, who) = (LeftBehind.AnotherVariable, command.Word(2));
                     break;
             }
+        }
+
+        // A block that put nothing there and ended by jumping somewhere else did not leave the
+        // variable alone — the reading stopped. Saying so is the difference between a fact and
+        // a place this instrument does not go.
+        if (left == LeftBehind.Nothing && block.Count > 0 && block[^1].Code == ScriptCommands.Goto)
+        {
+            return (LeftBehind.WentSomewhereElse, 0);
         }
 
         return (left, who);

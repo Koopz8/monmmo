@@ -30,6 +30,7 @@ public sealed class WhatACallLeavesBehindTests
     private const byte SetVar = 0x16;
     private const byte Compare = 0x21;
     private const byte GotoIf = 0x06;
+    private const byte Goto = 0x05;
 
     private const int Answer = 0x800D;
     private const int SomeOtherSlot = 0x8004;
@@ -141,6 +142,99 @@ public sealed class WhatACallLeavesBehindTests
         Put(image, 0x1100, SetVar, Lo(Answer), Hi(Answer), 0, 0, Return);
 
         Assert.Equal((SpecialCalls.LeftBehind.ANumberOnTheStraightLine, 1), Left(image));
+    }
+
+    /// <summary>
+    /// A BLOCK THAT ENDS BY JUMPING SOMEWHERE ELSE DID NOT LEAVE THE VARIABLE ALONE — the
+    /// reading stopped.
+    /// <para>
+    /// Those are different facts and printing them both as "nothing" is the same conflation
+    /// this family of rules has been caught by three times. Nine of the cartridge's 336 are
+    /// this, and they were sitting in the forty-nine that "leave the answer alone".
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ABlockThatEndsByJumpingAwayIsNotABlockThatLeftItAlone()
+    {
+        byte[] image = Blank();
+
+        Put(image, 0x1000, Goto);
+        Address(image, 0x1001, 0x1200);
+        Put(image, 0x1200, SetVar, Lo(Answer), Hi(Answer), 4, 0, Return);
+
+        Assert.Equal((SpecialCalls.LeftBehind.WentSomewhereElse, 0), Left(image));
+    }
+
+    /// <summary>
+    /// EVERYTHING A BLOCK CAN RETURN, and what the choice turns on.
+    /// <para>
+    /// 217 could say fifty-seven places call a block that is not a constant and could not say
+    /// what it returns instead. The cartridge's is <c>0x081BB79C</c>: nought or one, turning on
+    /// <c>0x083</c> and then <c>0x153</c>.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void WhatABlockCanReturnIncludesItsArmsAndWhatChoosesBetweenThem()
+    {
+        byte[] image = Blank();
+
+        Put(image, 0x1000, SpecialVar, Lo(Answer), Hi(Answer), 0x84, 0x00);
+        Put(image, 0x1005, Compare, Lo(Answer), Hi(Answer), 2, 0);
+        Put(image, 0x100A, GotoIf, 0x00);
+        Address(image, 0x100C, 0x1100);
+        Put(image, 0x1010, SetVar, Lo(Answer), Hi(Answer), 1, 0, Return);
+
+        Put(image, 0x1100, SetVar, Lo(Answer), Hi(Answer), 0, 0, Return);
+
+        SpecialCalls.WhatItCanReturn can =
+            SpecialCalls.Returns(new Rom(image), Rom.BaseAddress + 0x1000);
+
+        Assert.Equal(new[] { 0, 1 }, can.Answers.Select(a => a.Who).Order());
+        Assert.Equal(new[] { 0x84 }, can.Deciders);
+    }
+
+    /// <summary>
+    /// A block with no branch returns one thing and nothing chooses — the ordinary case, without
+    /// which "it returns two things" passes on an instrument that always says two.
+    /// </summary>
+    [Fact]
+    public void ABlockWithNoBranchReturnsOneThingAndNothingChooses()
+    {
+        byte[] image = Blank();
+
+        Put(image, 0x1000, SetVar, Lo(Answer), Hi(Answer), 7, 0, Return);
+
+        SpecialCalls.WhatItCanReturn can =
+            SpecialCalls.Returns(new Rom(image), Rom.BaseAddress + 0x1000);
+
+        Assert.Equal(7, Assert.Single(can.Answers).Who);
+        Assert.Empty(can.Deciders);
+    }
+
+    /// <summary>
+    /// The decider is the routine asked LAST before the branch, not the first one in the block.
+    /// <para>
+    /// A block that asks two things and branches on the second is the shape the cartridge uses,
+    /// and crediting the first is the same off-by-one the barrier list exists to stop.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TheDeciderIsWhateverWasAskedLastBeforeTheBranch()
+    {
+        byte[] image = Blank();
+
+        Put(image, 0x1000, SpecialVar, Lo(Answer), Hi(Answer), 0x11, 0x00);
+        Put(image, 0x1005, SpecialVar, Lo(Answer), Hi(Answer), 0x22, 0x00);
+        Put(image, 0x100A, Compare, Lo(Answer), Hi(Answer), 2, 0);
+        Put(image, 0x100F, GotoIf, 0x00);
+        Address(image, 0x1011, 0x1100);
+        Put(image, 0x1015, SetVar, Lo(Answer), Hi(Answer), 1, 0, Return);
+
+        Put(image, 0x1100, SetVar, Lo(Answer), Hi(Answer), 0, 0, Return);
+
+        Assert.Equal(
+            new[] { 0x22 },
+            SpecialCalls.Returns(new Rom(image), Rom.BaseAddress + 0x1000).Deciders);
     }
 
     /// <summary>
