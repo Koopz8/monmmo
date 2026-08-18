@@ -10261,6 +10261,31 @@ public static class Program
                 + $" — holds {gates.Behind(flag).Count} object(s)");
         }
 
+        // AND WHY IT GOES ROUND, which is a counting argument. A block that reads a flag and
+        // writes the opposite is a toggle; a pass that runs an odd number of them ends with the
+        // flag the other way round, every pass, forever. 239 found the run stopped settling and
+        // 240 named the flags; neither said why, and "it depends which map the walk reached last"
+        // is a description of oscillation rather than a cause.
+        IReadOnlyList<ToggledInAPass> toggled = WhyItGoesRound.In(played.FlagMoves);
+
+        IReadOnlyList<ToggledInAPass> cannot = WhyItGoesRound.CannotSettle(toggled, played.Passes);
+
+        Console.WriteLine(
+            cannot.Count == 0
+                ? "      and nothing was moved an ODD number of times on the pass the run stopped"
+                  + $" on (pass {played.Passes}), so no flag is why this run does not settle"
+                : $"      {cannot.Count} flag(s) cannot settle — an ODD number of moves on pass"
+                  + $" {played.Passes}, the one the run stopped on, so each ends every pass the"
+                  + " other way round:");
+
+        foreach (ToggledInAPass one in cannot)
+        {
+            Console.WriteLine($"        0x{one.Flag:X4} {one}");
+
+            foreach (ToggledInAPass pass in toggled.Where(t => t.Flag == one.Flag))
+                Console.WriteLine($"          {pass}");
+        }
+
         if (played.TookBack.Count == 0)
         {
             Console.WriteLine(
