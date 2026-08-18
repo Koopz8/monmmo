@@ -7609,29 +7609,37 @@ public static class Program
     private static void WriteWhatIsWaitedFor(Rom rom, MapLibrary library)
     {
         var calls = new List<(int Routine, int At, bool Waited)>();
+        var asked = new List<(int Routine, int Selector, int At, bool Waited)>();
 
-        var opened = new Dictionary<int, ScriptCommand>();
+        // Block by block and in order, because what a call was handed is the run of setvars
+        // immediately before it — a dictionary of every byte position cannot say "immediately".
+        var read = new HashSet<uint>();
 
         foreach ((string _, string _, uint address) in library.EveryScript())
-            foreach (ScriptCommand command in ScriptReader.ReadAll(rom, address))
-                opened[command.Offset] = command;
-
-        foreach (ScriptCommand command in opened.Values)
         {
-            int routine = command.Code switch
+            if (!read.Add(address)) continue;
+
+            List<ScriptCommand> block = ScriptReader.ReadAll(rom, address);
+
+            for (var i = 0; i < block.Count; i++)
             {
-                SpecialCalls.Special when command.Arguments.Length >= 2 => command.Word(),
-                SpecialCalls.SpecialVar when command.Arguments.Length >= 4 => command.Word(2),
-                _ => -1,
-            };
+                ScriptCommand command = block[i];
 
-            if (routine < 0) continue;
+                int routine = command.Code switch
+                {
+                    SpecialCalls.Special when command.Arguments.Length >= 2 => command.Word(),
+                    SpecialCalls.SpecialVar when command.Arguments.Length >= 4 => command.Word(2),
+                    _ => -1,
+                };
 
-            bool waited =
-                opened.TryGetValue(command.Offset + 1 + command.Arguments.Length, out ScriptCommand? after)
-                && after.Code == FieldEffectNumbers.WaitUnnamed;
+                if (routine < 0) continue;
 
-            calls.Add((routine, command.Offset, waited));
+                bool waited =
+                    i + 1 < block.Count && block[i + 1].Code == FieldEffectNumbers.WaitUnnamed;
+
+                calls.Add((routine, command.Offset, waited));
+                asked.Add((routine, WhatIsWaitedFor.SelectorBefore(block, i), command.Offset, waited));
+            }
         }
 
         IReadOnlyList<WhatIsWaitedFor.Routine> routines = WhatIsWaitedFor.From(calls);
@@ -7674,6 +7682,31 @@ public static class Program
             $"    and the other side: {routines.Count(r => r.AsksMoreThanOnce && r.Waited == 0)} of the"
             + $" {routines.Count(r => r.AsksMoreThanOnce)} routines asked in more than one place are waited"
             + " for at NONE of them");
+
+        // AND THE SAME QUESTION ASKED OF WHAT IS ACTUALLY BEING ASKED.
+        //
+        // A routine number is not an operation here: 0x194 is asked eighteen different ways, and
+        // bucketing all of them together is what made it look like an exception.
+        IReadOnlyList<WhatIsWaitedFor.Asking> askings = WhatIsWaitedFor.ByAsking(asked);
+
+        List<WhatIsWaitedFor.Asking> askedMore = [.. askings.Where(a => a.AskedMoreThanOnce)];
+
+        Console.WriteLine();
+        Console.WriteLine("    BY WHAT IS ASKED — the routine AND what 0x8004 held when it was:");
+        Console.WriteLine(
+            $"      {askings.Count} (routine, argument) pair(s), {askedMore.Count} of them in more than one place");
+        Console.WriteLine(
+            $"      {askedMore.Count(a => a.Mixed)} of those {askedMore.Count} are waited for at SOME places and not"
+            + $" others; chance at {chance:P1} a place would give {WhatIsWaitedFor.ExpectedMixed(askings, chance):0.0}");
+
+        foreach (WhatIsWaitedFor.Asking asking in askings
+                     .Where(a => a.Number == 0x194)
+                     .OrderByDescending(a => a.Places))
+        {
+            Console.WriteLine(
+                $"        0x194 with 0x8004 = {(asking.Selector == WhatIsWaitedFor.NoSelector ? "none" : asking.Selector.ToString()),4}"
+                + $"   {asking.Places,2} place(s), {asking.Waited} waited");
+        }
     }
 
     private static void WriteRoutinesReachedByNumber(Rom rom)

@@ -122,6 +122,131 @@ public sealed class WaitingIsAboutTheRoutineTests
         Assert.Equal(0, WhatIsWaitedFor.ExpectedAtEveryPlace([new(0x0BD, 1, 1)], 0.5), 6);
     }
 
+    // ------------------------------------------------- and what was actually asked
+
+    private static ScriptCommand SetVar(int at, int variable, int value) =>
+        new(at, 0x16,
+            [(byte)(variable & 0xFF), (byte)(variable >> 8), (byte)(value & 0xFF), (byte)(value >> 8)]);
+
+    private static ScriptCommand Special(int at, int routine) =>
+        new(at, 0x25, [(byte)(routine & 0xFF), (byte)(routine >> 8)]);
+
+    private static ScriptCommand Message(int at) => new(at, 0x67, [0, 0, 0, 0]);
+
+    /// <summary>
+    /// THE DISCRIMINATION: only the unbroken run of setvars touching the call. A
+    /// <c>setvar 0x8004</c> with a message between it and the call is a variable that happens to
+    /// be nearby, and crediting it hands the routine an argument it was never given.
+    /// </summary>
+    [Fact]
+    public void OnlyTheRunOfSetvarsTouchingTheCallIsTheArgument()
+    {
+        ScriptCommand[] touching =
+        [
+            SetVar(0x100, 0x8004, 9), SetVar(0x105, 0x8005, 1), Special(0x10A, 0x194),
+        ];
+
+        Assert.Equal(9, WhatIsWaitedFor.SelectorBefore(touching, 2));
+
+        ScriptCommand[] broken =
+        [
+            SetVar(0x100, 0x8004, 9), Message(0x105), SetVar(0x10A, 0x8005, 1), Special(0x10F, 0x194),
+        ];
+
+        Assert.Equal(WhatIsWaitedFor.NoSelector, WhatIsWaitedFor.SelectorBefore(broken, 3));
+    }
+
+    /// <summary>
+    /// The nearest one wins when the run sets it twice, and a call with nothing in front of it is
+    /// handed nothing — which is a bucket of its own and not the same as being handed nought.
+    /// </summary>
+    [Fact]
+    public void TheNearestOneWinsAndNothingIsNotNought()
+    {
+        ScriptCommand[] twice =
+        [
+            SetVar(0x100, 0x8004, 9), SetVar(0x105, 0x8004, 2), Special(0x10A, 0x194),
+        ];
+
+        Assert.Equal(2, WhatIsWaitedFor.SelectorBefore(twice, 2));
+
+        Assert.Equal(WhatIsWaitedFor.NoSelector, WhatIsWaitedFor.SelectorBefore([Special(0x100, 0x194)], 0));
+        Assert.NotEqual(0, WhatIsWaitedFor.NoSelector);
+    }
+
+    /// <summary>
+    /// THE DISCRIMINATION for the buckets: one routine asked two ways is TWO askings, and a
+    /// reading that bucketed by routine alone gets exactly what 235 got — a routine that looks
+    /// waited-for at some places and not others.
+    /// </summary>
+    [Fact]
+    public void OneRoutineAskedTwoWaysIsTwoAskings()
+    {
+        IReadOnlyList<WhatIsWaitedFor.Asking> askings = WhatIsWaitedFor.ByAsking(
+        [
+            (0x194, 2, 0x1000, true),
+            (0x194, 19, 0x2000, false),
+            (0x194, 19, 0x3000, false),
+        ]);
+
+        Assert.Equal(2, askings.Count);
+
+        WhatIsWaitedFor.Asking waited = askings.Single(a => a.Selector == 2);
+        WhatIsWaitedFor.Asking not = askings.Single(a => a.Selector == 19);
+
+        Assert.Equal(1, waited.Places);
+        Assert.Equal(1, waited.Waited);
+        Assert.False(waited.Mixed);
+
+        Assert.Equal(2, not.Places);
+        Assert.Equal(0, not.Waited);
+        Assert.False(not.Mixed);
+
+        // And by routine alone the same calls read as the exception 235 reported.
+        WhatIsWaitedFor.Routine asOne = WhatIsWaitedFor.From(
+            [(0x194, 0x1000, true), (0x194, 0x2000, false), (0x194, 0x3000, false)]).Single();
+
+        Assert.True(asOne.AtSomeOnly);
+    }
+
+    /// <summary>An asking waited at some of its places and not others is the thing being counted.</summary>
+    [Fact]
+    public void MixedIsSomeButNotAll()
+    {
+        WhatIsWaitedFor.Asking mixed = WhatIsWaitedFor.ByAsking(
+            [(0x194, 2, 0x1000, true), (0x194, 2, 0x2000, false)]).Single();
+
+        Assert.True(mixed.Mixed);
+        Assert.True(mixed.AskedMoreThanOnce);
+    }
+
+    /// <summary>
+    /// The null is the chance of the MIXED outcome — one minus all and minus none — because
+    /// "all of them or none of them" is two outcomes of two to the n and the count of all-waited
+    /// groups is dominated by the ones that wait for nothing.
+    /// </summary>
+    /// <remarks>
+    /// What this test cannot do: an asking with ONE place contributes
+    /// <c>1 - p - (1 - p) = 0</c> whatever p is, so excluding them changes no answer and no
+    /// fixture can catch a reading that keeps them. The filter is a statement of intent. Written
+    /// down rather than left to be found.
+    /// </remarks>
+    [Fact]
+    public void TheNullIsTheChanceOfTheMixedOutcome()
+    {
+        WhatIsWaitedFor.Asking[] two = [new(0x194, 2, Places: 2, Waited: 0)];
+
+        // 1 - 0.25 - 0.25
+        Assert.Equal(0.5, WhatIsWaitedFor.ExpectedMixed(two, 0.5), 6);
+
+        WhatIsWaitedFor.Asking[] three = [new(0x194, 2, Places: 3, Waited: 0)];
+
+        // 1 - 0.125 - 0.125
+        Assert.Equal(0.75, WhatIsWaitedFor.ExpectedMixed(three, 0.5), 6);
+
+        Assert.Equal(0, WhatIsWaitedFor.ExpectedMixed([new(0x194, 2, 1, 1)], 0.5), 6);
+    }
+
     /// <summary>
     /// And the rate is waited PLACES over all PLACES — over the whole population, including the
     /// routines nothing ever waits for, or the null is built out of the sites that agree with it.
