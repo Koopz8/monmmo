@@ -1,7 +1,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-259`, 2894 tests green.
+`claude-260`, 2903 tests green.
 
 Standing rules — do not break these:
 
@@ -101,8 +101,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-220-the-other-arm-of-the-barrier.md` first, then
-`219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
+Read `claude/milestone-221-may-have-is-not-an-answer.md` first, then
+`220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
 **Twenty faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
@@ -156,7 +156,10 @@ dotnet run -c Release --project src/Tools/RomDump -- firered.gba --routines
 compare is only past a `call`, another `special`, a `callstd` or a `0xA0`, in their own section
 with the values they were being credited with. **It also prints branches as sites AND as byte
 positions**, because a block hanging off two triggers is read twice and only one of those two
-numbers is about the cartridge.
+numbers is about the cartridge. And since 221 it says, for every site whose whole claim is past
+a barrier, **what was in the way and whether it can have answered** — three verdicts, the third
+being that the reading does not know, which is what a `callstd` gets because nobody here has
+ever read a standard routine.
 
 `--through-a-call` follows a `call` one level and says what it leaves in the answer variable:
 a routine's answer, a number the block says out loud, another variable, or nothing. **A literal
@@ -256,9 +259,11 @@ of 1055 branching sites in the file, nought takes 212 — and 0x188's one place 
 40 leave the answer alone and 9 jump somewhere the reading does not follow — those are different
 of the 40, 38 read 0x01C's or 0x01D's answer across a call that is `copyvar 0x8012, 0x8013`
 11 of the 336 have NO owner: 2 behind a jump here and 9 from 218
---routines had NO barrier until 220: 145 sites across 24 routines were read past something
-17 of 63 routines were branched on ONLY that way; branched-on is 46 now
+--routines had NO barrier until 220: 145 sites have a compare past something, 78 with nothing else
+of those 78: 38 the routine gets back, 30 were somebody else's, 10 not said (7 behind a callstd)
+17 of 63 routines were branched on ONLY that way — 2 come back, 10 are not theirs, 5 unknown
 the branch table is 1037 sites at 411 byte positions — 0x187 is 376 reads of 72 addresses
+0x01C's nineteen sites are ONE address; 219 called them nineteen places
 the 57 are TWO blocks, each a yes/no turning on 0x083 or 0x084 and then 0x153
 2 of those gates hold NOBODY — 0x084A and 0x084B, the ferry, with no setter anywhere
 ```
@@ -277,28 +282,24 @@ the 57 are TWO blocks, each a yes/no turning on 0x083 or 0x084 and then 0x153
    anyway, which is the `#130` at 71 the party ends with. **The floor is clean**: 1 place asks,
    nothing comes of it, so the floor's party of six is entirely earned. Whether that deserves a
    `--pay` lever or a located payout table is a DECISION and it is deliberately not made.
-3. **The seventeen routines whose every branch was read across a barrier** (220). Giving
-   `SpecialContracts` the list `SpecialCalls` has had since 214 took branched-on from 63 to 46
-   and put 145 sites across 24 routines into "the compare is past something that may have
-   answered instead". `--through-a-call` is the instrument that says what that something leaves,
-   and 219 already answered the two biggest: `0x01C` and `0x01D`, nineteen sites each, with
-   `copyvar 0x8012, 0x8013 ; return` in the way, which cannot have answered. `0x0A5` at eight
-   sites and `0x138` at six are next. **`0x0156` is the one to read first** — its two sites are
-   the same compare `0x0188` gets, at the very bytes 215 read by hand, so the table was crediting
-   one compare to two routines.
-   And **`0x0188`'s other ten**: 215 called it the last of the run's ceiling on the strength of
-   one clean site, and ten more of its sites have a compare past a barrier.
+3. **The five sites behind a `callstd`, which is a standard routine nobody here has read.**
+   221 resolved the seventeen: two come back (`0x01C`, `0x01D` — the call in the way is
+   `copyvar 0x8012, 0x8013 ; return`), ten were never theirs, and five are behind a standard
+   routine and stay unknown. `0x0BF`, `0x0DE`, `0x11D`, `0x177`, `0x1A0`, one site each — and
+   **seven of `0x0188`'s ten** are behind one too. Reading a standard routine would settle
+   twelve sites and is a thing this project has never attempted.
+   **And `0x0188`'s other three**: three past a command that answers on its own account, three
+   past a block that jumps away. 215 called `0x0188` the last of the run's ceiling on the
+   strength of one clean site.
    **Every routine sentence in this project quoted sites, not places.** The branch table is 1037
-   sites at 411 byte positions, and `0x0187` is 376 reads of 72 addresses. Which of the older
-   numbers were about the cartridge is now askable.
-   Still owed from 218 and cheap: **`0x081A77B0`**, where the jumping arm goes from nineteen
-   places — one level further than the rule allows, so it wants its own reading. And
-   **`0x0153`**, which is half of every one of the fifty-seven decisions and whose own sites
-   nobody has looked at. Also owed: **seven boulder flags with no setter anywhere** (whatever
-   drops a boulder into a hole is not script), **`0x0805`** which the STRENGTH script sets and
-   shares across all twelve boulders, and **`0x0053`** holding 31 people across the SILPH CO.
-   floors with no setter — the doors are open (176, 181) and the people are still held, which
-   are two different facts.
+   sites at 411 byte positions; `0x0187` is 376 reads of 72 addresses and `0x01C` is nineteen
+   reads of ONE. 219's "nineteen places" was nineteen times. Which of the older numbers were
+   about the cartridge is now askable and mostly unasked.
+   Still owed and cheap: **`0x081A77B0`**, where 218's jumping arm goes from nineteen sites, and
+   **`0x0153`**, half of every one of the fifty-seven decisions, whose own sites nobody has
+   looked at. Also owed: **seven boulder flags with no setter anywhere**, **`0x0805`** which the
+   STRENGTH script sets across all twelve boulders, and **`0x0053`** holding 31 people across the
+   SILPH CO. floors with no setter — the doors are open (176, 181) and the people are still held.
 
 4. **Money, for real this time — and the prices are READ now.** Three drinks at 200/300/350 and
    a POKé DOLL at 1000, plus 208's ¥20 a coin and fifteen coin prices, all READ, all at counters
@@ -412,6 +413,13 @@ reason; one was given a barrier at 214 and the other had none, and they contradi
 out loud for six milestones without anybody asking both. **When you fix a reading, grep for who
 else reads that shape** — and prefer exposing the one list to copying it, because a copy is how
 they came apart.
+
+**A green break twice running meant the RULE was in the wrong place, not the guard** (219, 221).
+At 219 the line being broken was a second copy of a rule nothing could reach; at 221 it was two
+lines inside a function that needs a whole cartridge to run, so no fixture could reach it either.
+Both times the fix was to move the rule to where a test can ask it directly, and both times the
+re-run break failed exactly one test. **When a break is green, ask where the rule lives before
+you suspect the fixture.**
 
 **A guard nothing can reach is not a guard** (219). The walk back past a call had a `case Call`
 arm of its own sitting immediately above a barrier check that already contained `call` — two

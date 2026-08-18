@@ -6,11 +6,12 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **Two readings of the same bytes, and only one of them had the safety check.** The newer one
-  stops when something else might have answered the question first. The older one — the one
-  every routine number in this project was read off — never stopped at all.
-- **Seventeen of sixty-three routines had no clean reading at all.** Every branch they were
-  credited with was read across something that may have answered instead. Branched-on goes 63 to 46.
-- One compare was being credited to two routines at once, at bytes read by hand five milestones ago.
-- **And the table counted reads, not places**: 1037 sites are 411 addresses.
-- Five breaks, five catches — one fixture was testing the window instead of the rule.
+- **"Something might have answered first" is not an answer, so this went and looked.** Of the
+  78 sites where the whole claim rested on that: 38 come back to the routine (the thing in the
+  way is four bytes that move one number to another), 30 were never its answer at all, and 10
+  stay unknown.
+- **The unknown ten are the honest part.** Seven sit behind a standard routine nobody here has
+  ever read, and calling those a "no" would have been inventing a fact to fill a hole.
+- Last milestone's own headline said 145 where it meant 78. Both numbers are printed now.
+- **One list of every script, replacing five copies of it** — a sixth was about to be written.
+- Five breaks, five catches. The green one meant the rule was somewhere no test could reach it.
