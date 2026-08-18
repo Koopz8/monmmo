@@ -193,8 +193,11 @@ public sealed class WhoLooksAtItTests
         // Written and never read.
         Block(image, 0x1200, SetVar, Lo(Watched), Hi(Watched), 1, 0);
 
-        // Read and never written.
+        // Read and never written — TWO of them, so that this count and the never-read one are
+        // different numbers. With one of each a rule that reported the wrong side answered 1
+        // either way and the fixture could not tell.
         Block(image, 0x1300, Compare, 0x70, 0x40, 1, 0);
+        Block(image, 0x1380, Compare, 0x71, 0x40, 1, 0);
 
         // And one outside the band, written and never read, which must not be counted.
         Block(image, 0x1400, SetVar, 0x11, 0x80, 1, 0);
@@ -203,7 +206,7 @@ public sealed class WhoLooksAtItTests
             new Rom(image), v => v is >= 0x4000 and < 0x8000);
 
         Assert.Equal(2, written);
-        Assert.Equal(2, read);
+        Assert.Equal(3, read);
         Assert.Equal(1, never);
     }
 
