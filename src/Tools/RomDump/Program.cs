@@ -208,6 +208,7 @@ public static class Program
         if (options.PersonCommands) WriteTwoCommands(rom);
         if (options.Arrivals) WriteArrivals(rom);
         if (options.TheFloor) WriteTheFloorTable(rom, options.StartAt);
+        if (options.ReadFrom.Count > 0) WriteBlocks(rom, options.ReadFrom);
         if (options.Closure) WriteClosure(rom, options.RoutineAnswers, options.StartAt);
         if (options.Play)
             WritePlaythrough(
@@ -5979,6 +5980,70 @@ public static class Program
     /// reads the cartridge facts once, plays six times, and prints what it was handed.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// One or more addresses, decoded: the bytes and what they read as, side by side, plus every
+    /// block each one reaches and where any read stopped.
+    /// </summary>
+    /// <remarks>
+    /// The command this project has needed since 190 and kept doing by hand. See
+    /// <see cref="ABlockRead"/> for why the bytes and the decode come off the same command.
+    /// </remarks>
+    private static void WriteBlocks(Rom rom, IReadOnlyList<uint> addresses)
+    {
+        Console.WriteLine();
+        Console.WriteLine("READ FROM");
+        Console.WriteLine();
+
+        foreach (uint address in addresses)
+        {
+            if (!rom.IsRomAddress(address))
+            {
+                Console.WriteLine($"  0x{address:X8} is not an address in this image");
+                continue;
+            }
+
+            IReadOnlyList<ABlockRead.Block> blocks = ABlockRead.From(rom, address);
+
+            Console.WriteLine();
+            Console.WriteLine(
+                $"  0x{address:X8} — {blocks.Count} block(s), "
+                + $"{blocks.Sum(b => b.Lines.Count)} command(s), "
+                + $"{blocks.Count(b => b.Stopped)} of them stopped");
+
+            foreach (ABlockRead.Block block in blocks)
+            {
+                Console.WriteLine();
+                Console.WriteLine(
+                    $"    0x{block.Address:X8}"
+                    + (block.Address == address ? "   <- asked for" : "")
+                    + (block.Reaches.Count > 0
+                        ? "   hands over to " + string.Join(", ", block.Reaches.Select(r => $"0x{r:X8}"))
+                        : ""));
+
+                foreach (ABlockRead.Line line in block.Lines)
+                {
+                    Console.WriteLine(
+                        $"      0x{line.Offset:X6}  "
+                        + string.Join(" ", line.Bytes.Select(b => $"{b:X2}")).PadRight(26)
+                        + line.Name);
+                }
+
+                if (block.StoppedOn is { } code)
+                {
+                    Console.WriteLine(
+                        $"      0x{block.StoppedAt:X6}  {code:X2}"
+                        + new string(' ', 24)
+                        + "<- STOPPED: this project has no width for it");
+                }
+            }
+        }
+
+        Console.WriteLine();
+        Console.WriteLine(
+            "  the bytes and the decode come off the same command, so they cannot disagree — and"
+            + " what a block hands over to is the four pointer forms only, never a fall-through");
+    }
+
     private static void WriteTheFloorTable(Rom rom, string startAt)
     {
         Console.WriteLine();
@@ -12718,6 +12783,9 @@ public static class Program
                                     what it does with them: handed over, asked for, taken
                                     away, sold, or loaded for a routine. Reads rather than
                                     runs, so a gift on a branch nobody can take still shows.
+              --read-from A[,A]     decode these addresses: the bytes and what they read as,
+                                    side by side, every block each one reaches, and where any
+                                    read stopped. The command this project kept doing by hand.
               --in-the-image F[,F]  every place in the WHOLE FILE that turns these flags on or
                                     off, and whether the map scan ever decoded that byte.
                                     Every other reading here starts at a map and follows the
@@ -12970,6 +13038,9 @@ public static class Program
 
         public bool TheFloor { get; private init; }
 
+        /// <summary>Addresses to decode and print, or nothing.</summary>
+        public IReadOnlyList<uint> ReadFrom { get; private init; } = [];
+
         public bool Play { get; private init; }
 
         /// <summary>Items to hunt through every script in the image, or nothing.</summary>
@@ -13179,6 +13250,7 @@ public static class Program
             bool personCommands = false;
             bool arrivals = false;
             bool theFloor = false;
+            var readFrom = new List<uint>();
             bool fights = false;
             bool whoKnows = false;
             var coins = false;
@@ -13445,6 +13517,15 @@ public static class Program
                     case "--the-floor":
                         theFloor = true;
                         break;
+                    case "--read-from":
+                    {
+                        foreach (string named in Next(args, ref i, "--read-from").Split(','))
+                        {
+                            if (TryNumber(named, out int blockAt)) readFrom.Add((uint)blockAt);
+                        }
+
+                        break;
+                    }
                     case "--fights":
                         fights = true;
                         break;
@@ -13770,6 +13851,7 @@ public static class Program
                 PersonCommands = personCommands,
                 Arrivals = arrivals,
                 TheFloor = theFloor,
+                ReadFrom = readFrom,
                 Play = play,
                 WhereFrom = whereFrom,
                 InTheImage = inTheImage,
