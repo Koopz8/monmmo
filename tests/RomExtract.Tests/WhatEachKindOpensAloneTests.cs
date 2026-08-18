@@ -137,8 +137,8 @@ public sealed class WhatEachKindOpensAloneTests
                 // routine alone. A fixture where both columns come out the same number cannot
                 // tell them apart, and a break that computed one from the other passed against
                 // exactly that.
-                ["person"] = new(1584, 1250, 39446, [0x1000, 0x2000], [0x188, 0x194]),
-                ["on load"] = new(234, 163, 2770, [0x2000, 0x3000, 0x4000], [0x0A7, 0x194]),
+                ["person"] = new(1584, 1250, 39446, [0x1000, 0x2000], [0x188, 0x194], [0x003E]),
+                ["on load"] = new(234, 163, 2770, [0x2000, 0x3000, 0x4000], [0x0A7, 0x194], [0x0070, 0x003E]),
             });
 
         WhatTheScanOpens.AKind onLoad = Assert.Single(rows.Where(r => r.Kind == "on load"));
@@ -150,6 +150,12 @@ public sealed class WhatEachKindOpensAloneTests
 
         // Two places alone and one routine alone — the columns are two questions, not one.
         Assert.NotEqual(onLoad.Only, onLoad.RoutinesOnly.Count);
+
+        // And a third question with the same rule: the flag only this kind moves. On the
+        // cartridge that is 0x0070, whose only two movers are the arms of one branch on a
+        // routine no run can answer.
+        Assert.Equal(2, onLoad.Flags);
+        Assert.Equal([0x0070], onLoad.FlagsOnly);
 
         // And the row carries what was gathered rather than recomputing it.
         Assert.Equal(234, onLoad.Entries);

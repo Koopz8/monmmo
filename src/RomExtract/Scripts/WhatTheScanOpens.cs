@@ -45,6 +45,8 @@ public static class WhatTheScanOpens
     /// <c>on load</c> was missing every position only <c>on load</c> reaches, and nothing
     /// printed that.
     /// </param>
+    /// <param name="Flags">Flags set or cleared by scripts of this kind.</param>
+    /// <param name="FlagsOnly">Flags <b>no other kind</b> moves.</param>
     /// <param name="Routines">Routines asked by scripts of this kind.</param>
     /// <param name="RoutinesOnly">
     /// Routines <b>no other kind</b> asks. 224 recovered two kinds and twenty routines appeared;
@@ -58,7 +60,9 @@ public static class WhatTheScanOpens
         int Places,
         int Only,
         int Routines,
-        IReadOnlyList<int> RoutinesOnly);
+        IReadOnlyList<int> RoutinesOnly,
+        int Flags,
+        IReadOnlyList<int> FlagsOnly);
 
     /// <param name="Entries">Script entries the maps hang off people, triggers and signs.</param>
     /// <param name="Addresses">How many distinct addresses those entries point at.</param>
@@ -73,7 +77,8 @@ public static class WhatTheScanOpens
         int Addresses,
         int Reads,
         IReadOnlyCollection<int> Places,
-        IReadOnlyCollection<int> Routines);
+        IReadOnlyCollection<int> Routines,
+        IReadOnlyCollection<int> Flags);
 
     /// <summary>
     /// The per-kind rows, from what was gathered — <b>where the ALONE columns are decided</b>.
@@ -92,6 +97,9 @@ public static class WhatTheScanOpens
         Dictionary<string, IReadOnlyCollection<int>> routines =
             byKind.ToDictionary(e => e.Key, e => e.Value.Routines);
 
+        Dictionary<string, IReadOnlyCollection<int>> flags =
+            byKind.ToDictionary(e => e.Key, e => e.Value.Flags);
+
         return
         [
             .. byKind
@@ -103,11 +111,17 @@ public static class WhatTheScanOpens
                     e.Value.Places.Count,
                     OnlyHere(places, e.Key),
                     e.Value.Routines.Count,
-                    OnlyIn(routines, e.Key)))
+                    OnlyIn(routines, e.Key),
+                    e.Value.Flags.Count,
+                    OnlyIn(flags, e.Key)))
                 .OrderByDescending(k => k.Only)
                 .ThenByDescending(k => k.Places),
         ];
     }
+
+    private const byte SetFlag = 0x29;
+
+    private const byte ClearFlag = 0x2A;
 
     /// <summary>Which of the five kinds a script's name says it is.</summary>
     public static string KindOf(string what) =>
@@ -126,6 +140,7 @@ public static class WhatTheScanOpens
         var reads = new Dictionary<string, int>();
         var places = new Dictionary<string, HashSet<int>>();
         var routines = new Dictionary<string, HashSet<int>>();
+        var flags = new Dictionary<string, HashSet<int>>();
 
         foreach ((string _, string what, uint address) in library.EveryScript())
         {
@@ -141,6 +156,8 @@ public static class WhatTheScanOpens
 
             if (!routines.TryGetValue(kind, out HashSet<int>? asked)) routines[kind] = asked = [];
 
+            if (!flags.TryGetValue(kind, out HashSet<int>? moved)) flags[kind] = moved = [];
+
             foreach (ScriptCommand command in ScriptReader.ReadAll(rom, address))
             {
                 reads[kind] = reads.GetValueOrDefault(kind) + 1;
@@ -151,6 +168,11 @@ public static class WhatTheScanOpens
 
                 if (command.Code == SpecialCalls.SpecialVar && command.Arguments.Length >= 4)
                     asked.Add(command.Word(2));
+
+                // Both halves: a flag this game turns off is as much a story step as one it
+                // turns on, and three flags in the middle of it are only ever cleared.
+                if (command.Code is SetFlag or ClearFlag && command.Arguments.Length >= 2)
+                    moved.Add(command.Word());
             }
         }
 
@@ -161,7 +183,8 @@ public static class WhatTheScanOpens
                 addresses[kind].Count,
                 reads.GetValueOrDefault(kind),
                 places[kind],
-                routines[kind])));
+                routines[kind],
+                flags[kind])));
     }
 
     /// <summary>

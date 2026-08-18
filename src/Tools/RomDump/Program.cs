@@ -7191,6 +7191,13 @@ public static class Program
                     ? ""
                     : ": " + string.Join(", ", kind.RoutinesOnly.Take(12).Select(r => $"0x{r:X3}"))
                       + (kind.RoutinesOnly.Count > 12 ? $" and {kind.RoutinesOnly.Count - 12} more" : "")));
+            Console.WriteLine(
+                $"                moves {kind.Flags,3} flag(s), {kind.FlagsOnly.Count} of them moved"
+                + " by no other kind"
+                + (kind.FlagsOnly.Count == 0
+                    ? ""
+                    : ": " + string.Join(", ", kind.FlagsOnly.Take(12).Select(f => $"0x{f:X4}"))
+                      + (kind.FlagsOnly.Count > 12 ? $" and {kind.FlagsOnly.Count - 12} more" : "")));
         }
 
         int clean = byCode.Count(c => c.Reads == c.Places);
