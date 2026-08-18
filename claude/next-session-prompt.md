@@ -165,8 +165,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-237-twenty-two-doors-nothing-could-see.md` first, then `236`, `235`,
-`234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
+Read `claude/milestone-238-the-same-width-is-not-the-same-reading.md` first, then `237`,
+`236`, `235`, `234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
 **Twenty faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
@@ -221,7 +221,14 @@ dotnet run -c Release --project src/Tools/RomDump -- firered.gba --arrivals
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --the-floor
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --read-from 0x081BE06F
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --field-effects
+dotnet run -c Release --project src/Tools/RomDump -- firered.gba --slots 0x9D,0x7F,0x82
 ```
+
+`--slots N[,N]` asks one question of any command that takes a byte and a word: **is the byte an
+index?** Runs of it counted in byte positions, whether every run counts 0,1,2 from nought, and a
+floor drawn from the values that byte actually takes. It comes back **unanswerable** when the
+byte has one value — `0x7F` is 0 at all three of its places and would otherwise read as a yes at
+a floor of one in one. `0x9D` is one in 3^9; `0x82`'s byte is 1 at all seven.
 
 `--field-effects` pairs every block that asks who knows a move with the number its `dofieldeffect`
 takes: 7 blocks, 6 moves, 6 numbers, no move with two — and it says out loud that the only direct
@@ -397,6 +404,10 @@ the two kinds the shared list lost open 2491 places nothing else reaches — 1 i
 0x63 takes a person and a SQUARE — 26 of 126 hit that person's own square against a floor of 0.45
 0x65 takes a person and a MOVEMENT TYPE — 54 of 105 the person's own against a floor of 22.7
 neither is NAMED: what they take is read, what they do is still a guess
+0x9D's first byte is an INDEX: 9 byte positions in 5 runs, every run 0,1,2 from nought, one in 3^9
+0x7F is 0 at all 3 of its places and 0x82 is 1 at all 7 — both UNANSWERABLE, not yes (238)
+0x82's word is 7 distinct across 7 places, none a variable; two of them are CUT's and ROCK
+  SMASH's own move ids (15, 249) — two of two is not a column, do not build on it
 9 routines only the map's own script list asks, 11 only what it runs on arrival — 224's twenty
 0x0A7 is one place in the whole game, unbranched, the line before the eight fan questions
 0x5C trainerbattle is 794 reads at 729 places and --fights says 729 — two readings agreeing
@@ -454,11 +465,11 @@ the raw 0x9C sweep is 11446 sites in BOTH images and the REVERSAL READS ON MORE 
 1. **`0x0AB` IS READ (232) and the block audit is DONE (231).** What is left of the audit: What is left of it: the three
    numbers nothing prints (`62 gates hold 240 people`, `146 trees and rocks`, `158 objects`) and
    `the ceiling is 45 of 437 byte positions`. Each needs an instrument or deleting; they are
-   marked in the block. The next cheap reads are **`0x9D`** — three of them run before the field
-   effect on `10.14` with `0, 255`, `1, 10`, `2, 14`, and it has a width and no meaning — and
-   **`0x194`'s nineteen doors** on TRAINER TOWER (236), some of which `--entries` may now see
-   since 237 admitted the argument band. `--read-from` makes both one command each. The history
-   for reference:
+   marked in the block. The next cheap reads are **`0x194`'s nineteen doors** on TRAINER TOWER
+   (236), some of which `--entries` may now see since 237 admitted the argument band, and
+   **`0x82`'s seven words** — 58, 231, 85, 247, 53 in one run of five, and 15 and 249 in the CUT
+   and ROCK SMASH blocks (238). `--read-from` and `--slots` make both one command each. The
+   history for reference:
    230 did the floor-row bisect (answer: milestone **199**, one commit, +3 at all six settings,
    announced in its own commit message) and then found the bigger thing: that block, and two
    items of this list, entered the prompt at **`f8d4f15fe`, "the next session's prompt with 190
