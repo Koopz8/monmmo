@@ -7599,6 +7599,86 @@ public static class Program
             }
         }
 
+        // AND THE LIMITATION, MEASURED. This command has said since 229 that only a setvar tells
+        // you what value it writes, so a condition satisfiable through a copyvar or an addvar
+        // reads as satisfiable by nothing — the safe direction, quoted as a caveat for
+        // twenty-five milestones with no number on it. Half of it is readable: addvar's second
+        // word is a literal, so a variable set to nought and added to by one can hold one, two
+        // and three, and that is in the bytes.
+        IReadOnlyDictionary<int, WhatItCanHold> canHold = WhatAVariableCanHold.In(rom, library);
+
+        List<WhenAMapRunsSomething.Arrival> middle =
+            [.. arrivals.Where(a => a.NobodyWritesThisValue)];
+
+        if (middle.Count > 0)
+        {
+            int ceiling = Math.Max(1, arrivals.Max(a => a.Value));
+
+            // FOUR ANSWERS, in the order that decides them. A value the corrected write set
+            // already contains is SATISFIABLE and the bucket was simply wrong about it; one a
+            // counter reaches is readable too; one behind a copy from something unread is the
+            // answer this cannot give; and what is left is the boundary the bucket was named for.
+            bool Written(WhenAMapRunsSomething.Arrival a) =>
+                canHold.TryGetValue(a.Variable, out WhatItCanHold? hold) && hold.Set.Contains(a.Value);
+
+            bool Counted(WhenAMapRunsSomething.Arrival a) =>
+                !Written(a)
+                && canHold.TryGetValue(a.Variable, out WhatItCanHold? hold)
+                && hold.Steps.Count > 0
+                && hold.CanReach(a.Value, ceiling);
+
+            bool Copied(WhenAMapRunsSomething.Arrival a) =>
+                !Written(a)
+                && !Counted(a)
+                && canHold.TryGetValue(a.Variable, out WhatItCanHold? hold)
+                && hold.Copied;
+
+            int Distinct(IEnumerable<WhenAMapRunsSomething.Arrival> of) =>
+                of.Select(a => (a.Variable, a.Value, a.Address)).Distinct().Count();
+
+            List<WhenAMapRunsSomething.Arrival> written = [.. middle.Where(Written)];
+            List<WhenAMapRunsSomething.Arrival> counted = [.. middle.Where(Counted)];
+            List<WhenAMapRunsSomething.Arrival> copied = [.. middle.Where(Copied)];
+            List<WhenAMapRunsSomething.Arrival> neither =
+                [.. middle.Where(a => !Written(a) && !Counted(a) && !Copied(a))];
+
+            Console.WriteLine();
+            Console.WriteLine(
+                $"  the middle bucket is {middle.Count} condition(s), {Distinct(middle)} distinct,"
+                + " and it is answered off setvar alone. What the other kinds of write are worth,"
+                + $" counting up to {ceiling}:");
+
+            Console.WriteLine(
+                $"    {written.Count,4} condition(s), {Distinct(written),3} distinct — SOMETHING"
+                + " DOES WRITE THAT VALUE, through a copy whose source the command before it just"
+                + " set to a literal. One hop, adjacent, no barrier list. The bucket was wrong");
+            Console.WriteLine(
+                $"    {counted.Count,4} condition(s), {Distinct(counted),3} distinct — a COUNTER"
+                + " can reach it: something sets the variable and something adds to it, and"
+                + " addvar's step is a literal too");
+            Console.WriteLine(
+                $"    {copied.Count,4} condition(s), {Distinct(copied),3} distinct — something"
+                + " COPIES into it from a source this cannot read, so what it can hold is another"
+                + " variable's contents and the honest answer is that this does not know");
+            Console.WriteLine(
+                $"    {neither.Count,4} condition(s), {Distinct(neither),3} distinct — nothing"
+                + " sets it, steps it or copies into it with anything that reaches the value:"
+                + " the bucket means what it says");
+
+            foreach (IGrouping<int, WhenAMapRunsSomething.Arrival> one in written
+                         .Union(counted).Union(copied)
+                         .GroupBy(a => a.Variable).OrderBy(g => g.Key))
+            {
+                WhatItCanHold hold = canHold[one.Key];
+
+                Console.WriteLine(
+                    $"      0x{one.Key:X4} — wanted {string.Join("/", one.Select(a => a.Value).Distinct().Order())};"
+                    + $" set to {(hold.Set.Count == 0 ? "nothing" : string.Join("/", hold.Set.Order()))}"
+                    + (hold.Steps.Count > 0 ? $"; stepped by {string.Join("/", hold.Steps.Order())}" : "")
+                    + (hold.Copied ? "; COPIED INTO" : ""));
+            }
+        }
+
         Console.WriteLine();
         Console.WriteLine("  by variable, worst first:");
 
