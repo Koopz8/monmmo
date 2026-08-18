@@ -48,6 +48,19 @@ public enum ShutBecause
     /// </para>
     /// </summary>
     AnObstacle,
+
+    /// <summary>
+    /// The run had it ON and turned it off again. Nothing about the file explains this gate:
+    /// whatever else could or could not open it, the run demonstrably did.
+    /// <para>
+    /// <b>The sixth bucket, and the first one that is about the RUN rather than the file.</b>
+    /// Impossible before 239 — nothing the playthrough did could clear a flag — and until 240
+    /// all four of the floor's went into <see cref="OnlyPastTheBoundary"/>, which says the
+    /// opposite of what happened. Three of the four were never set by any script at all: they
+    /// are on before the first frame and a script turns them off.
+    /// </para>
+    /// </summary>
+    TheRunTookItBack,
 }
 
 /// <summary>One gate the run never opened, and why.</summary>
@@ -118,7 +131,8 @@ public static class WhyTheGatesAreShut
         IEnumerable<int> setByTheRun,
         IReadOnlyDictionary<int, IReadOnlyList<FlagSite>> movedInTheImage,
         IReadOnlyCollection<int> onTheFloor,
-        IReadOnlyCollection<int> obstacles)
+        IReadOnlyCollection<int> obstacles,
+        IReadOnlyCollection<int>? tookBack = null)
     {
         var shut = new List<ShutGate>();
 
@@ -133,15 +147,23 @@ public static class WhyTheGatesAreShut
 
             // THE ORDER IS A DECISION AND IT IS SAID OUT LOUD.
             //
-            // A flag can be several of these at once. An opened setter comes first because it
-            // is the one a walk can reach and prove. Being an obstacle or a thing on the floor
-            // comes next, ahead of an unopened setter, because both are opened by a routine
-            // rather than by a script and calling either "past the boundary" would be false
-            // about a gate whose opener is simply not written as script.
+            // A flag can be several of these at once. The run having taken it back comes
+            // FIRST, ahead of everything the file can say: the other five are all arguments
+            // about what might open a gate, and this one is a run that opened it and closed it
+            // again. Filed anywhere else it becomes a claim contradicted by the same Attempt
+            // the bucket was computed from — which is what "past the code boundary" meant for
+            // the floor's four until 240.
+            //
+            // An opened setter comes next because it is the one a walk can reach and prove.
+            // Being an obstacle or a thing on the floor comes after that, ahead of an unopened
+            // setter, because both are opened by a routine rather than by a script and calling
+            // either "past the boundary" would be false about a gate whose opener is simply
+            // not written as script.
             shut.Add(new ShutGate(
                 flag,
                 gates.Of(flag),
-                opened > 0 ? ShutBecause.NeverRan
+                tookBack?.Contains(flag) == true ? ShutBecause.TheRunTookItBack
+                : opened > 0 ? ShutBecause.NeverRan
                 : obstacles.Contains(flag) ? ShutBecause.AnObstacle
                 : onTheFloor.Contains(flag) ? ShutBecause.TakenOffTheFloor
                 : sets.Count > 0 ? ShutBecause.OnlyPastTheBoundary

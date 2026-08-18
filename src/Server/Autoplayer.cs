@@ -162,6 +162,34 @@ public sealed record Traced(int Pass, string MapId, int LocalId, uint Address, V
         $"  0x{Address:X8}  {What}";
 }
 
+/// <summary>
+/// A script turning a flag on or off during a run, with where and when.
+/// </summary>
+/// <remarks>
+/// <para>
+/// <b><c>--trace</c> watches a VARIABLE.</b> It shares the number space with flags, so
+/// <c>--trace 0x003F</c> is a question that answers, prints "nothing the run executed touched
+/// it", and is about something else entirely. Until 240 nothing in this project could say which
+/// script turned a flag on during a run, and the clearing half did not exist at all because
+/// nothing could clear one.
+/// </para>
+/// <para>
+/// The set half matters as much as the clear half: "0x003F was on and is off" is not a finding
+/// until something says what put it on, and the static instruments cannot — a flag set by
+/// picking something up has no <c>setflag</c> anywhere in the image.
+/// </para>
+/// </remarks>
+/// <param name="Flag">Which flag.</param>
+/// <param name="Pass">The pass it moved on.</param>
+/// <param name="MapId">The map the script was run from.</param>
+/// <param name="Address">The script.</param>
+/// <param name="Cleared">True for off, false for on.</param>
+public sealed record MovedAFlag(int Flag, int Pass, string MapId, uint Address, bool Cleared)
+{
+    public override string ToString() =>
+        $"pass {Pass}  {MapId}  0x{Address:X8}  {(Cleared ? "CLEARED" : "set")} 0x{Flag:X4}";
+}
+
 public sealed record ShutDoor(
     string FromMapId,
     GridPosition Square,
@@ -488,6 +516,36 @@ public sealed record Attempt(
     IReadOnlyList<ShutDoor> ShutDoors,
     IReadOnlyList<Frontier> Blocked)
 {
+    /// <summary>
+    /// Every flag the run ended a pass with on, which is <see cref="Flags"/> plus whatever it
+    /// took back again.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Flags"/> is the state of the pass the loop stopped on, and that has always
+    /// been true — it only started to MEAN anything at 239, when signs put the first thing in
+    /// the run that can clear a flag. Where the two differ, every number in this project that
+    /// says "the run set N flags" is quoting one phase of a cycle.
+    /// </remarks>
+    public IReadOnlyCollection<int> EverOn { get; init; } = [];
+
+    /// <summary>The flags it had on at the end of some pass and not at the end of the run.</summary>
+    public IReadOnlyList<int> TookBack { get; init; } = [];
+
+    /// <summary>Every flag any script turned on or off during the run, in order.</summary>
+    public IReadOnlyList<MovedAFlag> FlagMoves { get; init; } = [];
+
+    /// <summary>
+    /// Maps the walk reaches with <see cref="EverOn"/> that it does not reach with
+    /// <see cref="Flags"/> — what stopping on the other phase of the cycle would have cost.
+    /// </summary>
+    /// <remarks>
+    /// A flag is only ever a wall in this walk by hiding somebody: a person with a hide flag
+    /// is gone once it is set, so a set flag opens a square rather than shutting one. Empty
+    /// here means the toggling is real and free; it is not the same claim as nothing toggling.
+    /// </remarks>
+    public IReadOnlyList<string> ReachedOnlyWithWhatItTookBack { get; init; } = [];
+
+
     /// <summary>
     /// How many attempts at a fight failed, which is more than the number of trainers that beat
     /// it.
@@ -1115,6 +1173,12 @@ public static class Autoplayer
         var trace = new List<Traced>();
         var dropped = 0;
 
+        // Every flag any script turned on or off, in order. Not capped: a run moves flags a
+        // few thousand times where the variable trace watches one variable at a time and is
+        // capped at 4096 — and a cap here would silently truncate the only evidence there is
+        // about which script took something back.
+        var flagMoves = new List<MovedAFlag>();
+
         var won = 0;
         var lost = 0;
         var skipped = 0;
@@ -1125,6 +1189,20 @@ public static class Autoplayer
         // Every state the run has been in, so a loop that oscillates can be told from one that
         // is still opening things. The pass-to-pass test below only ever finds a fixed point.
         var been = new WhereItHasBeen();
+
+        // AND EVERY FLAG IT HAS EVER STOPPED A PASS WITH ON.
+        //
+        // `flags` is a live set: a script that clears one removes it, and what this method
+        // returns is therefore the state of whichever pass the loop happened to stop on. That
+        // was the same thing as "every flag it ever set" for as long as nothing could take one
+        // back, and 239 put the first thing in that can. A run whose cycle stops on the low
+        // phase reports one flag fewer than the same run stopped one pass later, and nothing
+        // in this project could see the difference.
+        //
+        // Folded at the END of a pass and not as flags move, deliberately: a flag set and
+        // cleared inside one pass was never in a state any walk was computed from, and
+        // counting it would overstate what the run could ever have reached.
+        var everOn = new HashSet<int>();
 
         // The pass the party first knew how to swim, or nought for never. Recorded rather than
         // recomputed at the end: "it can swim" and "it could swim in time for that to matter"
@@ -1161,12 +1239,14 @@ public static class Autoplayer
             // for additions as they happen — a script that clears a flag another one sets
             // reports something new every pass for ever, which is what put the first real run
             // into its backstop with nothing changing from pass four onwards.
-            int flagsWere = flags.Count;
-            int movesWere = moves.Count;
-            int partyWas = party.Count;
-            int carriedWas = bag.DistinctItems;
-            int goneWere = gone.Count;
-            int movedWere = moved.Count;
+            //
+            // BY CONTENTS AND NOT BY SIZE. This was six counts until 240, and a pass that
+            // cleared one flag and set another matched all six and stopped the run saying
+            // nothing more opened — while something had. 239 wrote that rule down inside
+            // WhereItHasBeen and left the test three lines above it made of counts, which is
+            // the whole of trap 17 happening again inside the fix for trap 17.
+            long was = WhereItHasBeen.Signature(
+                flags, moves, party.Count, bag.DistinctItems, gone.Count, moved.Count);
 
             foreach (MapData map in world.Maps.Where(m => reach.Maps.Contains(m.Id)))
             {
@@ -1242,6 +1322,20 @@ public static class Autoplayer
                         }
 
                         specials[routine] = specials.GetValueOrDefault(routine) + 1;
+                    }
+
+                    // Recorded before they are applied, so that a flag set twice on one pass
+                    // shows twice rather than once — how many places move a flag is a
+                    // different question from whether it ended up on, and the second is the
+                    // only one this loop could answer until now.
+                    foreach (int flag in did.FlagsSet)
+                    {
+                        flagMoves.Add(new MovedAFlag(flag, pass, map.Id, what.Address, Cleared: false));
+                    }
+
+                    foreach (int flag in did.FlagsCleared)
+                    {
+                        flagMoves.Add(new MovedAFlag(flag, pass, map.Id, what.Address, Cleared: true));
                     }
 
                     foreach (int flag in did.FlagsSet) flags.Add(flag);
@@ -1607,18 +1701,27 @@ public static class Autoplayer
 
             if (learnedToCross == 0 && KnowsHowToCross(rules, moves)) learnedToCross = pass;
 
+            everOn.UnionWith(flags);
+
             log?.Invoke(
                 $"  pass {pass,2}: {reach.Maps.Count,3} maps, {flags.Count,4} flags, "
                 + $"{party.Count} in the party (highest level {(party.Count == 0 ? 0 : party.Max(m => m.Level))}), "
                 + $"{bag.DistinctItems} things carried, {won} won / {lost} lost");
 
+            // ONE definition of "the same state", used by both answers below. Two definitions
+            // is what 239 shipped and it is why the floor stopped four flags short.
+            long now = WhereItHasBeen.Signature(
+                flags, moves, party.Count, bag.DistinctItems, gone.Count, moved.Count);
+
             // A pass that only picked something up has opened nothing yet and has still
             // changed the game — the door the thing unlocks is asked about by a script on
             // the next pass, not this one. Left out of this test, the loop stops one pass
             // before the bag is ever used and the whole of the above buys nothing.
-            if (flags.Count == flagsWere && moves.Count == movesWere && party.Count == partyWas
-                && bag.DistinctItems == carriedWas && gone.Count == goneWere
-                && moved.Count == movedWere)
+            //
+            // Asked BEFORE the cycle test on purpose: this state is already in `been` from
+            // the end of the last pass, so a run that has genuinely settled would otherwise
+            // report a cycle — a self-loop is a cycle of length one and it is not the finding.
+            if (now == was)
             {
                 stopped = StoppedBecause.NothingMoreOpened;
 
@@ -1629,9 +1732,7 @@ public static class Autoplayer
             // first thing this run does that takes something back, and a fixpoint over a step
             // that is not one-way does not converge — it goes round. Everything a cycle will
             // ever reach it has reached, so this stops and says which of the two it was.
-            if (been.SeenBefore(
-                    WhereItHasBeen.Signature(
-                        flags, moves, party.Count, bag.DistinctItems, gone.Count, moved.Count)))
+            if (been.SeenBefore(now))
             {
                 stopped = StoppedBecause.ItWentRoundInACircle;
 
@@ -1642,6 +1743,37 @@ public static class Autoplayer
         Reach last = WorldWalker.Walk(
             world, startMapId, moves, surfing: surfing || KnowsHowToCross(rules, moves), flagsSet: flags, asIfGone: gone,
             ridingTheBoat: ridingTheBoat, movedTo: moved);
+
+        // WHAT THE RUN TOOK BACK, and whether it cost anything.
+        //
+        // The walk above is computed from the stopping pass's flags, so a door that stands
+        // open only while a toggled flag is on is reported shut whenever the loop stops on the
+        // other phase. That is a different claim from "the run cannot get there" and this is
+        // the only thing in the project that can tell them apart.
+        IReadOnlyList<int> tookBack = [.. everOn.Except(flags).Order()];
+
+        IReadOnlyList<string> onlyWithThose = [];
+
+        // Not an optimisation and not a shortcut past a measurement: with nothing taken back
+        // `everOn` and `flags` are the same set, so the second walk would be the first one
+        // again and its answer is empty by construction.
+        if (tookBack.Count > 0)
+        {
+            Reach everWalked = WorldWalker.Walk(
+                world, startMapId, moves, surfing: surfing || KnowsHowToCross(rules, moves),
+                flagsSet: everOn, asIfGone: gone, ridingTheBoat: ridingTheBoat, movedTo: moved);
+
+            // ONE DIRECTION ONLY, and that is a proof rather than an oversight.
+            //
+            // The first version printed the other half as well — maps reached BECAUSE it took
+            // them back — on the reasoning that a number with one direction cannot say which
+            // way it went. That number cannot come back non-empty: a flag in this walk does
+            // exactly one thing, which is hide somebody, and a hidden person cannot block a
+            // square. More flags is therefore always a superset of the reach, and printing a
+            // line that can only ever say nought is worse than not printing it. Monotonicity
+            // is asserted in TheFlagsItTookBackTests rather than believed here.
+            onlyWithThose = [.. everWalked.Maps.Except(last.Maps).Order()];
+        }
 
         // Built once. Inside the query below it would be rebuilt for every map in the world,
         // which is the same mistake the walker's own comment records making with its grids.
@@ -1728,6 +1860,10 @@ public static class Autoplayer
             shut,
             last.Blocked)
         {
+            EverOn = everOn,
+            TookBack = tookBack,
+            FlagMoves = flagMoves,
+            ReachedOnlyWithWhatItTookBack = onlyWithThose,
             FightAttemptsLost = lost,
             Carried = bag.Entries,
             SurfMove = rules.SurfMove,

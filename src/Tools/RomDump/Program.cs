@@ -6468,13 +6468,20 @@ public static class Program
                   + string.Join(", ", missing.Take(14).Select(f => $"0x{f:X4}"))
                   + (missing.Count > 14 ? $", +{missing.Count - 14} more" : ""));
 
+        // AND WHETHER THE NUMBER ABOVE IS ONE PHASE OF A CYCLE.
+        //
+        // Every flag count this project prints is the state of the pass the loop stopped on.
+        // That was the same thing as "everything it ever set" until 239, and a run that
+        // oscillates has no reason to stop on the phase with more flags on it.
+        WriteWhatItTookBack(played, gates, world);
+
         // AND WHY EACH OF THEM IS SHUT, which the line above cannot say.
         //
         // "110 gating flags it never set" reads the same whether the run is one door short of
         // everything or a hundred and ten scripts short, and those are opposite findings. This
         // is the join --flags has never made: --flags takes only the ROM and has never seen an
         // Attempt, and the run knows what it set and nothing about what else could have.
-        WriteWhyTheGatesAreShut(rom, world, gates, played.Flags);
+        WriteWhyTheGatesAreShut(rom, world, gates, played.Flags, played.TookBack);
 
         // WHY IT COULD CROSS WATER, WHICH WAS A COMMAND-LINE FLAG UNTIL NOW.
         //
@@ -8803,6 +8810,118 @@ public static class Program
     };
 
     /// <summary>
+    /// Whether the flag count above is everything the run ever had, or one phase of a cycle.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Prints BOTH halves and not only the interesting one. "The run took back 1 flag" and
+    /// "nothing this run set was ever taken back" are opposite findings and a line that only
+    /// appears for the first cannot come back empty — trap 8, the ninth time.
+    /// </para>
+    /// <para>
+    /// And it says what the difference COSTS, which is the question: a flag is only ever a wall
+    /// in this walk by hiding somebody, so stopping on the low phase can leave a corridor shut
+    /// that the run walked through two passes earlier.
+    /// </para>
+    /// </remarks>
+    private static void WriteWhatItTookBack(Attempt played, FlagGates gates, WorldData world)
+    {
+        // WHAT MOVED BOTH WAYS, which is a different question from what ended up off and is
+        // the one that says why a run goes round in a circle.
+        //
+        // 239 said the cycle was `9.6`'s fifteen doors toggling 0x0001. That was read off the
+        // scripts and never off a run, and a run says otherwise: the flags that move both ways
+        // WITHIN one pass are the oscillators, and whether a pass ends with one on depends on
+        // which map the walk reached last. A flag can also be taken back once and stay off,
+        // which is not an oscillator at all, and the two were the same line until now.
+        var moves = played.FlagMoves
+            .GroupBy(m => m.Flag)
+            .Select(g => (
+                Flag: g.Key,
+                Set: g.Count(m => !m.Cleared),
+                Cleared: g.Count(m => m.Cleared),
+                InOnePass: g.GroupBy(m => m.Pass)
+                    .Any(p => p.Any(m => m.Cleared) && p.Any(m => !m.Cleared))))
+            .Where(f => f.Set > 0 && f.Cleared > 0)
+            .OrderBy(f => f.Flag)
+            .ToList();
+
+        Console.WriteLine(
+            $"      {played.FlagMoves.Count} flag move(s) by {played.FlagMoves.Select(m => m.Flag).Distinct().Count()}"
+            + $" flag(s); {moves.Count} moved BOTH ways, {moves.Count(f => f.InOnePass)} of those"
+            + " within one pass — the ones that can make the state go round");
+
+        foreach ((int flag, int set, int cleared, bool inOnePass) in moves.Where(f => f.InOnePass))
+        {
+            Console.WriteLine(
+                $"        0x{flag:X4}: {set} set(s), {cleared} clear(s), both in one pass"
+                + $" — holds {gates.Behind(flag).Count} object(s)");
+        }
+
+        if (played.TookBack.Count == 0)
+        {
+            Console.WriteLine(
+                $"      and it took NOTHING back: all {played.EverOn.Count} flag(s) it ever ended"
+                + " a pass with are still on, so the count above is not one phase of anything");
+
+            return;
+        }
+
+        IReadOnlyList<int> gating = [.. played.TookBack.Where(gates.IsAboutTheWorld)];
+
+        Console.WriteLine(
+            $"      IT TOOK {played.TookBack.Count} FLAG(S) BACK — {played.EverOn.Count} were on at"
+            + " the end of some pass and the count above is the pass it stopped on:");
+
+        Console.WriteLine(
+            "        " + string.Join(", ", played.TookBack.Take(14).Select(f => $"0x{f:X4}"))
+            + (played.TookBack.Count > 14 ? $", +{played.TookBack.Count - 14} more" : "")
+            + $" — {gating.Count} of them gate something in this world file");
+
+        Console.WriteLine(
+            played.ReachedOnlyWithWhatItTookBack.Count == 0
+                ? "        it costs NO map: nothing is reachable with them that is not reachable"
+                  + " without, so stopping on the other phase would have reported the same world"
+                : $"        and {played.ReachedOnlyWithWhatItTookBack.Count} map(s) are reachable"
+                  + " with them and not without — the run WALKED these and does not report them: "
+                  + string.Join(", ", played.ReachedOnlyWithWhatItTookBack.Take(10)));
+
+
+        // AND WHO MOVED EACH ONE, which is the half that makes it actionable. `--trace` takes
+        // a VARIABLE and answers about something else when handed a flag number, so until now
+        // "0x003F was on and is off" was the end of what anybody could say about it.
+        foreach (int flag in played.TookBack)
+        {
+            IReadOnlyList<MovedAFlag> moved = [.. played.FlagMoves.Where(m => m.Flag == flag)];
+
+            // Whether it was on before the first frame is the difference between "a script
+            // opened this and another shut it" and "the game handed it to the player already
+            // open". Only the second is a claim about a fresh save, and three of the floor's
+            // four are the second.
+            bool atStart = world.FlagsAtStart.Contains(flag);
+
+            IReadOnlyList<HeldBack> holds = gates.Behind(flag);
+
+            Console.WriteLine(
+                $"        0x{flag:X4}: {moved.Count(m => !m.Cleared)} set(s), "
+                + $"{moved.Count(m => m.Cleared)} clear(s), holds {holds.Count} object(s)"
+                + (holds.Count > 0 ? $" — {string.Join(", ", holds.Take(4).Select(h => $"{h.MapId} p{h.LocalId}"))}" : "")
+                + (atStart ? " — AND IT IS ON BEFORE THE FIRST FRAME" : "")
+                + (moved.Count(m => !m.Cleared) == 0 && !atStart
+                    ? " — nothing set it and it is not a starting flag, which should be"
+                      + " impossible and is worth reading"
+                    : ""));
+
+            // The last of each, which is what decides the state it stopped in. The whole list
+            // would be the same two lines repeated once per pass.
+            foreach (MovedAFlag one in new[] { moved.LastOrDefault(m => !m.Cleared), moved.LastOrDefault(m => m.Cleared) })
+            {
+                if (one is not null) Console.WriteLine($"          last {one}");
+            }
+        }
+    }
+
+    /// <summary>
     /// The gates a run never opened, sorted by whether anything in the file could have opened
     /// them.
     /// <para>
@@ -8811,7 +8930,11 @@ public static class Program
     /// </para>
     /// </summary>
     private static void WriteWhyTheGatesAreShut(
-        Rom rom, WorldData world, FlagGates gates, IReadOnlyCollection<int> set)
+        Rom rom,
+        WorldData world,
+        FlagGates gates,
+        IReadOnlyCollection<int> set,
+        IReadOnlyCollection<int>? tookBack = null)
     {
         List<SetsAFlag> scripts = [.. MapLibrary.Open(rom).All().SelectMany(EveryScriptOn)];
 
@@ -8835,7 +8958,8 @@ public static class Program
             set,
             EverywhereInTheImage.EveryFlagMoved(rom, covered),
             onTheFloor,
-            [.. obstacles.Select(g => g.Flag)]);
+            [.. obstacles.Select(g => g.Flag)],
+            tookBack);
 
         if (shut.Count == 0) return;
 
@@ -8877,7 +9001,12 @@ public static class Program
 
         // The two that can never be walked to, named. The third bucket is the reach problem and
         // it is as long as the walk is short, so it is counted and not listed.
-        foreach (ShutBecause why in new[] { ShutBecause.NothingSetsIt, ShutBecause.OnlyPastTheBoundary })
+        foreach (ShutBecause why in new[]
+                 {
+                     ShutBecause.NothingSetsIt,
+                     ShutBecause.OnlyPastTheBoundary,
+                     ShutBecause.TheRunTookItBack,
+                 })
         {
             List<ShutGate> these = [.. shut.Where(g => g.Why == why)];
 
@@ -8896,6 +9025,7 @@ public static class Program
     {
         ShutBecause.NothingSetsIt => "no setflag names it and nothing on the floor hides behind it — the boundary",
         ShutBecause.OnlyPastTheBoundary => "set only where the map scan cannot see — past the code boundary",
+        ShutBecause.TheRunTookItBack => "THE RUN HAD IT ON AND TURNED IT OFF — not a boundary at all",
         ShutBecause.TakenOffTheFloor => "set by PICKING SOMETHING UP — the object's record says so, no script does",
         ShutBecause.AnObstacle => "holds a TREE, A ROCK OR A BOULDER — cleared by knowing the move, not by a script",
         _ => "set by a script on a map, and the run never ran it — a REACH problem",
