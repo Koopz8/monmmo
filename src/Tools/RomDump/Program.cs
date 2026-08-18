@@ -8931,12 +8931,41 @@ public static class Program
 
         MapLibrary library = MapLibrary.Open(rom);
 
+        // THE READ THAT IS NOT A COMMAND. A map runs a script on arrival when a variable holds
+        // a value, and that condition is two halfwords in the map's own header — a look at a
+        // variable with no command anywhere near it. Every sweep in this project walks a script
+        // stream, so none of them has ever counted one, and 245 reported 0x407C as consulted
+        // nowhere in sixteen megabytes while nineteen maps were consulting it on arrival.
+        var onArrival = new Dictionary<int, List<string>>();
+
+        foreach (LoadedMap map in library.All())
+        {
+            foreach (MapEntryScript entry in map.OnEntry.Where(WhenAMapRunsSomething.IsARead))
+            {
+                if (!onArrival.TryGetValue(entry.Variable, out List<string>? maps))
+                    onArrival[entry.Variable] = maps = [];
+
+                maps.Add(WorldExporter.MapId(map.Bank, map.Number));
+            }
+        }
+
         BothNamespaces scan = TwoNamespacesOneNumber.Of(
-            rom, library.All().SelectMany(EveryScriptOn).Select(s => s.Address));
+            rom, library.All().SelectMany(EveryScriptOn).Select(s => s.Address)) with
+        {
+            LookedAtBySomethingElse = new Dictionary<string, IReadOnlyCollection<int>>
+            {
+                ["a map header, on arrival"] =
+                    WhenAMapRunsSomething.LookedAt(library.All().SelectMany(m => m.OnEntry)),
+            },
+        };
 
         Console.WriteLine(
             $"  the map scan reads {scan.Commands} command(s) and names {scan.Flags.Count}"
             + $" number(s) as a FLAG and {scan.Variables.Count} as a VARIABLE");
+
+        Console.WriteLine(
+            $"  and {onArrival.Count} number(s) are looked at by a map header on arrival, which is"
+            + " a read and is not a command — no sweep in this project counted one before 246");
 
         IReadOnlyList<SharedNumber> shared = scan.Shared;
 
@@ -9016,13 +9045,37 @@ public static class Program
         // AND WRITTEN AND NEVER LOOKED AT, asked of the map scan where it has an answer.
         IReadOnlyList<int> deaf = scan.WrittenAndNeverLookedAt;
         IReadOnlyList<int> deafRaw = scan.WrittenAndNeverReadRaw;
+        IReadOnlyList<int> deafByCommand = scan.WrittenAndNeverLookedAtByACommand;
 
         Console.WriteLine();
         Console.WriteLine(
             $"  {deaf.Count} of the {scan.Written.Count} variable(s) the map scan WRITES are"
-            + " never looked at by any operand that names a variable"
+            + " never looked at by anything this project can find"
             + $" — {deafRaw.Count} if the value-naming operand(s) are counted as looks, so"
             + $" {deaf.Count - deafRaw.Count} were hidden by a literal");
+
+        // AND THE SIZE OF 246'S OWN CORRECTION, which is the finding. 245 printed the
+        // commands-only list and called it "never looked at"; naming the ones that moved, and
+        // what reads each, is what stops this being a number that changed on trust.
+        List<int> byTheHeaderOnly = [.. deafByCommand.Where(v => !deaf.Contains(v))];
+
+        Console.WriteLine(
+            byTheHeaderOnly.Count == 0
+                ? "    and NONE of them is read by a map header on arrival, so 245's"
+                  + " commands-only reading and this one agree"
+                : $"    {deafByCommand.Count} by the commands alone, which is what 245 printed —"
+                  + $" {byTheHeaderOnly.Count} of those are read by a map header on arrival and"
+                  + " by nothing else:");
+
+        foreach (int variable in byTheHeaderOnly)
+        {
+            List<string> maps = onArrival[variable];
+
+            Console.WriteLine(
+                $"      0x{variable:X4} — {maps.Count} arrival condition(s) on"
+                + $" {maps.Distinct().Count()} map(s): {string.Join(", ", maps.Distinct().Take(6))}"
+                + (maps.Distinct().Count() > 6 ? ", ..." : ""));
+        }
 
         // AND WHICH KIND OF NEVER, which the count above cannot say. "No script the map scan
         // opened looks at it" and "nothing in sixteen megabytes looks at it" are opposite
@@ -9045,6 +9098,90 @@ public static class Program
                   + " boundary rather than a variable nothing consults"
                 : $"    and {nowhereAtAll.Count} are looked at NOWHERE IN SIXTEEN MEGABYTES: "
                   + string.Join(", ", nowhereAtAll.Select(v => $"0x{v:X4}")));
+
+        // AND WHETHER THE GAME'S OWN CODE HOLDS THE NUMBER, which is the one question left that
+        // separates dead space from a variable the compiled game reads by address. A script
+        // names a variable in an operand; compiled code cannot, because a sixteen-bit constant
+        // does not fit in a THUMB instruction — it goes in an aligned literal pool. So an
+        // aligned word equal to the id, at bytes no script occupies, is the code holding it.
+        if (nowhereAtAll.Count > 0)
+        {
+            List<SetsAFlag> scripts = [.. library.All().SelectMany(EveryScriptOn)];
+
+            int[] covered = EverywhereInTheImage.Opened(rom, scripts);
+
+            Console.WriteLine();
+            Console.WriteLine(
+                "    and of those, which the game's own CODE holds as a four-byte-aligned word an"
+                + " instruction LOADS — the only way a compiled routine can name a variable, and"
+                + " the difference between dead space and a variable read by address:");
+
+            // EVERY variable the map scan writes, in one pass, so the answer for the few has a
+            // denominator. "Two of nine are held by compiled code" means one thing if half the
+            // cartridge's variables are and something else entirely if almost none is.
+            IReadOnlyCollection<int> every = scan.Written;
+
+            IReadOnlyDictionary<int, IReadOnlyList<WordSite>> words =
+                EverywhereInTheImage.HeldAsAWord(rom, every, covered);
+
+            IReadOnlyDictionary<int, int> floors = EverywhereInTheImage.HeldAsAWordFloor(rom, every);
+
+            int InCode(int variable) => words[variable].Count(w => w.HeldByCode);
+
+            var held = 0;
+
+            foreach (int variable in nowhereAtAll)
+            {
+                int code = InCode(variable);
+
+                if (code > 0) held++;
+
+                Console.WriteLine(
+                    $"      0x{variable:X4} — {code} word(s) an instruction loads"
+                    + $" ({words[variable].Count - code} that nothing loads or a script owns)"
+                    + $"    REVERSED: {floors[variable]}"
+                    + (code == 0
+                        ? ""
+                        : "  <- "
+                          + string.Join(
+                              ", ",
+                              words[variable].Where(w => w.HeldByCode).Take(4)
+                                  .Select(w => $"0x{w.Offset:X6} loaded from 0x{w.LoadedFrom:X6}"))));
+            }
+
+            Console.WriteLine(
+                $"    so {held} of the {nowhereAtAll.Count} are held by compiled code and"
+                + $" {nowhereAtAll.Count - held} are held by nothing in the file at all");
+
+            Console.WriteLine(
+                "    those last are as far as reading the cartridge takes this: a variable this"
+                + " game writes, no script looks at, no map header consults and no instruction"
+                + " loads");
+
+            // THE DENOMINATOR, and the reversal beside it — AT EVERY THRESHOLD, because one hit
+            // and three hits are not the same claim and a single cut cannot say where the signal
+            // starts. This is the line that stops "held by compiled code" being quotable as a
+            // yes/no: at one hit the image and its reversal are the same order of number.
+            Console.WriteLine(
+                $"    the denominator, over all {every.Count} variable(s) the map scan writes,"
+                + " image against REVERSED at each threshold:");
+
+            foreach (int least in new[] { 1, 2, 3 })
+            {
+                Console.WriteLine(
+                    $"      at least {least} loaded word(s): {every.Count(v => InCode(v) >= least)}"
+                    + $"   REVERSED: {every.Count(v => floors[v] >= least)}"
+                    + $"    (and without the instruction, {every.Count(v => words[v].Count(w => !w.Opened) >= least)}"
+                    + " — which is why the instruction is in the rule)");
+            }
+
+            Console.WriteLine(
+                "    the limit of this reading: a routine that computes an id from a base would"
+                + " hold the BASE and not the id, and nothing here would see it. 0x4000 is loaded"
+                + $" {EverywhereInTheImage.HeldAsAWord(rom, 0x4000, covered).Count(w => w.HeldByCode)}"
+                + $" time(s) against a reversed {EverywhereInTheImage.HeldAsAWordFloor(rom, 0x4000)},"
+                + " so that is not an empty worry — \"held by nothing\" is not \"read by nothing\"");
+        }
 
         Console.WriteLine();
         Console.WriteLine("  and the raw version, which is the one that needed checking:");

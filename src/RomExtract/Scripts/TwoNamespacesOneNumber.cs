@@ -31,6 +31,39 @@ public sealed record BothNamespaces(
     public IReadOnlyDictionary<string, IReadOnlyDictionary<int, int>> ByOperand { get; init; } =
         new Dictionary<string, IReadOnlyDictionary<int, int>>();
 
+    /// <summary>
+    /// Numbers something LOOKS AT that is not a script command at all, by what does the looking.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>A read is not always a command, and every sweep in this project was one.</b>
+    /// <see cref="TwoNamespacesOneNumber.Of"/> walks a script stream and decides what a number is
+    /// by which operand of which command named it. That is the right shape for a question about a
+    /// script stream and it is silently the wrong shape for a question about the cartridge: a map
+    /// runs a script on arrival <em>when a variable holds a value</em>, and that condition sits in
+    /// the map's own header as two halfwords. It names a variable, it is a read, and no command
+    /// anywhere in the file is involved.
+    /// </para>
+    /// <para>
+    /// So 245 reported <c>0x407C</c> as looked at nowhere in sixteen megabytes while nineteen maps
+    /// were consulting it on arrival. Trap 1 one level down — the scan enumerated commands and the
+    /// sentence was about the world.
+    /// </para>
+    /// <para>
+    /// A dictionary rather than a set because a reader that is not a command has to say what did
+    /// the reading, or it is an unfalsifiable subtraction from somebody else's number.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyDictionary<string, IReadOnlyCollection<int>> LookedAtBySomethingElse
+    {
+        get;
+        init;
+    } = new Dictionary<string, IReadOnlyCollection<int>>();
+
+    /// <summary>Every number a non-command reader looks at.</summary>
+    public IReadOnlyCollection<int> LookedAtOutsideTheCommands =>
+        [.. LookedAtBySomethingElse.SelectMany(o => o.Value).Distinct()];
+
     /// <summary>Operands that put something INTO a variable rather than looking at one.</summary>
     public static readonly string[] Writing = ["0x16 arg0", "0x17 arg0", "0x18 arg0", "0x1A arg0"];
 
@@ -95,7 +128,24 @@ public sealed record BothNamespaces(
     /// moment somebody hands its number to a routine as a literal.
     /// </para>
     /// </remarks>
-    public IReadOnlyList<int> WrittenAndNeverLookedAt
+    public IReadOnlyList<int> WrittenAndNeverLookedAt =>
+    [
+        .. WrittenAndNeverLookedAtByACommand.Where(
+            n => !LookedAtOutsideTheCommands.Contains(n)),
+    ];
+
+    /// <summary>
+    /// The same list before any reader that is not a script command is subtracted from it.
+    /// </summary>
+    /// <remarks>
+    /// <b>The size of the correction, printed rather than reasoned about.</b> This is exactly
+    /// what 245 reported, and the difference between it and
+    /// <see cref="WrittenAndNeverLookedAt"/> is the count of variables this project called
+    /// unconsulted while the cartridge was consulting them somewhere no command exists. Kept for
+    /// the same reason <see cref="WrittenAndNeverReadRaw"/> is: a correction whose size nobody
+    /// can see is a number that changed for reasons the reader has to take on trust.
+    /// </remarks>
+    public IReadOnlyList<int> WrittenAndNeverLookedAtByACommand
     {
         get
         {
@@ -123,6 +173,7 @@ public sealed record BothNamespaces(
             HashSet<int> looked =
             [
                 .. ByOperand.Where(o => !Writing.Contains(o.Key)).SelectMany(o => o.Value.Keys),
+                .. LookedAtOutsideTheCommands,
             ];
 
             return [.. Written.Where(n => !looked.Contains(n)).Order()];

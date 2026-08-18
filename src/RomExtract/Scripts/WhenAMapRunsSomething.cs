@@ -51,6 +51,38 @@ public static class WhenAMapRunsSomething
     }
 
     /// <summary>
+    /// The variables these arrival conditions LOOK AT.
+    /// <para>
+    /// <b>An arrival condition is a read of a variable and it is not a command.</b> Every sweep in
+    /// this project walks a script stream and decides what a number is by which operand of which
+    /// command named it, so none of them has ever counted one of these — and 245 reported
+    /// <c>0x407C</c> as looked at nowhere in sixteen megabytes while nineteen maps consulted it on
+    /// arrival.
+    /// </para>
+    /// <para>
+    /// <b>An entry with no script is not a read.</b> The list in a map's header ends with an
+    /// all-zero record, and its variable field is a nought that names nothing — counting it would
+    /// rescue variable 0 from every deaf list for free, on every map in the game.
+    /// </para>
+    /// <para>
+    /// Split out of the sweep, and taking the entries rather than a <see cref="MapLibrary"/>,
+    /// because a rule that needs a whole cartridge is a rule no fixture can reach — which is the
+    /// fault four milestones running found by breaking a guard and getting green back.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyCollection<int> LookedAt(IEnumerable<MapEntryScript> entries) =>
+        [.. entries.Where(IsARead).Select(e => e.Variable).Distinct()];
+
+    /// <summary>
+    /// Whether one header entry is a read at all — it is, unless it runs nothing.
+    /// </summary>
+    /// <remarks>
+    /// Where the rule above actually lives, so that the caller counting conditions and the caller
+    /// counting variables cannot come apart. Two readings of one shape is how they always do.
+    /// </remarks>
+    public static bool IsARead(MapEntryScript entry) => entry.ScriptAddress != 0;
+
+    /// <summary>
     /// Every arrival condition on every map, with what the file does about the variable it names.
     /// </summary>
     /// <param name="written">
@@ -66,7 +98,7 @@ public static class WhenAMapRunsSomething
         {
             string mapId = WorldExporter.MapId(map.Bank, map.Number);
 
-            foreach (MapEntryScript entry in map.OnEntry.Where(e => e.ScriptAddress != 0))
+            foreach (MapEntryScript entry in map.OnEntry.Where(IsARead))
                 found.Add(For(mapId, entry, written.GetValueOrDefault(entry.Variable)));
         }
 

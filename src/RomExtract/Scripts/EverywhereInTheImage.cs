@@ -51,6 +51,31 @@ public sealed record VariableSite(
 }
 
 /// <summary>
+/// One four-byte-aligned word in the image equal to a number somebody asked about.
+/// </summary>
+/// <param name="Offset">Where the four bytes sit.</param>
+/// <param name="Opened">
+/// True when the map scan decoded this byte as part of a command — in which case these four
+/// bytes are somebody's operand and say nothing about compiled code.
+/// </param>
+/// <param name="LoadedFrom">
+/// Where a THUMB PC-relative load that reaches these four bytes sits, or null when none does.
+/// <para>
+/// <b>This is what turns the word sweep from a hunch into a reading.</b> An aligned word equal to
+/// a variable's id is a weak filter — over the ninety variables the map scan writes, forty-one
+/// have one and the REVERSED image gives twenty-seven, which is the same order of number. An
+/// instruction that loads it is not weak: <c>ldr rX, [pc, #imm]</c> is five fixed bits and an
+/// eight-bit offset that has to come out at exactly this address, and 2.4% of aligned words in
+/// this image have one at all.
+/// </para>
+/// </param>
+public sealed record WordSite(int Offset, bool Opened, int? LoadedFrom = null)
+{
+    /// <summary>The game's own code holds this number: no script owns it and an instruction loads it.</summary>
+    public bool HeldByCode => !Opened && LoadedFrom is not null;
+}
+
+/// <summary>
 /// One place in the image holding a pointer at, or just above, an address.
 /// </summary>
 /// <param name="Offset">Where the four bytes sit.</param>
@@ -401,6 +426,128 @@ public static class EverywhereInTheImage
         }
 
         return found;
+    }
+
+    /// <summary>
+    /// Every four-byte-aligned word in the image that equals <paramref name="number"/>, split by
+    /// whether the map scan ever decoded those bytes.
+    /// <para>
+    /// <b>The only way this project can ask whether COMPILED CODE knows a number.</b> A script
+    /// names a variable in an operand; the game's own code cannot, because a sixteen-bit constant
+    /// does not fit in a THUMB instruction — the compiler puts it in a four-byte-aligned literal
+    /// pool and loads it PC-relative. So a word equal to a variable's id, on a four-byte boundary,
+    /// at bytes no script occupies, is the game's code holding that number.
+    /// </para>
+    /// <para>
+    /// <b>Both halves of the split are the measurement.</b> <c>setvar 0x4026, 0</c> is the five
+    /// bytes <c>16 26 40 00 00</c>, and four of them read as the word <c>0x00004026</c> whenever
+    /// the command happens to land one byte before an alignment boundary — which is exactly what
+    /// happens at <c>0x165220</c>. Counting the script's own operand as evidence about compiled
+    /// code would find the number every time a script wrote it, which is every time.
+    /// </para>
+    /// </summary>
+    /// <param name="covered">
+    /// What the map scan decoded, from <see cref="Opened"/>. Null when the caller has not worked
+    /// it out, in which case every hit reports as unopened — honest about the caller rather than
+    /// about the file, and why it is a parameter and not a default.
+    /// </param>
+    public static IReadOnlyList<WordSite> HeldAsAWord(Rom rom, int number, int[]? covered = null) =>
+        HeldAsAWord(rom, [number], covered)[number];
+
+    /// <summary>
+    /// The same sweep for many numbers at once, in one pass of the image.
+    /// <para>
+    /// The denominator needs every variable the map scan writes asked the same question, and
+    /// ninety separate passes of sixteen megabytes is ninety times the work for the same answer.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyDictionary<int, IReadOnlyList<WordSite>> HeldAsAWord(
+        Rom rom, IReadOnlyCollection<int> numbers, int[]? covered = null)
+    {
+        Dictionary<int, IReadOnlyList<WordSite>> found =
+            numbers.Distinct().ToDictionary(n => n, _ => (IReadOnlyList<WordSite>)new List<WordSite>());
+
+        var wanted = new HashSet<int>(numbers);
+
+        ReadOnlySpan<byte> image = rom.Span;
+
+        // FOUR AT A TIME, from nought. An unaligned scan is a different question and a much
+        // worse one: it finds the low half of every pointer and the tail of every argument, and
+        // a literal pool is the one thing that is guaranteed aligned.
+        for (var offset = 0; offset + 4 <= image.Length; offset += 4)
+        {
+            if (image[offset + 2] != 0 || image[offset + 3] != 0) continue;
+
+            int word = image[offset] | (image[offset + 1] << 8);
+
+            if (!wanted.Contains(word)) continue;
+
+            ((List<WordSite>)found[word]).Add(
+                new WordSite(
+                    offset,
+                    covered is not null && covered[offset] != Nobody,
+                    LoadedFrom(rom, offset)));
+        }
+
+        return found;
+    }
+
+    /// <summary>
+    /// Where a THUMB PC-relative load reaching <paramref name="literal"/> sits, or null.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>ldr rX, [pc, #imm]</c> is <c>01001</c>, three bits of register and eight bits of offset,
+    /// and the address it reaches is <c>align4(here + 4) + imm * 4</c>. The offset is a byte, so
+    /// nothing more than 1020 bytes away can be reached and nothing further back is looked at.
+    /// </para>
+    /// <para>
+    /// <b>The arithmetic is the filter.</b> Five fixed bits recur constantly; five fixed bits
+    /// whose eight-bit offset lands on exactly this word do not. Measured on this image, 2.4% of
+    /// aligned words have any instruction that reaches them.
+    /// </para>
+    /// </remarks>
+    public static int? LoadedFrom(Rom rom, int literal)
+    {
+        ReadOnlySpan<byte> image = rom.Span;
+
+        for (int at = Math.Max(0, literal - 1020); at + 1 < literal; at += 2)
+        {
+            int instruction = image[at] | (image[at + 1] << 8);
+
+            if ((instruction & 0xF800) != 0x4800) continue;
+
+            if (((at + 4) & ~3) + ((instruction & 0xFF) * 4) == literal) return at;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The same sweep on the image backwards — how many aligned words these bytes make by
+    /// accident.
+    /// </summary>
+    /// <remarks>
+    /// A specific word in four million of them is nothing like as likely as a specific three
+    /// bytes, so this floor is expected to be nought and is printed anyway. A floor nobody prints
+    /// is a floor nobody can be surprised by.
+    /// </remarks>
+    public static int HeldAsAWordFloor(Rom rom, int number) => HeldAsAWordFloor(rom, [number])[number];
+
+    /// <summary>The same floor for many numbers at once, in one pass of the reversed image.</summary>
+    public static IReadOnlyDictionary<int, int> HeldAsAWordFloor(
+        Rom rom, IReadOnlyCollection<int> numbers)
+    {
+        byte[] backwards = rom.Span.ToArray();
+
+        Array.Reverse(backwards);
+
+        // THE SAME RULE, or it is not a floor. The reversed image has no map scan, so nothing in
+        // it is Opened — which makes HeldByCode there mean "an instruction loads it", the same
+        // test the real image is being asked, minus a filter that can only make the real number
+        // smaller. That is the conservative direction.
+        return HeldAsAWord(new Rom(backwards), numbers)
+            .ToDictionary(n => n.Key, n => n.Value.Count(w => w.HeldByCode));
     }
 
     /// <summary>
