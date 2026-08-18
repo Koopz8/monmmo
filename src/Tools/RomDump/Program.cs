@@ -215,7 +215,7 @@ public static class Program
         if (options.Play)
             WritePlaythrough(
                 rom, options.RoutineAnswers, options.StartAt, options.Boat, options.Money, options.SayYes,
-                options.Variables, options.Surf, options.InOrder, options.Watch);
+                options.Variables, options.Surf, options.InOrder, options.Watch, options.Signs);
         if (options.WhereFrom.Count > 0) WriteWhereFrom(rom, options.WhereFrom);
         if (options.InTheImage.Count > 0) WriteInTheImage(rom, options.InTheImage);
         if (options.ClimbFrom.Count > 0) WriteClimb(rom, options.ClimbFrom);
@@ -6347,7 +6347,7 @@ public static class Program
     private static void WritePlaythrough(
         Rom rom, IReadOnlyDictionary<int, int> answers, string startAt, bool boat = false, int money = 0,
         bool sayYes = false, IReadOnlyDictionary<int, int>? variables = null, bool surf = false,
-        bool inOrder = false, int? watch = null)
+        bool inOrder = false, int? watch = null, bool signs = false)
     {
         Console.WriteLine();
         Console.WriteLine("A PLAYTHROUGH");
@@ -6482,6 +6482,25 @@ public static class Program
         // is the join --flags has never made: --flags takes only the ROM and has never seen an
         // Attempt, and the run knows what it set and nothing about what else could have.
         WriteWhyTheGatesAreShut(rom, world, gates, played.Flags, played.TookBack);
+
+        if (signs)
+        {
+            // THE SAME RUN WITH THE FOURTH LIST SWITCHED OFF, in this process, so that what
+            // signs are worth is subtracted from two runs rather than remembered from two
+            // commits. A fresh reader and a fresh beaten set, because both are written to by
+            // the walk and sharing them would make the control a continuation of the run.
+            var controlBeaten = new HashSet<int>();
+            var controlRemembered = new Dictionary<int, int>();
+
+            var control = new HowAScriptRuns(
+                rom, teaches, answers, variables, sayYes, controlBeaten, controlRemembered, watch);
+
+            Attempt without = Autoplayer.Play(
+                world, first.Id, rules, control.Read, null, boat, money, controlBeaten, surf,
+                controlRemembered, inOrder, doorsTo, readSigns: false);
+
+            WriteSignsRead(world, played, without, gates);
+        }
 
         // WHY IT COULD CROSS WATER, WHICH WAS A COMMAND-LINE FLAG UNTIL NOW.
         //
@@ -8808,6 +8827,154 @@ public static class Program
             "nought takes no branch, so it falls through like any other wrong answer",
         _ => "nought takes some of the branches and not others",
     };
+
+    /// <summary>
+    /// What the fourth list did — which sign scripts the walk stood in front of, and which
+    /// flags nothing but a sign moved.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// 239 put 519 sign scripts into the run and measured what they cost in flags. Which of them
+    /// ever ran was owed from that milestone and could not be asked: the run executed addresses
+    /// on maps and remembered nothing about which of the map's four lists each came off, so
+    /// "the signs did this" and "something on that map did this" were the same sentence.
+    /// </para>
+    /// <para>
+    /// Signs against ADDRESSES against MAPS, all three, because they are three different
+    /// numbers — 519 scripts sit at 360 addresses on 143 maps and 224 is the milestone about
+    /// exactly that confusion.
+    /// </para>
+    /// </remarks>
+    /// <summary>Why a run stopped, in the words the playthrough itself uses.</summary>
+    private static string WhyItStopped(StoppedBecause stopped) => stopped switch
+    {
+        StoppedBecause.NothingMoreOpened => "a pass opened nothing new",
+        StoppedBecause.ItNeverSettled => "it hit the pass backstop, so something never settles",
+        StoppedBecause.ItWentRoundInACircle => "the state came back to one it had been in — a CYCLE",
+        _ => "everything it had was beaten",
+    };
+
+    private static void WriteSignsRead(
+        WorldData world, Attempt played, Attempt without, FlagGates gates)
+    {
+        var inTheWorld = world.Maps
+            .SelectMany(m => m.Signs.Where(g => g.HasScript).Select(g => (m.Id, g.ScriptAddress)))
+            .ToList();
+
+        Console.WriteLine();
+        Console.WriteLine("    WHAT THE FOURTH LIST DID");
+
+        Console.WriteLine(
+            $"      {played.SignsRead.Count} of the {inTheWorld.Count} sign script(s) ran, at "
+            + $"{played.SignsRead.Select(s => s.Address).Distinct().Count()} of the "
+            + $"{inTheWorld.Select(s => s.ScriptAddress).Distinct().Count()} address(es), on "
+            + $"{played.SignsRead.Select(s => s.MapId).Distinct().Count()} of the "
+            + $"{inTheWorld.Select(s => s.Id).Distinct().Count()} map(s)");
+
+        if (played.SignsRead.Count == 0) return;
+
+        Console.WriteLine(
+            $"      read {played.SignsRead.Sum(s => s.Times)} time(s) over the whole run; the"
+            + " most-read: "
+            + string.Join(", ", played.SignsRead.OrderByDescending(s => s.Times).Take(4)));
+
+        // WHAT ONLY A SIGN DID, which is the question 239 left. A flag a sign sets and a person
+        // sets as well was never behind a sign, and the difference between the two is the whole
+        // of what putting the fourth list in bought.
+        var bySigns = played.FlagMoves.Where(m => m.From == WhatRanIt.ASign).ToList();
+
+        HashSet<int> alsoOthers =
+            [.. played.FlagMoves.Where(m => m.From != WhatRanIt.ASign).Select(m => m.Flag)];
+
+        IReadOnlyList<int> onlySigns =
+            [.. bySigns.Select(m => m.Flag).Distinct().Where(f => !alsoOthers.Contains(f)).Order()];
+
+        Console.WriteLine(
+            $"      {bySigns.Count} flag move(s) by a sign, "
+            + $"{bySigns.Select(m => m.Flag).Distinct().Count()} distinct flag(s); "
+            + $"{onlySigns.Count} of those NOTHING ELSE in this run moved");
+
+        foreach (int flag in onlySigns)
+        {
+            MovedAFlag first = bySigns.First(m => m.Flag == flag);
+
+            Console.WriteLine(
+                $"        0x{flag:X4}  {(gates.IsAboutTheWorld(flag) ? "GATES something" : "gates nothing")}"
+                + $", holds {gates.Behind(flag).Count} object(s)  — first {first}");
+        }
+
+        // AND THE OTHER KINDS, so the number above has something to be read against. A sign
+        // count with no denominator cannot say whether the fourth list is most of the run or
+        // none of it.
+        Console.WriteLine(
+            "      by kind, every flag move this run made: "
+            + string.Join(
+                ", ",
+                played.FlagMoves
+                    .GroupBy(m => m.From)
+                    .OrderByDescending(g => g.Count())
+                    .Select(g => $"{g.Key} {g.Count()}")));
+
+        // AND THE CONTROL: the same run with the fourth list switched off, subtracted here
+        // rather than remembered from a milestone document.
+        IReadOnlyList<int> onlyWithSigns = [.. played.Flags.Except(without.Flags).Order()];
+        IReadOnlyList<int> lostToSigns = [.. without.Flags.Except(played.Flags).Order()];
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"      THE CONTROL — the same run with no signs in it: {without.Reached.Count} maps,"
+            + $" {without.Flags.Count} flags in {without.Passes} pass(es), stopped because"
+            + $" {WhyItStopped(without.Stopped)}");
+
+        Console.WriteLine(
+            $"      so signs are worth {played.Reached.Count - without.Reached.Count} map(s) and"
+            + $" {played.Flags.Count - without.Flags.Count} flag(s) — {onlyWithSigns.Count} the"
+            + $" run only has WITH them, {lostToSigns.Count} it only has without");
+
+        // Both directions, because the two are different findings and the second one is the
+        // surprising one: running more scripts can take a flag away as easily as add one.
+        foreach ((string what, IReadOnlyList<int> which) in new[]
+                 {
+                     ("only WITH signs", onlyWithSigns),
+                     ("only WITHOUT them", lostToSigns),
+                 })
+        {
+            if (which.Count == 0) continue;
+
+            Console.WriteLine(
+                $"        {what}: "
+                + string.Join(
+                    ", ",
+                    which.Take(12).Select(
+                        f => $"0x{f:X4}{(gates.IsAboutTheWorld(f) ? " (gates)" : "")}"))
+                + (which.Count > 12 ? $", +{which.Count - 12} more" : ""));
+
+            // AND WHAT THE GATING ONES ACTUALLY HOLD. "2 of the 7 gate something" is 210's
+            // mistake in miniature: it reads the same whether they hold one doorway or forty
+            // people, and those are opposite findings.
+            foreach (int flag in which.Where(gates.IsAboutTheWorld).Take(8))
+            {
+                IReadOnlyList<HeldBack> holds = gates.Behind(flag);
+
+                Console.WriteLine(
+                    $"          0x{flag:X4}  {gates.Of(flag)}, holds {holds.Count} object(s)"
+                    + (holds.Count > 0
+                        ? " — " + string.Join(", ", holds.Take(4).Select(h => $"{h.MapId} p{h.LocalId}"))
+                        : ""));
+            }
+        }
+
+        // The ones a sign moved DIRECTLY, against the ones the run only has because signs ran.
+        // If those two lists were the same the fourth list would be doing exactly what it
+        // says; they are not, and the gap is what one script opening a door for another looks
+        // like from outside.
+        HashSet<int> directly = [.. played.FlagMoves.Where(m => m.From == WhatRanIt.ASign).Select(m => m.Flag)];
+
+        Console.WriteLine(
+            $"      of those {onlyWithSigns.Count}, {onlyWithSigns.Count(directly.Contains)} were"
+            + " moved by a sign itself — the rest are what the signs' own doors opened for"
+            + " somebody else");
+    }
 
     /// <summary>
     /// Whether the flag count above is everything the run ever had, or one phase of a cycle.
@@ -13510,6 +13677,12 @@ public static class Program
 
         public bool FieldEffects { get; private init; }
 
+        /// <summary>
+        /// With <c>--play</c>: what the fourth list did. Which of the 519 sign scripts the walk
+        /// stood in front of, and which flags only a sign moved.
+        /// </summary>
+        public bool Signs { get; private init; }
+
         /// <summary>Commands to ask the index question of.</summary>
         public IReadOnlyList<byte> Slots { get; private init; } = [];
 
@@ -13726,6 +13899,7 @@ public static class Program
             bool arrivals = false;
             bool theFloor = false;
             bool fieldEffects = false;
+            bool signs = false;
             var slots = new List<byte>();
             var readFrom = new List<uint>();
             bool fights = false;
@@ -13996,6 +14170,9 @@ public static class Program
                         break;
                     case "--field-effects":
                         fieldEffects = true;
+                        break;
+                    case "--signs":
+                        signs = true;
                         break;
                     case "--slots":
                     {
@@ -14341,6 +14518,7 @@ public static class Program
                 Arrivals = arrivals,
                 TheFloor = theFloor,
                 FieldEffects = fieldEffects,
+                Signs = signs,
                 Slots = slots,
                 ReadFrom = readFrom,
                 Play = play,

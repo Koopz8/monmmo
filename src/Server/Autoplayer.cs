@@ -163,6 +163,44 @@ public sealed record Traced(int Pass, string MapId, int LocalId, uint Address, V
 }
 
 /// <summary>
+/// Which of the map's four lists a script the run executed came off.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The map scan has known five kinds of script since 224 and the RUN has known none: everything
+/// it executed was an address and a map, and "which signs actually ran" could not be asked.
+/// 239 put the fourth list in and left that so.
+/// </para>
+/// <para>
+/// A continuation — the bytes after a fight — is filed under whatever started it, because it
+/// belongs to the battle and the battle belongs to whoever was talked to.
+/// </para>
+/// </remarks>
+public enum WhatRanIt
+{
+    /// <summary>The map's own script, run on arriving.</summary>
+    OnArrival,
+
+    /// <summary>A square that runs something when it is walked onto.</summary>
+    ATrigger,
+
+    /// <summary>Somebody talked to.</summary>
+    APerson,
+
+    /// <summary>Something read off a wall. The fourth list, and new at 239.</summary>
+    ASign,
+}
+
+/// <summary>One sign the walk stood in front of, and how many times it read it.</summary>
+/// <param name="MapId">The map it is on.</param>
+/// <param name="Address">The block behind it.</param>
+/// <param name="Times">How many times over the whole run, across every pass.</param>
+public sealed record RanASign(string MapId, uint Address, int Times)
+{
+    public override string ToString() => $"{MapId}  0x{Address:X8}  x{Times}";
+}
+
+/// <summary>
 /// A script turning a flag on or off during a run, with where and when.
 /// </summary>
 /// <remarks>
@@ -184,10 +222,12 @@ public sealed record Traced(int Pass, string MapId, int LocalId, uint Address, V
 /// <param name="MapId">The map the script was run from.</param>
 /// <param name="Address">The script.</param>
 /// <param name="Cleared">True for off, false for on.</param>
-public sealed record MovedAFlag(int Flag, int Pass, string MapId, uint Address, bool Cleared)
+public sealed record MovedAFlag(
+    int Flag, int Pass, string MapId, uint Address, bool Cleared, WhatRanIt From)
 {
     public override string ToString() =>
-        $"pass {Pass}  {MapId}  0x{Address:X8}  {(Cleared ? "CLEARED" : "set")} 0x{Flag:X4}";
+        $"pass {Pass}  {MapId}  0x{Address:X8}  {(Cleared ? "CLEARED" : "set")} 0x{Flag:X4}"
+        + $"  ({From})";
 }
 
 public sealed record ShutDoor(
@@ -533,6 +573,14 @@ public sealed record Attempt(
 
     /// <summary>Every flag any script turned on or off during the run, in order.</summary>
     public IReadOnlyList<MovedAFlag> FlagMoves { get; init; } = [];
+
+    /// <summary>Every sign the walk stood in front of, and how many times over the run.</summary>
+    /// <remarks>
+    /// Keyed by (map, address). 519 sign scripts sit at 360 addresses because blocks are
+    /// shared, so counting addresses answers a different question from counting signs — which
+    /// is 224's finding standing in the run rather than in the scan.
+    /// </remarks>
+    public IReadOnlyList<RanASign> SignsRead { get; init; } = [];
 
     /// <summary>
     /// Maps the walk reaches with <see cref="EverOn"/> that it does not reach with
@@ -1039,7 +1087,8 @@ public static class Autoplayer
         bool surfing = false,
         IReadOnlyDictionary<int, int>? remembered = null,
         bool inOrder = false,
-        IReadOnlyDictionary<uint, uint>? doorsTo = null)
+        IReadOnlyDictionary<uint, uint>? doorsTo = null,
+        bool readSigns = true)
     {
         // WHICH SCENE A SCRIPT IS, WHICH IS NOT THE SAME AS WHICH SCRIPT IT IS.
         //
@@ -1179,6 +1228,12 @@ public static class Autoplayer
         // about which script took something back.
         var flagMoves = new List<MovedAFlag>();
 
+        // Every sign the walk stood in front of, and how many times over the whole run. By
+        // (map, address) and not by address: 519 sign scripts sit at 360 addresses, so a
+        // shared block read on two maps is two signs read and one address, and 224's whole
+        // lesson was that those are different numbers.
+        var signsRead = new Dictionary<(string MapId, uint Address), int>();
+
         var won = 0;
         var lost = 0;
         var skipped = 0;
@@ -1254,7 +1309,8 @@ public static class Autoplayer
                 // and it has to run HERE — with the same bag, the same flags and the same
                 // folding as everything else. Handing it to a second copy of this body is how
                 // the two would drift apart, and this project has found that fault five times.
-                var toRun = new Queue<Runnable>(Reachable(map, stood, flags, gone, remembered, inOrder));
+                var toRun = new Queue<Runnable>(
+                    Reachable(map, stood, flags, gone, remembered, inOrder, readSigns));
                 var alreadyRun = new HashSet<uint>();
 
                 while (toRun.Count > 0)
@@ -1262,6 +1318,17 @@ public static class Autoplayer
                     Runnable what = toRun.Dequeue();
 
                     PlayedScript did = runScript(what.Address, flags, bag);
+
+                    // WHICH SIGNS ACTUALLY RAN. 239 put 519 sign scripts into the run and
+                    // measured what they cost in flags; which of them the walk ever stood in
+                    // front of was owed from that milestone and could not be asked, because
+                    // nothing the run executed remembered which list it came off.
+                    if (what.From == WhatRanIt.ASign)
+                    {
+                        if (!signsRead.TryGetValue((map.Id, what.Address), out int already))
+                            signsRead[(map.Id, what.Address)] = 1;
+                        else signsRead[(map.Id, what.Address)] = already + 1;
+                    }
 
                     // In the order it happened, which is the entire point of the thing.
                     foreach (VariableTouch touch in did.Touched)
@@ -1330,12 +1397,14 @@ public static class Autoplayer
                     // only one this loop could answer until now.
                     foreach (int flag in did.FlagsSet)
                     {
-                        flagMoves.Add(new MovedAFlag(flag, pass, map.Id, what.Address, Cleared: false));
+                        flagMoves.Add(
+                            new MovedAFlag(flag, pass, map.Id, what.Address, Cleared: false, what.From));
                     }
 
                     foreach (int flag in did.FlagsCleared)
                     {
-                        flagMoves.Add(new MovedAFlag(flag, pass, map.Id, what.Address, Cleared: true));
+                        flagMoves.Add(
+                            new MovedAFlag(flag, pass, map.Id, what.Address, Cleared: true, what.From));
                     }
 
                     foreach (int flag in did.FlagsSet) flags.Add(flag);
@@ -1544,7 +1613,7 @@ public static class Autoplayer
                                 // Nobody's, on purpose: the continuation belongs to the
                                 // battle rather than to the person, and filing it under them
                                 // would overwrite what talking to them came to.
-                                toRun.Enqueue(new Runnable(did.AfterTheFight, 0));
+                                toRun.Enqueue(new Runnable(did.AfterTheFight, 0, what.From));
                             }
 
                             break;
@@ -1863,6 +1932,13 @@ public static class Autoplayer
             EverOn = everOn,
             TookBack = tookBack,
             FlagMoves = flagMoves,
+            SignsRead =
+            [
+                .. signsRead
+                    .Select(s => new RanASign(s.Key.MapId, s.Key.Address, s.Value))
+                    .OrderBy(s => s.MapId, StringComparer.Ordinal)
+                    .ThenBy(s => s.Address),
+            ],
             ReachedOnlyWithWhatItTookBack = onlyWithThose,
             FightAttemptsLost = lost,
             Carried = bag.Entries,
@@ -2340,7 +2416,8 @@ public static class Autoplayer
         HashSet<int> flags,
         HashSet<(string MapId, int LocalId)> gone,
         IReadOnlyDictionary<int, int>? remembered = null,
-        bool inOrder = false)
+        bool inOrder = false,
+        bool readSigns = true)
     {
         // WHETHER A SCRIPT'S OWN CONDITION IS HONOURED, WHICH IS WHAT THE FLOOR MEANS.
         //
@@ -2395,7 +2472,7 @@ public static class Autoplayer
         foreach (MapEntryScript entry in map.OnEntry)
         {
             if (entry.ScriptAddress != 0 && Fires(entry.Variable, entry.Value))
-                yield return new Runnable(entry.ScriptAddress, 0);
+                yield return new Runnable(entry.ScriptAddress, 0, WhatRanIt.OnArrival);
         }
 
         foreach (MapTrigger trigger in map.Triggers)
@@ -2404,7 +2481,7 @@ public static class Autoplayer
                 && stood.Contains((map.Id, trigger.Square))
                 && Fires(trigger.Variable, trigger.Value))
             {
-                yield return new Runnable(trigger.ScriptAddress, 0);
+                yield return new Runnable(trigger.ScriptAddress, 0, WhatRanIt.ATrigger);
             }
         }
 
@@ -2423,6 +2500,7 @@ public static class Autoplayer
                 yield return new Runnable(
                     person.ScriptAddress,
                     person.CanBeTakenAway ? person.HiddenBy : 0,
+                    WhatRanIt.APerson,
                     person.LocalId);
             }
         }
@@ -2439,12 +2517,23 @@ public static class Autoplayer
         //
         // Nothing here can be taken off the map — a sign is not a person and has no hide flag,
         // so the second half of a Runnable is nought and its owner has no local id.
+        // THE CONTROL, and it is a control rather than a lever.
+        //
+        // 239 measured what putting the fourth list in was worth by running the whole
+        // playthrough twice, one commit apart, and writing the two tables down side by side.
+        // That number cannot be re-checked by anybody who has not got the earlier commit built,
+        // and a number nobody can re-run is one nobody can catch. With this it is one process:
+        // the same world, the same levers, the same everything, and the fourth list switched
+        // off — which is the same shape as the reversed-image floor every reading in this
+        // project is measured against.
+        if (!readSigns) yield break;
+
         foreach (MapSign sign in map.Signs)
         {
             if (!sign.HasScript) continue;
 
             if (Beside(map.Id, sign.Square).Any(stood.Contains))
-                yield return new Runnable(sign.ScriptAddress, 0);
+                yield return new Runnable(sign.ScriptAddress, 0, WhatRanIt.ASign);
         }
     }
 
@@ -2458,7 +2547,7 @@ public static class Autoplayer
     /// would delete them from the world for the rest of the run.
     /// </para>
     /// </summary>
-    private sealed record Runnable(uint Address, int TakenAway, int LocalId = 0);
+    private sealed record Runnable(uint Address, int TakenAway, WhatRanIt From, int LocalId = 0);
 
     /// <summary>One square that way.</summary>
     private static GridPosition Step(GridPosition from, Direction way) => way switch
