@@ -152,4 +152,23 @@ public sealed class WhatAVariableCanHoldTests
         Assert.True(new WhatItCanHold(0x4002, [0], [1], false).CanReach(9, 9));
         Assert.False(new WhatItCanHold(0x4002, [0], [1], false).CanReach(10, 9));
     }
+
+    /// <summary>
+    /// And the ceiling bounds the WALK, not only the question — a value inside it that can only
+    /// be reached by going above it is not reached.
+    /// </summary>
+    /// <remarks>
+    /// <b>The first version of this test was the one above and the break came back green.</b>
+    /// Asking for a value past the ceiling is refused by a guard on the way in, so a fixture that
+    /// only does that is caught by the guard and says nothing about the walk — fixture-lie 12,
+    /// two statements of one rule and a fixture that reaches the wrong one. Here three is well
+    /// inside a ceiling of eight and the only route to it is through nine.
+    /// </remarks>
+    [Fact]
+    public void AValueOnlyReachableAboveTheCeilingIsNotReached()
+    {
+        // 0 -> 9 -> 3, and nine is the only way there.
+        Assert.True(new WhatItCanHold(0x4002, [0], [6, 9], false).CanReach(3, 9));
+        Assert.False(new WhatItCanHold(0x4002, [0], [6, 9], false).CanReach(3, 8));
+    }
 }
