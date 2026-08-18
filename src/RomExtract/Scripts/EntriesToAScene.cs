@@ -46,6 +46,34 @@ public sealed record AnEntry(SetsAFlag Where, uint Leads, int Says, int Into)
 /// </summary>
 public static class EntriesToAScene
 {
+    /// <summary>Where the band a script hands ARGUMENTS to a routine in begins.</summary>
+    public const int FirstArgument = 0x8000;
+
+    /// <summary>And where it ends.</summary>
+    public const int LastArgument = 0x800F;
+
+    /// <summary>
+    /// Whether a variable is one a door can announce itself in.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Two bands and not one. The scratch pads below <paramref name="scratchBelow"/> are where
+    /// 173 found the door numbers and where this instrument has looked since 194 — but a door
+    /// can announce itself in an ARGUMENT variable just as well, and this cartridge has a
+    /// twenty-two-door scene that does: `10.14`'s slot machines say
+    /// <c>0x8004 = 0</c> through <c>21</c>. Cut at the scratch cliff alone, every one of them
+    /// reads as a block that does something of its own, and the scene is invisible.
+    /// </para>
+    /// <para>
+    /// <b>What stays out is the story's own memory</b>, and that is the whole point of a cut. A
+    /// block that writes <c>0x4055</c> before handing over is not saying which door you came in
+    /// by; it is moving the story on, and folding those together would fold two scenes into one
+    /// because they happen to share an exit.
+    /// </para>
+    /// </remarks>
+    public static bool AnnouncesItself(int variable, int scratchBelow) =>
+        variable < scratchBelow || variable is >= FirstArgument and <= LastArgument;
+
     /// <summary>The commands a block may contain and still be nothing but a handover.</summary>
     private static readonly byte[] Housekeeping =
     [
@@ -90,7 +118,7 @@ public static class EntriesToAScene
             bool bare = read.All(c =>
                 c == handovers[0]
                 || Housekeeping.Contains(c.Code)
-                || (c.Code == 0x16 && said.Count == 1 && c.Word() < scratchBelow));
+                || (c.Code == 0x16 && said.Count == 1 && AnnouncesItself(c.Word(), scratchBelow)));
 
             if (!bare) continue;
 
