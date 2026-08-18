@@ -19,6 +19,10 @@ catch.
   dotnet run … --play --signs
 ```
 
+> **CORRECTED AT 242: `215` is `317`.** The read set was keyed on (map, address), which counts
+> two signs on one map written on the same block as one sign. 214 addresses and 79 maps are
+> right; every sign count below is one milestone too low — 317 / 396 / 465, not 215 / 288 / 328.
+
 ```
   WHAT THE FOURTH LIST DID
     215 of the 519 sign script(s) ran, at 214 of the 360 address(es), on 79 of the 143 map(s)
@@ -69,9 +73,12 @@ Three counts, not one:
 
 ```
   519 sign scripts   at 360 addresses   on 143 maps       (the file)
-  215 ran            at 214 addresses   on  79 maps       (the floor)
-  328 ran            at 327 addresses   on 134 maps       (the widest)
+  215 ran            at 214 addresses   on  79 maps       (the floor)    <- 317 (242)
+  328 ran            at 327 addresses   on 134 maps       (the widest)   <- 465 (242)
 ```
+
+**And the two corrected numbers are the ones this very paragraph explains.** The sentence below
+about blocks being shared is right; the count above it was made the other way. 242 has it.
 
 Blocks are shared, so a script read in two towns is **two signs read and one address**, and
 `SignsRead` is keyed by (map, address) for that reason. That is 224's finding standing in the run
@@ -106,8 +113,9 @@ assumed.
 
 * **Why the seven are what they are.** Two people is the answer to *how much*; which sign opens
   which person is one `--read-from` away and this milestone did not take it.
-* **The 191 sign scripts that never run at any setting** — reach, or a square nothing can stand
-  beside. Not separated.
+* ~~The 191 sign scripts that never run at any setting.~~ **CLOSED AT 242** — and there are 54,
+  not 191: 36 on maps the run never reaches, 17 walls on maps it walks, and exactly ONE that
+  nothing could ever stand beside.
 * **`1.114`'s 154 reads.**
 * **`0x026C` and `0x0807`** (240), **`0x4001` in two namespaces** (240), **`0x194`'s nineteen
   doors** (236), **`0x82`'s seven words** (238), the three numbers nothing computes (231),

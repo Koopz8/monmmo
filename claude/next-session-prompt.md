@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-281`, 3038 tests green.
+`claude-282`, 3048 tests green.
 
 Standing rules — do not break these:
 
@@ -194,9 +194,23 @@ Traps worth carrying:
     instrument.** The fix was a parameter and one extra run inside the same command, which is
     the same shape as the reversed-image floor this project measures every reading against.
 
+20. **A break that fails LESS than it should is the same signal as one that passes** (242). The
+    rule "a sign is read from its own square or any of the four around it" was broken to ask
+    only its own square, and one test went red where two should have. A sign's own square is
+    SOLID — that is what a sign is — so the wrong rule reads every sign in the game as one
+    nothing could stand beside, and the only fixture that noticed did so by accident. **Count
+    what a break kills against what it should have killed.** A fixture was added, then the same
+    break re-run.
+
+21. **The same trap can be sprung by the milestone that quotes it** (242). 241's own document
+    cites 224 — five copies of "every script on a map", counted by the wrong key — one line
+    below a count it had made by the wrong key. `215` was addresses-per-map reported as signs;
+    the answer is `317`. **When you write a sentence about what a number is keyed on, go and
+    look at the key.**
+
 ## Where things are
 
-Read `claude/milestone-241-a-control-that-fits-in-one-process.md` first, then `240`, `239`,
+Read `claude/milestone-242-a-sign-is-a-square.md` first, then `241`, `240`, `239`,
 `238`, `237`,
 `236`, `235`, `234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
@@ -262,8 +276,9 @@ dotnet run -c Release --project src/Tools/RomDump -- firered.gba --play --signs
 ```
 
 `--play --signs` is the fourth list with **its own control in the same process**: which sign
-scripts ran, at how many addresses, on how many maps, then THE SAME RUN WITH SIGNS SWITCHED OFF
-and the two subtracted. It reproduces 239's before-numbers off one build — 183/153, 243/231,
+scripts ran, at how many addresses, on how many maps, **why each of the rest did not** (three
+buckets, and the first is about the FILE and must not move with a lever), then THE SAME RUN WITH
+SIGNS SWITCHED OFF and the two subtracted. It reproduces 239's before-numbers off one build — 183/153, 243/231,
 381/294 — which is what a control is for. Signs are worth **0 maps at every lever setting** and
 7 / 3 / 2 flags. Keyed by (map, address): one block read in two towns is two signs and one
 address, which is 224 in the run rather than in the scan.
@@ -458,7 +473,11 @@ BUT THE RUN ALSO TAKES FLAGS BACK: 164 ever on at the floor against the 160 it s
   costs 0 maps at all six settings, and only that direction can be non-empty — the walk is
   monotone in flags, asserted in TheFlagsItTookBackTests rather than believed
 702 signs: 519 a script at 360 addresses on 143 maps, 183 a hidden item — `--export-world` (239)
-  215 of the 519 RUN at the floor (214 addresses, 79 maps); 328 at the widest (327, 134) — 241
+  317 of the 519 RUN at the floor (214 addresses, 79 maps); 465 at the widest (327, 134) — 242
+    241 said 215 and 328: it keyed the read set on (map, ADDRESS) and a sign is a SQUARE. The
+    address and map columns were right throughout. 224 for the THIRD time, this one self-inflicted
+  the 54 unread at the widest: 36 on maps it never reached, 17 walls on maps it walks, and
+    EXACTLY ONE nothing could ever stand beside — 10.6 (4,1), 0x0816C153, same at every lever
   the floor's seven: 0x0031, 0x0032, 0x0233, 0x0234, 0x0235, 0x026D, 0x0834; TWO gate and each
     holds one person — 3.43 p1 and 30.0 p2. Only 2 of the 7 were moved by a sign ITSELF
   every control stops with "nothing more opened", so signs ARE what makes the run cycle (241)
@@ -553,7 +572,9 @@ still work.**
   `--play --signs`. What is left of it: **why** the seven are what they are (which sign opens
   which of the two people), and the **191 sign scripts that run at no setting** — reach, or a
   square nothing can stand beside, not separated. And `1.114 0x08163F5A`, read 154 times in one
-  run, which nobody has asked is a wide sign or a wide walk.
+  run, which nobody has asked is a wide sign or a wide walk. And **`10.6 (4,1)`** (242), the one
+  sign nothing in the cartridge can stand beside — a mistake, furniture, or a square this
+  project's collision reading gets wrong. One `--read-from` and one `--script-map 10.6`.
 * **`0x026C` and `0x0807`** — the two that actually make the run go round (240). Set on one map,
   cleared on another, holding nothing. `--read-from` on the four addresses is one command.
 * **`0x4001` is a flag in the run and a variable in the doors reading**, 63 of those. The same
