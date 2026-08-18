@@ -111,11 +111,10 @@ public static class WhoTheCompareBelongsTo
                 (IReadOnlyList<int> direct, IReadOnlyList<int> beyond) =
                     SpecialContracts.WhatIsComparedAfter(commands, i, answer);
 
-                if (beyond.Count == 0) continue;
-
                 // Only the sites the table gave up on. One with a clean compare as well has an
-                // owner already, and reporting it here would count it twice.
-                if (direct.Count > 0) continue;
+                // owner already, and reporting it here would count it twice — and the rule for
+                // which is which is asked of SpecialContracts rather than repeated here.
+                if (!SpecialContracts.NothingCleanHere(direct, beyond)) continue;
 
                 (InTheWay Was, uint Called)? stood = WhatStoodInTheWay(rom, commands, i);
 

@@ -177,10 +177,7 @@ public static class SpecialContracts
                 {
                     Note(acrossAt, routine, command.Offset);
 
-                    // With nothing clean before it, the barrier is the whole of what this site
-                    // says about this routine. With a clean compare too, it has an owner and
-                    // this is only the extra values.
-                    if (values.Count == 0)
+                    if (NothingCleanHere(values, beyond))
                         nothingClean[routine] = nothingClean.GetValueOrDefault(routine) + 1;
                 }
 
@@ -288,6 +285,23 @@ public static class SpecialContracts
 
         seen.Add(offset);
     }
+
+    /// <summary>
+    /// Whether this site's whole claim on the routine is past a barrier — a compare beyond one
+    /// and none before it.
+    /// <para>
+    /// <b>The difference between the two numbers is 67 of 145.</b> A site with a clean compare
+    /// as well already has an owner, and the barrier only adds values to it; a site with nothing
+    /// clean is one where the barrier is the entire story. 220 printed the first number and
+    /// called it the second.
+    /// </para>
+    /// <para>
+    /// One rule, and <see cref="WhoTheCompareBelongsTo"/> asks it rather than repeating it — a
+    /// second copy that drifts is exactly what 220 was about.
+    /// </para>
+    /// </summary>
+    public static bool NothingCleanHere(IReadOnlyList<int> direct, IReadOnlyList<int> beyond) =>
+        beyond.Count > 0 && direct.Count == 0;
 
     /// <summary>
     /// How many reads, and how many BYTE POSITIONS those reads are.

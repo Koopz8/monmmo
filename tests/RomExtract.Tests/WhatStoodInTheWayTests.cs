@@ -213,6 +213,31 @@ public sealed class WhatStoodInTheWayTests
     }
 
     /// <summary>
+    /// AND WHICH SITES THIS READING IS EVEN ABOUT: the ones whose whole claim on the routine is
+    /// past a barrier, not merely the ones that have something past one.
+    /// <para>
+    /// <b>Those are 78 and 145 on the cartridge</b>, and 220's own headline printed the second
+    /// with the first's wording. A site with a clean compare as well already has an owner and
+    /// the barrier only adds values to it.
+    /// </para>
+    /// <para>
+    /// One rule, asked by both readings. A second copy that drifts is what 220 was about.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void OnlyASiteWithNothingCleanIsThisReadingsToAnswer()
+    {
+        Assert.True(SpecialContracts.NothingCleanHere([], [1]));
+
+        // Has an owner already — the barrier is not the whole story here.
+        Assert.False(SpecialContracts.NothingCleanHere([0], [1]));
+
+        // And nothing past a barrier at all is not this reading's business either way.
+        Assert.False(SpecialContracts.NothingCleanHere([0], []));
+        Assert.False(SpecialContracts.NothingCleanHere([], []));
+    }
+
+    /// <summary>
     /// The FIRST thing in the way decides, not the last. Two barriers and the verdict is the
     /// nearer one's — anything after it is already about somebody else.
     /// </summary>
