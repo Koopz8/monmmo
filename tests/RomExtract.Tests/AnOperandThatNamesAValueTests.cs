@@ -223,13 +223,30 @@ public sealed class AnOperandThatNamesAValueTests
 
     /// <summary>
     /// And it is about what is WRITTEN: a number nothing writes is not a variable written and
-    /// never looked at, however absent it is from every reading operand.
+    /// never looked at, however absent it is from every LOOKING operand.
     /// </summary>
+    /// <remarks>
+    /// The fixture is the literal, and it has to be: computing this list from every number any
+    /// variable command names — rather than from the written ones — passes a fixture built out
+    /// of flags, because a flag is in neither set. A literal is in one of them. That break came
+    /// back GREEN the first time, which is trap 20 and is why this fixture was rewritten before
+    /// it was re-run.
+    /// </remarks>
     [Fact]
     public void ANumberNothingWritesIsNotAVariableWrittenAndNeverLookedAt()
     {
-        BothNamespaces both = Of(Image((0x100, [.. SetFlag(0x0025), End])));
+        BothNamespaces both = Of(Image((0x100,
+        [
+            .. SetVar(0x8004, 1),
+            .. Compare(0x8004, 2),
+            .. CopyIfNotZero(0x8004, 0x0005),
+            .. CopyIfNotZero(0x8004, 0x0006),
+            .. CopyIfNotZero(0x8004, 0x0007),
+            End,
+        ])));
 
+        // 0x0005 to 0x0007 are named by a variable command and written by nothing. They are
+        // literals, not deaf variables, and 0x8004 is written AND looked at.
         Assert.Empty(both.WrittenAndNeverLookedAt);
     }
 
