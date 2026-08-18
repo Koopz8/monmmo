@@ -22,12 +22,23 @@ namespace PokeMmo.RomExtract.Scripts;
 /// How many sites branch on the answer at all, with nothing in between that could have
 /// answered instead.
 /// </param>
+/// <param name="Places">
+/// How many distinct BYTE POSITIONS those branches are, which is the number about the
+/// cartridge. A block hanging off two triggers is read twice and counted twice in
+/// <see cref="Branches"/>; <c>0x0188</c> reads as two branches and is one byte position, which
+/// is what 215 found by hand. Places, not times — 195's lesson, applied to a table that
+/// predates it.
+/// </param>
 /// <param name="AcrossABarrier">
 /// How many sites branch on the answer <b>only past something that may have answered
 /// instead</b> — a <c>call</c>, another <c>special</c>, a <c>callstd</c>. Until 220 these were
 /// counted in <see cref="Branches"/> and their values in <see cref="Compared"/>, and nothing
 /// said so. This is the error bar on every routine sentence in this project, and it comes back
 /// nought for a routine nobody reads across anything.
+/// </param>
+/// <param name="PlacesAcross">
+/// The same count for the branches past a barrier: distinct byte positions rather than script
+/// entries.
 /// </param>
 /// <param name="ComparedAcross">
 /// The values compared past the barrier, kept apart from <see cref="Compared"/> for the same
@@ -42,7 +53,9 @@ public sealed record SpecialContract(
     int TakesArguments,
     IReadOnlyDictionary<int, int> Compared,
     int Branches,
+    int Places,
     int AcrossABarrier,
+    int PlacesAcross,
     IReadOnlyDictionary<int, int> ComparedAcross,
     IReadOnlyList<string> Where)
 {
@@ -111,8 +124,8 @@ public static class SpecialContracts
         var sites = new Dictionary<int, int>();
         var arguments = new Dictionary<int, int>();
         var compared = new Dictionary<int, Dictionary<int, int>>();
-        var branches = new Dictionary<int, int>();
-        var across = new Dictionary<int, int>();
+        var branchesAt = new Dictionary<int, List<int>>();
+        var acrossAt = new Dictionary<int, List<int>>();
         var comparedAcross = new Dictionary<int, Dictionary<int, int>>();
         var where = new Dictionary<int, List<string>>();
 
@@ -145,9 +158,11 @@ public static class SpecialContracts
 
                 (List<int> values, List<int> beyond) = ComparedAfter(commands, i, answer);
 
-                if (values.Count > 0) branches[routine] = branches.GetValueOrDefault(routine) + 1;
+                // Every read is a site; the byte position is what says how many PLACES those
+                // sites are, and one address hanging off two triggers is read twice.
+                if (values.Count > 0) Note(branchesAt, routine, command.Offset);
 
-                if (beyond.Count > 0) across[routine] = across.GetValueOrDefault(routine) + 1;
+                if (beyond.Count > 0) Note(acrossAt, routine, command.Offset);
 
                 if (!compared.TryGetValue(routine, out Dictionary<int, int>? seen))
                     compared[routine] = seen = [];
@@ -172,13 +187,18 @@ public static class SpecialContracts
                 sites[routine],
                 arguments.GetValueOrDefault(routine),
                 compared.GetValueOrDefault(routine, []),
-                branches.GetValueOrDefault(routine),
-                across.GetValueOrDefault(routine),
+                SitesAndPlaces(branchesAt.GetValueOrDefault(routine, [])).Sites,
+                SitesAndPlaces(branchesAt.GetValueOrDefault(routine, [])).Places,
+                SitesAndPlaces(acrossAt.GetValueOrDefault(routine, [])).Sites,
+                SitesAndPlaces(acrossAt.GetValueOrDefault(routine, [])).Places,
                 comparedAcross.GetValueOrDefault(routine, []),
                 where.GetValueOrDefault(routine, []))),
         ];
 
         log?.Invoke($"  {derived.Count} routines called, {derived.Sum(d => d.Sites)} times between them");
+        log?.Invoke(
+            $"    the branches below are {derived.Sum(d => d.Branches)} site(s) at {derived.Sum(d => d.Places)} "
+            + "byte position(s) — a block hanging off two triggers is read twice");
         log?.Invoke($"    {derived.Count(d => d.Branches > 0)} of them are branched on, which is what makes an answer matter");
         log?.Invoke($"    {derived.Count(d => d.LooksLikeACount)} are compared against a run from one upwards");
 
@@ -240,6 +260,37 @@ public static class SpecialContracts
     /// barrier is where to look next, not where to stop looking.
     /// </para>
     /// </remarks>
+    private static void Note(Dictionary<int, List<int>> at, int routine, int offset)
+    {
+        if (!at.TryGetValue(routine, out List<int>? seen)) at[routine] = seen = [];
+
+        seen.Add(offset);
+    }
+
+    /// <summary>
+    /// How many reads, and how many BYTE POSITIONS those reads are.
+    /// <para>
+    /// <b>Places, not times</b> — 195's lesson, arriving at a table six milestones older than
+    /// it. A block hanging off two triggers is read once per trigger, so a routine called at
+    /// one address on one map can report two of everything. <c>0x0188</c> reads as two branches
+    /// and is one byte position, which is exactly what 215 found by grepping the whole image
+    /// for the bytes and getting one hit.
+    /// </para>
+    /// </summary>
+    public static (int Sites, int Places) SitesAndPlaces(IEnumerable<int> offsets)
+    {
+        var seen = new HashSet<int>();
+        var sites = 0;
+
+        foreach (int offset in offsets)
+        {
+            sites++;
+            seen.Add(offset);
+        }
+
+        return (sites, seen.Count);
+    }
+
     /// <summary>
     /// The same reading, against a handful of bytes rather than against a whole world.
     /// <para>

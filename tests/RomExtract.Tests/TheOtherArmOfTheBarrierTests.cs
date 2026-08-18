@@ -270,6 +270,28 @@ public sealed class TheOtherArmOfTheBarrierTests
     }
 
     /// <summary>
+    /// AND PLACES ARE NOT TIMES. A block hanging off two triggers is read twice and is one byte
+    /// position, and the table counted the reads.
+    /// <para>
+    /// On the cartridge <c>0x0188</c> reads as two branches at one place — 215 grepped the whole
+    /// image for <c>25 88 01 21 0D 80</c> and got exactly one hit, and both of <c>1.93</c>'s
+    /// triggers run that same block. <c>0x0187</c> reads as 376 at 72. The table has been
+    /// quoting times since before 195 said to quote places.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void OneAddressReadTwiceIsTwoSitesAndOnePlace()
+    {
+        Assert.Equal((2, 1), SpecialContracts.SitesAndPlaces([0x1634DB, 0x1634DB]));
+
+        // And the decoy: two different addresses are two of both, so a rule that returned the
+        // same number twice would not have passed either half.
+        Assert.Equal((2, 2), SpecialContracts.SitesAndPlaces([0x1634DB, 0x1BB567]));
+
+        Assert.Equal((0, 0), SpecialContracts.SitesAndPlaces([]));
+    }
+
+    /// <summary>
     /// A compare nothing branches on is still not a branch, on either side of the barrier.
     /// </summary>
     [Fact]

@@ -7056,8 +7056,8 @@ public static class Program
                      .OrderByDescending(c => c.Branches))
         {
             Console.WriteLine(
-                $"    0x{contract.Routine:X3}  {contract.Sites,3} site(s), {contract.Branches,3} branch, "
-                + $"{contract.TakesArguments} argument(s)"
+                $"    0x{contract.Routine:X3}  {contract.Sites,3} site(s), {contract.Branches,3} branch "
+                + $"at {contract.Places,3} place(s), {contract.TakesArguments} argument(s)"
                 + (contract.LooksLikeACount ? "   <- compared against a run from 1, so it counts something" : ""));
 
             if (contract.Compared.Count > 0)
@@ -7098,7 +7098,8 @@ public static class Program
             {
                 Console.WriteLine(
                     $"    0x{contract.Routine:X3}  {contract.Sites,3} site(s), "
-                    + $"{contract.AcrossABarrier,3} across a barrier, {contract.TakesArguments} argument(s)");
+                    + $"{contract.AcrossABarrier,3} across a barrier at {contract.PlacesAcross,3} place(s), "
+                    + $"{contract.TakesArguments} argument(s)");
 
                 WriteAcrossABarrier(contract);
 
