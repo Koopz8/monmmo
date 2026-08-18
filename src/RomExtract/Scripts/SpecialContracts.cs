@@ -232,17 +232,14 @@ public static class SpecialContracts
 
         List<SpecialContract> derived =
         [
-            .. sites.Keys.Order().Select(routine => new SpecialContract(
+            .. perRoutine.Keys.Order().Select(routine => Assemble(
                 routine,
-                sites[routine],
-                perRoutine.GetValueOrDefault(routine).Places,
+                perRoutine[routine],
                 arguments.GetValueOrDefault(routine),
                 compared.GetValueOrDefault(routine, []),
-                SitesAndPlaces(branchesAt.GetValueOrDefault(routine, [])).Sites,
-                SitesAndPlaces(branchesAt.GetValueOrDefault(routine, [])).Places,
-                SitesAndPlaces(acrossAt.GetValueOrDefault(routine, [])).Sites,
+                SitesAndPlaces(branchesAt.GetValueOrDefault(routine, [])),
+                SitesAndPlaces(acrossAt.GetValueOrDefault(routine, [])),
                 nothingClean.GetValueOrDefault(routine),
-                SitesAndPlaces(acrossAt.GetValueOrDefault(routine, [])).Places,
                 comparedAcross.GetValueOrDefault(routine, []),
                 where.GetValueOrDefault(routine, []))),
         ];
@@ -367,6 +364,43 @@ public static class SpecialContracts
     /// reach — which is why the last four green breaks in this project were green.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// One routine's row, built out of the tallies rather than inside the sweep that gathers
+    /// them.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Here because a break aimed at the wiring came back green.</b> Deciding which half of a
+    /// (calls, places) pair goes in which column used to happen inside <see cref="Derive"/>,
+    /// which needs a <see cref="MapLibrary"/> and sixteen megabytes — so swapping them failed no
+    /// test at all. That is the fifth green break in this project with one cause, and the cause
+    /// is always a rule living somewhere a fixture cannot reach.
+    /// </para>
+    /// </remarks>
+    public static SpecialContract Assemble(
+        int routine,
+        (int Calls, int Places) called,
+        int arguments,
+        IReadOnlyDictionary<int, int> compared,
+        (int Sites, int Places) branches,
+        (int Sites, int Places) across,
+        int nothingClean,
+        IReadOnlyDictionary<int, int> comparedAcross,
+        IReadOnlyList<string> where) =>
+        new(
+            routine,
+            called.Calls,
+            called.Places,
+            arguments,
+            compared,
+            branches.Sites,
+            branches.Places,
+            across.Sites,
+            nothingClean,
+            across.Places,
+            comparedAcross,
+            where);
+
     public static IReadOnlyDictionary<int, (int Calls, int Places)> CallsAndPlaces(
         IEnumerable<(int Routine, int At)> calls)
     {

@@ -89,6 +89,42 @@ public sealed class ARoutineAskedInOnePlaceTests
         Assert.Equal(0, Contract(sites: 0, places: 0).CallInflation);
     }
 
+    /// <summary>
+    /// And the row itself puts the two halves of the pair in the right columns — the wiring, in
+    /// a place a fixture can reach.
+    /// <para>
+    /// This test exists because the break that swapped them came back GREEN: the decision lived
+    /// inside a sweep that needs a whole cartridge, which is the fifth green break in this
+    /// project with exactly one cause. The numbers are deliberately different in every column so
+    /// no two of them can be confused for each other.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TheRowPutsCallsAndPlacesInTheirOwnColumns()
+    {
+        SpecialContract row = SpecialContracts.Assemble(
+            routine: 0x194,
+            called: (Calls: 1066, Places: 34),
+            arguments: 3,
+            compared: new Dictionary<int, int> { [0] = 30, [1] = 27 },
+            branches: (Sites: 57, Places: 8),
+            across: (Sites: 5, Places: 4),
+            nothingClean: 2,
+            comparedAcross: new Dictionary<int, int> { [1] = 5 },
+            where: ["3.21 person 2 at 0x1A9589"]);
+
+        Assert.Equal(0x194, row.Routine);
+        Assert.Equal(1066, row.Sites);
+        Assert.Equal(34, row.CallPlaces);
+        Assert.Equal(57, row.Branches);
+        Assert.Equal(8, row.Places);
+        Assert.Equal(5, row.AcrossABarrier);
+        Assert.Equal(4, row.PlacesAcross);
+        Assert.Equal(2, row.NothingClean);
+        Assert.Equal(3, row.TakesArguments);
+        Assert.False(row.CalledOncePerPlace);
+    }
+
     private static SpecialContract Contract(int sites, int places) =>
         new(0x194, sites, places, 0, new Dictionary<int, int>(), 0, 0, 0, 0, 0,
             new Dictionary<int, int>(), []);
