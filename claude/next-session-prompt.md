@@ -165,8 +165,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-236-nineteen-askings-in-one-bucket.md` first, then `235`, `234`,
-`233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
+Read `claude/milestone-237-twenty-two-doors-nothing-could-see.md` first, then `236`, `235`,
+`234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
 **Twenty faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
@@ -359,8 +359,9 @@ in the same commit; the alternative is what 230 and 231 spent a session undoing.
 
 ```
 2915 scripts on 425 maps, reaching 3888 blocks
-227 of them do nothing but hand over; 22 scenes are one scene entered several ways
-3856 read to a proper end, 32 stopped at 19 codes
+275 of them do nothing but hand over; 26 scenes are one scene entered several ways, 112 doors
+doors announce themselves in 0x4001 x63, 0x8008 x25, 0x8004 x23, 0x4002 x6 — TWO bands (237)
+3856 read to a proper end, 32 stopped at 19 codes — [0x89]=2 would make it 3857/31 and is DECLINED
 729 trainerbattle sites on 104 maps; 27 carry a second exit, 10 of those skipped a guard
 7 places in the file ask who knows a move and are jumped into; 0 in the reversal; 5 OFFER
 7 blocks in the WHOLE IMAGE offer — the other 2 are CUT's and WATERFALL's, jumped into by nothing
@@ -442,6 +443,9 @@ the same split again, as a different command: the six are followed by an UNNAMED
 0x9E is 3 byte positions in the whole map scan and all three do that — one in 64 conservatively
 62 is 1.80 SECTION 49 on arrival, 68 is 2.56 BIRTH ISLAND person 1, 64 and 69 are 10.14 signs
 0x0816C994 is ONE byte position reached from NINETEEN sign entries on 10.14
+10.14's shared sign block IS a slot machine, READ: "A slot machine! Want to play?" and
+  "A COIN CASE is required..." past checkflag 0x0243 — 22 doors saying 0x8004 = 0..21,
+  three of them (4, 15, 18) named by nothing; --entries could not see any of it until 237
 the raw 0x9C sweep is 11446 sites in BOTH images and the REVERSAL READS ON MORE — throw it away
 ```
 
@@ -450,10 +454,11 @@ the raw 0x9C sweep is 11446 sites in BOTH images and the REVERSAL READS ON MORE 
 1. **`0x0AB` IS READ (232) and the block audit is DONE (231).** What is left of the audit: What is left of it: the three
    numbers nothing prints (`62 gates hold 240 people`, `146 trees and rocks`, `158 objects`) and
    `the ceiling is 45 of 437 byte positions`. Each needs an instrument or deleting; they are
-   marked in the block. The next cheap reads are **`0x011E`**, the routine `10.14`'s nineteen
-   shared signs ask, and **`0x194`'s nineteen doors** — eighteen `0x8004` values and a
-   no-argument form, all on TRAINER TOWER, none of them read. `--read-from` makes both one
-   command each. The history for reference:
+   marked in the block. The next cheap reads are **`0x9D`** — three of them run before the field
+   effect on `10.14` with `0, 255`, `1, 10`, `2, 14`, and it has a width and no meaning — and
+   **`0x194`'s nineteen doors** on TRAINER TOWER (236), some of which `--entries` may now see
+   since 237 admitted the argument band. `--read-from` makes both one command each. The history
+   for reference:
    230 did the floor-row bisect (answer: milestone **199**, one commit, +3 at all six settings,
    announced in its own commit message) and then found the bigger thing: that block, and two
    items of this list, entered the prompt at **`f8d4f15fe`, "the next session's prompt with 190
@@ -749,6 +754,12 @@ the other, and nothing about a single green run says which. 207 writes the 2x2 d
 * **A plain `call` is a barrier in the answer scan.** `special ; call ; compare` reads the
   CALL's answer, not the special's — SEVEN ISLAND's `0x0028` was credited with `0x005D`'s reply
   for as long as the scan existed. Added at 214, 42 of 1097 attributions lost. Do not remove it.
+* **Adopting `[0x89] = 2`.** Measured at 237 and declined: width two is the only one that makes
+  the argument `0x800D`, which the `specialvar 0x011E` above it just wrote, and the only one that
+  gives the arm the same `faceplayer ; end` its two siblings have — but it is ONE site, the
+  whole-image column is 1 against a reversal of 0 of 20, and adopting opens exactly one block
+  (3856 -> 3857) and moves no run number at any lever setting. A second site would settle it;
+  there is not one. Do not adopt it without one.
 * **Where the floor row went 150 -> 153.** Milestone 199, `40b589d13`, one commit out of the
   forty-seven between 193's merge and 207, and it is +3 at ALL SIX lever settings — which its own
   commit message said at the time. The three flags are `0x026E`, `0x026F`, `0x0270`, set on
