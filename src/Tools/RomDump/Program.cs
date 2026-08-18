@@ -7603,6 +7603,79 @@ public static class Program
     /// where the table is; the shape is hunted and the reversed image says whether the shape
     /// means anything.
     /// </summary>
+    /// <summary>
+    /// Which routines a script waits for after asking — all of them, or none of them.
+    /// </summary>
+    private static void WriteWhatIsWaitedFor(Rom rom, MapLibrary library)
+    {
+        var calls = new List<(int Routine, int At, bool Waited)>();
+
+        var opened = new Dictionary<int, ScriptCommand>();
+
+        foreach ((string _, string _, uint address) in library.EveryScript())
+            foreach (ScriptCommand command in ScriptReader.ReadAll(rom, address))
+                opened[command.Offset] = command;
+
+        foreach (ScriptCommand command in opened.Values)
+        {
+            int routine = command.Code switch
+            {
+                SpecialCalls.Special when command.Arguments.Length >= 2 => command.Word(),
+                SpecialCalls.SpecialVar when command.Arguments.Length >= 4 => command.Word(2),
+                _ => -1,
+            };
+
+            if (routine < 0) continue;
+
+            bool waited =
+                opened.TryGetValue(command.Offset + 1 + command.Arguments.Length, out ScriptCommand? after)
+                && after.Code == FieldEffectNumbers.WaitUnnamed;
+
+            calls.Add((routine, command.Offset, waited));
+        }
+
+        IReadOnlyList<WhatIsWaitedFor.Routine> routines = WhatIsWaitedFor.From(calls);
+
+        List<WhatIsWaitedFor.Routine> any = [.. routines.Where(r => r.Waited > 0)];
+
+        Console.WriteLine();
+        Console.WriteLine("  AND WHICH OF THEM A SCRIPT WAITS FOR");
+        Console.WriteLine(
+            $"    {routines.Sum(r => r.Waited)} of {routines.Sum(r => r.Places)} call place(s) are followed"
+            + $" straight away by a wait, at {any.Count} routine(s)");
+
+        // THE DENOMINATOR. A routine asked in one place is waited for "at every place" the moment
+        // it is waited for at all, and most of them are — so the all-or-nothing claim can only be
+        // made about the ones asked more than once.
+        List<WhatIsWaitedFor.Routine> more = [.. any.Where(r => r.AsksMoreThanOnce)];
+
+        Console.WriteLine(
+            $"      {any.Count - more.Count} of those {any.Count} are asked in ONE place, where all-or-nothing"
+            + " says nothing at all; the claim below is about the other " + more.Count);
+
+        double chance = WhatIsWaitedFor.Chance(routines);
+        double expected = WhatIsWaitedFor.ExpectedAtEveryPlace(routines, chance);
+
+        Console.WriteLine(
+            $"      {more.Count(r => r.AtEveryPlace)} of the {more.Count} are waited for at EVERY place that asks"
+            + $" them; {more.Count(r => r.AtSomeOnly)} at some but not all");
+        Console.WriteLine(
+            $"      if each place were decided on its own at the overall rate of {chance:P1}, the number of"
+            + $" multi-place routines waited at every one would be {expected:0.00}");
+
+        foreach (WhatIsWaitedFor.Routine routine in more.OrderByDescending(r => r.Places))
+        {
+            Console.WriteLine(
+                $"        0x{routine.Number:X3}  {routine.Waited,2} of {routine.Places,2} place(s)"
+                + (routine.AtEveryPlace ? "   every one" : "   NOT ALL"));
+        }
+
+        Console.WriteLine(
+            $"    and the other side: {routines.Count(r => r.AsksMoreThanOnce && r.Waited == 0)} of the"
+            + $" {routines.Count(r => r.AsksMoreThanOnce)} routines asked in more than one place are waited"
+            + " for at NONE of them");
+    }
+
     private static void WriteRoutinesReachedByNumber(Rom rom)
     {
         Console.WriteLine();
@@ -7700,6 +7773,8 @@ public static class Program
         List<SpecialContract> contracts = SpecialContracts.Derive(rom, library, Console.WriteLine);
 
         List<WhoTheCompareBelongsTo.ACompareAcross> across = WhoTheCompareBelongsTo.In(rom, library);
+
+        WriteWhatIsWaitedFor(rom, library);
 
         // Branched-on first: a routine nobody branches on cannot be shutting a door, whatever
         // else it does, so it is not what a story walk is looking for.
