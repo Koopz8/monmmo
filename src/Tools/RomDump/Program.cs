@@ -207,6 +207,7 @@ public static class Program
         if (options.TheScan) WriteWhatTheScanOpens(rom);
         if (options.PersonCommands) WriteTwoCommands(rom);
         if (options.Arrivals) WriteArrivals(rom);
+        if (options.TheFloor) WriteTheFloorTable(rom, options.StartAt);
         if (options.Closure) WriteClosure(rom, options.RoutineAnswers, options.StartAt);
         if (options.Play)
             WritePlaythrough(
@@ -5958,6 +5959,101 @@ public static class Program
                 : ""));
 
         foreach (Traced touch in played.Trace) Console.WriteLine($"    {touch}");
+    }
+
+    /// <summary>
+    /// The floor table: one run at each of the six lever settings, printed with the differences
+    /// between them worked out from those same six rows.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Six runs, on purpose.</b> The block at the top of every session's prompt was stale in
+    /// five of its six rows for thirteen milestones and every sentence written about it stayed
+    /// true, because each milestone re-ran the pair it cared about and pasted the delta onto a
+    /// base nobody re-ran. The only thing that catches that is running the whole block, so this
+    /// runs the whole block.
+    /// </para>
+    /// <para>
+    /// What the rows say and what the differences say both live in <see cref="TheFloorTable"/>,
+    /// where a test can ask them without sixteen megabytes. This function is the plumbing: it
+    /// reads the cartridge facts once, plays six times, and prints what it was handed.
+    /// </para>
+    /// </remarks>
+    private static void WriteTheFloorTable(Rom rom, string startAt)
+    {
+        Console.WriteLine();
+        Console.WriteLine("THE FLOOR TABLE, RE-READ");
+        Console.WriteLine();
+
+        WorldData world = WorldExporter.Export(rom);
+        GameRules rules = RulesExporter.Export(rom);
+        MapData first = world.Find(startAt) ?? world.Maps.First();
+        Dictionary<int, int> teaches = TeachingMachines(rom);
+
+        // Read once. Which script addresses are doors into a scene rather than scenes is a fact
+        // about the cartridge, not about a lever, and six identical readings of it would be six
+        // identical readings of it.
+        Dictionary<uint, uint> doorsTo = EntriesToAScene
+            .In(rom, MapLibrary.Open(rom).All().SelectMany(EveryScriptOn), HowAScriptRuns.FirstRemembered)
+            .GroupBy(d => d.Where.Address)
+            .ToDictionary(g => g.Key, g => g.First().Leads);
+
+        Console.WriteLine(
+            $"  {TheFloorTable.Settings.Count} run(s) over {world.Maps.Count} maps, from"
+            + $" {first.Id} ({first.Name}) — this is slow, and that is the price of a table"
+            + " nobody has to keep up to date");
+        Console.WriteLine();
+
+        List<TheFloorTable.Row> rows = [];
+
+        foreach (TheFloorTable.Setting at in TheFloorTable.Settings)
+        {
+            // A FRESH SAVE EACH TIME. Both of these are written into as a run goes, and a run
+            // handed the previous run's beaten trainers and story memory is not the setting it
+            // says it is — it is that setting continued from somewhere else.
+            var beaten = new HashSet<int>();
+            var remembered = new Dictionary<int, int>();
+
+            var reader = new HowAScriptRuns(
+                rom, teaches, null, null, at.SayYes, beaten, remembered);
+
+            Attempt played = Autoplayer.Play(
+                world, first.Id, rules, reader.Read, null, at.Boat, 0, beaten, at.Surf,
+                remembered, at.InOrder, doorsTo);
+
+            rows.Add(TheFloorTable.Read(at, played, world.Maps.Count));
+
+            Console.WriteLine($"    ran {at.Command}");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("  THE ROWS");
+        Console.WriteLine();
+
+        foreach (string line in TheFloorTable.Render(rows)) Console.WriteLine("    " + line);
+
+        Console.WriteLine();
+        Console.WriteLine("  and what each run did about the sea, which is READ and not a lever");
+
+        foreach (TheFloorTable.Row row in rows)
+            Console.WriteLine($"    {row.At.Command,-42} {row.Water}");
+
+        Console.WriteLine();
+        Console.WriteLine(
+            "  AND THE DIFFERENCES, SUBTRACTED FROM THE ROWS ABOVE rather than remembered");
+        Console.WriteLine(
+            "    every pair of rows exactly ONE lever apart. A pair two levers apart also"
+            + " produces a number and that number is not about either lever, so it is not here.");
+        Console.WriteLine();
+
+        foreach (TheFloorTable.Difference difference in TheFloorTable.Differences(rows))
+            Console.WriteLine("    " + difference.Said);
+
+        Console.WriteLine();
+        Console.WriteLine(
+            "  Paste the rows above into the prompt whole. Do not apply a delta to them — the"
+            + " deltas are printed from the same six runs, so a table kept by hand from these"
+            + " lines is exactly the drift this command exists to end.");
     }
 
     private static void WritePlaythrough(
@@ -12870,6 +12966,8 @@ public static class Program
 
         public bool Arrivals { get; private init; }
 
+        public bool TheFloor { get; private init; }
+
         public bool Play { get; private init; }
 
         /// <summary>Items to hunt through every script in the image, or nothing.</summary>
@@ -13078,6 +13176,7 @@ public static class Program
             bool theScan = false;
             bool personCommands = false;
             bool arrivals = false;
+            bool theFloor = false;
             bool fights = false;
             bool whoKnows = false;
             var coins = false;
@@ -13340,6 +13439,9 @@ public static class Program
                         break;
                     case "--arrivals":
                         arrivals = true;
+                        break;
+                    case "--the-floor":
+                        theFloor = true;
                         break;
                     case "--fights":
                         fights = true;
@@ -13665,6 +13767,7 @@ public static class Program
                 TheScan = theScan,
                 PersonCommands = personCommands,
                 Arrivals = arrivals,
+                TheFloor = theFloor,
                 Play = play,
                 WhereFrom = whereFrom,
                 InTheImage = inTheImage,
