@@ -62,6 +62,18 @@ public static class ScriptCommands
     public const byte CallStandard = 0x09;
     public const byte Lock = 0x6A;
     public const byte FacePlayer = 0x6B;
+
+    /// <summary>
+    /// The command that does what a field move does, taking a number of its own.
+    /// </summary>
+    /// <remarks>
+    /// <b>Named here because it was already named somewhere else.</b> The sweep that reads who
+    /// knows a move has had <c>private const byte DoFieldEffect = 0x9C</c> since 191 and used it
+    /// to say what a block offers to do; every other reading in this project printed it as a bare
+    /// number, and 232 measured it as an unnamed column forty-one milestones later. One name, in
+    /// one place, is the fix for that — see <c>FieldEffectNumbers</c> for what the number is.
+    /// </remarks>
+    public const byte DoFieldEffect = 0x9C;
     public const byte Release = 0x6C;
     public const byte Message = 0x67;
     public const byte WaitButton = 0x66;
@@ -1200,6 +1212,7 @@ public static class ScriptCommands
         CallStandard => "callstd",
         Lock => "lock",
         FacePlayer => "faceplayer",
+        DoFieldEffect => "dofieldeffect",
         Release => "release",
         Message => "message",
         WaitButton => "waitbutton",

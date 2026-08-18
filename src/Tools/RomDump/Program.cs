@@ -208,6 +208,7 @@ public static class Program
         if (options.PersonCommands) WriteTwoCommands(rom);
         if (options.Arrivals) WriteArrivals(rom);
         if (options.TheFloor) WriteTheFloorTable(rom, options.StartAt);
+        if (options.FieldEffects) WriteFieldEffects(rom);
         if (options.ReadFrom.Count > 0) WriteBlocks(rom, options.ReadFrom);
         if (options.Closure) WriteClosure(rom, options.RoutineAnswers, options.StartAt);
         if (options.Play)
@@ -5988,6 +5989,107 @@ public static class Program
     /// The command this project has needed since 190 and kept doing by hand. See
     /// <see cref="ABlockRead"/> for why the bytes and the decode come off the same command.
     /// </remarks>
+    /// <summary>
+    /// What number <c>dofieldeffect</c> takes, against the move the same block asked about — and
+    /// the sites that take one with no move anywhere near them.
+    /// </summary>
+    private static void WriteFieldEffects(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("WHAT DOFIELDEFFECT TAKES");
+        Console.WriteLine();
+
+        List<MoveData> moves = MoveExtractor.Extract(rom);
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        var opened = new HashSet<int>();
+
+        foreach ((string _, string _, uint address) in library.EveryScript())
+            foreach (ScriptCommand command in ScriptReader.ReadAll(rom, address))
+                opened.Add(command.Offset);
+
+        IReadOnlyList<MoveSite> sites = EverywhereInTheImage.AsksWhoKnows(rom, moves.Count, [.. opened]);
+
+        List<FieldEffectNumbers.Offer> offers =
+        [
+            .. sites.Where(s => s.Offers)
+                .Select(s => new FieldEffectNumbers.Offer(s.Move, s.FieldEffect, s.Offset))
+                .OrderBy(o => o.Effect),
+        ];
+
+        Console.WriteLine($"  {offers.Count} block(s) in the image pair a move with a number:");
+
+        foreach (FieldEffectNumbers.Offer offer in offers)
+        {
+            string name = offer.Move < moves.Count ? moves[offer.Move].Name : "(past the table)";
+
+            Console.WriteLine(
+                $"    move {offer.Move,3} {name,-12} -> {offer.Effect,3}   at 0x{Rom.BaseAddress + (uint)offer.At:X8}");
+        }
+
+        FieldEffectNumbers.OneEach each = FieldEffectNumbers.PerMove(offers);
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  {each.Moves} move(s), {each.Effects} number(s), and "
+            + (each.Holds
+                ? "no move has two"
+                : "SOME MOVE HAS TWO: " + string.Join(", ", each.WithTwoNumbers)));
+        Console.WriteLine(
+            $"    {each.Repeated} move(s) appear in more than one block and {each.RepeatedAgreeing} of those"
+            + " got the same number every time — which is ALL the direct evidence there is that the"
+            + " number follows the move, and it is one agreement, not six");
+
+        // AND THE SITES WITH NO MOVE. The map scan opens seven of these commands; the ones above
+        // account for some of them, and what is left is the interesting half.
+        List<ScriptCommand> onMaps =
+        [
+            .. opened.Order()
+                .Where(o => rom.ReadU8(o) == ScriptCommands.DoFieldEffect)
+                .Select(o => new ScriptCommand(o, ScriptCommands.DoFieldEffect, rom.Slice(o + 1, 2).ToArray())),
+        ];
+
+        var driven = offers.Select(o => o.Effect).ToHashSet();
+
+        List<ScriptCommand> others = [.. onMaps.Where(c => !driven.Contains(c.Word()))];
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  the map scan opens {onMaps.Count} of them; {onMaps.Count - others.Count} take a number a move"
+            + $" drives and {others.Count} do not:");
+
+        foreach (ScriptCommand command in others)
+            Console.WriteLine($"    0x{Rom.BaseAddress + (uint)command.Offset:X8}  number {command.Word(),3}   no move is asked about in that block");
+
+        FieldEffectNumbers.TheSplit split =
+            FieldEffectNumbers.AreTheLowest(driven, others.Select(o => o.Word()));
+
+        Console.WriteLine();
+        Console.WriteLine(
+            split.Cleanly
+                ? $"  EVERY move-driven number is below every other one — {split.Taken} of {split.Of},"
+                  + $" which chance would do one time in {split.OneIn:0}"
+                : "  the two sets interleave, so the numbers are not two bands");
+
+        // AND THE RAW SWEEP, which is here to be thrown away.
+        (int sites, int readsOn, int words) real = FieldEffectNumbers.Sweep(rom);
+        (int sites, int readsOn, int words) floor = FieldEffectNumbers.NoiseFloor(rom);
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  the raw whole-image sweep: {real.sites} site(s), {real.readsOn} reading to a proper end,"
+            + $" {real.words} distinct number(s)");
+        Console.WriteLine(
+            $"    the same sweep REVERSED:  {floor.sites} site(s), {floor.readsOn} reading on,"
+            + $" {floor.words} distinct number(s)");
+        Console.WriteLine(
+            floor.readsOn >= real.readsOn
+                ? "    THE REVERSAL IS AHEAD. The raw sweep is not a finding and the only sites worth"
+                  + " reading are the ones a map or a jump opens."
+                : "    the real image is ahead, which is worth looking at rather than assuming");
+    }
+
     private static void WriteBlocks(Rom rom, IReadOnlyList<uint> addresses)
     {
         Console.WriteLine();
@@ -12783,6 +12885,9 @@ public static class Program
                                     what it does with them: handed over, asked for, taken
                                     away, sold, or loaded for a routine. Reads rather than
                                     runs, so a gift on a branch nobody can take still shows.
+              --field-effects       what number dofieldeffect takes, against the move the same
+                                    block asked about, with the four sites that take one with no
+                                    move anywhere near them
               --read-from A[,A]     decode these addresses: the bytes and what they read as,
                                     side by side, every block each one reaches, and where any
                                     read stopped. The command this project kept doing by hand.
@@ -13038,6 +13143,8 @@ public static class Program
 
         public bool TheFloor { get; private init; }
 
+        public bool FieldEffects { get; private init; }
+
         /// <summary>Addresses to decode and print, or nothing.</summary>
         public IReadOnlyList<uint> ReadFrom { get; private init; } = [];
 
@@ -13250,6 +13357,7 @@ public static class Program
             bool personCommands = false;
             bool arrivals = false;
             bool theFloor = false;
+            bool fieldEffects = false;
             var readFrom = new List<uint>();
             bool fights = false;
             bool whoKnows = false;
@@ -13516,6 +13624,9 @@ public static class Program
                         break;
                     case "--the-floor":
                         theFloor = true;
+                        break;
+                    case "--field-effects":
+                        fieldEffects = true;
                         break;
                     case "--read-from":
                     {
@@ -13851,6 +13962,7 @@ public static class Program
                 PersonCommands = personCommands,
                 Arrivals = arrivals,
                 TheFloor = theFloor,
+                FieldEffects = fieldEffects,
                 ReadFrom = readFrom,
                 Play = play,
                 WhereFrom = whereFrom,

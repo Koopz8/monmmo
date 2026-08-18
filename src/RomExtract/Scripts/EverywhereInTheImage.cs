@@ -505,8 +505,6 @@ public static class EverywhereInTheImage
     /// <summary>Which routine number is the yes-or-no.</summary>
     private const byte TheYesOrNo = 5;
 
-    /// <summary>The command that does a field effect, and the one that loads what to say.</summary>
-    private const byte DoFieldEffect = 0x9C;
 
     /// <summary>
     /// Reading on from "who knows this move" to see whether anything is being offered.
@@ -534,7 +532,7 @@ public static class EverywhereInTheImage
                     asked = said;
                     break;
 
-                case DoFieldEffect when asked != 0:
+                case ScriptCommands.DoFieldEffect when asked != 0:
                     return (asked, command.Word());
             }
         }
