@@ -66,6 +66,49 @@ public static class WhatTheScanOpens
     /// <param name="Places">How many distinct byte positions the scan decodes at all.</param>
     public sealed record Overall(int Entries, int Addresses, int Reads, int Places);
 
+    /// <param name="Places">Byte positions this kind's scripts decode.</param>
+    /// <param name="Routines">Routine numbers this kind's scripts ask.</param>
+    public sealed record Gathered(
+        int Entries,
+        int Addresses,
+        int Reads,
+        IReadOnlyCollection<int> Places,
+        IReadOnlyCollection<int> Routines);
+
+    /// <summary>
+    /// The per-kind rows, from what was gathered — <b>where the ALONE columns are decided</b>.
+    /// <para>
+    /// Split out of the sweep because the sweep needs a whole cartridge. A break that made the
+    /// routines column the kind's own set rather than what only it asks came back green against
+    /// every test in this file while the rule lived inside <see cref="ByKind"/>, which is the
+    /// fifth time in nine milestones.
+    /// </para>
+    /// </summary>
+    public static List<AKind> Assemble(IReadOnlyDictionary<string, Gathered> byKind)
+    {
+        Dictionary<string, IReadOnlyCollection<int>> places =
+            byKind.ToDictionary(e => e.Key, e => e.Value.Places);
+
+        Dictionary<string, IReadOnlyCollection<int>> routines =
+            byKind.ToDictionary(e => e.Key, e => e.Value.Routines);
+
+        return
+        [
+            .. byKind
+                .Select(e => new AKind(
+                    e.Key,
+                    e.Value.Entries,
+                    e.Value.Addresses,
+                    e.Value.Reads,
+                    e.Value.Places.Count,
+                    OnlyHere(places, e.Key),
+                    e.Value.Routines.Count,
+                    OnlyIn(routines, e.Key)))
+                .OrderByDescending(k => k.Only)
+                .ThenByDescending(k => k.Places),
+        ];
+    }
+
     /// <summary>Which of the five kinds a script's name says it is.</summary>
     public static string KindOf(string what) =>
         what.StartsWith("on ", StringComparison.Ordinal)
@@ -111,21 +154,14 @@ public static class WhatTheScanOpens
             }
         }
 
-        return
-        [
-            .. entries.Keys
-                .Select(kind => new AKind(
-                    kind,
-                    entries[kind],
-                    addresses[kind].Count,
-                    reads.GetValueOrDefault(kind),
-                    places[kind].Count,
-                    OnlyHere(places.ToDictionary(e => e.Key, e => (IReadOnlyCollection<int>)e.Value), kind),
-                    routines[kind].Count,
-                    OnlyIn(routines.ToDictionary(e => e.Key, e => (IReadOnlyCollection<int>)e.Value), kind)))
-                .OrderByDescending(k => k.Only)
-                .ThenByDescending(k => k.Places),
-        ];
+        return Assemble(entries.Keys.ToDictionary(
+            kind => kind,
+            kind => new Gathered(
+                entries[kind],
+                addresses[kind].Count,
+                reads.GetValueOrDefault(kind),
+                places[kind],
+                routines[kind])));
     }
 
     /// <summary>

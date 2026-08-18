@@ -119,6 +119,38 @@ public sealed class WhatEachKindOpensAloneTests
     }
 
     /// <summary>
+    /// THE ROWS, ASSEMBLED — where the two ALONE columns are decided, and the thing that was
+    /// unguarded while it lived inside a sweep that needs a whole cartridge.
+    /// <para>
+    /// A break making the routines column the kind's own set rather than what only it asks came
+    /// back green against every test above. Fifth time in nine milestones that a green break
+    /// meant the rule was somewhere no fixture could reach.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ARowsAloneColumnsAreWhatNoOtherKindHas()
+    {
+        List<WhatTheScanOpens.AKind> rows = WhatTheScanOpens.Assemble(
+            new Dictionary<string, WhatTheScanOpens.Gathered>
+            {
+                ["person"] = new(1584, 1250, 39446, [0x1000, 0x2000], [0x188, 0x194]),
+                ["on load"] = new(234, 163, 2770, [0x2000, 0x3000], [0x0A7, 0x194]),
+            });
+
+        WhatTheScanOpens.AKind onLoad = Assert.Single(rows.Where(r => r.Kind == "on load"));
+
+        Assert.Equal(2, onLoad.Places);
+        Assert.Equal(1, onLoad.Only);
+        Assert.Equal(2, onLoad.Routines);
+        Assert.Equal([0x0A7], onLoad.RoutinesOnly);
+
+        // And the row carries what was gathered rather than recomputing it.
+        Assert.Equal(234, onLoad.Entries);
+        Assert.Equal(163, onLoad.Addresses);
+        Assert.Equal(2770, onLoad.Reads);
+    }
+
+    /// <summary>
     /// And the kinds are told apart by name, including the two whose names are two words.
     /// </summary>
     [Theory]
