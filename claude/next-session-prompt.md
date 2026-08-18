@@ -99,10 +99,20 @@ Traps worth carrying:
     print it at two lever settings and check it does not move.** The fixed version reads 44 at
     all three.
 
+14. **A block nobody re-runs does not need a delta to be wrong** (230). Trap 12 was about a
+    table maintained by deltas drifting while staying self-consistent. The block called *Where
+    the reading stands*, and items 8 and 9 of the task list, are simpler than that: they entered
+    this file in ONE commit at milestone 190 and were copied forward thirty-nine times without
+    anybody re-running the instrument that produced them. Three of the eight lines checked were
+    wrong, one of them wrong in the same commit message that announced the change. **When a
+    number in this prompt matters to what you are about to do, run its instrument first.** The
+    milestone that discovers the true number is not the act that corrects the block — 228 wrote
+    "its 264 was right" in its own document and left `258` standing here.
+
 ## Where things are
 
-Read `claude/milestone-229-waiting-on-a-number-nobody-writes.md` first, then
-`228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
+Read `claude/milestone-230-three-flags-behind-a-prize-counter.md` first, then
+`229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
 **Twenty faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
@@ -154,7 +164,16 @@ dotnet run -c Release --project src/Tools/RomDump -- firered.gba --standard
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --the-scan
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --two-commands
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --arrivals
+dotnet run -c Release --project src/Tools/RomDump -- firered.gba --the-floor
 ```
+
+`--the-floor` is the block below, read rather than remembered: six runs at the six lever
+settings in one process, printed with **the differences between them worked out by subtracting
+two of those same six rows**. A difference is only reported for a pair exactly ONE lever apart
+and it names both rows, so no sentence about a lever can outlive the base it was measured
+against — which is precisely how the block below went stale in five of six rows while every
+sentence quoted from it stayed true. It also prints two things nobody had said: `--say-yes` costs
+two party members and a pass, and `--surf` costs two passes as well as its two flags.
 
 `--the-scan` is the error bar on every map-scan number: reads against byte positions for **every**
 command code, and a per-kind table with the ALONE columns — what each of the five kinds of script
@@ -223,6 +242,12 @@ hands over. **Two levers are MODELLED — `--say-yes` and `--boat`.** `--surf` i
 override: the walk crosses water on its own when the party knows the move, which is READ.
 `--in-order` is the one lever that makes it stricter. Say which every time.
 
+**RUN `--the-floor` AND PASTE. It runs all six settings in one process (twelve seconds, one
+export between them) and prints the rows AND the differences between them, subtracted from those
+same six rows.** Do not apply a delta to this block by hand — that is what put it thirteen
+milestones out of date, and 230 built the command so that the absolutes and the sentences about
+them cannot come apart. Re-measured at 207 and again at 230; unchanged.
+
 **RE-MEASURED AT 207, all six rows, and five of them had drifted.** The map counts were right;
 every flag count was wrong, four party sizes were wrong and one row had the wrong number of
 passes. `--play --say-yes` had been carrying **milestone 193's** reading for thirteen milestones.
@@ -255,12 +280,13 @@ sets. CERULEAN CAVE is closed: the run now reaches it, off the SAPPHIRE thread.
 ## Where the reading stands
 
 ```
-2915 scripts on 425 maps, reaching 3836 blocks
+2915 scripts on 425 maps, reaching 3888 blocks
 227 of them do nothing but hand over; 22 scenes are one scene entered several ways
-3783 read to a proper end, 53 stopped
+3856 read to a proper end, 32 stopped at 19 codes
 729 trainerbattle sites on 104 maps; 27 carry a second exit, 10 of those skipped a guard
 7 places in the file ask who knows a move and are jumped into; 0 in the reversal; 4 offer
-322 flags gate something; 258 are moved by a script somewhere; 233 are the code boundary
+322 flags gate something; 264 are moved by a script somewhere; 233 are the code boundary
+  259 of the 264 are on an arm a run could take; the other 5 are behind a switch the script decides
 9 people on or beside a door behind 5 flags — the wall list
 21 people never arrive at all
 11 of 425 maps have no way in at all
@@ -307,16 +333,24 @@ callstd 0x05 and 0x00 ANSWER — 153 and 2 sites have nothing in front that coul
 0x01C's nineteen sites are ONE address; 219 called them nineteen places
 the 57 are TWO blocks, each a yes/no turning on 0x083 or 0x084 and then 0x153
 2 of those gates hold NOBODY — 0x084A and 0x084B, the ferry, with no setter anywhere
+the floor's 150 -> 153 is milestone 199 alone: 0x026E/0x026F/0x0270 at 10.14, the prize counter
+of 199's three widths, 0xB3 and 0xB4 are in SERIES and 0xC1 opens no flag at any lever setting
 ```
 
 ## The next task, precisely
 
-1. **The other five rows of the floor table have never been chased back.** 207 re-ran all six and
-   five had drifted; only `--play --say-yes` was bisected, and it turned out to be milestone
-   **193's** reading, moved at 198, 199 and 200 and copied forward through all three. Where the
-   floor row went 150 → 153 is the same bisect and it has not been done. **This is a small job
-   and it is first on the list because the number a session reads before anything else was wrong
-   for thirteen milestones and every sentence written about it stayed true.**
+1. **AUDIT THE "Where the reading stands" BLOCK, LINE BY LINE, AGAINST ITS OWN INSTRUMENTS.**
+   230 did the floor-row bisect (answer: milestone **199**, one commit, +3 at all six settings,
+   announced in its own commit message) and then found the bigger thing: that block, and two
+   items of this list, entered the prompt at **`f8d4f15fe`, "the next session's prompt with 190
+   folded in"** and **have never been re-run since — thirty-nine milestones**. Eight lines were
+   checked at 230; five were right and three were wrong (`258` was 264, `3836` was 3888,
+   `3783 / 53` was 3856 / 32 — the last being the pre-199 reading, moved in the same commit
+   message as the +3 flags). Items 8 and 9 were sending sessions after commands that already
+   have widths. **The other forty lines have not been looked at.** It is one run of each
+   instrument and one careful read against the block, and on this evidence it will find more.
+   `--the-floor` now makes six of those lines unable to go stale; the honest end of this job is
+   an instrument that prints the rest of the block too, rather than a person who maintains it.
 2. **The money ceiling is MEASURED and unlevered — decide against the number, not the worry.** 201
    counted it: **8 places** ask the run for money at five of the six lever settings and **1 of
    them hands something over** — `16.0 0x0816F75F` wants 500 and gives `#129` at level 5
@@ -370,13 +404,18 @@ the 57 are TWO blocks, each a yes/no turning on 0x083 or 0x084 and then 0x153
    in the world sets it, so it is the code boundary with an address on it. The RUBY is behind it
    (`1.102` person 1), and `32.0` person 3 wants the RUBY and the SAPPHIRE both. The SAPPHIRE
    half is closed (190); the RUBY half is not.
-8. **The blocks that still stop.** Two entries turned out to be symptoms of a wrong width
-   upstream rather than commands, so **check alignment before adopting a width**: `--stops
-   0xNN` prints where each read started. The remaining named stops are `0xB3`, `0xCA`, `0xC3`,
-   `0xC4`, `0x43`, `0x73`, `0xE6` — 17 of 24 have something behind them at every width that
-   reads on. **`--derive`'s verdict is advisory — READ THE BYTES.**
-9. **The four that no width reads on from** — `0x92`, `0x9B`, `0xD3`, `0x62`. Misreads, so those
-   blocks are wrong earlier; finding where is the job that found `0x1F` and `0x6F`.
+8. **The blocks that still stop — RE-READ AT 230, and the old list was two milestones out of
+   date.** `0xB3` got a width at 199 and `0x43` got one at 203; `0xE6` stops nothing now. Today
+   `--scripts` says **32 reads stop, at 19 codes**, and 15 of the 19 have something behind them
+   at every width that reads on:
+   `0xCA (3)`, `0xC4 (3)`, `0xC3 (3)`, `0xA4 (2)`, `0x36`, `0xC6`, `0x98`, `0xA6`, `0x57`,
+   `0x61`, `0x7A`, `0x59`. `0x73` still stops four and is still worth nothing (ruled out below).
+   Two entries have turned out to be symptoms of a wrong width upstream rather than commands, so
+   **check alignment before adopting a width**: `--stops 0xNN` prints where each read started.
+   **`--derive`'s verdict is advisory — READ THE BYTES.**
+9. **The ones no width reads on from are TWO, not four** — `0x9B` (4 stops) and `0x62` (1).
+   `[0x92] = 5` and `[0xD3] = 4` are both in `ScriptReader` now. A misread means those blocks are
+   wrong earlier; finding where is the job that found `0x1F` and `0x6F`.
 10. **The five wall flags** — `0x0013`, `0x0012`, `0x0089`, `0x0053`, `0x0017` — and the ~28
    hand-rolled map walks left in `Program.cs`.
 
@@ -596,6 +635,16 @@ the other, and nothing about a single green run says which. 207 writes the 2x2 d
 * **A plain `call` is a barrier in the answer scan.** `special ; call ; compare` reads the
   CALL's answer, not the special's — SEVEN ISLAND's `0x0028` was credited with `0x005D`'s reply
   for as long as the scan existed. Added at 214, 42 of 1097 attributions lost. Do not remove it.
+* **Where the floor row went 150 -> 153.** Milestone 199, `40b589d13`, one commit out of the
+  forty-seven between 193's merge and 207, and it is +3 at ALL SIX lever settings — which its own
+  commit message said at the time. The three flags are `0x026E`, `0x026F`, `0x0270`, set on
+  `10.14`, the GAME CORNER prize counter, by persons 5 to 10. 198's +2 and 200's +1 move the
+  `--say-yes` row and never reach the floor. Bisected at 230 with all forty-seven built and run;
+  do not re-run it.
+* **Which of 199's three widths did it.** `0xB3` and `0xB4` are in series — removing either loses
+  all three flags — and **`0xC1` opens nothing at any lever setting**. `0xC1` is the one adopted
+  on two sites, below this project's bar of five, and said so out loud; its blast radius on the
+  run is nought. Whether it should stay is a DECISION and it is deliberately not made.
 * **The drink, the vending machine, CELADON DEPT, the ferry tickets, the badge-count routine** —
   all dead, see `claude/the-drink-and-the-boat.md`.
 
