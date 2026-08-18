@@ -1,7 +1,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-256`, 2873 tests green.
+`claude-257`, 2877 tests green.
 
 Standing rules — do not break these:
 
@@ -101,8 +101,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-217-one-level-in.md` first, then
-`216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
+Read `claude/milestone-218-a-jump-is-not-a-silence.md` first, then
+`217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
 **Twenty faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
@@ -156,7 +156,10 @@ dotnet run -c Release --project src/Tools/RomDump -- firered.gba --routines
 a routine's answer, a number the block says out loud, another variable, or nothing. **A literal
 on the straight line is a constant only when nothing anywhere in the block asks a routine** —
 `0x081BBB1E` ends `setvar 0x800D, 1` and its LESS arm ends `setvar 0x800D, 0`. One level only,
-and a call inside a call leaves nothing rather than being chased. `--who-reads` is `--who-writes`'s mirror and is eleven milestones late: it finds every
+and a call inside a call leaves nothing rather than being chased. `Returns` reads one level of
+ARMS as well and says what a block can leave and which routines the choice turns on — and
+**a block that ends by jumping away is reported as that, not as leaving the variable alone**,
+because those are different facts and one of them is about the instrument. `--who-reads` is `--who-writes`'s mirror and is eleven milestones late: it finds every
 `compare`, `comparevars` and copy-from that looks at a variable, with the reversed-image floor
 beside it. **The source of a copy is a read and the destination is a write** — counting both
 would make every write a read as well. Its aggregate ("650 in the save's band are written and
@@ -241,7 +244,9 @@ the 12 STRENGTH boulders are SEAFOAM and VICTORY ROAD, and their flags split THR
 of 1055 branching sites in the file, nought takes 212 — and 0x188's one place comes to nothing
 0x4059 has one writer and NO readers anywhere; 0x4055 has 21 readers against a floor of 0
 0x083 and 0x084 are asked twice between them and carry 39 of the ceiling's 44 branches
-336 places read an answer through a call: 225 belong to 6 routines, 57 turn on an arm, 49 to nobody
+336 places read an answer through a call: 225 belong to 6 routines, 57 turn on an arm
+40 leave the answer alone and 9 jump somewhere the reading does not follow — those are different
+the 57 are TWO blocks, each a yes/no turning on 0x083 or 0x084 and then 0x153
 2 of those gates hold NOBODY — 0x084A and 0x084B, the ferry, with no setter anywhere
 ```
 
@@ -259,14 +264,15 @@ of 1055 branching sites in the file, nought takes 212 — and 0x188's one place 
    anyway, which is the `#130` at 71 the party ends with. **The floor is clean**: 1 place asks,
    nothing comes of it, so the floor's party of six is entirely earned. Whether that deserves a
    `--pay` lever or a located payout table is a DECISION and it is deliberately not made.
-3. **The 49 places whose call leaves the answer variable alone.** 217 built `--through-a-call`
-   and gave 225 of 336 answers an owner. What is left: **49 places where the called block touches
-   nothing**, so the compare after it is reading an older answer still — finding whose means
-   walking back PAST the call in the caller, which 214's barrier deliberately stops. That is a
-   third instrument, not a tweak.
-   And **57 places whose block returns one or nought depending on an arm**. Both arms end in a
-   literal, so each is a yes/no whose answer is a routine's; following arms would say which
-   routine per arm. `0x083`, `0x084` and `0x0153` all live in there.
+3. **The FORTY places whose call really does leave the answer variable alone.** 218 read the
+   57 (two blocks, each a yes/no turning on `0x083` or `0x084` and then `0x153`) and found that
+   nine of 217's forty-nine were the reading stopping at a `goto` rather than the call touching
+   nothing. Forty are real: the compare after them reads an older answer, and finding whose
+   means **walking back PAST the call in the caller**, which 214's barrier deliberately stops.
+   That is a third instrument and it is still not built.
+   Cheaper and also unread: **`0x081A77B0`**, where the jumping arm goes from nineteen places —
+   one level further than the rule allows, so it wants its own reading. And **`0x0153`**, which
+   is half of every one of the fifty-seven decisions and whose own sites nobody has looked at.
    Also owed and cheap: **seven boulder flags with no setter anywhere** (whatever drops a
    boulder into a hole is not script), **`0x0805`** which the STRENGTH script sets and shares
    across all twelve boulders, and **`0x0053`** holding 31 people across the SILPH CO. floors

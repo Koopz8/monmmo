@@ -6,14 +6,13 @@ Everything below the line is the part that gets posted. Edit it as things move.
 
 ---
 
-- **The one thing this project had never built: following a `call` to see whose answer a
-  script is reading.** Two milestones ago the scan was taught to stop at a call rather than
-  guess — losing 42 attributions, deliberately. This gets them back and more.
-- **336 places read an answer through a call. 225 of them now have an owner** — six routines
-  that were being credited to nobody. 14 blocks, 38 maps.
-- I got the rule wrong twice, in the same shape both times. First it counted only routines,
-  and credited one at 57 places where the block **throws the routine's answer away** and ends
-  by saying the answer out loud. Then it called that literal a constant — and it isn't: the
-  same block's other arm returns a different number, so it answers one or nought depending on
-  a routine nobody can run.
-- Both fixes are in the shipped rule. Four breaks, four catches.
+- **Fifty-seven places call one of two blocks, and each is a yes-or-no.** Read one level of
+  arms: they return nought or one, and the choice turns on two routines in sequence — the
+  same two that carry most of what the robot's silence still decides.
+- **And nine of them were never what they were reported as.** One block's arm ends by jumping
+  somewhere the reading does not follow, and the instrument had been printing that as "the
+  call left the answer alone". Those are different facts: one is about the cartridge and the
+  other is about the instrument.
+- Corrected, "the call touches nothing" drops from 49 to 40 and nine get their own line.
+- **Fourth milestone running where "nothing found" was standing in for "did not look".**
+  Four breaks, four catches.
