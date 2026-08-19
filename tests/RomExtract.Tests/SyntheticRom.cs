@@ -188,6 +188,21 @@ public sealed class SyntheticRom
 
     private const int ObjectsStride = 128;
 
+    /// <summary>The clone record's own id — one past the stray, which is one past the objects.</summary>
+    public const int CloneLocalId = 5;
+
+    /// <summary>Its graphics id, distinct from every ordinary object's so a test can name it.</summary>
+    public const int CloneGraphicsId = 200;
+
+    /// <summary>The local id of the object it clones, on another map.</summary>
+    public const int ClonedLocalId = 4;
+
+    /// <summary>The map it names — a number and a bank, where the ordinary layout reads a trainer.</summary>
+    public const int ClonedMapNumber = 11;
+
+    /// <inheritdoc cref="ClonedMapNumber"/>
+    public const int ClonedMapBank = 2;
+
     /// <summary>Which trainer the person on a map picks a fight as. Never zero.</summary>
     public static int TrainerIdFor(int mapIndex) => 1 + mapIndex % TrainerCount;
 
@@ -1385,9 +1400,28 @@ public sealed class SyntheticRom
         WriteU16(stray + 4, MapWidth + 5);
         WriteU16(stray + 6, 1);
 
+        // AND A CLONE WHOSE SQUARE IS ON THE MAP — the decoy 259 needs.
+        //
+        // A clone is marked by 0xFF in the byte after the graphics id, and every field after
+        // the square means something else: the byte the ordinary layout calls an elevation is
+        // the local id of the object being cloned, and the two halfwords it calls a trainer type
+        // and a sight range are a map number and a bank. All nine of the cartridge's sit outside
+        // their own map, so the off-map test caught every one of them and the kind byte was never
+        // needed. This one is INSIDE the map, so only the kind byte can catch it — without it a
+        // break that removes the kind test comes back green.
+        int clone = table + (objects.Count + 1) * 24;
+        _data[clone] = (byte)CloneLocalId;
+        _data[clone + 1] = (byte)CloneGraphicsId;
+        _data[clone + 2] = 0xFF;
+        WriteU16(clone + 4, 2);
+        WriteU16(clone + 6, 2);
+        _data[clone + 8] = (byte)ClonedLocalId;
+        WriteU16(clone + 12, (ushort)ClonedMapNumber);
+        WriteU16(clone + 14, (ushort)ClonedMapBank);
+
         int events = MapEventsOffset + index * EventsStride;
 
-        _data[events] = (byte)(objects.Count + 1);
+        _data[events] = (byte)(objects.Count + 2);
         WriteU32(events + 4, Rom.BaseAddress + (uint)table);
     }
 

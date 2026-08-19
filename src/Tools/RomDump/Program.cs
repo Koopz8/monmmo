@@ -211,6 +211,7 @@ public static class Program
         if (options.FieldEffects) WriteFieldEffects(rom);
         if (options.Namespaces) WriteNamespaces(rom);
         if (options.Buried) WriteBuried(rom);
+        if (options.Dropped) WriteDropped(rom);
         if (options.Operands) WriteOperands(rom);
         if (options.Slots.Count > 0) WriteSlots(rom, options.Slots);
         if (options.ReadFrom.Count > 0) WriteBlocks(rom, options.ReadFrom);
@@ -7478,6 +7479,257 @@ public static class Program
         }
 
         return teaches;
+    }
+
+    /// <summary>
+    /// What the four event-list readers throw away before anything else sees it.
+    /// </summary>
+    /// <remarks>
+    /// <b>Three milestones rested on "228 triggers" and nobody printed the number underneath.</b>
+    /// Every one of the four readers drops a record whose square is off the map, silently, before
+    /// the record reaches any reading. The filter is right — a square nobody can stand on is not
+    /// a square — but a filter with no count is a filter that could be removing anything.
+    /// </remarks>
+    private static void WriteDropped(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("WHAT THE READERS THROW AWAY BEFORE ANYTHING SEES IT");
+        Console.WriteLine();
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        var dropped = new List<(string MapId, DroppedEvent What)>();
+        var kept = new Dictionary<string, int>();
+        var keptWithScript = new Dictionary<string, int>();
+        var keptReadable = new Dictionary<string, int>();
+
+        void Keep(string list, uint script)
+        {
+            kept[list] = kept.GetValueOrDefault(list) + 1;
+
+            if (script == 0 || !rom.IsRomAddress(script)) return;
+
+            keptWithScript[list] = keptWithScript.GetValueOrDefault(list) + 1;
+
+            if (ScriptReader.ReadsAsAScript(rom, script))
+                keptReadable[list] = keptReadable.GetValueOrDefault(list) + 1;
+        }
+
+        int idsInOrder = 0;
+        int idsAsked = 0;
+        var everybody = new Dictionary<(string MapId, int LocalId), MapObject>();
+        var graphics = new Dictionary<int, int>();
+
+        foreach (LoadedMap map in library.All())
+        {
+            string mapId = WorldExporter.MapId(map.Bank, map.Number);
+
+            foreach (DroppedEvent one in map.Dropped) dropped.Add((mapId, one));
+
+            // The control on the id column, measured only where the index is unambiguous — a map
+            // that dropped something has had its remaining records renumbered by the drop.
+            if (!map.Dropped.Any(d =>
+                    d.List is DroppedEvent.Objects or DroppedEvent.Clones))
+            {
+                for (var i = 0; i < map.Objects.Count; i++)
+                {
+                    idsAsked++;
+
+                    if (map.Objects[i].LocalId == i + 1) idsInOrder++;
+                }
+            }
+
+            // AND THE KEPT ONES, because "the dropped records have readable scripts" is a
+            // sentence about nothing until the same share of the survivors is beside it.
+            foreach (MapObject o in map.Objects)
+            {
+                Keep(DroppedEvent.Objects, o.ScriptAddress);
+                everybody[(mapId, o.LocalId)] = o;
+                graphics[o.GraphicsId] = graphics.GetValueOrDefault(o.GraphicsId) + 1;
+            }
+            foreach (Warp _ in map.Warps) Keep(DroppedEvent.Warps, 0);
+            foreach (MapTrigger t in map.Triggers) Keep(DroppedEvent.Triggers, t.ScriptAddress);
+            foreach (MapSign s in map.Signs) Keep(DroppedEvent.Signs, s.ScriptAddress);
+        }
+
+        Console.WriteLine(
+            $"  {dropped.Count} record(s) dropped across {library.Count} map(s),"
+            + $" on {dropped.Select(d => d.MapId).Distinct().Count()} map(s)");
+        Console.WriteLine();
+
+        foreach (string list in new[]
+                 {
+                     DroppedEvent.Objects,
+                     DroppedEvent.Clones,
+                     DroppedEvent.Warps,
+                     DroppedEvent.Triggers,
+                     DroppedEvent.Signs,
+                 })
+        {
+            List<(string MapId, DroppedEvent What)> of =
+                [.. dropped.Where(d => d.What.List == list)];
+
+            if (list == DroppedEvent.Clones)
+            {
+                Console.WriteLine(
+                    $"    {list,-8} {of.Count,4} taken out of the OBJECT table by the kind byte —"
+                    + $" {(kept.GetValueOrDefault(DroppedEvent.Objects) + of.Count == 0 ? 0 : 100.0 * of.Count / (kept.GetValueOrDefault(DroppedEvent.Objects) + of.Count)):F2}%"
+                    + " of it, and not a list of their own");
+            }
+            else
+            {
+                Console.WriteLine(
+                    $"    {list,-8} {of.Count,4} dropped against {kept.GetValueOrDefault(list),5} kept"
+                    + $" — {(kept.GetValueOrDefault(list) + of.Count == 0 ? 0 : 100.0 * of.Count / (kept.GetValueOrDefault(list) + of.Count)):F2}%"
+                    + " of what the tables claim");
+            }
+
+            if (of.Count == 0) continue;
+
+            // THE FIRST CONTROL: WHERE IN THE TABLE. A count one too long over-reads the byte
+            // after the table and that record is ALWAYS the last one. A record dropped from the
+            // middle of a table is a record the cartridge meant to put there.
+            int last = of.Count(d => d.What.WasTheLastInItsTable);
+
+            Console.WriteLine(
+                $"      {last} of the {of.Count} were the LAST record their table claimed,"
+                + $" {of.Count - last} came from the MIDDLE — a count one too long can only ever"
+                + " produce the last");
+
+            // THE THIRD CONTROL, AND THE ONE THAT DECIDES IT: an object record carries its own
+            // id, and in this cartridge that id is one more than where the record sits. Bytes
+            // past the end of a table cannot do that once, let alone nine times — and the
+            // control on the control is the same column measured on the records that were KEPT,
+            // without which "nine of nine" is a coincidence with no floor.
+            if (list is DroppedEvent.Objects or DroppedEvent.Clones)
+            {
+                int matching = of.Count(d => d.What.ItsIdMatchesWhereItSits);
+
+                Console.WriteLine(
+                    $"      {matching} of the {of.Count} have localId == index + 1 — against"
+                    + $" {idsInOrder} of {idsAsked} of the KEPT records on maps that dropped"
+                    + " nothing, where the index is unambiguous");
+            }
+
+            // THE SECOND CONTROL: DOES IT READ AS A SCRIPT. A record past the end of a table is
+            // whatever bytes follow it; a real record has a pointer that decodes.
+            //
+            // IT IS THE ONE THAT WAS WRONG. Nought of the nine carries a pointer against 1584 of
+            // 1639 kept, which reads as overwhelming — and the id column says they are real and
+            // the graphics-id check below settles it. Kept, because a control that misled is
+            // worth more in the output than out of it.
+            List<DroppedEvent> withScript =
+                [.. of.Select(d => d.What).Where(d => d.Script != 0 && rom.IsRomAddress(d.Script))];
+
+            int readable = withScript.Count(d => ScriptReader.ReadsAsAScript(rom, d.Script));
+
+            int keptTotal = keptWithScript.GetValueOrDefault(list);
+
+            Console.WriteLine(
+                $"      {withScript.Count} carry a pointer into the cartridge and {readable} of"
+                + $" those read as a script — against"
+                + $" {keptReadable.GetValueOrDefault(list == DroppedEvent.Clones ? DroppedEvent.Objects : list)} of"
+                + $" {(list == DroppedEvent.Clones ? keptWithScript.GetValueOrDefault(DroppedEvent.Objects) : keptTotal)}"
+                + " of the KEPT records, which is the share it should have matched and did not");
+
+            // AND HOW FAR OFF. A square one step past the edge is a different kind of thing from
+            // a square at 0x7FFF.
+            Console.WriteLine(
+                "      how far outside: "
+                + string.Join(
+                    ", ",
+                    of.Select(d => Math.Max(
+                            Math.Max(d.What.X < 0 ? -d.What.X : d.What.X - d.What.Width + 1, 0),
+                            Math.Max(d.What.Y < 0 ? -d.What.Y : d.What.Y - d.What.Height + 1, 0)))
+                        .GroupBy(n => n switch
+                        {
+                            <= 1 => "1 square",
+                            <= 4 => "2-4",
+                            <= 16 => "5-16",
+                            _ => "more than 16",
+                        })
+                        .OrderBy(g => g.Key)
+                        .Select(g => $"{g.Key} x{g.Count()}")));
+
+            foreach ((string mapId, DroppedEvent what) in of.Take(16))
+            {
+                Console.WriteLine(
+                    $"        {mapId,-8} #{what.Index} of {what.Count} at ({what.X}, {what.Y})"
+                    + $" on a {what.Width}x{what.Height} map"
+                    + (what.Script != 0 ? $" — script 0x{what.Script:X8}" : "")
+                    + (list == DroppedEvent.Clones ? $" -> {what.Value}.{what.Variable}" : "")
+                    + $"   at 0x{what.At:X6}: "
+                    + string.Join(" ", Enumerable.Range(0, 24).Select(k => $"{rom.Span[what.At + k]:X2}")));
+            }
+
+            if (of.Count > 16) Console.WriteLine($"        ... and {of.Count - 16} more");
+        }
+
+        // ----------------------------------------------------------------- the second kind
+        List<(string MapId, DroppedEvent What)> clones =
+            [.. dropped.Where(d => d.What.List == DroppedEvent.Clones)];
+
+        if (clones.Count > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine(
+                "  THE SECOND KIND OF OBJECT RECORD. 0xFF in the byte after the graphics id, and"
+                + " every field after the square means something else: the byte the ordinary"
+                + " layout calls an ELEVATION is a local id, and the two halfwords it calls a"
+                + " trainer type and a sight range are a map number and a bank.");
+            Console.WriteLine(
+                "  The test is that the record's own graphics id should be the graphics id of"
+                + " THAT object on THAT map — an independent table, made for another question:");
+            Console.WriteLine();
+
+            var matched = 0;
+            double floor = 0;
+            int objects = graphics.Values.Sum();
+
+            foreach ((string mapId, DroppedEvent what) in clones)
+            {
+                string target = $"{what.Value}.{what.Variable}";
+                int cloned = rom.Span[what.At + 8];
+                int mine = rom.Span[what.At + 1];
+
+                everybody.TryGetValue((target, cloned), out MapObject? theirs);
+
+                bool same = theirs is not null && theirs.GraphicsId == mine;
+
+                if (same) matched++;
+
+                floor += objects == 0 ? 0 : (double)graphics.GetValueOrDefault(mine) / objects;
+
+                string side = what.X < 0 ? "off the LEFT"
+                    : what.X >= what.Width ? "off the RIGHT"
+                    : what.Y < 0 ? "off the TOP"
+                    : "off the BOTTOM";
+
+                Console.WriteLine(
+                    $"    {mapId,-7} ({what.X,4},{what.Y,4}) {side,-14} gfx {mine,3}"
+                    + $"  -> {target,-6} #{cloned,-3}"
+                    + (theirs is null
+                        ? "  NO SUCH OBJECT"
+                        : $"  gfx {theirs.GraphicsId,3} at ({theirs.X},{theirs.Y})")
+                    + (same ? "   MATCH" : ""));
+            }
+
+            Console.WriteLine();
+            Console.WriteLine(
+                $"    {matched} of {clones.Count} match, against a floor of {floor:F2} — the"
+                + " expected number if each record's graphics id were asked of an object drawn at"
+                + $" random from all {objects} of them");
+            Console.WriteLine(
+                "    and every one of them sits OUTSIDE its own map, on the side the map it names"
+                + " lies — which is what a clone is for: the person you can see across the join.");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine(
+            "  A dropped record is not a lost reading unless something would have read it. The"
+            + " two controls are where in the table it sat and whether its pointer decodes; a"
+            + " table one entry too long can only produce a LAST record, and bytes past a table"
+            + " do not usually read as a script.");
     }
 
     /// <summary>
@@ -15286,6 +15538,9 @@ public static class Program
 
         public bool Buried { get; private init; }
 
+        /// <summary>What the four event-list readers throw away before anything sees it.</summary>
+        public bool Dropped { get; private init; }
+
         public bool Operands { get; private init; }
 
         /// <summary>
@@ -15513,6 +15768,7 @@ public static class Program
             bool signs = false;
             bool namespaces = false;
             var buried = false;
+            var droppedEvents = false;
             var operands = false;
             var moved = new List<int>();
             var slots = new List<byte>();
@@ -15794,6 +16050,9 @@ public static class Program
                         break;
                     case "--buried":
                         buried = true;
+                        break;
+                    case "--dropped":
+                        droppedEvents = true;
                         break;
                     case "--operands":
                         operands = true;
@@ -16154,6 +16413,7 @@ public static class Program
                 Signs = signs,
                 Namespaces = namespaces,
                 Buried = buried,
+                Dropped = droppedEvents,
                 Operands = operands,
                 Moved = moved,
                 Slots = slots,

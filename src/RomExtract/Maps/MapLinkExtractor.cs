@@ -42,7 +42,13 @@ public static class MapLinkExtractor
     /// step against.
     /// </para>
     /// </summary>
-    public static List<Warp> ReadWarps(Rom rom, MapHeaderRecord header, int width, int height, Action<string>? log = null)
+    public static List<Warp> ReadWarps(
+        Rom rom,
+        MapHeaderRecord header,
+        int width,
+        int height,
+        Action<string>? log = null,
+        ICollection<DroppedEvent>? dropped = null)
     {
         var warps = new List<Warp>();
 
@@ -70,6 +76,7 @@ public static class MapLinkExtractor
             if (x < 0 || x >= width || y < 0 || y >= height)
             {
                 log?.Invoke($"    warp {i} at ({x}, {y}) is outside a {width}x{height} map — dropped");
+                dropped?.Add(new DroppedEvent(DroppedEvent.Warps, i, count, x, y, width, height, At: at));
                 continue;
             }
 
@@ -88,7 +95,13 @@ public static class MapLinkExtractor
     /// which is the same trap as the warps and worth naming twice.
     /// </para>
     /// </summary>
-    public static List<MapObject> ReadObjects(Rom rom, MapHeaderRecord header, int width, int height, Action<string>? log = null)
+    public static List<MapObject> ReadObjects(
+        Rom rom,
+        MapHeaderRecord header,
+        int width,
+        int height,
+        Action<string>? log = null,
+        ICollection<DroppedEvent>? dropped = null)
     {
         var objects = new List<MapObject>();
 
@@ -109,6 +122,14 @@ public static class MapLinkExtractor
 
             int localId = rom.ReadU8(at);
             int graphicsId = rom.ReadU8(at + 1);
+
+            // THE KIND BYTE. 0xFF is not a person on this map — it is a clone of a person on a
+            // map beside it, and every field after the square means something else. The off-map
+            // test below happened to catch all nine of this cartridge's, which is the right
+            // answer for the wrong reason: a clone whose square landed inside its own map would
+            // have been read as somebody with an elevation of ten and a trainer type of
+            // twenty-seven. Decided by the byte that says so.
+            int kind = rom.ReadU8(at + 2);
             int x = (short)rom.ReadU16(at + 4);
             int y = (short)rom.ReadU16(at + 6);
             int movementType = rom.ReadU8(at + 9);
@@ -137,9 +158,31 @@ public static class MapLinkExtractor
             // means hidden.
             int hiddenBy = rom.ReadU16(at + 20);
 
+            if (kind == CloneKind)
+            {
+                log?.Invoke($"    object {i} is a clone of #{rom.ReadU8(at + 8)} on another map");
+                dropped?.Add(new DroppedEvent(
+                    DroppedEvent.Clones,
+                    i,
+                    count,
+                    x,
+                    y,
+                    width,
+                    height,
+                    script,
+                    Variable: rom.ReadU16(at + 12),
+                    Value: rom.ReadU16(at + 14),
+                    At: at,
+                    LocalId: localId));
+                continue;
+            }
+
             if (x < 0 || x >= width || y < 0 || y >= height)
             {
                 log?.Invoke($"    object {i} at ({x}, {y}) is outside a {width}x{height} map — dropped");
+                dropped?.Add(new DroppedEvent(
+                    DroppedEvent.Objects, i, count, x, y, width, height, script,
+                    At: at, LocalId: localId));
                 continue;
             }
 
@@ -232,6 +275,9 @@ public static class MapLinkExtractor
     }
 
     /// <summary>A trigger record: a square, an elevation, a condition, and a script.</summary>
+    /// <summary>The byte after the graphics id, when the record is a clone rather than a person.</summary>
+    private const int CloneKind = 0xFF;
+
     private const int TriggerSizeBytes = 16;
 
     private const int TriggerVariableOffset = 6;
@@ -255,7 +301,12 @@ public static class MapLinkExtractor
     /// </para>
     /// </summary>
     public static List<MapTrigger> ReadTriggers(
-        Rom rom, MapHeaderRecord header, int width, int height, Action<string>? log = null)
+        Rom rom,
+        MapHeaderRecord header,
+        int width,
+        int height,
+        Action<string>? log = null,
+        ICollection<DroppedEvent>? dropped = null)
     {
         var triggers = new List<MapTrigger>();
 
@@ -277,6 +328,18 @@ public static class MapLinkExtractor
             if (x < 0 || x >= width || y < 0 || y >= height)
             {
                 log?.Invoke($"    trigger {i} at ({x}, {y}) is outside a {width}x{height} map — dropped");
+                dropped?.Add(new DroppedEvent(
+                    DroppedEvent.Triggers,
+                    i,
+                    count,
+                    x,
+                    y,
+                    width,
+                    height,
+                    rom.ReadU32(at + TriggerPointerOffset),
+                    rom.ReadU16(at + TriggerVariableOffset),
+                    rom.ReadU16(at + TriggerVariableOffset + 2),
+                    at));
                 continue;
             }
 
@@ -326,7 +389,12 @@ public static class MapLinkExtractor
     /// </para>
     /// </summary>
     public static List<MapSign> ReadSigns(
-        Rom rom, MapHeaderRecord header, int width, int height, Action<string>? log = null)
+        Rom rom,
+        MapHeaderRecord header,
+        int width,
+        int height,
+        Action<string>? log = null,
+        ICollection<DroppedEvent>? dropped = null)
     {
         var signs = new List<MapSign>();
 
@@ -349,6 +417,16 @@ public static class MapLinkExtractor
             if (x < 0 || x >= width || y < 0 || y >= height)
             {
                 log?.Invoke($"    sign {i} at ({x}, {y}) is outside a {width}x{height} map — dropped");
+                dropped?.Add(new DroppedEvent(
+                    DroppedEvent.Signs,
+                    i,
+                    count,
+                    x,
+                    y,
+                    width,
+                    height,
+                    kind == MapSign.HiddenItem ? 0 : rom.ReadU32(at + SignPointerOffset),
+                    At: at));
                 continue;
             }
 

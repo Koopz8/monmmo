@@ -107,6 +107,18 @@ public sealed record LoadedMap(
     public IReadOnlyList<MapTrigger> Triggers { get; init; } = [];
 
     /// <summary>
+    /// The records this map's four event lists THREW AWAY because their square is not on the
+    /// map — the denominator under every count of people, warps, triggers and signs.
+    /// </summary>
+    /// <remarks>
+    /// The filter is right: a square off the map is a square nobody can stand on. But it runs
+    /// before anything else sees the record, so it was silent, and 247, 250, 257 and 258 all
+    /// rest on "228 triggers" with no number underneath. Carried on the map rather than counted
+    /// by one command, because every reading that counts a list is entitled to know.
+    /// </remarks>
+    public IReadOnlyList<DroppedEvent> Dropped { get; init; } = [];
+
+    /// <summary>
     /// What this map runs on arrival, when one of its variables says so.
     /// <para>
     /// With the script addresses, unlike the server's copy — this side has the cartridge,

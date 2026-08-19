@@ -125,7 +125,11 @@ public sealed class MapLibrary
 
         CollisionGrid raw = entry.Header.Layout.ReadCollision(_rom);
 
-        List<Warp> warps = MapLinkExtractor.ReadWarps(_rom, entry.Header, raw.Width, raw.Height);
+        // What the four readers throw away, collected at the drop site — one reader, not two.
+        var dropped = new List<DroppedEvent>();
+
+        List<Warp> warps = MapLinkExtractor.ReadWarps(
+            _rom, entry.Header, raw.Width, raw.Height, dropped: dropped);
 
         // Doors are solid in the block data. The client has to open them for the same
         // reason the server does — it predicts every step against this grid, and a step
@@ -147,10 +151,14 @@ public sealed class MapLibrary
             Behaviours = entry.Header.Layout.ReadBehaviours(_rom),
             EventsPointer = entry.Header.EventsPointer,
             Music = entry.Header.Music,
-            Objects = MapLinkExtractor.ReadObjects(_rom, entry.Header, collision.Width, collision.Height),
-            Signs = MapLinkExtractor.ReadSigns(_rom, entry.Header, collision.Width, collision.Height),
-            Triggers = MapLinkExtractor.ReadTriggers(_rom, entry.Header, collision.Width, collision.Height),
+            Objects = MapLinkExtractor.ReadObjects(
+                _rom, entry.Header, collision.Width, collision.Height, dropped: dropped),
+            Signs = MapLinkExtractor.ReadSigns(
+                _rom, entry.Header, collision.Width, collision.Height, dropped: dropped),
+            Triggers = MapLinkExtractor.ReadTriggers(
+                _rom, entry.Header, collision.Width, collision.Height, dropped: dropped),
             Warps = warps,
+            Dropped = dropped,
             OnEntry = MapScripts.OnEntry(_rom, entry.Header),
             OnLoad = MapScripts.Read(_rom, entry.Header),
         };
