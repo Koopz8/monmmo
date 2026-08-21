@@ -292,6 +292,28 @@ public sealed class WhySignsWentUnreadTests
             Assert.Single(WhySignsWentUnread.Of(world, [], ["1.0"])).Why);
     }
 
+    /// <summary>
+    /// <b>The grid is the caller's question (283).</b> This class sorts with the water OPEN, which
+    /// is what makes its own answer a fact about the file — but asked with the water SHUT the same
+    /// sign says whether a swimmer is needed to read it, and those are two findings that print as
+    /// one line otherwise.
+    /// </summary>
+    [Fact]
+    public void TheSameSignAskedWithTheWaterShutIsADifferentQuestion()
+    {
+        MapData map = Column("1.0", 0, 1, 1) with
+        {
+            // The middle square is water: solid on foot, open surfing.
+            Behaviours = [0, (byte)MetatileBehaviour.PondWater, 0],
+            Signs = [new MapSign(0, 2, Kind: 0, TheSign)],
+        };
+
+        MapSign sign = map.Signs[0];
+
+        Assert.True(WhySignsWentUnread.CanBeStoodBeside(map.ToGrid(surfing: true), sign));
+        Assert.False(WhySignsWentUnread.CanBeStoodBeside(map.ToGrid(surfing: false), sign));
+    }
+
     // ------------------------------------------------------------ at NO setting (283)
 
     /// <summary>

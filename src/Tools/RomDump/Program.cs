@@ -6437,6 +6437,56 @@ public static class Program
         foreach ((UnreadBecause why, int signs) in WhySignsWentUnread.Counted(never))
             Console.WriteLine($"      {signs,4}  {Unread(why)}");
 
+        // AND THE TWO SMALL BUCKETS NAMED. 36 signs on maps nothing reaches is a reach problem
+        // with a shape — which maps — and 18 walls inside maps every run walks is the residue
+        // this whole section exists to isolate.
+        foreach (UnreadBecause why in new[]
+                 {
+                     UnreadBecause.NothingCouldStandBesideIt,
+                     UnreadBecause.ItNeverGotToThatWall,
+                 })
+        {
+            List<UnreadSign> these = [.. never.Where(u => u.Why == why)];
+
+            if (these.Count == 0) continue;
+
+            Console.WriteLine($"      {Unread(why)}:");
+            Console.WriteLine("        " + string.Join(", ", these));
+
+            // AND WHETHER A SWIMMER IS NEEDED — asked of the REACH bucket only.
+            //
+            // The buckets are sorted with the water OPEN, so a sign whose only standable square
+            // is sea lands in the reach bucket looking like a wall the walk merely failed to
+            // visit; asking the same question with the water SHUT separates those, and one of
+            // the six runs surfs. Asking it of the OTHER bucket would print a number that cannot
+            // be anything but the whole bucket — a sign nothing can stand beside with the water
+            // open is a sign nothing can stand beside with the water shut, necessarily — and a
+            // measurement that can only come out one way is not a measurement (219).
+            if (why != UnreadBecause.ItNeverGotToThatWall) continue;
+
+            List<UnreadSign> wet =
+            [
+                .. these.Where(u =>
+                    world.Find(u.MapId) is { } m
+                    && m.Signs.FirstOrDefault(s => s.Square == u.Square) is { } sign
+                    && !WhySignsWentUnread.CanBeStoodBeside(m.ToGrid(surfing: false), sign)),
+            ];
+
+            Console.WriteLine(
+                $"        of those {these.Count}, {wet.Count} can only be read from WATER"
+                + (wet.Count == 0 ? "" : ": " + string.Join(", ", wet)));
+        }
+
+        Console.WriteLine(
+            "      and the maps nothing reached, with how many signs each: "
+            + string.Join(
+                ", ",
+                never.Where(u => u.Why == UnreadBecause.OnAMapItNeverReached)
+                    .GroupBy(u => u.MapId)
+                    .OrderByDescending(g => g.Count())
+                    .ThenBy(g => g.Key, StringComparer.Ordinal)
+                    .Select(g => $"{g.Key} x{g.Count()}")));
+
         // THE CONTROL, and it is a control on the BUCKETING rather than on the walk. The six runs
         // above obey the side (280); this asks the same six runs' leftovers under 242's older
         // five-square rule, so what moves is what the side rule alone is worth to the separation.

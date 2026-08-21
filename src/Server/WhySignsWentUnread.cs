@@ -159,7 +159,12 @@ public static class WhySignsWentUnread
     /// own and the four around it when its kind names none. The same rule the walk itself uses,
     /// which is the whole point of it being here.
     /// </summary>
-    private static bool CanBeStoodBeside(CollisionGrid grid, MapSign sign, bool obeySignSides) =>
+    /// <remarks>
+    /// Public because the grid is the caller's choice and that choice is a question. This class
+    /// asks it with the water OPEN, which is what makes its own answer a fact about the file; ask
+    /// it with the water shut and the same sign says whether a swimmer is needed to read it.
+    /// </remarks>
+    public static bool CanBeStoodBeside(CollisionGrid grid, MapSign sign, bool obeySignSides = true) =>
         obeySignSides && sign.MustBeReadFrom is { } only
             ? grid.IsWalkable(only)
             : Around(sign.Square).Any(grid.IsWalkable);
