@@ -11192,6 +11192,43 @@ public static class Program
         // that reason alone, which is the fault 274's own-quarters column had.
         int[] ladder = [57, 114, 228, 486, 972, 1944];
 
+        // AND WHERE EACH ROW LIVES (278). Every band below is cut one way or the other and 277
+        // chose by hand; 278's measurement is that the choice may not have been available. No
+        // group cut from a population can be spread over more of the file than that population
+        // is, so a row that occupies more of the file than the REFERENCE does has no matching
+        // null at all — neither a run nor a scatter of the reference looks like it.
+        const int Slices = 64;
+
+        var whole = (uint)rom.Span.Length;
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  AND WHERE EACH ROW LIVES (278) — the file in {Slices} equal slices, and how many of"
+            + " them each population has a block in:");
+        Console.WriteLine();
+        Console.WriteLine($"    {"population",-26} {"blocks",7} {$"of {Slices} slices",16}   span");
+
+        foreach (APopulation one in mixes)
+        {
+            uint at = one.Blocks.Min();
+            uint upTo = one.Blocks.Max();
+
+            Console.WriteLine(
+                $"    {one.Name,-26} {one.Blocks.Count,7}"
+                + $" {WhatABlockIsMadeOf.Touches(one.Blocks, 0x08000000, 0x08000000 + whole, Slices),16}"
+                + $"   0x{at:X8}..0x{upTo:X8}  {(upTo - at) / (double)whole:P1} of the file");
+        }
+
+        Console.WriteLine(
+            "    THE REFERENCE IS THE FIRST ROW. Every block of script this cartridge is known to"
+            + " hold lies in 2.5% of the file, and every population read against it is spread over"
+            + " ninety per cent or more. That is NOT a defect in the null — the null is \"if these"
+            + " were real script\", and a sample of real script is region-confined because the"
+            + " script is. What it does mean is that the CUT cannot be measured: the shape a"
+            + " sample of the reference should have can only be read off members of the row that"
+            + " lie inside the reference's span, and almost none do. **EVERY BAND BELOW IS CUT AS"
+            + " A SCATTER AND THAT CHOICE IS MODELLED** (277's reasoning, not a measurement).");
+
         // WHICH JUNK MODEL IS CHOSEN BY THE MIXTURES AND NOT BY THE ANSWER (79). Each model gets
         // the same known shares put through it and the worst miss is its calibration.
         var calibrated = new List<(string Name, double Bar, IReadOnlyList<(string Name, double Says)> Read)>();
@@ -14856,13 +14893,95 @@ public static class Program
             IReadOnlyList<double> realEnd =
                 WhatABlockIsMadeOf.AgainstTheRest(rom, openedInOrder, unnamedSites.Count);
 
-            // AND THE SAME CUT INTERLEAVED (277). Consecutive groups are conservative only if the
-            // population being READ is a run of neighbours. These 38 sites are scattered from
-            // 0x028514 to 0xEA7A8F, so a null made of runs carries the file's regional structure
-            // and the reading carries none of it. Every band below is printed both ways and the
-            // verdict is read off the INTERLEAVED one, which is the matching shape.
-            IReadOnlyList<double> realEndScattered = WhatABlockIsMadeOf.AgainstTheRest(
-                rom, openedInOrder, unnamedSites.Count, Cut.Interleaved);
+            // AND WHICH CUT MATCHES, MEASURED (278). 277 gave this reading two nulls and chose
+            // between them by hand — a knob that changes conclusions and fails no test. The two
+            // KNOWN rows are what the two answers look like on this cartridge, and the population
+            // being read is scored the same way (262: an instrument whose known rows are in its
+            // own output controls itself on every run).
+            (Cut which, int touches, int footprint, int fitsInside, IReadOnlyList<int> inRuns,
+                IReadOnlyList<int> asScatter) = WhatABlockIsMadeOf.WhichCut(
+                    openedInOrder, [.. WhatABlockIsMadeOf.InFileOrder(unnamedSites)]);
+
+            Console.WriteLine();
+            Console.WriteLine(
+                $"        WHICH CUT MATCHES THE {unnamedSites.Count} (278) — the span both"
+                + $" populations cover, in {unnamedSites.Count} equal slices, and how many of them"
+                + " a group of that size lands in:");
+            Console.WriteLine(
+                $"          a CONSECUTIVE group of {unnamedSites.Count} of the maps' own sites"
+                + $" touches {inRuns.Min()}..{inRuns.Max()} slice(s) ({inRuns.Count} group(s))");
+            Console.WriteLine(
+                $"          an INTERLEAVED group of {unnamedSites.Count} touches"
+                + $" {asScatter.Min()}..{asScatter.Max()} ({asScatter.Count} group(s))");
+            Console.WriteLine(
+                $"          THE WHOLE REFERENCE — all {openedInOrder.Count} of the maps' own sites"
+                + $" — touches {footprint}, and no group cut from it can beat that");
+            // AND THE OTHER REAL POPULATION, because if the flag-site reference is confined to a
+            // region the question is whether ANY known real script is not. 276 already reaches
+            // for the maps' own SCRIPTS as a second derivation; here it is a second FOOTPRINT.
+            List<uint> spreadScripts =
+                [.. WhatABlockIsMadeOf.InFileOrder(TheMapScansBlocks(rom).Opened)];
+
+            (_, _, int scriptFootprint, _, IReadOnlyList<int> scriptRuns, IReadOnlyList<int> scriptScatter) =
+                WhatABlockIsMadeOf.WhichCut(
+                    spreadScripts, [.. WhatABlockIsMadeOf.InFileOrder(unnamedSites)]);
+
+            Console.WriteLine(
+                $"          the maps' own SCRIPTS — {spreadScripts.Count} blocks, the other real"
+                + $" population — touch {scriptFootprint} as a whole, and a group of"
+                + $" {unnamedSites.Count} of them touches {scriptRuns.Min()}..{scriptRuns.Max()} in"
+                + $" runs and {scriptScatter.Min()}..{scriptScatter.Max()} scattered");
+            // AND THE ARGUMENT FROM POSITION, which needs no command mix at all. If every block
+            // of script this cartridge is known to hold lives in one stretch of the file, then a
+            // site OUTSIDE that stretch is evidence on its own — and the share of the file the
+            // stretch covers is the floor that says how much.
+            uint scriptFrom = Math.Min(spreadScripts.Min(), openedInOrder.Min());
+            uint scriptTo = Math.Max(spreadScripts.Max(), openedInOrder.Max());
+
+            int inside = unnamedSites.Count(at => at >= scriptFrom && at <= scriptTo);
+
+            // AND ITS FLOOR, MEASURED RATHER THAN COMPUTED. What share of the file the stretch
+            // covers is an arithmetic expectation; what share of the places where these bytes
+            // ACTUALLY occur lie in it is a fact about the cartridge, and the two are not the same
+            // number because the bytes are not spread evenly.
+            List<uint> everySite =
+                [.. moved.Values.SelectMany(v => v).Where(v => v.ReadsAsAScript).Select(v => v.Address)];
+
+            List<uint> everyUnopened =
+                [.. moved.Values.SelectMany(v => v).Where(v => !v.Opened && v.ReadsAsAScript)
+                    .Select(v => v.Address)];
+
+            double Share(IReadOnlyList<uint> of) =>
+                of.Count == 0 ? double.NaN : (double)of.Count(at => at >= scriptFrom && at <= scriptTo) / of.Count;
+
+            Console.WriteLine(
+                $"          AND FROM POSITION ALONE: every block of script this project knows lies"
+                + $" between 0x{scriptFrom:X8} and 0x{scriptTo:X8} — {(scriptTo - scriptFrom) / 1024}"
+                + $" KiB, {(scriptTo - scriptFrom) / (double)rom.Span.Length:P1} of the file.");
+            Console.WriteLine(
+                $"            {inside} of the {unnamedSites.Count} unnamed sites are inside it"
+                + $" ({(double)inside / unnamedSites.Count:P1}), against {Share(everySite):P1} of all"
+                + $" {everySite.Count} sites that read as a script and {Share(everyUnopened):P1} of"
+                + $" the {everyUnopened.Count} the map scan does not open — the floor is measured,"
+                + " not an area");
+            Console.WriteLine(
+                $"          THE {unnamedSites.Count} THEMSELVES touch {touches}, against the whole"
+                + $" reference's {footprint}");
+            Console.WriteLine(
+                fitsInside * 4 >= unnamedSites.Count
+                    ? $"          and {fitsInside} of them lie inside the reference's own span, which"
+                        + $" is enough to measure the shape against: the matching cut is"
+                        + $" {which.ToString().ToUpperInvariant()}"
+                    : $"          BUT ONLY {fitsInside} OF THEM LIE INSIDE THE REFERENCE'S OWN SPAN."
+                        + " The cut is about how a sample of the REFERENCE should be shaped, and"
+                        + $" with {unnamedSites.Count - fitsInside} of them outside it there is"
+                        + " nothing to measure that against. **THE CUT IS MODELLED** — 277 chose"
+                        + " SCATTERED by reasoning (a sample of real script would be spread through"
+                        + " script-land, not a run of neighbours), and reasoning is what it stays."
+                        + " The reading is printed both ways.");
+
+            IReadOnlyList<double> realEndScattered =
+                WhatABlockIsMadeOf.AgainstTheRest(rom, openedInOrder, unnamedSites.Count, which);
 
             Console.WriteLine();
             Console.WriteLine(
@@ -14897,7 +15016,7 @@ public static class Program
                 + $"   {Rate38(realEndScattered)}");
             Console.WriteLine(
                 $"          {"  the same, against a whole that CONTAINS the group",-46}"
-                + $" {Band(band),18} {Band(WhatABlockIsMadeOf.SamplingBand(rom, openedInOrder, unnamedSites.Count, Cut.Interleaved)),18}"
+                + $" {Band(band),18} {Band(WhatABlockIsMadeOf.SamplingBand(rom, openedInOrder, unnamedSites.Count, which)),18}"
                 + $"   {band.Count,6}   {Rate38(band)}"
                 + $"   <- {(double)unnamedSites.Count / openedInOrder.Count:P1} of that whole IS the group");
 
@@ -14912,8 +15031,8 @@ public static class Program
             IReadOnlyList<double> otherRealRuns =
                 WhatABlockIsMadeOf.AgainstTheRest(rom, ownScripts, unnamedSites.Count);
 
-            IReadOnlyList<double> otherReal = WhatABlockIsMadeOf.AgainstTheRest(
-                rom, ownScripts, unnamedSites.Count, Cut.Interleaved);
+            IReadOnlyList<double> otherReal =
+                WhatABlockIsMadeOf.AgainstTheRest(rom, ownScripts, unnamedSites.Count, which);
 
             Console.WriteLine(
                 $"          {"REAL: the maps' own SCRIPTS, another derivation",-46}"
@@ -14942,7 +15061,7 @@ public static class Program
                 junkEnds.Add(
                     (name, from, blocks,
                         WhatABlockIsMadeOf.AgainstAnother(
-                            from, blocks, unnamedSites.Count, real, Cut.Interleaved)));
+                            from, blocks, unnamedSites.Count, real, which)));
 
             AddJunkEnd(
                 "JUNK: the reversal's sites",
@@ -15020,10 +15139,10 @@ public static class Program
                 // SCATTERED on both sides (277), so a mixed group has the shape the 38 have —
                 // spread over the file rather than a run of neighbours.
                 List<IReadOnlyList<int>> ownCuts =
-                    [.. WhatABlockIsMadeOf.Cuts(openedInOrder.Count, fromOwn, Cut.Interleaved)];
+                    [.. WhatABlockIsMadeOf.Cuts(openedInOrder.Count, fromOwn, which)];
 
                 List<IReadOnlyList<int>> junkCuts =
-                    [.. WhatABlockIsMadeOf.Cuts(mixJunk.Count, fromJunkSide, Cut.Interleaved)];
+                    [.. WhatABlockIsMadeOf.Cuts(mixJunk.Count, fromJunkSide, which)];
 
                 groups = Math.Min(
                     fromOwn == 0 ? int.MaxValue : ownCuts.Count,
@@ -15102,16 +15221,18 @@ public static class Program
             int perBlock = Math.Min(otherReal.Count, reversalEnd.Count) / 4;
 
             IReadOnlyList<double> realRates =
-                WhatABlockIsMadeOf.RateBand(otherReal, fromReal, perBlock, Cut.Interleaved);
+                WhatABlockIsMadeOf.RateBand(otherReal, fromReal, perBlock, which);
 
             IReadOnlyList<double> junkRates =
-                WhatABlockIsMadeOf.RateBand(reversalEnd, fromReal, perBlock, Cut.Interleaved);
+                WhatABlockIsMadeOf.RateBand(reversalEnd, fromReal, perBlock, which);
 
             Console.WriteLine();
             Console.WriteLine(
-                $"        AND THE RATE, BOTH WAYS OF CUTTING THE NULL (277). The 38 are scattered"
-                + " from 0x028514 to 0xEA7A8F, so the matching null is a SCATTER; a null cut into"
-                + " runs carries the file's regional structure and the reading carries none of it:");
+                $"        AND THE RATE, BOTH WAYS OF CUTTING THE NULL (277). Which is the matching"
+                + " one is MODELLED (278) — only 3 of the 38 lie inside the reference's span, so"
+                + " there is nothing to measure the shape against — and the reasoning is that a"
+                + " sample of real script would be spread through script-land rather than a run of"
+                + " neighbours. Both columns, so the choice is visible:");
             Console.WriteLine(
                 $"          {"population",-32} {"rate in runs",13} {"rate SCATTERED",15}"
                 + $" {"band, scattered",17}   blocks");
@@ -15134,7 +15255,7 @@ public static class Program
             // AND THE OTHER THING 276 LEFT: two REAL populations that disagreed, 0/11 against
             // 6/102. How often does a block of ELEVEN real-script groups hold none at all?
             IReadOnlyList<double> atEleven =
-                WhatABlockIsMadeOf.RateBand(otherReal, fromReal, realEnd.Count, Cut.Interleaved);
+                WhatABlockIsMadeOf.RateBand(otherReal, fromReal, realEnd.Count, which);
 
             Console.WriteLine(
                 atEleven.Count == 0
@@ -15173,8 +15294,9 @@ public static class Program
                 + " calibrated against are built out of the nudged site and read 0%..100%. THE RATE"
                 + " IS THE READING AND THE SHARE IS NOT.");
             Console.WriteLine(
-                $"        273'S VERDICT {(realRate < junkRate ? "STANDS" : "DOES NOT STAND")}, and"
-                + " 276's withdrawal of it was an artefact of the NULL'S SHAPE: cut into runs, real"
+                $"        273'S VERDICT {(realRate < junkRate ? "STANDS" : "DOES NOT STAND")} ON A"
+                + " MODELLED CUT, and 276's withdrawal of it was that same choice made the other"
+                + " way: cut into runs, real"
                 + $" script reaches {fromReal:F3} in"
                 + $" {otherRealRuns.Count(d => d >= fromReal)} of {otherRealRuns.Count} and 273 looks"
                 + $" too strong; cut to match the 38's own scatter it reaches it in"

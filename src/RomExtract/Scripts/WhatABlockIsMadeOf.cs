@@ -180,6 +180,111 @@ public static class WhatABlockIsMadeOf
         }
     }
 
+    /// <summary>
+    /// How many of <paramref name="slices"/> equal slices of <paramref name="from"/>..
+    /// <paramref name="to"/> hold at least one of <paramref name="members"/> — how spread over the
+    /// file a population is.
+    /// </summary>
+    /// <remarks>
+    /// <b>The measurement the cut is chosen by</b> (278). 277 gave this project two ways to cut a
+    /// null and left which one to use as a judgement at each call site, which is a knob that
+    /// changes conclusions and fails no test. A run of neighbours lands in one slice; a scatter
+    /// lands in many; and the population being READ lands wherever it lands. The span is passed in
+    /// rather than taken from the reference, because a reference that occupies a tenth of the file
+    /// would otherwise rate everything outside it as one slice — which is how the first version of
+    /// this read 38 sites spanning fourteen megabytes as touching THREE.
+    /// </remarks>
+    public static int Touches(IEnumerable<uint> members, uint from, uint to, int slices)
+    {
+        if (slices <= 0 || to <= from) return 0;
+
+        return members
+            .Select(
+                at => at < from
+                    ? 0
+                    : (int)Math.Min(slices - 1, (long)(at - from) * slices / (to - from)))
+            .Distinct()
+            .Count();
+    }
+
+    /// <summary>
+    /// Which cut matches a population being read, decided by the two KNOWN rows rather than by
+    /// hand — and able to answer NEITHER.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A consecutive group of the reference and an interleaved group of the same size are what the
+    /// two answers look like, measured on this cartridge rather than argued about (262: an
+    /// instrument whose known rows are in its own output controls itself on every run). The
+    /// population being read is scored the same way over the same slices.
+    /// </para>
+    /// <para>
+    /// <b>And it can answer that the question is not askable</b>, which is what it does for the
+    /// 38. The cut is about how a sample of the REFERENCE should be shaped, so it can only be
+    /// measured off members of the read population that lie inside the reference's own span. Three
+    /// of the 38 do. With the other thirty-five outside it there is nothing to measure the shape
+    /// against, and the cut is MODELLED — 277 chose it by reasoning, and reasoning is what it
+    /// stays. <c>Inside</c> is how a caller finds that out.
+    /// </para>
+    /// <para>
+    /// A note on what the file-spread does NOT show. The null is "if these were real script", and
+    /// this cartridge keeps all the script it is known to hold in 2.5% of the file — so a sample
+    /// of real script is region-confined by necessity, and the read population being spread over
+    /// ninety per cent of the file is a property of the ALTERNATIVE, not a defect in the null.
+    /// </para>
+    /// </remarks>
+    public static (Cut Which, int Read, int Reference, int Inside, IReadOnlyList<int> InRuns,
+        IReadOnlyList<int> Scattered) WhichCut(
+        IReadOnlyList<uint> reference, IReadOnlyList<uint> read)
+    {
+        if (reference.Count == 0 || read.Count == 0)
+        {
+            return (Cut.Consecutive, 0, 0, 0, [], []);
+        }
+
+        int slices = read.Count;
+
+        uint from = Math.Min(reference.Min(), read.Min());
+        uint to = Math.Max(reference.Max(), read.Max());
+
+        int Of(IEnumerable<int> group) =>
+            Touches(group.Select(i => reference[i]), from, to, slices);
+
+        IReadOnlyList<int> runs =
+            [.. Cuts(reference.Count, read.Count, Cut.Consecutive).Select(Of).Order()];
+
+        IReadOnlyList<int> scattered =
+            [.. Cuts(reference.Count, read.Count, Cut.Interleaved).Select(Of).Order()];
+
+        int here = Touches(read, from, to, slices);
+        int whole = Touches(reference, from, to, slices);
+
+        uint own = reference.Min();
+        uint upTo = reference.Max();
+
+        int inside = read.Count(at => at >= own && at <= upTo);
+
+        if (runs.Count == 0 || scattered.Count == 0)
+        {
+            return (Cut.Consecutive, here, whole, inside, runs, scattered);
+        }
+
+        // Measured on the members that are INSIDE the reference's span, because those are the only
+        // ones whose shape can be compared with a group cut from it.
+        int fits = Touches(read.Where(at => at >= own && at <= upTo), from, to, slices);
+
+        double toRuns = Math.Abs(fits - runs.Average());
+        double toScatter = Math.Abs(fits - scattered.Average());
+
+        return (
+            toScatter <= toRuns ? Cut.Interleaved : Cut.Consecutive,
+            here,
+            whole,
+            inside,
+            runs,
+            scattered);
+    }
+
     /// <summary>A population in the order the cartridge holds it, so a group is neighbours.</summary>
     public static IReadOnlyList<uint> InFileOrder(IEnumerable<uint> population) =>
         [.. population.Order()];
