@@ -183,11 +183,24 @@ public sealed class AControlImageTests
         }
 
         Pointer(0x100, 0x08000300);
-        Pointer(0x104, 0x08000200);
 
-        IReadOnlyList<uint> aligned = EveryScriptInTheImage.Aligned(new Rom(image));
+        // AND ONE AIMED AT THE TAIL, which is zeros to the end of the file. A run of zeros is a
+        // run of no-ops that never reaches an end, so this address does not decode.
+        //
+        // The obvious version of this fixture pointed at 0x200 instead and proved nothing: the
+        // zeros there are a NOP SLIDE that walks all the way to the End at 0x300, so the address
+        // read as a script after all and a break that filtered the list out came back green.
+        // Trap 1, in the fixture written to guard against the same shape of mistake.
+        Pointer(0x104, 0x08000380);
+
+        var rom = new Rom(image);
+
+        Assert.True(ScriptReader.ReadsAsAScript(rom, 0x08000300));
+        Assert.False(ScriptReader.ReadsAsAScript(rom, 0x08000380));
+
+        IReadOnlyList<uint> aligned = EveryScriptInTheImage.Aligned(rom);
 
         Assert.Contains(0x08000300u, aligned);
-        Assert.Contains(0x08000200u, aligned);
+        Assert.Contains(0x08000380u, aligned);
     }
 }
