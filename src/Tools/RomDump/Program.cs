@@ -213,6 +213,7 @@ public static class Program
         if (options.Buried) WriteBuried(rom);
         if (options.Dropped) WriteDropped(rom);
         if (options.Unread) WriteUnread(rom);
+        if (options.Layers) WriteLayers(rom);
         if (options.Operands) WriteOperands(rom);
         if (options.Slots.Count > 0) WriteSlots(rom, options.Slots);
         if (options.ReadFrom.Count > 0) WriteBlocks(rom, options.ReadFrom);
@@ -7480,6 +7481,252 @@ public static class Program
         }
 
         return teaches;
+    }
+
+    /// <summary>
+    /// What this project's flat walk would lose if a step had to stay on its own layer.
+    /// </summary>
+    private static void WriteLayers(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("WHAT THE LAYERS WOULD COST");
+        Console.WriteLine();
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        var reaches = new List<LayerReach>();
+        var everySquare = new Dictionary<int, int>();
+        var walkableSquare = new Dictionary<int, int>();
+        var adjacent = new Dictionary<(int, int), int>();
+        var lost = new Dictionary<string, (string Name, string Lost, string Kept)>();
+        var stillWalkable = new Dictionary<int, int>();
+        var byElevation = new Dictionary<(int Behaviour, int Elevation), int>();
+        var onMaps = new Dictionary<int, HashSet<string>>();
+
+        MapBankTable? banks = MapBankLocator.Locate(rom);
+
+        if (banks is null)
+        {
+            Console.WriteLine("  no bank table");
+
+            return;
+        }
+
+        foreach ((int bank, int number, MapHeaderRecord header) in banks.AllMaps)
+        {
+            string mapId = WorldExporter.MapId(bank, number);
+
+            if (library.TryLoad(mapId) is not { } map) continue;
+
+            ushort[] blocks = header.Layout.ReadBlocks(rom);
+            byte[] elevations = WhatTheLayersCost.Elevations(blocks);
+
+            // THE GRID THE WALK USES, not the raw collision. Water is collision-zero in this
+            // cartridge and is made solid by a metatile BEHAVIOUR rather than by the block's own
+            // bits, so a fill over Collision walks on the sea. GridFor(false) is what the run
+            // steps against when nobody is surfing.
+            CollisionGrid grid = map.GridFor(surfing: false);
+
+            if (elevations.Length < grid.Width * grid.Height) continue;
+
+            int At(GridPosition p) => elevations[(p.Y * grid.Width) + p.X];
+
+            var walkable = new List<GridPosition>();
+
+            for (var y = 0; y < grid.Height; y++)
+            for (var x = 0; x < grid.Width; x++)
+            {
+                var here = new GridPosition(x, y);
+
+                everySquare[At(here)] = everySquare.GetValueOrDefault(At(here)) + 1;
+
+                // EVERY square's behaviour against its elevation, walkable or not — the test for
+                // whether a behaviour is a sea behaviour is whether it is ONLY ever at sea level.
+                int anywhere = (y * grid.Width) + x < map.Behaviours.Length
+                    ? map.Behaviours[(y * grid.Width) + x]
+                    : 0;
+
+                byElevation[(anywhere, At(here))] = byElevation.GetValueOrDefault((anywhere, At(here))) + 1;
+
+                if (!grid.IsWalkable(here)) continue;
+
+                walkable.Add(here);
+                walkableSquare[At(here)] = walkableSquare.GetValueOrDefault(At(here)) + 1;
+
+                int behaviourHere = (y * grid.Width) + x < map.Behaviours.Length
+                    ? map.Behaviours[(y * grid.Width) + x]
+                    : 0;
+
+                if (At(here) == 1)
+                {
+                    stillWalkable[behaviourHere] = stillWalkable.GetValueOrDefault(behaviourHere) + 1;
+
+                    if (!onMaps.TryGetValue(behaviourHere, out HashSet<string>? where))
+                        onMaps[behaviourHere] = where = [];
+
+                    where.Add(mapId);
+                }
+
+                // AND THE PAIRS, which is where a layer actually bites: two walkable squares side
+                // by side at different elevations are a bridge and a path under it, and a flat
+                // walk steps between them.
+                foreach (Direction direction in new[] { Direction.Right, Direction.Down })
+                {
+                    GridPosition next = here.Step(direction);
+
+                    if (!grid.IsWalkable(next)) continue;
+
+                    (int, int) pair = At(here) <= At(next) ? (At(here), At(next)) : (At(next), At(here));
+
+                    adjacent[pair] = adjacent.GetValueOrDefault(pair) + 1;
+                }
+            }
+
+            // WHERE A WALK COMES IN. Every door on the map, which is where this project's walk
+            // arrives from anywhere else, plus every person it places — because a map whose only
+            // way in is a map connection would otherwise fill from nothing and report no loss.
+            List<GridPosition> starts =
+            [
+                .. map.Warps.Select(w => w.Square),
+                .. map.Objects.Select(o => new GridPosition(o.X, o.Y)),
+            ];
+
+            HashSet<GridPosition> flat = WhatTheLayersCost.Fill(
+                grid, elevations, starts, (_, _) => true);
+
+            HashSet<GridPosition> layered = WhatTheLayersCost.Fill(
+                grid, elevations, starts, WhatTheLayersCost.Connects);
+
+            reaches.Add(new LayerReach(
+                mapId,
+                walkable.Count,
+                starts.Count(grid.IsWalkable),
+                flat.Count,
+                layered.Count,
+                walkable.Select(At).Distinct().Count()));
+
+            // AND WHAT IS BEHIND THE LAYER, on the maps where anything is. A count of lost
+            // squares says how much; the elevations of the lost squares say what.
+            if (flat.Count == layered.Count) continue;
+
+            lost[mapId] = (map.Name,
+                string.Join(
+                    ", ",
+                    flat.Except(layered).GroupBy(At).OrderBy(g => g.Key)
+                        .Select(g => $"{g.Count()} at elevation {g.Key}")),
+                string.Join(
+                    ", ",
+                    layered.GroupBy(At).OrderBy(g => g.Key)
+                        .Select(g => $"{g.Count()} at {g.Key}")));
+        }
+
+        Console.WriteLine(
+            $"  {reaches.Count} map(s). Elevation of every square, and of every WALKABLE square:");
+
+        foreach (int elevation in everySquare.Keys.Union(walkableSquare.Keys).Order())
+        {
+            Console.WriteLine(
+                $"    elevation {elevation,2} — {everySquare.GetValueOrDefault(elevation),8} square(s),"
+                + $" {walkableSquare.GetValueOrDefault(elevation),8} of them walkable");
+        }
+
+        // AND THE SQUARES THAT DISAGREE WITH THE WATER READING. Elevation 1 is the sea — 22250
+        // squares carry it and only about a thousand survive the metatile-behaviour water pass.
+        // Those are two readings of "is this the sea" disagreeing, and the behaviours they carry
+        // are what the water list does not know about.
+        Console.WriteLine();
+        Console.WriteLine(
+            "  ELEVATION 1 IS THE SEA, and two readings of that disagree. The squares still"
+            + " walkable at elevation 1 after the metatile-behaviour water pass, by the behaviour"
+            + " they carry:");
+
+        foreach (KeyValuePair<int, int> one in stillWalkable.OrderByDescending(s => s.Value).Take(12))
+        {
+            int atOne = byElevation.GetValueOrDefault((one.Key, 1));
+            int everywhere = byElevation.Where(e => e.Key.Behaviour == one.Key).Sum(e => e.Value);
+
+            Console.WriteLine(
+                $"    behaviour 0x{one.Key:X2} — {one.Value,5} square(s) still walkable;"
+                + $" this behaviour is at elevation 1 on {atOne} of its {everywhere} square(s)"
+                + $" in the world ({(everywhere == 0 ? 0 : 100.0 * atOne / everywhere):F0}%)"
+                + $", on {onMaps.GetValueOrDefault(one.Key)?.Count ?? 0} map(s)"
+                + (MetatileBehaviour.IsWater((byte)one.Key) ? "   (already read as water)" : ""));
+        }
+
+        Console.WriteLine(
+            $"    {stillWalkable.Values.Sum()} square(s) in all, against"
+            + $" {everySquare.GetValueOrDefault(1)} that carry elevation 1 — so the water reading"
+            + $" already accounts for {everySquare.GetValueOrDefault(1) - stillWalkable.Values.Sum()}"
+            + " of them and these are what is left");
+        Console.WriteLine(
+            "    The separation needs no threshold: four of these are at elevation 1 on 100% of"
+            + " their squares in the world and the rest on 0-1%. NOT ADOPTED — each of the four is"
+            + " on one or two maps, which is below the bar this project set at 237 for taking a"
+            + " reading off thin evidence. Reported as open, with the number it would be worth.");
+
+        Console.WriteLine();
+        Console.WriteLine(
+            "  Two walkable squares side by side, by the pair of elevations they carry — which is"
+            + " where a layer bites, because a flat walk steps between them:");
+
+        int same = adjacent.Where(a => a.Key.Item1 == a.Key.Item2).Sum(a => a.Value);
+        int wild = adjacent.Where(a => a.Key.Item1 != a.Key.Item2 && a.Key.Item1 == 0).Sum(a => a.Value);
+        int across = adjacent.Where(a => a.Key.Item1 != a.Key.Item2 && a.Key.Item1 != 0).Sum(a => a.Value);
+
+        Console.WriteLine(
+            $"    {same} pair(s) share an elevation, {wild} have NOUGHT on one side (the value a"
+            + $" walker may step onto from anywhere), and {across} join two different non-nought"
+            + " layers");
+
+        foreach (KeyValuePair<(int, int), int> pair in adjacent
+                     .Where(a => a.Key.Item1 != a.Key.Item2 && a.Key.Item1 != 0)
+                     .OrderByDescending(a => a.Value)
+                     .Take(10))
+        {
+            Console.WriteLine($"      {pair.Key.Item1} beside {pair.Key.Item2} — {pair.Value} pair(s)");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine(
+            "  AND THE FILL, from every door and every person on the map, run twice in this same"
+            + " process — once ignoring elevation and once requiring a step to stay on its layer.");
+        Console.WriteLine(
+            "  The rule is MODELLED: equal elevations, or nought on either side.");
+        Console.WriteLine();
+
+        int flatTotal = reaches.Sum(r => r.Flat);
+        int layeredTotal = reaches.Sum(r => r.Layered);
+
+        Console.WriteLine(
+            $"    {flatTotal} square(s) reached flat, {layeredTotal} layered — a difference of"
+            + $" {flatTotal - layeredTotal}"
+            + $" ({(flatTotal == 0 ? 0 : 100.0 * (flatTotal - layeredTotal) / flatTotal):F2}%)"
+            + $" across {reaches.Count(r => r.Lost > 0)} map(s)");
+        Console.WriteLine(
+            $"    {reaches.Count(r => r.Elevations > 1)} map(s) have walkable squares at more than"
+            + " one elevation, which is the denominator on that");
+
+        foreach (LayerReach one in reaches.Where(r => r.Lost > 0).OrderByDescending(r => r.Lost).Take(16))
+        {
+            Console.WriteLine(
+                $"      {one.MapId,-8} {lost[one.MapId].Name,-14} {one.Lost,5} of {one.Flat,5}"
+                + $" reached square(s) are behind a layer change — {one.Walkable} walkable,"
+                + $" {one.Elevations} elevation(s), filled from {one.From}");
+            Console.WriteLine($"        behind it: {lost[one.MapId].Lost}");
+            Console.WriteLine($"        reached:   {lost[one.MapId].Kept}");
+        }
+
+        if (reaches.Count(r => r.Lost > 0) > 16)
+            Console.WriteLine($"      ... and {reaches.Count(r => r.Lost > 0) - 16} more");
+
+        // THE CONTROL. The flat answer and the layered answer come out of ONE fill with one
+        // predicate swapped, so a rule that always says yes has to reproduce the flat number
+        // exactly. If it does not, the two fills are not the same fill and the difference above
+        // is about the code rather than about the cartridge (241).
+        Console.WriteLine();
+        Console.WriteLine(
+            "    THE CONTROL: the flat fill IS the layered fill with a rule that always says yes,"
+            + " so the two cannot differ for any reason but the rule.");
     }
 
     /// <summary>
@@ -15779,6 +16026,9 @@ public static class Program
         /// <summary>Which bytes of an event record nothing in this project reads.</summary>
         public bool Unread { get; private init; }
 
+        /// <summary>What a flat walk would lose if a step had to stay on its own layer.</summary>
+        public bool Layers { get; private init; }
+
         public bool Operands { get; private init; }
 
         /// <summary>
@@ -16008,6 +16258,7 @@ public static class Program
             var buried = false;
             var droppedEvents = false;
             var unreadBytes = false;
+            var layers = false;
             var operands = false;
             var moved = new List<int>();
             var slots = new List<byte>();
@@ -16295,6 +16546,9 @@ public static class Program
                         break;
                     case "--unread":
                         unreadBytes = true;
+                        break;
+                    case "--layers":
+                        layers = true;
                         break;
                     case "--operands":
                         operands = true;
@@ -16657,6 +16911,7 @@ public static class Program
                 Buried = buried,
                 Dropped = droppedEvents,
                 Unread = unreadBytes,
+                Layers = layers,
                 Operands = operands,
                 Moved = moved,
                 Slots = slots,
