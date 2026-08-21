@@ -120,6 +120,79 @@ public sealed class WhatTheLayersCostTests
         Assert.Empty(reached);
     }
 
+    // ------------------------------------------------------------------------ the hop
+
+    /// <summary>
+    /// A LEDGE IS CROSSED, NOT STOOD ON — and a fill that cannot do it is weaker than the walk it
+    /// claims to measure. 261 built one and reported 751 squares of ROUTE 17, the most ledge-dense
+    /// map in the game, as behind a layer change.
+    /// </summary>
+    [Fact]
+    public void AFillThatCanHopCrossesALedgeAndOneThatCannotDoesNot()
+    {
+        // Three squares: standing, a solid ledge, and the landing.
+        var grid = new CollisionGrid(3, 1, [0, 1, 0]);
+
+        GridPosition? Hop(GridPosition square, Direction facing) =>
+            square == new GridPosition(1, 0) && facing == Direction.Right
+                ? new GridPosition(2, 0)
+                : null;
+
+        Assert.Equal(
+            2,
+            WhatTheLayersCost.Fill(
+                grid, [3, 0, 3], [new GridPosition(0, 0)], WhatTheLayersCost.Connects, Hop).Count);
+
+        // …and without the hop the landing is behind a wall, which is what a fill with no ledge
+        // rule sees. Both answers have to be possible or the hop is not being tested.
+        Assert.Single(
+            WhatTheLayersCost.Fill(
+                grid, [3, 0, 3], [new GridPosition(0, 0)], WhatTheLayersCost.Connects));
+    }
+
+    /// <summary>
+    /// AND THE HOP GOES THROUGH THE LEDGE, NOT OVER IT. A ledge carries elevation nought — the
+    /// wildcard — and hopping one is how a walker changes layer, so asking whether the START
+    /// connects to the LANDING refuses exactly the move the ledge exists to allow.
+    /// </summary>
+    [Fact]
+    public void AHopMayChangeLayerBecauseTheLedgeIsTheWildcard()
+    {
+        var grid = new CollisionGrid(3, 1, [0, 1, 0]);
+
+        GridPosition? Hop(GridPosition square, Direction facing) =>
+            square == new GridPosition(1, 0) && facing == Direction.Right
+                ? new GridPosition(2, 0)
+                : null;
+
+        // Elevation 3, over a nought ledge, onto elevation 1 — start and landing do not connect.
+        Assert.Equal(
+            2,
+            WhatTheLayersCost.Fill(
+                grid, [3, 0, 1], [new GridPosition(0, 0)], WhatTheLayersCost.Connects, Hop).Count);
+    }
+
+    /// <summary>
+    /// AND A LEDGE ONTO ANOTHER LAYER WITH NO WILDCARD IN BETWEEN IS STILL REFUSED. Without this
+    /// the hop would be a way round the rule rather than a move through it, and every layered
+    /// answer would collapse to the flat one.
+    /// </summary>
+    [Fact]
+    public void AHopFromOneLayerStraightOntoAnotherIsRefused()
+    {
+        var grid = new CollisionGrid(3, 1, [0, 1, 0]);
+
+        GridPosition? Hop(GridPosition square, Direction facing) =>
+            square == new GridPosition(1, 0) && facing == Direction.Right
+                ? new GridPosition(2, 0)
+                : null;
+
+        // The ledge itself is at elevation 4 rather than nought, so neither half connects.
+        Assert.Single(
+            WhatTheLayersCost.Fill(
+                grid, [3, 4, 3], [new GridPosition(0, 0)], WhatTheLayersCost.Connects, Hop));
+    }
+
     // ------------------------------------------------------------------ the elevations
 
     /// <summary>

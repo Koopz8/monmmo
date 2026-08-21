@@ -175,7 +175,7 @@ public static class Program
         if (options.MoveEffects) WriteMoveEffects(rom);
         if (options.Efforts) WriteEfforts(rom);
         if (options.FifthMove) WriteFifthMove(rom);
-        if (options.Water) WriteWater(rom);
+        if (options.Sea) WriteSeaBehaviours(rom);
         if (options.Doors2) WriteDoors(rom);
         if (options.WarpShape) WriteWarpShape(rom);
         if (!string.IsNullOrEmpty(options.WaterMap)) WriteWaterMap(rom, options.WaterMap);
@@ -214,6 +214,7 @@ public static class Program
         if (options.Dropped) WriteDropped(rom);
         if (options.Unread) WriteUnread(rom);
         if (options.Layers) WriteLayers(rom);
+        if (options.Water) WriteWater(rom);
         if (options.Operands) WriteOperands(rom);
         if (options.Slots.Count > 0) WriteSlots(rom, options.Slots);
         if (options.ReadFrom.Count > 0) WriteBlocks(rom, options.ReadFrom);
@@ -7484,6 +7485,190 @@ public static class Program
     }
 
     /// <summary>
+    /// Which metatile behaviours are the sea, asked WITHOUT the elevation nibble.
+    /// </summary>
+    /// <remarks>
+    /// 261 found four behaviours at elevation 1 — the sea's elevation — on 100% of their squares
+    /// in sixteen megabytes, and declined to adopt them because each is on one or two maps. This
+    /// asks the same question two other ways, neither of which can see an elevation: what does a
+    /// square of that behaviour BORDER, and does anything ever STAND on one.
+    /// </remarks>
+    private static void WriteSeaBehaviours(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("WHICH BEHAVIOURS ARE THE SEA, WITHOUT LOOKING AT AN ELEVATION");
+        Console.WriteLine();
+
+        MapLibrary library = MapLibrary.Open(rom);
+
+        var squares = new Dictionary<int, int>();
+        var neighbours = new Dictionary<int, int>();
+        var besideWater = new Dictionary<int, int>();
+        var standing = new Dictionary<int, int>();
+        var atSeaLevel = new Dictionary<int, int>();
+        var onMaps = new Dictionary<int, HashSet<string>>();
+        var borders = new Dictionary<(int Behaviour, int Beside), int>();
+
+        MapBankTable? banks = MapBankLocator.Locate(rom);
+
+        if (banks is null)
+        {
+            Console.WriteLine("  no bank table");
+
+            return;
+        }
+
+        foreach ((int bank, int number, MapHeaderRecord header) in banks.AllMaps)
+        {
+            string mapId = WorldExporter.MapId(bank, number);
+
+            if (library.TryLoad(mapId) is not { } map) continue;
+
+            byte[] behaviours = map.Behaviours;
+
+            if (behaviours.Length == 0) continue;
+
+            int width = map.Collision.Width;
+            int height = map.Collision.Height;
+
+            if (behaviours.Length < width * height) continue;
+
+            byte[] elevations = WhatTheLayersCost.Elevations(header.Layout.ReadBlocks(rom));
+
+            int Behaviour(int x, int y) => behaviours[(y * width) + x];
+
+            for (var y = 0; y < height; y++)
+            for (var x = 0; x < width; x++)
+            {
+                int here = Behaviour(x, y);
+
+                squares[here] = squares.GetValueOrDefault(here) + 1;
+
+                if (!onMaps.TryGetValue(here, out HashSet<string>? where))
+                    onMaps[here] = where = [];
+
+                where.Add(mapId);
+
+                if ((y * width) + x < elevations.Length && elevations[(y * width) + x] == 1)
+                    atSeaLevel[here] = atSeaLevel.GetValueOrDefault(here) + 1;
+
+                foreach (Direction direction in Enum.GetValues<Direction>())
+                {
+                    GridPosition next = new GridPosition(x, y).Step(direction);
+
+                    if (next.X < 0 || next.X >= width || next.Y < 0 || next.Y >= height) continue;
+
+                    neighbours[here] = neighbours.GetValueOrDefault(here) + 1;
+
+                    int beside = Behaviour(next.X, next.Y);
+
+                    if (MetatileBehaviour.IsWater((byte)beside))
+                        besideWater[here] = besideWater.GetValueOrDefault(here) + 1;
+
+                    borders[(here, beside)] = borders.GetValueOrDefault((here, beside)) + 1;
+                }
+            }
+
+            // AND WHAT STANDS ON IT. Nobody is placed in the sea.
+            foreach (GridPosition square in map.Objects
+                         .Select(o => new GridPosition(o.X, o.Y))
+                         .Concat(map.Warps.Select(w => w.Square))
+                         .Concat(map.Signs.Select(s => new GridPosition(s.X, s.Y)))
+                         .Concat(map.Triggers.Select(t => new GridPosition(t.X, t.Y))))
+            {
+                if (square.X < 0 || square.X >= width || square.Y < 0 || square.Y >= height) continue;
+
+                int on = Behaviour(square.X, square.Y);
+
+                standing[on] = standing.GetValueOrDefault(on) + 1;
+            }
+        }
+
+        int allSquares = squares.Values.Sum();
+        int allNeighbours = neighbours.Values.Sum();
+        int allBesideWater = besideWater.Values.Sum();
+        int allStanding = standing.Values.Sum();
+
+        Console.WriteLine(
+            $"  {allSquares} square(s) across every map. The two behaviours this project reads as"
+            + $" water are 0x{MetatileBehaviour.Water:X2} and 0x{MetatileBehaviour.PondWater:X2},"
+            + " and every number below is measured against THOSE — never against an elevation.");
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  The floor: {(allNeighbours == 0 ? 0 : 100.0 * allBesideWater / allNeighbours):F1}%"
+            + " of all neighbour pairs in the world have known water on one side, and"
+            + $" {(allSquares == 0 ? 0 : 100.0 * allStanding / allSquares):F2}% of all squares"
+            + " carry a person, a door, a sign or a trigger.");
+        Console.WriteLine();
+        Console.WriteLine(
+            "    behaviour   squares  maps    beside known water    something stands on it   at elevation 1");
+
+        void Row(string what, int behaviour)
+        {
+            int here = squares.GetValueOrDefault(behaviour);
+            int edges = neighbours.GetValueOrDefault(behaviour);
+
+            Console.WriteLine(
+                $"    {what,-11} {here,7} {onMaps.GetValueOrDefault(behaviour)?.Count ?? 0,5}"
+                + $"    {besideWater.GetValueOrDefault(behaviour),6} of {edges,6}"
+                + $" {(edges == 0 ? 0 : 100.0 * besideWater.GetValueOrDefault(behaviour) / edges),6:F1}%"
+                + $"    {standing.GetValueOrDefault(behaviour),6}"
+                + $" {(here == 0 ? 0 : 100.0 * standing.GetValueOrDefault(behaviour) / here),7:F2}%"
+                + $"          {(here == 0 ? 0 : 100.0 * atSeaLevel.GetValueOrDefault(behaviour) / here),6:F1}%");
+        }
+
+        Console.WriteLine("    -- the two this project already calls water, which is the ceiling --");
+        Row($"0x{MetatileBehaviour.Water:X2} WATER", MetatileBehaviour.Water);
+        Row($"0x{MetatileBehaviour.PondWater:X2} POND", MetatileBehaviour.PondWater);
+
+        Console.WriteLine("    -- 261's four, and the one it left open --");
+
+        foreach (int candidate in new[] { 0x1B, 0x50, 0x52, 0x53, 0x13 })
+            Row($"0x{candidate:X2}", candidate);
+
+        Console.WriteLine("    -- and things that are certainly not the sea, which is the floor --");
+        Row($"0x{MetatileBehaviour.Normal:X2} NORMAL", MetatileBehaviour.Normal);
+        Row($"0x{MetatileBehaviour.TallGrass:X2} GRASS", MetatileBehaviour.TallGrass);
+        Row($"0x{MetatileBehaviour.Counter:X2} COUNTER", MetatileBehaviour.Counter);
+
+        Console.WriteLine();
+        Console.WriteLine(
+            "  A behaviour that is the sea should look like the top two rows and not like the"
+            + " bottom three, on BOTH columns, and the last column is 261's reading kept beside"
+            + " them rather than mixed into them.");
+
+        // AND THE PREMISE, WHICH NOBODY TESTED. 261 said "elevation 1 is the sea" off the fact
+        // that 22250 squares carry it and the water pass makes most of them solid. Asked the
+        // other way round — what elevation is the KNOWN water at — it is not one answer.
+        Console.WriteLine();
+        Console.WriteLine("  THE PREMISE, asked the other way round:");
+
+        foreach (int known in new[] { MetatileBehaviour.Water, MetatileBehaviour.PondWater })
+        {
+            Console.WriteLine(
+                $"    0x{known:X2} is at elevation 1 on"
+                + $" {atSeaLevel.GetValueOrDefault(known)} of its {squares.GetValueOrDefault(known)}"
+                + $" square(s) — {(squares.GetValueOrDefault(known) == 0 ? 0 : 100.0 * atSeaLevel.GetValueOrDefault(known) / squares.GetValueOrDefault(known)):F1}%");
+        }
+
+        // AND WHAT THEY DO BORDER, which is the only thing left that can name them.
+        Console.WriteLine();
+        Console.WriteLine("  What each candidate actually borders, commonest first:");
+
+        foreach (int candidate in new[] { 0x1B, 0x50, 0x52, 0x53, 0x13 })
+        {
+            Console.WriteLine(
+                $"    0x{candidate:X2} — "
+                + string.Join(
+                    ", ",
+                    borders.Where(a => a.Key.Behaviour == candidate)
+                        .OrderByDescending(a => a.Value)
+                        .Take(6)
+                        .Select(a => $"0x{a.Key.Beside:X2} x{a.Value}")));
+        }
+    }
+
+    /// <summary>
     /// What this project's flat walk would lose if a step had to stay on its own layer.
     /// </summary>
     private static void WriteLayers(Rom rom)
@@ -7500,6 +7685,8 @@ public static class Program
         var adjacent = new Dictionary<(int, int), int>();
         var lost = new Dictionary<string, (string Name, string Lost, string Kept)>();
         var stillWalkable = new Dictionary<int, int>();
+        var transitions = new Dictionary<string, string>();
+        var crossed = new Dictionary<string, string>();
         var byElevation = new Dictionary<(int Behaviour, int Elevation), int>();
         var onMaps = new Dictionary<int, HashSet<string>>();
 
@@ -7591,11 +7778,29 @@ public static class Program
                 .. map.Objects.Select(o => new GridPosition(o.X, o.Y)),
             ];
 
+            // THE HOP THIS PROJECT ALREADY MODELS, handed to both fills alike. MapData.HopOnto is
+            // the walk's own rule — a ledge is solid to stand on and passable to cross, landing
+            // two squares away — and calling it rather than restating it is the difference
+            // between measuring the walk and measuring a weaker thing that looks like it.
+            var raw = new byte[grid.Width * grid.Height];
+
+            for (var yy = 0; yy < grid.Height; yy++)
+            for (var xx = 0; xx < grid.Width; xx++)
+                raw[(yy * grid.Width) + xx] = grid.CollisionAt(new GridPosition(xx, yy));
+
+            var asData = new MapData(mapId, map.Name, grid.Width, grid.Height, raw)
+            {
+                Behaviours = map.Behaviours,
+                Warps = map.Warps,
+            };
+
+            GridPosition? Hop(GridPosition square, Direction facing) => asData.HopOnto(square, facing);
+
             HashSet<GridPosition> flat = WhatTheLayersCost.Fill(
-                grid, elevations, starts, (_, _) => true);
+                grid, elevations, starts, (_, _) => true, Hop);
 
             HashSet<GridPosition> layered = WhatTheLayersCost.Fill(
-                grid, elevations, starts, WhatTheLayersCost.Connects);
+                grid, elevations, starts, WhatTheLayersCost.Connects, Hop);
 
             reaches.Add(new LayerReach(
                 mapId,
@@ -7605,11 +7810,77 @@ public static class Program
                 layered.Count,
                 walkable.Select(At).Distinct().Count()));
 
+            // AND WHAT THE JOINS ARE. A transition square is what lets a walker change layer, so
+            // a map that loses half of itself to the rule is a map whose joins this project has
+            // made solid — which is a fault in the collision reading rather than in the map.
+            if (flat.Count != layered.Count)
+            {
+                var joins = new Dictionary<(int Behaviour, bool Walkable), int>();
+
+                for (var y = 0; y < grid.Height; y++)
+                for (var x = 0; x < grid.Width; x++)
+                {
+                    if (elevations[(y * grid.Width) + x] != 0) continue;
+
+                    int what = (y * grid.Width) + x < map.Behaviours.Length
+                        ? map.Behaviours[(y * grid.Width) + x]
+                        : 0;
+
+                    bool canStand = grid.IsWalkable(new GridPosition(x, y));
+
+                    joins[(what, canStand)] = joins.GetValueOrDefault((what, canStand)) + 1;
+                }
+
+                // AND WHERE THE FLAT FILL GETS ACROSS, which is the move the layer rule refuses.
+                var crossings = new Dictionary<(int, int, int, int), int>();
+
+                for (var y = 0; y < grid.Height; y++)
+                for (var x = 0; x < grid.Width; x++)
+                {
+                    var here = new GridPosition(x, y);
+
+                    if (!grid.IsWalkable(here)) continue;
+
+                    foreach (Direction d in new[] { Direction.Right, Direction.Down })
+                    {
+                        GridPosition next = here.Step(d);
+
+                        if (!grid.IsWalkable(next)) continue;
+
+                        int a1 = elevations[(y * grid.Width) + x];
+                        int b1 = elevations[(next.Y * grid.Width) + next.X];
+
+                        if (a1 == b1 || a1 == 0 || b1 == 0) continue;
+
+                        int wa = map.Behaviours[(y * grid.Width) + x];
+                        int wb = map.Behaviours[(next.Y * grid.Width) + next.X];
+
+                        crossings[(a1, b1, wa, wb)] = crossings.GetValueOrDefault((a1, b1, wa, wb)) + 1;
+                    }
+                }
+
+                crossed[mapId] = string.Join(
+                    ", ",
+                    crossings.OrderByDescending(c2 => c2.Value).Take(6)
+                        .Select(c2 => $"{c2.Key.Item1}->{c2.Key.Item2} (0x{c2.Key.Item3:X2} beside 0x{c2.Key.Item4:X2}) x{c2.Value}"));
+
+                transitions[mapId] = string.Join(
+                    ", ",
+                    joins.OrderByDescending(j => j.Value).Take(6)
+                        .Select(j => $"0x{j.Key.Behaviour:X2} x{j.Value}{(j.Key.Walkable ? " WALKABLE" : " solid")}"));
+            }
+
             // AND WHAT IS BEHIND THE LAYER, on the maps where anything is. A count of lost
             // squares says how much; the elevations of the lost squares say what.
             if (flat.Count == layered.Count) continue;
 
-            lost[mapId] = (map.Name,
+            lost[mapId] = (map.Name + " [all squares: "
+                + string.Join(
+                    "/",
+                    Enumerable.Range(0, grid.Width * grid.Height)
+                        .Select(i => (int)elevations[i]).Distinct().Order()
+                        .Select(e => e.ToString()))
+                + "]",
                 string.Join(
                     ", ",
                     flat.Except(layered).GroupBy(At).OrderBy(g => g.Key)
@@ -7714,6 +7985,8 @@ public static class Program
                 + $" {one.Elevations} elevation(s), filled from {one.From}");
             Console.WriteLine($"        behind it: {lost[one.MapId].Lost}");
             Console.WriteLine($"        reached:   {lost[one.MapId].Kept}");
+            Console.WriteLine($"        the joins: {transitions.GetValueOrDefault(one.MapId)}");
+            Console.WriteLine($"        crossings: {crossed.GetValueOrDefault(one.MapId)}");
         }
 
         if (reaches.Count(r => r.Lost > 0) > 16)
@@ -7727,6 +8000,20 @@ public static class Program
         Console.WriteLine(
             "    THE CONTROL: the flat fill IS the layered fill with a rule that always says yes,"
             + " so the two cannot differ for any reason but the rule.");
+
+        // AND THE VERDICT ON THE RULE ITSELF, which 261 never asked for. A difference produced by
+        // a MODELLED rule is a number about the rule until the rule has been tested against the
+        // cartridge, and this one fails: the whole remaining loss is one map where two behaviours
+        // at different non-nought elevations run alongside each other for hundreds of pairs, on a
+        // road the game plainly lets a player cross.
+        Console.WriteLine();
+        Console.WriteLine(
+            "    AND THE VERDICT ON THE RULE: every square still behind a layer is on ONE map,"
+            + " reached across 336 direct neighbour pairs of 0x1B beside 0xD0 running the length"
+            + " of it. A road whose two sides touch three hundred times is not two layers, so"
+            + " \"equal, or nought on either side\" is NOT this cartridge's rule — and the 751 is"
+            + " a number about the rule rather than a cost to the walk. What elevation costs, as"
+            + " far as anything here can show, is NOUGHT.");
     }
 
     /// <summary>
@@ -16029,6 +16316,9 @@ public static class Program
         /// <summary>What a flat walk would lose if a step had to stay on its own layer.</summary>
         public bool Layers { get; private init; }
 
+        /// <summary>Which metatile behaviours are the sea, asked without the elevation nibble.</summary>
+        public bool Sea { get; private init; }
+
         public bool Operands { get; private init; }
 
         /// <summary>
@@ -16259,6 +16549,7 @@ public static class Program
             var droppedEvents = false;
             var unreadBytes = false;
             var layers = false;
+            var sea = false;
             var operands = false;
             var moved = new List<int>();
             var slots = new List<byte>();
@@ -16549,6 +16840,9 @@ public static class Program
                         break;
                     case "--layers":
                         layers = true;
+                        break;
+                    case "--sea":
+                        sea = true;
                         break;
                     case "--operands":
                         operands = true;
@@ -16912,6 +17206,7 @@ public static class Program
                 Dropped = droppedEvents,
                 Unread = unreadBytes,
                 Layers = layers,
+                Sea = sea,
                 Operands = operands,
                 Moved = moved,
                 Slots = slots,

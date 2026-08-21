@@ -52,6 +52,11 @@ public static class WhatTheLayersCost
         from == to || from == Transition || to == Transition;
 
     /// <summary>Every walkable square a fill reaches from <paramref name="starts"/>.</summary>
+    /// <param name="hop">
+    /// How to cross a ledge, or null for a fill that cannot. A ledge is solid to stand on and
+    /// passable to hop, so a fill that only asks about walkability treats one as a wall — and the
+    /// squares behind it as unreachable.
+    /// </param>
     /// <param name="connects">
     /// Whether a step between two elevations is allowed. The FLAT fill passes a rule that always
     /// says yes, so the two answers come out of one function with one predicate swapped — a
@@ -62,7 +67,8 @@ public static class WhatTheLayersCost
         CollisionGrid grid,
         byte[] elevations,
         IEnumerable<GridPosition> starts,
-        Func<int, int, bool> connects)
+        Func<int, int, bool> connects,
+        Func<GridPosition, Direction, GridPosition?>? hop = null)
     {
         var reached = new HashSet<GridPosition>();
         var todo = new Queue<GridPosition>();
@@ -83,8 +89,28 @@ public static class WhatTheLayersCost
             {
                 GridPosition next = at.Step(direction);
 
-                if (!grid.IsWalkable(next)) continue;
-                if (!connects(At(at), At(next))) continue;
+                // A LEDGE IS NOT A SQUARE YOU STAND ON, IT IS ONE YOU CROSS. This project
+                // already models that — WorldData.HopOnto, a two-square move landing past the
+                // ledge — and a fill without it is weaker than the walk it claims to be
+                // measuring. 261 built one and reported 751 squares of ROUTE 17, the most
+                // ledge-dense map in the game, as behind a layer change.
+                if (!grid.IsWalkable(next) || !connects(At(at), At(next)))
+                {
+                    if (hop?.Invoke(next, direction) is not { } landing) continue;
+
+                    // THROUGH THE LEDGE, not over it. A ledge square carries elevation nought —
+                    // the value meaning "whatever is around it" — and hopping one is how a walker
+                    // changes layer, so the two halves of the move are onto the ledge and off it.
+                    // Asking whether the START connects to the LANDING refuses exactly the move
+                    // the ledge exists to allow, which is what left ROUTE 17's lower half behind.
+                    if (!connects(At(at), At(next)) || !connects(At(next), At(landing))) continue;
+                    if (!reached.Add(landing)) continue;
+
+                    todo.Enqueue(landing);
+
+                    continue;
+                }
+
                 if (!reached.Add(next)) continue;
 
                 todo.Enqueue(next);
