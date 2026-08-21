@@ -218,6 +218,7 @@ public static class Program
         if (options.WhichWay) WriteWhichWay(rom, options.StartAt);
         if (options.Water) WriteWater(rom);
         if (options.Operands) WriteOperands(rom);
+        if (options.OperandsEverywhere) WriteOperandsEverywhere(rom);
         if (options.Slots.Count > 0) WriteSlots(rom, options.Slots);
         if (options.ReadFrom.Count > 0) WriteBlocks(rom, options.ReadFrom);
         if (options.Closure) WriteClosure(rom, options.RoutineAnswers, options.StartAt);
@@ -10679,6 +10680,180 @@ public static class Program
     /// <summary>
     /// The numbers this cartridge uses in both namespaces at once.
     /// </summary>
+    /// <summary>
+    /// The operand sweep asked of the whole file rather than of the 0.6% the maps point at.
+    /// </summary>
+    private static void WriteOperandsEverywhere(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("EVERY OPERAND, ASKED OF THE WHOLE IMAGE");
+        Console.WriteLine();
+
+        MapLibrary library = MapLibrary.Open(rom);
+        List<SetsAFlag> scan = [.. library.All().SelectMany(EveryScriptOn)];
+
+        // The map scan's own blocks, walked the same way, so the two populations differ for one
+        // reason: where they started.
+        var opened = new HashSet<uint>();
+
+        foreach (SetsAFlag script in scan)
+        {
+            foreach (uint block in ScriptReader.Reachable(rom, script.Address)) opened.Add(block);
+        }
+
+        (byte Code, int At) calibration = (0x21, 0);
+
+        // THE CALIBRATION ROW, IN THE OUTPUT, AT EVERY SETTING. 262's rule: an instrument whose
+        // known rows are in its own output controls itself on every run. `compare`'s variable
+        // operand scores 98% on the population this project trusts; a wider population on which
+        // it does not is a wider population this test cannot be run on, and that is a fact about
+        // the population rather than about the tables.
+        double Calibrate(IReadOnlyCollection<uint> from) =>
+            EveryOperand.In(rom, from, TwoNamespacesOneNumber.Writers, leastNumbers: 1)
+                .FirstOrDefault(o => o.Code == calibration.Code && o.At == calibration.At)
+                ?.Share ?? double.NaN;
+
+        Console.WriteLine(
+            $"  the calibration row is 0x{calibration.Code:X2} arg{calibration.At} — compare's"
+            + " VARIABLE, which scores 98% over the map scan. A population it does not score high"
+            + " on is one this test cannot be run on.");
+        Console.WriteLine();
+        Console.WriteLine(
+            "    pointers            least   named   entries   blocks  |  BACKWARDS        |"
+            + " calibration");
+
+        // BOTH FILTERS AND A LENGTH SWEEP, because what the FLOOR does when a filter goes on is
+        // the argument for the filter. A tightening whose only evidence is that the answer got
+        // tidier is a tightening chosen by the answer.
+        foreach (bool aligned in new[] { false, true })
+        {
+            foreach (int least in new[] { 1, 2, 4, 8 })
+            {
+                TheImagesScripts wide =
+                    EveryScriptInTheImage.In(rom, aligned: aligned, leastCommands: least);
+                TheImagesScripts control =
+                    EveryScriptInTheImage.Floor(rom, aligned: aligned, leastCommands: least);
+
+                Console.WriteLine(
+                    $"    {(aligned ? "on a 4-byte boundary" : "at any offset      "),-20}"
+                    + $"{least,5}  {wide.Pointed,6}  {wide.Entries.Count,8}  {wide.Blocks.Count,7}"
+                    + $"  |  {control.Entries.Count,6} / {control.Blocks.Count,-6}  |"
+                    + $"  {Calibrate(wide.Entries),7:P0}");
+            }
+        }
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    for comparison, the map scan: {opened.Count} block(s), calibration"
+            + $" {Calibrate([.. scan.Select(s => s.Address)]),7:P0}");
+
+        // AND THE SPLIT, which is what turns "the wider population fails" into a reading. If the
+        // failure were noise it would be spread across both halves; if it is the code boundary it
+        // lands entirely on the half the maps do not lead to.
+        foreach (int least in new[] { 1, 8 })
+        {
+            TheImagesScripts split = EveryScriptInTheImage.In(rom, leastCommands: least);
+
+            List<uint> outside = [.. split.Entries.Where(e => !opened.Contains(e))];
+            List<uint> inside = [.. split.Entries.Where(opened.Contains)];
+
+            Console.WriteLine(
+                $"    aligned, least {least}: the {inside.Count} entr(ies) the maps DO lead to"
+                + $" score {Calibrate(inside),7:P0}; the {outside.Count} they do NOT score"
+                + $" {Calibrate(outside),7:P0}");
+        }
+
+        Console.WriteLine();
+
+        TheImagesScripts image = EveryScriptInTheImage.In(rom);
+        TheImagesScripts floor = EveryScriptInTheImage.Floor(rom);
+
+        Console.WriteLine(
+            $"  taking the aligned population at a length of one: {image.Blocks.Count} block(s)"
+            + $" against {opened.Count} the map scan opens, and the floor's {floor.Blocks.Count}");
+
+        var missed = image.Blocks.Where(b => !opened.Contains(b)).ToList();
+        var only = opened.Where(b => !image.Blocks.Contains(b)).ToList();
+
+        Console.WriteLine(
+            $"  {missed.Count} block(s) the maps do not lead to, and {only.Count} the maps lead to"
+            + " that NOTHING in the file points at");
+
+        Console.WriteLine();
+
+        IReadOnlyList<OneOperand> all =
+            EveryOperand.In(rom, image.Entries, TwoNamespacesOneNumber.Writers);
+
+        (byte Code, int At)[] known =
+            [.. TwoNamespacesOneNumber.Writers, .. TwoNamespacesOneNumber.Readers];
+
+        Console.WriteLine(
+            $"  {all.Count} operand(s) name at least 4 number(s) between them, scored by how much"
+            + " of what they name a known WRITING operand ever writes");
+        Console.WriteLine();
+        Console.WriteLine("  how the scores spread, in tenths:");
+
+        foreach ((int tenth, int operands) in EveryOperand.Spread(all))
+        {
+            Console.WriteLine(
+                $"    {tenth * 10,3}-{tenth * 10 + 9,3}%  {new string('#', Math.Min(60, operands))} {operands}");
+        }
+
+        IReadOnlyList<OneOperand> unknown = EveryOperand.Unknown(all, known);
+
+        Console.WriteLine();
+        Console.WriteLine(
+            unknown.Count == 0
+                ? "  and NOTHING outside the two tables scores above half — over the whole image"
+                  + " this time, which is what 252 left owed"
+                : $"  and {unknown.Count} operand(s) score above half and are in NEITHER table:");
+
+        foreach (OneOperand one in unknown)
+        {
+            Console.WriteLine($"    {one}");
+            Console.WriteLine(
+                "      names: "
+                + string.Join(", ", one.Named.Take(8).Select(n => $"0x{n.Number:X4} x{n.Places}")));
+
+            foreach (int place in one.Where.Take(8))
+            {
+                bool inTheScan = opened.Contains(Rom.BaseAddress + (uint)place);
+
+                Console.WriteLine(
+                    $"      0x{place:X6}{(inTheScan ? "  (a block the maps lead to)" : "")}");
+            }
+
+            if (one.Where.Count > 8) Console.WriteLine($"      ... +{one.Where.Count - 8} more");
+        }
+
+        // AND THE SAME TABLE OVER THE MAP SCAN, side by side. An operand's score moving between
+        // the two populations is the finding this command exists for; an operand that appears
+        // only in the wider one is the other half of it.
+        IReadOnlyList<OneOperand> inTheScanOnly =
+            EveryOperand.In(rom, scan.Select(s => s.Address), TwoNamespacesOneNumber.Writers);
+
+        Console.WriteLine();
+        Console.WriteLine(
+            "  AND WHAT MOVED. Every operand the two populations disagree about by more than a"
+            + " tenth, or that only one of them has at all:");
+
+        foreach (OneOperand one in all.OrderByDescending(o => o.Places))
+        {
+            OneOperand? was = inTheScanOnly.FirstOrDefault(
+                o => o.Code == one.Code && o.At == one.At);
+
+            if (was is not null && Math.Abs(was.Share - one.Share) <= 0.1) continue;
+
+            Console.WriteLine(
+                $"    {one.Name,-12} whole image {one.Share,6:P0} of {one.Numbers,4} number(s)"
+                + $" at {one.Places,6} place(s)   |   map scan "
+                + (was is null
+                    ? "NOT THERE AT ALL"
+                    : $"{was.Share,6:P0} of {was.Numbers,4} at {was.Places,6}")
+                + (known.Contains((one.Code, one.At)) ? "   named" : "   <- NEITHER TABLE"));
+        }
+    }
+
     private static void WriteOperands(Rom rom)
     {
         Console.WriteLine();
@@ -16743,6 +16918,9 @@ public static class Program
 
         public bool Operands { get; private init; }
 
+        /// <summary>The operand sweep over the whole file rather than over the map scan.</summary>
+        public bool OperandsEverywhere { get; private init; }
+
         /// <summary>
         /// With <c>--play</c>: every time the run turned these FLAGS on or off, with the script
         /// and the pass. The flag half of <c>--trace</c>, which watches a variable.
@@ -16972,6 +17150,7 @@ public static class Program
             var unreadBytes = false;
             var layers = false;
             var theWayBack = false;
+            var operandsEverywhere = false;
             var whichWay = false;
             var sea = false;
             var operands = false;
@@ -17276,6 +17455,9 @@ public static class Program
                         break;
                     case "--operands":
                         operands = true;
+                        break;
+                    case "--operands-everywhere":
+                        operandsEverywhere = true;
                         break;
                     case "--moved":
                     {
@@ -17640,6 +17822,7 @@ public static class Program
                 WhichWay = whichWay,
                 Sea = sea,
                 Operands = operands,
+                OperandsEverywhere = operandsEverywhere,
                 Moved = moved,
                 Slots = slots,
                 ReadFrom = readFrom,
