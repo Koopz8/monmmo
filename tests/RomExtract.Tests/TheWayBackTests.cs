@@ -139,18 +139,86 @@ public sealed class TheWayBackTests
     }
 
     /// <summary>
-    /// EVERY ENQUEUE IS RECORDED, and that is the invariant the record has to hold rather than a
-    /// count somebody wrote down. Every square the walk stood on except the one it began at is
-    /// the far end of some recorded step — so a walk that grew a new way of moving and forgot to
-    /// record it fails here, which is the only way this measurement can quietly go wrong.
+    /// A ledge whose landing is a square with nothing beside it: one way in and none out.
+    /// </summary>
+    /// <remarks>
+    /// <b>A decoy, and it was needed.</b> On the terrace above, dropping the record of a hop
+    /// changed no test: the landing squares have walkable neighbours, and the walk records a step
+    /// into a square it has already seen, so every one of them still had an arrival from the side.
+    /// The rule "every enqueue is recorded" was real and unreachable — 240's shape. A landing with
+    /// no neighbours is the only place it bites, and this cartridge has two of them in FUCHSIA.
+    /// </remarks>
+    private static MapData Pocket()
+    {
+        const int width = 3;
+        const int height = 4;
+
+        var behaviours = new byte[width * height];
+        var collision = new byte[width * height];
+
+        // Everything solid but a column, with the ledge across it.
+        for (var i = 0; i < collision.Length; i++) collision[i] = 1;
+
+        collision[0 * width + 1] = 0;
+        collision[1 * width + 1] = 0;
+        collision[3 * width + 1] = 0;
+
+        behaviours[2 * width + 1] = MetatileBehaviour.HopSouth;
+
+        return new MapData(Route, "THE POCKET", width, height, collision) { Behaviours = behaviours };
+    }
+
+    /// <summary>
+    /// A SQUARE WHOSE ONLY WAY IN IS A HOP IS STOOD ON, IS STRANDED, AND ARRIVED BY THE HOP. All
+    /// three, because the first two are true of a walk that forgot the hop was a hop and the
+    /// third is what says the record is the walk's own.
     /// </summary>
     [Fact]
-    public void EverySquareStoodOnExceptTheFirstArrivedBySomeRecordedStep()
+    public void APocketBehindALedgeArrivesByTheHopAndByNothingElse()
     {
         var steps = new List<AStepTaken>();
 
         Reach reach = WorldWalker.Walk(
-            new WorldData([Terrace()]), Route, startSquare: new GridPosition(0, 0), steps: steps);
+            new WorldData([Pocket()]), Route, startSquare: new GridPosition(1, 0), steps: steps);
+
+        var pocket = new Somewhere(Route, new GridPosition(1, 3));
+
+        Assert.Contains((Route, new GridPosition(1, 3)), reach.Stood);
+
+        Assert.Equal(
+            [pocket],
+            TheWayBack.Stranded(
+                reach.Stood.Select(s => new Somewhere(s.MapId, s.Square)),
+                steps.Select(s => (s.From, s.To)),
+                reach.Start));
+
+        AStepTaken into = Assert.Single(steps.Where(s => s.To == pocket));
+
+        Assert.Equal(AStepTaken.Hop, into.How);
+    }
+
+    /// <summary>
+    /// EVERY ENQUEUE IS RECORDED, and that is the invariant the record has to hold rather than a
+    /// count somebody wrote down. Every square the walk stood on except the one it began at is
+    /// the far end of some recorded step — so a walk that grew a new way of moving and forgot to
+    /// record it fails here, which is the only way this measurement can quietly go wrong.
+    /// <para>
+    /// Asked of the pocket as well as the terrace, and the pocket is the half that bites: on an
+    /// open map a square that lost its arrival still has one from a neighbour.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void EverySquareStoodOnExceptTheFirstArrivedBySomeRecordedStep(bool pocket)
+    {
+        var steps = new List<AStepTaken>();
+
+        Reach reach = WorldWalker.Walk(
+            new WorldData([pocket ? Pocket() : Terrace()]),
+            Route,
+            startSquare: new GridPosition(pocket ? 1 : 0, 0),
+            steps: steps);
 
         HashSet<Somewhere> arrived = [.. steps.Select(s => s.To)];
 
