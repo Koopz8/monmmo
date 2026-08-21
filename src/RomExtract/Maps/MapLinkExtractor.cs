@@ -278,6 +278,60 @@ public static class MapLinkExtractor
     /// <summary>The byte after the graphics id, when the record is a clone rather than a person.</summary>
     private const int CloneKind = 0xFF;
 
+    /// <summary>
+    /// Where each of a map's four event tables sits, how many records it claims and how wide one
+    /// of them is — exposed so a sweep can ask what a reader NEVER LOOKS AT.
+    /// </summary>
+    /// <remarks>
+    /// <b>One definition of each width.</b> The sizes are the same constants the readers below
+    /// use, and the two lists whose size this project derived rather than knew go through
+    /// <see cref="EventLayout.Table"/> exactly as they do there. A sweep that wrote its own copy
+    /// of "a trigger is sixteen bytes" would be the fault of 251 and 258 with a new face.
+    /// </remarks>
+    public static IEnumerable<(string List, int Table, int Count, int Size)> EventTables(
+        Rom rom, MapHeaderRecord header)
+    {
+        if (Table(rom, header, first: true, MaxObjects, ObjectSizeBytes) is { } objects)
+            yield return (DroppedEvent.Objects, objects.Table, objects.Count, ObjectSizeBytes);
+
+        if (Table(rom, header, first: false, MaxWarps, WarpSizeBytes) is { } warps)
+            yield return (DroppedEvent.Warps, warps.Table, warps.Count, WarpSizeBytes);
+
+        if (EventLayout.Table(rom, header.EventsPointer, EventLayout.Triggers, TriggerSizeBytes)
+            is { } triggers)
+        {
+            yield return (DroppedEvent.Triggers, triggers.Table, triggers.Count, TriggerSizeBytes);
+        }
+
+        if (EventLayout.Table(rom, header.EventsPointer, EventLayout.Signs, SignSizeBytes)
+            is { } signs)
+        {
+            yield return (DroppedEvent.Signs, signs.Table, signs.Count, SignSizeBytes);
+        }
+    }
+
+    /// <summary>
+    /// The first two of the four lists, whose count and pointer the readers take by hand rather
+    /// than through <see cref="EventLayout"/>.
+    /// </summary>
+    private static (int Table, int Count)? Table(
+        Rom rom, MapHeaderRecord header, bool first, int most, int size)
+    {
+        if (header.EventsPointer == 0) return null;
+        if (rom.ToOffsetOrNull(header.EventsPointer) is not { } events) return null;
+        if (events + EventsPointersOffset + 8 > rom.Length) return null;
+
+        int count = rom.ReadU8(events + (first ? 0 : 1));
+
+        if (count is 0 || count > most) return null;
+
+        uint pointer = rom.ReadU32(events + EventsPointersOffset + (first ? 0 : 4));
+
+        if (rom.ToOffsetOrNull(pointer) is not { } table) return null;
+
+        return table + count * size > rom.Length ? null : (table, count);
+    }
+
     private const int TriggerSizeBytes = 16;
 
     private const int TriggerVariableOffset = 6;

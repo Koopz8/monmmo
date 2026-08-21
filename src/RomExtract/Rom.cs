@@ -79,12 +79,64 @@ public sealed class Rom
     /// </summary>
     public int? ToOffsetOrNull(uint address) => IsRomAddress(address) ? (int)(address - BaseAddress) : null;
 
-    public byte ReadU8(int offset) => _data[offset];
+    private HashSet<int>? _touched;
 
-    public ushort ReadU16(int offset) => (ushort)(_data[offset] | (_data[offset + 1] << 8));
+    /// <summary>
+    /// Records every byte position read through this image until the returned handle is disposed
+    /// — so a sweep can ask what a reader ACTUALLY looked at.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Because the alternative is a second copy of the layout.</b> "Which bytes of a trigger
+    /// record does this project read?" can be answered by writing the offsets down beside the
+    /// reader, and such a list goes stale the first time somebody adds a field — the fault this
+    /// project has fixed at 220, 224, 251 and 258. Watching cannot go stale, because it is the
+    /// reader.
+    /// </para>
+    /// <para>
+    /// Off by default, one null check per read when it is off, and not nestable — one sweep at a
+    /// time is all anything here needs.
+    /// </para>
+    /// </remarks>
+    public IDisposable WatchReads(HashSet<int> into)
+    {
+        _touched = into;
 
-    public uint ReadU32(int offset) =>
-        (uint)(_data[offset] | (_data[offset + 1] << 8) | (_data[offset + 2] << 16) | (_data[offset + 3] << 24));
+        return new StopWatching(this);
+    }
+
+    private sealed class StopWatching(Rom rom) : IDisposable
+    {
+        public void Dispose() => rom._touched = null;
+    }
+
+    public byte ReadU8(int offset)
+    {
+        _touched?.Add(offset);
+
+        return _data[offset];
+    }
+
+    public ushort ReadU16(int offset)
+    {
+        if (_touched is { } watching)
+        {
+            watching.Add(offset);
+            watching.Add(offset + 1);
+        }
+
+        return (ushort)(_data[offset] | (_data[offset + 1] << 8));
+    }
+
+    public uint ReadU32(int offset)
+    {
+        if (_touched is { } watching)
+        {
+            for (var i = 0; i < 4; i++) watching.Add(offset + i);
+        }
+
+        return (uint)(_data[offset] | (_data[offset + 1] << 8) | (_data[offset + 2] << 16) | (_data[offset + 3] << 24));
+    }
 
     /// <summary>Reads a 32-bit cartridge pointer stored at <paramref name="offset"/>.</summary>
     public uint ReadPointer(int offset) => ReadU32(offset);

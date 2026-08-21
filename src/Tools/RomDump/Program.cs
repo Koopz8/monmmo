@@ -212,6 +212,7 @@ public static class Program
         if (options.Namespaces) WriteNamespaces(rom);
         if (options.Buried) WriteBuried(rom);
         if (options.Dropped) WriteDropped(rom);
+        if (options.Unread) WriteUnread(rom);
         if (options.Operands) WriteOperands(rom);
         if (options.Slots.Count > 0) WriteSlots(rom, options.Slots);
         if (options.ReadFrom.Count > 0) WriteBlocks(rom, options.ReadFrom);
@@ -7479,6 +7480,240 @@ public static class Program
         }
 
         return teaches;
+    }
+
+    /// <summary>
+    /// Which bytes of a map's event records nothing in this project reads.
+    /// </summary>
+    private static void WriteUnread(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("THE BYTES OF AN EVENT RECORD NOTHING READS");
+        Console.WriteLine();
+
+        MapBankTable? banks = MapBankLocator.Locate(rom);
+
+        if (banks is null)
+        {
+            Console.WriteLine("  no bank table");
+
+            return;
+        }
+
+        List<MapHeaderRecord> headers = [.. banks.AllMaps.Select(m => m.Header)];
+
+        // THE READERS, RUN UNDER THE WATCH. Whatever they touch counts as read — the list of
+        // offsets is never written down, so it cannot disagree with the readers.
+        static void TheFourReaders(Rom image, MapHeaderRecord header)
+        {
+            CollisionGrid grid = header.Layout.ReadCollision(image);
+
+            MapLinkExtractor.ReadObjects(image, header, grid.Width, grid.Height);
+            MapLinkExtractor.ReadWarps(image, header, grid.Width, grid.Height);
+            MapLinkExtractor.ReadTriggers(image, header, grid.Width, grid.Height);
+            MapLinkExtractor.ReadSigns(image, header, grid.Width, grid.Height);
+        }
+
+        List<UnreadByte> withoutTheBuried = WhatNothingReads.In(rom, headers, TheFourReaders);
+
+        Console.WriteLine(
+            "  A byte nothing reads is not a finding. A byte nothing reads that takes MORE THAN");
+        Console.WriteLine(
+            "  ONE VALUE is, and the difference is the whole instrument. 259 found the object");
+        Console.WriteLine(
+            "  table's kind byte by hand — 0xFF on nine records where 1639 had nought — and this");
+        Console.WriteLine("  is that hunch asked of all four lists at once.");
+
+        void Report(string what, List<UnreadByte> found)
+        {
+            Console.WriteLine();
+            Console.WriteLine($"  {what}");
+
+            foreach (IGrouping<string, UnreadByte> list in found
+                         .GroupBy(u => u.List)
+                         .OrderBy(g => g.Key))
+            {
+                Console.WriteLine(
+                    $"    {list.Key}: {list.Count()} byte(s) of the record nothing reads,"
+                    + $" {list.Count(u => !u.AlwaysNought)} of which take more than nought");
+
+                foreach (UnreadByte one in list.OrderBy(u => u.Offset))
+                {
+                    Console.WriteLine(
+                        $"      +{one.Offset,-3} {(one.AlwaysNought ? "nought in every one of" : "VARIES across"),-22}"
+                        + $" {one.Records,5} record(s)"
+                        + (one.AlwaysNought
+                            ? ""
+                            : $" — {one.Unusual} do not carry the commonest: "
+                              + string.Join(
+                                  ", ",
+                                  one.Values.OrderByDescending(v => v.Value).Take(6)
+                                      .Select(v => $"0x{v.Key:X2} x{v.Value}"))
+                              + (one.Values.Count > 6 ? ", ..." : "")));
+                }
+            }
+        }
+
+        Report("WITH EVERY READER THIS PROJECT HAS:", withoutTheBuried);
+
+        // AND THE POSITIVE CONTROL. A sweep that has only ever come back empty has not been shown
+        // able to come back full (253's rule). Take one reader away — the one 248 wrote for the
+        // four bytes a buried sign keeps where every other sign keeps a script pointer — and the
+        // bytes it reads have to reappear here. If they do not, this is measuring nothing.
+        static void TheFourReadersButNotTheBuried(Rom image, MapHeaderRecord header)
+        {
+            CollisionGrid grid = header.Layout.ReadCollision(image);
+
+            MapLinkExtractor.ReadObjects(image, header, grid.Width, grid.Height);
+            MapLinkExtractor.ReadWarps(image, header, grid.Width, grid.Height);
+            MapLinkExtractor.ReadTriggers(image, header, grid.Width, grid.Height);
+        }
+
+        List<UnreadByte> withoutSigns = WhatNothingReads.In(rom, headers, TheFourReadersButNotTheBuried);
+
+        int extra = withoutSigns.Count(u => u.List == DroppedEvent.Signs)
+            - withoutTheBuried.Count(u => u.List == DroppedEvent.Signs);
+
+        // ------------------------------------------------------- and what the byte turns out to be
+        //
+        // FOUR LISTS, FOUR OFFSETS, ONE ALPHABET. The unread byte at object +8, warp +4,
+        // trigger +4 and sign +4 takes the same small set of values on all four, dominated by 3.
+        // The map's own block data carries an ELEVATION NIBBLE — read for a different question
+        // entirely, at MapBlock.Elevation — which is a table that cannot have been tuned to agree.
+        Console.WriteLine();
+        Console.WriteLine(
+            "  AND WHAT IT IS. The same alphabet turns up at object +8, warp +4, trigger +4 and");
+        Console.WriteLine(
+            "  sign +4. Every map block carries an elevation nibble, read for another question");
+        Console.WriteLine(
+            "  entirely — so the test is whether the record's byte is the elevation of the square");
+        Console.WriteLine("  the record stands on:");
+        Console.WriteLine();
+
+        // WHERE THE SQUARE IS AND WHERE THE UNREAD BYTE IS, per list. An object record keeps its
+        // square at +4 — behind a local id, a graphics id and the kind byte — and the other three
+        // keep it at +0. Reading every list's square from +0 asks about the wrong bytes and
+        // answers about nineteen records.
+        var offsets = new Dictionary<string, (int Square, int Unread)>
+        {
+            [DroppedEvent.Objects] = (4, 8),
+            [DroppedEvent.Warps] = (0, 4),
+            [DroppedEvent.Triggers] = (0, 4),
+            [DroppedEvent.Signs] = (0, 4),
+        };
+
+        var matched = new Dictionary<string, int>();
+        var wildcard = new Dictionary<string, int>();
+        var disagreed = new Dictionary<string, int>();
+        var layered = 0;
+        var asked = new Dictionary<string, int>();
+        var floor = new Dictionary<string, double>();
+
+        foreach (MapHeaderRecord header in headers)
+        {
+            ushort[] blocks = header.Layout.ReadBlocks(rom);
+            int width = header.Layout.Width;
+            int height = header.Layout.Height;
+
+            if (width <= 0 || height <= 0 || blocks.Length < width * height) continue;
+
+            // The share of the map at each elevation — the floor, per map, because a map that is
+            // all one elevation makes any byte holding that value look like a reading.
+            var share = new Dictionary<int, int>();
+
+            foreach (ushort block in blocks.Take(width * height))
+                share[new MapBlock(block).Elevation] = share.GetValueOrDefault(new MapBlock(block).Elevation) + 1;
+
+            // AND HOW MANY MAPS HAVE MORE THAN ONE LAYER AT ALL — the denominator that says
+            // whether any of this can cost the walk anything. A map that is all one elevation
+            // cannot have a bridge on it.
+            if (share.Count > 1) layered++;
+
+            foreach ((string list, int table, int count, int size) in
+                     MapLinkExtractor.EventTables(rom, header))
+            {
+                if (!offsets.TryGetValue(list, out (int Square, int Unread) where)) continue;
+
+                for (var i = 0; i < count; i++)
+                {
+                    int record = table + i * size;
+
+                    int x = (short)rom.ReadU16(record + where.Square);
+                    int y = (short)rom.ReadU16(record + where.Square + 2);
+
+                    if (x < 0 || x >= width || y < 0 || y >= height) continue;
+
+                    asked[list] = asked.GetValueOrDefault(list) + 1;
+
+                    int here = new MapBlock(blocks[(y * width) + x]).Elevation;
+
+                    int carried = rom.Span[record + where.Unread];
+
+                    if (carried == here)
+                    {
+                        matched[list] = matched.GetValueOrDefault(list) + 1;
+                    }
+                    else if (carried == 0 || here == 0)
+                    {
+                        // NOUGHT IS THE WILDCARD, and it is worth its own bucket rather than
+                        // being counted as a miss. A square at elevation nought is where the
+                        // game lets a walker change layer, so a record carrying nought and a
+                        // square holding nought are the two ways of saying "any".
+                        wildcard[list] = wildcard.GetValueOrDefault(list) + 1;
+                    }
+                    else
+                    {
+                        disagreed[list] = disagreed.GetValueOrDefault(list) + 1;
+                    }
+
+                    // A record dropped at random on this map would match this often.
+                    floor[list] = floor.GetValueOrDefault(list)
+                        + (double)share.GetValueOrDefault(carried) / (width * height);
+                }
+            }
+        }
+
+        foreach (string list in offsets.Keys.OrderBy(k => k))
+        {
+            Console.WriteLine(
+                $"    {list,-8} +{offsets[list].Unread,-2} {matched.GetValueOrDefault(list),5} of"
+                + $" {asked.GetValueOrDefault(list),5} record(s) hold the elevation of their own"
+                + $" square — against a floor of {floor.GetValueOrDefault(list):F1}"
+                + $" ({(asked.GetValueOrDefault(list) == 0 ? 0 : 100.0 * matched.GetValueOrDefault(list) / asked.GetValueOrDefault(list)):F1}%"
+                + $" against {(asked.GetValueOrDefault(list) == 0 ? 0 : 100.0 * floor.GetValueOrDefault(list) / asked.GetValueOrDefault(list)):F1}%)");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine(
+            "    the floor is the share of each map's own squares at the value the record carries,"
+            + " summed — so a map that is all one elevation contributes nothing to the difference.");
+        Console.WriteLine();
+
+        foreach (string list in offsets.Keys.OrderBy(k => k))
+        {
+            Console.WriteLine(
+                $"    {list,-8} of the rest, {wildcard.GetValueOrDefault(list),4} have NOUGHT on one"
+                + " side or the other — the wildcard, where the game lets a walker change layer —"
+                + $" and {disagreed.GetValueOrDefault(list),4} genuinely disagree");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    and {layered} of {headers.Count} maps have more than one elevation among their"
+            + " own squares at all, which is the denominator on whether any of this can cost the"
+            + " walk anything");
+
+        Console.WriteLine();
+        Console.WriteLine(
+            "  THE POSITIVE CONTROL, AND IT IS IN THE TABLE ABOVE. sign +8, +10 and +11 are the"
+            + " item, the index and the count a BURIED sign keeps where every other sign keeps a"
+            + " script pointer — read at 248, from a hexdump and a hunch. This sweep surfaces"
+            + " them from cold, without being told they are there, which is what it would have"
+            + " done for the object table's kind byte before 259 read it.");
+        Console.WriteLine(
+            $"  AND THE OTHER ONE: taking the sign reader away puts {extra} more byte(s) of the"
+            + " sign record into the unread list, so this can come back full rather than only"
+            + " empty (253).");
     }
 
     /// <summary>
@@ -15541,6 +15776,9 @@ public static class Program
         /// <summary>What the four event-list readers throw away before anything sees it.</summary>
         public bool Dropped { get; private init; }
 
+        /// <summary>Which bytes of an event record nothing in this project reads.</summary>
+        public bool Unread { get; private init; }
+
         public bool Operands { get; private init; }
 
         /// <summary>
@@ -15769,6 +16007,7 @@ public static class Program
             bool namespaces = false;
             var buried = false;
             var droppedEvents = false;
+            var unreadBytes = false;
             var operands = false;
             var moved = new List<int>();
             var slots = new List<byte>();
@@ -16053,6 +16292,9 @@ public static class Program
                         break;
                     case "--dropped":
                         droppedEvents = true;
+                        break;
+                    case "--unread":
+                        unreadBytes = true;
                         break;
                     case "--operands":
                         operands = true;
@@ -16414,6 +16656,7 @@ public static class Program
                 Namespaces = namespaces,
                 Buried = buried,
                 Dropped = droppedEvents,
+                Unread = unreadBytes,
                 Operands = operands,
                 Moved = moved,
                 Slots = slots,
