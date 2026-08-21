@@ -12668,6 +12668,159 @@ public static class Program
                     + $"   {Side(0),13} {Side(1),13} {Side(2),13} {Side(3),13}");
             }
 
+            // AND WHAT EACH KIND STANDS ON (281). 242 says a sign's own square is SOLID — that is
+            // what a sign is — and that is a rule about the 519 with a script behind them. The
+            // buried kind is a thing in the ground you walk over, and if that is right its own
+            // square is the one you STAND on rather than a wall you read.
+            Console.WriteLine(
+                $"      {"kind",6} {"records",9}   its OWN square is walkable");
+
+            foreach ((int kind, int howMany) in signKinds.OrderByDescending(k => k.Value))
+            {
+                List<WhatIsBuried.ASign> these = [.. allSigns.Where(one => one.Kind == kind)];
+
+                int stood = these.Count(one => Open(one.MapId, one.X, one.Y));
+
+                Console.WriteLine(
+                    $"      {$"0x{kind:X2}",6} {howMany,9}   {stood,6}/{howMany}"
+                    + $"  {(double)stood / howMany,8:P1}");
+            }
+
+            byte? Behaviour(WhatIsBuried.ASign one)
+            {
+                if (!everyMap.TryGetValue(one.MapId, out LoadedMap? map)) return null;
+
+                int at = (one.Y * map.Collision.Width) + one.X;
+
+                return at >= 0 && at < map.Behaviours.Length ? map.Behaviours[at] : null;
+            }
+
+            foreach ((string what, Func<WhatIsBuried.ASign, bool> holds) in
+                     new (string, Func<WhatIsBuried.ASign, bool>)[]
+                     {
+                         ("kind 0x00 ON a walkable square", one => one.Kind == 0 && Open(one.MapId, one.X, one.Y)),
+                         ("kind 0x00 on a WALL", one => one.Kind == 0 && !Open(one.MapId, one.X, one.Y)),
+                         ("kind 0x01 (south)", one => one.Kind == 1),
+                         ("kind 0x03 (west)", one => one.Kind == 3),
+                         ("kind 0x04 (east)", one => one.Kind == 4),
+                         ("the BURIED kind, walkable", one => one.Kind == 7 && Open(one.MapId, one.X, one.Y)),
+                         ("the BURIED kind, on a WALL", one => one.Kind == 7 && !Open(one.MapId, one.X, one.Y)),
+                     })
+            {
+                List<WhatIsBuried.ASign> these = [.. allSigns.Where(holds)];
+
+                Console.WriteLine(
+                    $"      what {what} stands on: "
+                    + string.Join(
+                        ", ",
+                        these.GroupBy(Behaviour).OrderByDescending(g => g.Count()).Take(8)
+                            .Select(g => $"0x{g.Key:X2} x{g.Count()}")));
+            }
+
+            // AND THE OTHER DIRECTION, which is the one that can NAME a byte. "179 signs stand on
+            // 0x84" says nothing on its own — 0x84 might be every wall in the game. What says
+            // something is how many 0x84 squares there are and how many of them hold a sign.
+            HashSet<(string, int, int)> signSquares =
+                [.. allSigns.Select(one => (one.MapId, one.X, one.Y))];
+
+            IEnumerable<(byte, bool)> EverySquare()
+            {
+                foreach (LoadedMap map in library.All())
+                {
+                    string id = WorldExporter.MapId(map.Bank, map.Number);
+
+                    for (var y = 0; y < map.Collision.Height; y++)
+                    {
+                        for (var x = 0; x < map.Collision.Width; x++)
+                        {
+                            int at = (y * map.Collision.Width) + x;
+
+                            if (at >= map.Behaviours.Length) continue;
+
+                            yield return (map.Behaviours[at], signSquares.Contains((id, x, y)));
+                        }
+                    }
+                }
+            }
+
+            IReadOnlyDictionary<byte, (int Squares, int Marked)> tally =
+                WhichWayASignIsRead.HowOften(EverySquare());
+
+            double everywhere = WhichWayASignIsRead.Everywhere(tally);
+
+            Console.WriteLine();
+            Console.WriteLine(
+                "      AND THE OTHER DIRECTION (281) — how many squares of each behaviour there are"
+                + " and how many hold a sign, which is what can NAME a byte:");
+            Console.WriteLine(
+                $"      {"behaviour",10} {"squares",9} {"hold a sign",13}   {"share",8}   against the world");
+
+            foreach ((byte behaviour, (int howMany, int onIt)) in
+                     tally.Where(b => b.Value.Marked > 0).OrderByDescending(b => b.Value.Marked).Take(8))
+            {
+                double often = (double)onIt / howMany;
+
+                Console.WriteLine(
+                    $"      {$"0x{behaviour:X2}",10} {howMany,9} {onIt,13}   {often,8:P1}"
+                    + $"   {often / everywhere,8:F0}x");
+            }
+
+            Console.WriteLine(
+                $"      for comparison, every square in the game: {tally.Values.Sum(one => one.Squares)},"
+                + $" of which {tally.Values.Sum(one => one.Marked)} hold a sign — {everywhere:P3}");
+
+            // AND THE TEN 0x84 SQUARES WITH NOTHING ON THEM, because 179 of 189 is a reading and
+            // the other ten are the part that could refute it.
+            var spare = new List<string>();
+
+            foreach (LoadedMap map in library.All())
+            {
+                string id = WorldExporter.MapId(map.Bank, map.Number);
+
+                for (var y = 0; y < map.Collision.Height; y++)
+                {
+                    for (var x = 0; x < map.Collision.Width; x++)
+                    {
+                        int at = (y * map.Collision.Width) + x;
+
+                        if (at >= map.Behaviours.Length
+                            || map.Behaviours[at] != MetatileBehaviour.SignBoard)
+                        {
+                            continue;
+                        }
+
+                        if (!signSquares.Contains((id, x, y))) spare.Add($"{id} ({x},{y})");
+                    }
+                }
+            }
+
+            Console.WriteLine(
+                $"      the {spare.Count} square(s) of 0x84 with NO sign on them: "
+                + string.Join(", ", spare.Take(12))
+                + (spare.Count > 12 ? $", +{spare.Count - 12} more" : string.Empty));
+
+            // AND THE ONE 242 COULD NOT PLACE. 10.6 (4,1) is the single sign in this cartridge
+            // that nothing can stand beside, at every lever setting — a mistake, furniture, or a
+            // square this project's collision reading gets wrong, and nobody has looked at the
+            // byte under it.
+            foreach (WhatIsBuried.ASign one in allSigns.Where(
+                         one => one.MapId == "10.6" && one.X == 4 && one.Y == 1))
+            {
+                Console.WriteLine(
+                    $"      AND 10.6 (4,1), the one sign nothing can stand beside (242): kind"
+                    + $" 0x{one.Kind:X2}, its own square 0x{Behaviour(one):X2} and"
+                    + $" {(Open(one.MapId, one.X, one.Y) ? "WALKABLE" : "solid")}, its four"
+                    + " neighbours "
+                    + string.Join(
+                        ", ",
+                        sides.Select(
+                            side =>
+                                $"{side.Name} 0x{(everyMap.TryGetValue(one.MapId, out LoadedMap? m)
+                                    && (one.Y + side.Dy) * m.Collision.Width + one.X + side.Dx is var n
+                                    && n >= 0 && n < m.Behaviours.Length ? m.Behaviours[n] : 0):X2}"
+                                + $" {(Open(one.MapId, one.X + side.Dx, one.Y + side.Dy) ? "open" : "shut")}")));
+            }
+
             Console.WriteLine(
                 "      the floor is kind 0x00's own rate, which is the kind that names no side: "
                 + string.Join(", ", sides.Select((side, i) => $"{side.Name} {openRate[i]:P1}")));

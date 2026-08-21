@@ -50,6 +50,53 @@ public static class WhichWayASignIsRead
         return always.Count == 1 ? always[0] : null;
     }
 
+    /// <summary>
+    /// How many squares carry each behaviour and how many of those hold one of the things being
+    /// counted — the direction that can NAME a byte (281).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>"179 signs stand on 0x84" names nothing.</b> It reads the same whether <c>0x84</c> is a
+    /// sign board or every wall in the game, and those are opposite findings. The direction that
+    /// names it is the other one: <b>189 squares of it exist and 179 hold a sign</b> — 94.7%
+    /// against the world's own 0.300%.
+    /// </para>
+    /// <para>
+    /// This is 8's rule wearing a different hat: the count of hits is the numerator and the
+    /// population of the BYTE is the denominator, and the one this project reaches for first is
+    /// the population of the hits.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyDictionary<byte, (int Squares, int Marked)> HowOften(
+        IEnumerable<(byte Behaviour, bool Marked)> squares)
+    {
+        var tally = new Dictionary<byte, (int Squares, int Marked)>();
+
+        foreach ((byte behaviour, bool marked) in squares)
+        {
+            (int was, int held) = tally.GetValueOrDefault(behaviour);
+
+            tally[behaviour] = (was + 1, held + (marked ? 1 : 0));
+        }
+
+        return tally;
+    }
+
+    /// <summary>
+    /// The share of EVERY square in the world that is marked — the floor the shares above are read
+    /// against.
+    /// </summary>
+    /// <remarks>
+    /// Over every square and not over the squares of the behaviours that scored: a floor drawn
+    /// from the rows that did well is a floor the answer chose (79).
+    /// </remarks>
+    public static double Everywhere(IReadOnlyDictionary<byte, (int Squares, int Marked)> tally)
+    {
+        int all = tally.Values.Sum(one => one.Squares);
+
+        return all == 0 ? 0 : (double)tally.Values.Sum(one => one.Marked) / all;
+    }
+
     /// <summary>The side opposite the one given — the control on any side reading.</summary>
     /// <remarks>
     /// If the squares merely had a lot of open neighbours, the far side would be open about as

@@ -60,6 +60,33 @@ public static class MetatileBehaviour
     /// </summary>
     public const byte Counter = 0x80;
 
+    /// <summary>
+    /// The board a sign is written on (281).
+    /// <para>
+    /// <b>Named from the cartridge's own two directions, and the second is the one that names
+    /// it.</b> That 179 sign records stand on this byte says nothing on its own — it might be
+    /// every wall in the game. What says something is the other way round: there are <b>189
+    /// squares</b> of it in the world and <b>179 of them hold a sign</b>, which is 94.7% against a
+    /// whole-game base rate of 0.300% — three hundred and sixteen-fold.
+    /// </para>
+    /// <para>
+    /// And it belongs to ONE kind of sign: all 179 are kind <c>0x00</c>, the kind whose record
+    /// names no side (279). Not one of the 97 that name a side stands on it, and neither does any
+    /// of the 183 buried ones.
+    /// </para>
+    /// <para>
+    /// The ten squares with nothing on them are nine on <c>3.11</c> and one on <c>10.19</c>. Nine
+    /// of ten on one map is either a decoration or nine records that were removed, and there is
+    /// nothing here to tell those apart.
+    /// </para>
+    /// <para>
+    /// <b>Nothing reads this yet.</b> It is named because the evidence is in hand and because the
+    /// next milestone that wants it should not have to derive it again — not because a reading
+    /// depends on it.
+    /// </para>
+    /// </summary>
+    public const byte SignBoard = 0x84;
+
     /// <summary>Long grass. Adjacent to tall grass in the numbering and also an encounter square.</summary>
     public const byte LongGrass = 0x03;
 
