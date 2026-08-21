@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-304`, 3197 tests green.
+`claude-305`, 3216 tests green.
 
 Standing rules — do not break these:
 
@@ -634,16 +634,36 @@ Traps worth carrying:
     change what a table contains, grep the block for the population it feeds** — not for the
     number you changed, which appears nowhere.
 
+73. **REACHING IS NOT RETURNING, AND EVERY REACH NUMBER HERE IS THE FIRST ONE** (265). The walk
+    is a forward traversal of a graph with one-way edges in it — ledges, doors, the runtime
+    sentinel — and "the run reaches 174 maps" has been read as connectedness for two hundred
+    milestones. At the floor **24029 of 35142 squares cannot get back**, 137 maps stranded whole,
+    through eighteen ledge hops on one route. **A directed graph has two questions and this
+    project had been asking one of them.**
+
+74. **HALF A READING IS THE EASIEST KIND TO STOP AT** (265). `Warp.Dynamic` was derived so the
+    walker would stop reporting nineteen ordinary exits as holes. It understands the sentinel
+    well enough not to call it a hole and not well enough to come back out through one, so the
+    walk steps into three lift cabins, counts each as a map reached, and stands there forever.
+    **When you teach a reader to stop being wrong in one direction, ask what the other direction
+    now does.**
+
+75. **THE LOOSE HALF OF A TEST IS THE HALF THAT CANNOT MOVE** (265). "The far door names this map
+    back" scores 237 in the reading and 233 in the control — it is nearly free, because most
+    maps' doors all lead to the same place. "It names THIS door back" scores **920 against 219**.
+    Two predicates on one question, and only one of them is evidence. **Print both and let the
+    control say which.**
+
 ## Where things are
 
-Read `claude/milestone-264-the-block-re-run.md` first, then `263`, `262`, `261`, `260`, `259`, `258`, `257`,
+Read `claude/milestone-265-the-way-back.md` first, then `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
 `250`, `249`, `248`, `247`, `246`, `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
 `238`, `237`,
 `236`, `235`, `234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
-**Thirty-six faults closed and every one was in this project, not on the cartridge.** A walk that
+**Thirty-seven faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
 script" list; a list ranked by a count instead of by what it costs; a party that could not gain
 a level; a roadmap line that called a fix a cost; a continuation that carried flags and not
@@ -695,7 +715,14 @@ refuted by two tests that cannot see an elevation**, along with its premise (`0x
 elevation 1 on 59.6% of its squares) and the layer rule itself; the water list was never changed,
 so the fault closed at 262 is 261's own inference and it cost nothing; and at 263 **two numbers
 quoted in this file since 190 that nothing had ever computed** — withdrawn rather than corrected,
-because no split of this cartridge reproduces either, while the other two came back exact.
+because no split of this cartridge reproduces either, while the other two came back exact; and at
+264 **five block lines moved by one milestone that re-ran none of them**, and 248's "183 of 183"
+counting twelve hits on an item table's BLANK entry; and at 265 **a walk that enters three lift
+cabins and can never leave one** — `Warp.Dynamic` was derived so the walker would stop calling
+nineteen ordinary exits holes, and it stops there: the sentinel is understood on the way in and
+not on the way out, so three maps are counted as reached and are rooms with no exit. **And the
+larger half of that one is not a bug at all but a reading**: every reach number in this file is
+forward, 24029 of the floor's 35142 squares cannot get back, and nothing had ever asked.
 
 `246` is the read that is not a command, and the literal-pool test for whether compiled code holds
 a number — both live inside `--namespaces`, which is now the fullest single instrument in the
@@ -751,7 +778,16 @@ dotnet run -c Release --project src/Tools/RomDump -- firered.gba --dropped
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --unread
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --layers
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --sea
+dotnet run -c Release --project src/Tools/RomDump -- firered.gba --the-way-back
 ```
+
+`--the-way-back` asks whether the places the walk gets to can get back to where it began (265).
+The walker hands out the edges it TAKES — every enqueue goes through one function that records
+and then enqueues — and the reverse traversal is of that record and of nothing else, so the two
+cannot come to disagree about what a step is. Three settings, then the same question asked of
+the map data alone: the warp mirror (920 name this door back against a control's 219) and the
+borders (114 of 116 declared from both sides). **Reaching and returning are two facts and this
+project printed one of them for two hundred milestones.**
 
 `--sea` asks which behaviours are water WITHOUT looking at an elevation (262): what a square
 BORDERS and whether anything STANDS on it, with the two behaviours already read as water and three
@@ -1230,6 +1266,20 @@ elevation 1 is NOT the sea: 0x15 is at elevation 1 on 59.6% of its squares, 0x10
   known water 0 times in 3004 and 0x52/0x53 carry people at 3.5%/4.4% against NORMAL's 1.39% (262)
 0x1B is 751 squares on ROUTE 17 bordered only by itself and 0xD0 (336 pairs); neither is named
 675 walkable pairs join two different non-nought layers, 269 of them 3-beside-4 — the bridges
+REACHING IS NOT RETURNING and until 265 only one of them was ever printed. `--the-way-back`:
+  the floor stands on 35142 squares over 174 maps and 24029 of them CANNOT get back — 140 maps,
+    137 stranded WHOLE, and the way into every one is EIGHTEEN LEDGE HOPS on 3.22 ROUTE 4
+  with moves and through people it is 48 squares on 4 maps; surfing does not change that number
+  three of the four are LIFT CABINS — 10.6, 1.58, 1.46 — which the walk enters and never leaves,
+    because their exits are the runtime sentinel and the walker `continue`s past it
+  the fourth is 2 squares behind a ledge on 3.7 FUCHSIA, and it is this milestone's decoy fixture
+  1294 warps: 19 the sentinel, and of the other 1275 — 920 name THIS door back, 237 come back to
+    the map by another door, 118 are ONE WAY. Control (the next door along): 219 / 233 / 823
+  116 borders, 114 declared from both sides; the 2 are 3.50 and 3.51 both naming 3.14 THREE
+    ISLAND upward, which names 3.49 downward — three maps claim to be south of it, it claims one
+  9 maps have NO exit but the sentinel: 0.0-0.4 (the rooms above a centre; 0.1 and 0.4 each have
+    19 doors in from 19 maps, one per town), 1.46, 1.58, 2.11 TRAINER TOWER, 10.6. The walk gets
+    into 3; the other 6 are entered by a script rather than by standing on a square
 object +3/+11/+22/+23 and trigger +5/+10/+11 are nought in EVERY record in the game — spare (260)
 object +14 is unread on the 1199 non-trainers and is nought on 1197 of them; two are not (260)
 the map scan is 2915 entries at 1959 addresses, 90624 command reads at 24491 byte positions
@@ -1405,6 +1455,18 @@ still work.**
   as a look. What is left: `0x4001`'s other two flag sites, and whether
   `EverywhereInTheImage.Reads` should stop counting `0x1A arg2` at all (244 marked the output
   rather than moving quoted numbers, and that decision is owed a re-run).
+* **What 265 left.** `--the-way-back` printed the second column for the first time; what is owed:
+  * **What the lifts are worth.** The walk gets into `10.6`, `1.58` and `1.46` and models each as
+    a room with no exit. Joining every floor with a door into a lift is the same upper bound the
+    boat already takes; the difference it makes to reach has never been measured. A lever, and
+    MODELLED.
+  * **The other six sentinel rooms** — `0.0`-`0.4` and `2.11` TRAINER TOWER — are entered by a
+    script, so `--through-scripted-doors` is the setting that would walk into them. Not run.
+  * **The two one-way borders.** `3.50` and `3.51` both name `3.14` THREE ISLAND upward and it
+    names `3.49` downward. Neither is reached without the boat, so what a walker crossing north
+    from either actually comes back onto is unmeasured.
+  * **The floor table has six rows and one column.** 265 asked three settings; `--the-floor`'s own
+    six have not been asked whether they can get back.
 * **`9.6`'s puzzle** — fifteen doors, `0x8004` against `0x8008`. Read far enough to say what it
   is; it is NOT why the run cycles, whatever 239 said.
 * **`3.57 sign (9,43)`** — the LEMONADE example that has been quoted in this prompt for
