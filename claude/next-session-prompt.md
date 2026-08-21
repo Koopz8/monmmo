@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-308`, 3241 tests green.
+`claude-309`, 3248 tests green.
 
 Standing rules — do not break these:
 
@@ -692,9 +692,21 @@ Traps worth carrying:
     is that axis, and total variation being linear in a mixture makes "how much of this could be
     real" arithmetic on two distances rather than a judgement.
 
+82. **A CONTROL WITH VARIANCE IS NOT A CONTROL, AND ITS OWN VARIANCE IS HOW YOU KNOW** (269).
+    Rotation looked like the right null for 268's problem and gave 289 / 2301 / 2449 entries at
+    three offsets — an eightfold spread, because rotating by four megabytes moves the pointers out
+    of the region scripts live in. The nudge gives 14.9% to 16.4% from four bytes to four
+    thousand. **Run a proposed floor at several settings before believing one of them.**
+
+83. **A CONTROL HAS A SCOPE AND IT IS WORTH PRINTING** (269). Rotation is a NO-OP by construction
+    for content-relative sweeps — the literal-pool test and the written-and-never-read counts come
+    back identical at every offset, because a PC-relative load reaches a word a fixed distance from
+    itself wherever the file sits. Those readings are not about addresses, so a null that only
+    breaks addresses says nothing about them, and the reversal stays their control.
+
 ## Where things are
 
-Read `claude/milestone-268-the-floor-was-the-wrong-control.md` first, then `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
+Read `claude/milestone-269-a-floor-that-keeps-the-region.md` first, then `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
 `250`, `249`, `248`, `247`, `246`, `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
@@ -828,7 +840,16 @@ dotnet run -c Release --project src/Tools/RomDump -- firered.gba --sea
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --the-way-back
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --which-way
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --operands-everywhere
+dotnet run -c Release --project src/Tools/RomDump -- firered.gba --the-control
 ```
+
+`--the-control` is the floor, re-asked (269). Three controls side by side: BACKWARDS (what this
+project has always used, and 268 showed it keeps every table), ROTATED by a multiple of four
+(keeps the tables and the alignment, breaks the pointer-to-target correspondence — and is itself a
+bad floor, 289/2301/2449 at three offsets), and THE NUDGE (the same pointers aimed a few bytes
+off, stable from 4 bytes to 4096). **Use the nudge for anything that follows a pointer and the
+reversal for anything content-relative** — rotation is provably a no-op for the second kind and
+the command prints both to show it.
 
 `--operands-everywhere` is the operand sweep over the whole file rather than over the 0.6% the
 maps point at (267), which 252 left owed. Population: every four bytes anywhere holding a ROM
@@ -1334,7 +1355,14 @@ the file holds 10240 blocks reachable from an ALIGNED pointer against the map sc
   populations sit 0.24-0.32 from the reversal. The mixture bound (total variation is linear, so
   this is arithmetic) puts at most 3.1% and 1.8% of them on the real side — about 121 of 4825
 so the reversed-image floor said 456 where the truth is about 6300, a FOURTEEN-FOLD gap, because
-  reversing keeps every table (268). 267's "6621 blocks no map leads to" is WITHDRAWN as a count
+  reversing keeps every table (268). The region-preserving floor (269) puts it at 15%: of 46143
+  aligned targets, 19.2% decode AS NAMED and 14.9-16.4% decode NUDGED by 4 to 4096 bytes — and
+  split, the maps' own go 99.6% -> 51-70% and everything else 14.9% -> 12.0-13.8%. Two routes
+  sharing no code agree that the maps lead to very nearly all the script this cartridge has
+a pointer aimed FOUR BYTES into the middle of a real script still decodes to a proper end two
+  thirds of the time — the reader resynchronises (269). That is why "reads as a script" was never
+  the filter its name suggests, and 0x00 being a no-op with no arguments is why a run of zeros
+  reaches whatever end follows it 267's "6621 blocks no map leads to" is WITHDRAWN as a count
   of scripts: the maps lead to very nearly all the script this cartridge has
 the whole-image operand sweep CANNOT be run and now has no reason to be: compare's variable
   operand is 98% over the map scan and 27% over the outside half (267) because the outside half is
@@ -1541,10 +1569,16 @@ still work.**
   as a look. What is left: `0x4001`'s other two flag sites, and whether
   `EverywhereInTheImage.Reads` should stop counting `0x1A arg2` at all (244 marked the output
   rather than moving quoted numbers, and that decision is owed a re-run).
-* **What 268 left**, and it is the biggest thing on this list:
-  * **A FLOOR THAT KEEPS THE FILE'S STRUCTURE.** Every "against a reversed floor of N" in this
-    prompt is waiting on it. Rotating the image by one byte keeps every table and every alignment
-    and destroys every command boundary, which is what these controls claim to be. Untried.
+* **What 269 left.** The control exists now; applying it does not:
+  * **Re-run every reading whose floor was the reversal AND which is about ADDRESSES.**
+    `--in-the-image`'s jumped-into sites, the coin-chain floor and the field-effect floor are all
+    of that shape and none has been asked. This is the biggest thing on this list.
+  * **A nudge for the three-byte sweeps.** `Moves`, `Writes` and `AsksWhoKnows` scan for a pattern
+    rather than follow a pointer, so "aim it a few bytes off" does not translate; asking for a
+    flag id the cartridge does not use does, and was not tried.
+  * **The seam.** A rotation joins the end of the file to the beginning; four bytes of the control
+    were never adjacent. Unmeasured.
+* **What 268 left:**
   * **The 121.** The bound says at most that many outside blocks are real script; WHICH ones is a
     per-block question the mix cannot answer.
   * **`0x09`, `0x0F` and `0x21` are 30% of the maps' scripts and under 4% of everything else.** A
