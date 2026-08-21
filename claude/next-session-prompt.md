@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-312`, 3266 tests green.
+`claude-313`, 3272 tests green.
 
 Standing rules — do not break these:
 
@@ -709,6 +709,17 @@ Traps worth carrying:
     what names their own blocks is a literal in code, which the climb had said per site since 191.
     **Before believing a proximity test, ask what it would find if the thing were merely nearby.**
 
+88. **A DISTANCE MEASURED ON TENS AND ONE MEASURED ON THOUSANDS ARE NOT COMPARABLE** (273). The
+    38 unnamed boundary sites' command mix sits **0.601** from the maps' own scripts where the
+    reversed image sits 0.504 — which reads as "farther from real script than junk is" and made
+    268's mixture bound clamp to nought. It is the sample size: **a sample of 38 drawn from the
+    maps' OWN scripts scores 0.220 to 0.360 against its own whole.** With that band printed the
+    answer is clean — 0.601 is outside the maps' band, 0.373 is inside the reversal's, the 38 are
+    the reversal's kind. **A population small enough to name individually is small enough to need
+    a sampling band**, and `WhatABlockIsMadeOf.SamplingBand` is it: consecutive groups, so it is
+    reproducible from the file, and consecutive is the conservative direction because neighbours
+    are alike. **The clamp was the sample size, not a finding, and the command says so.**
+
 87. **A UNIFORM ERROR BAR ON A NON-UNIFORM FILE IS WRONG BY THE BYTE FREQUENCIES** (272).
     `--in-the-image` has said since 175 that a three-byte pattern turns up about once by accident.
     Asked of sixteen unused ids with the same high byte, a `0x00xx` flag's floor is a MEDIAN of
@@ -739,14 +750,14 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-272-the-error-bar-was-an-order-of-magnitude-low.md` first, then `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
+Read `claude/milestone-273-thirty-eight-blocks-is-a-small-sample.md` first, then `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
 `250`, `249`, `248`, `247`, `246`, `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
 `238`, `237`,
 `236`, `235`, `234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
-**Forty-two faults closed and every one was in this project, not on the cartridge.** A walk that
+**Forty-three faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
 script" list; a list ranked by a count instead of by what it costs; a party that could not gain
 a level; a roadmap line that called a fix a cost; a continuation that carried flags and not
@@ -817,6 +828,10 @@ pointers are aimed past the window, so `--flags`' "8 boundary flags jumped into"
 offered as entry points since 175 is the opening plus thirty-eight unnamed accidents; and at 272
 **the whole-image error bar** — "about 1.0 by accident" since 175, against a measured ten to
 thirteen for any `0x00xx` flag, so every wall flag's site count was on its floor all along; and at
+273 **a command-mix distance read without a sampling band** — 38 blocks sit 0.601 from the maps'
+own scripts where the reversal sits 0.504, which is not "farther than junk" but the cost of
+thirty-eight blocks: the maps' own score 0.220-0.360 at that sample size, and 268's bound clamping
+to nought was arithmetic on two numbers measured on different amounts of evidence; and at
 267 **fifteen milestones of "the whole image" being owed, answered NO with a number** — the
 operand sweep's calibration row falls from 98% to 27% on the half the maps do not lead to, so the
 population that would have settled 252 cannot; and at
@@ -1529,6 +1544,9 @@ ONE number is named both as a flag and as a variable in the map scan — 0x4001,
   the bands, READ not asserted: flags 0x0000+ 237n/347p and 0x4000+ 1n/4p; variables
     0x4000+ 77n/856p and 0x8000+ 16n/3428p, with 0x1A arg2's 145n/501p outside both (264)
   the whole-IMAGE version of the same question says 2117 / 14308 / 1333 — throw it away (264)
+the 38 unnamed boundary sites are the REVERSAL'S KIND (273): command mix 0.601 from the maps' own
+  against a 38-block band of 0.220..0.360, 0.373 from the reversal's against its 0.333..0.822;
+  22 of the 38 are two or three commands long and three are runs of nop — 269's zero slide
 0x9C is dofieldeffect, named in ONE place since 233 and privately in EverywhereInTheImage since 191
 6 moves pair with 6 numbers: CUT 2, SURF 9, ROCK SMASH 37, STRENGTH 40, WATERFALL 43, DIVE 44
 the only repeated move (DIVE, twice) repeats its number — ONE agreement, not six
@@ -1633,8 +1651,10 @@ still work.**
 * **What 271 left.** The boundary's sixty are sorted (`--flags`, `WhatTheBoundaryIs`): 21 the
   opening, 1 code read as a `call`, 0 a literal's block, **38 that read as script and that
   NOTHING names**. Owed:
-  * **The 38.** A per-site test — does the block decode from the command boundary before the
-    site, with a command mix like the maps' own (268's axis)? Most are 269's resynchronisation.
+  * ~~The 38.~~ **READ AT 273: they are the reversal's kind.** Their command mix is 0.601 from
+    the maps' own against a 38-block sampling band of 0.220..0.360, and 0.373 from the
+    reversal's against its band of 0.333..0.822. **The sixty are fully accounted for: 21 + 1 +
+    38 + nothing left over.**
   * ~~Slack itself~~ **DONE AT 271**: window at nought, 4 of 3674 sites and 0 on the boundary.
   * ~~`0x0014` at `0x081C0D45`~~ **DONE AT 271, and it is THUMB code** — see trap 86.
   * ~~The 60 minus 21~~ **DONE AT 271** — 21 / 1 / 0 / 38, printed by `--flags`.
