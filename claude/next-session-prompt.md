@@ -709,6 +709,22 @@ Traps worth carrying:
     what names their own blocks is a literal in code, which the climb had said per site since 191.
     **Before believing a proximity test, ask what it would find if the thing were merely nearby.**
 
+107. **TO NAME A BYTE, COUNT THE BYTE'S SQUARES AND NOT THE THINGS ON THEM** (281). *179 signs
+    stand on `0x84`* names nothing — it reads the same whether that byte is a sign board or every
+    wall in the game, and those are opposite findings. Asked the other way: **189 squares of `0x84`
+    exist and 179 hold a sign**, 94.7% against the world's own 0.300%, which is 315-fold. It is
+    trap 8 wearing a different hat — the count of hits is the numerator and the population of the
+    BYTE is the denominator, and the one this project reaches for first is the population of the
+    hits. `MetatileBehaviour.SignBoard` is named off it, and `0x9A` (238-fold, SEVEN squares) and
+    `0x20` (89-fold, fifteen) are declined on 237's bar.
+
+106. **A RULE THAT IS TRUE OF THE KIND YOU LOOKED AT** (281). 242 wrote that a sign's own square is
+    SOLID — *that is what a sign is* — and it is true of every one of the 97 that name a side (0 of
+    73, 0 of 14, 0 of 10 walkable) and **false of 85 of the 422 that name none**. The buried kind is
+    the other way round again: **142 of 183 walkable**, which is what a thing you dig up should be.
+    One rule, three answers, and the kind byte is what tells them apart — which nothing knew until
+    279 counted it.
+
 105. **A COUNT OF HOW WRONG SOMETHING COULD BE IS NOT A COUNT OF HOW WRONG IT WAS** (280). 279
     found 97 signs readable from one side that this project read from four, and printed the blast
     radius from the records alone: **68 of the 97 have a walkable neighbour the kind forbids**. Made
@@ -900,15 +916,15 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-280-ninety-seven-signs-and-two-of-them-mattered.md` first, then `279`,
-then `278`, then `277`, then `276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
+Read `claude/milestone-281-a-scale-with-both-ends-measured-was-a-byte-nobody-had-counted.md`
+first, then `280`, then `279`, then `278`, then `277`, then `276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
 `250`, `249`, `248`, `247`, `246`, `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
 `238`, `237`,
 `236`, `235`, `234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
-**Fifty-two faults closed and every one was in this project, not on the cartridge.** A walk that
+**Fifty-three faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
 script" list; a list ranked by a count instead of by what it costs; a party that could not gain
 a level; a roadmap line that called a fix a cost; a continuation that carried flags and not
@@ -1017,7 +1033,9 @@ those kinds name the SIDE you have to stand on to read the sign (0x01 south 73/7
 0x04 east 10/10, against the commonest kind's 87%, 55% and 47%, with the opposite side open 0 of 14
 and 0 of 10). **242's four-square rule is three squares too many for 97 signs** — and at 280 the walk was made to
 obey the record, which costs **0 maps, 0 flags and 2 signs** at every lever setting, against the 68
-of 97 the records said could be over-read.
+of 97 the records said could be over-read; and at 281 **242's own rule that a sign's own square is
+SOLID**, which is true of all 97 that name a side and false of 85 of the 422 that name none — and
+the buried kind is walkable on 142 of 183, because a thing you dig up is in the ground.
 
 `246` is the read that is not a command, and the literal-pool test for whether compiled code holds
 a number — both live inside `--namespaces`, which is now the fullest single instrument in the
@@ -1596,6 +1614,15 @@ BUT THE RUN ALSO TAKES FLAGS BACK: 164 ever on at the floor against the 160 it s
     and 280, which took two off each end by making the walk obey the side the record names
     241 said 215 and 328: it keyed the read set on (map, ADDRESS) and a sign is a SQUARE. The
     address and map columns were right throughout. 224 for the THIRD time, this one self-inflicted
+  WHAT EACH KIND STANDS ON (281): its own square is walkable on 0/73 of kind 0x01, 0/14 of 0x03,
+    0/10 of 0x04 — a sign read from one side is on a wall — against 85/422 of kind 0x00 and 142/183
+    of the buried kind. **242's "a sign's own square is SOLID" is wrong for 85 signs**
+  0x84 IS THE SIGN BOARD (281): 189 squares in the game, 179 hold a sign — 94.7% against the world's
+    own 0.300%, 315-fold. All 179 are kind 0x00; none of the 97 side-namers and none of the 183
+    buried. The ten spare are NINE on 3.11 and one on 10.19. Named on MetatileBehaviour.SignBoard,
+    and nothing reads it yet. 0x9A (7 squares, 5 signs, 238x) and 0x20 (15, 4, 89x) DECLINED on 237's bar
+  10.6 (4,1), the one sign nothing can stand beside (242): kind 0x00, own square 0x00 and SOLID,
+    all four neighbours 0x00 and shut — not a sign board and not a collision reading of that kind
   the 56 unread at the widest: 36 on maps it never reached, 19 walls on maps it walks, and
     EXACTLY ONE nothing could ever stand beside — 10.6 (4,1), 0x0816C153, same at every lever
   the floor's seven: 0x0031, 0x0032, 0x0233, 0x0234, 0x0235, 0x026D, 0x0834; TWO gate and each
@@ -1922,12 +1949,19 @@ still work.**
   as a look. What is left: `0x4001`'s other two flag sites, and whether
   `EverywhereInTheImage.Reads` should stop counting `0x1A arg2` at all (244 marked the output
   rather than moving quoted numbers, and that decision is owed a re-run).
+* **What 281 left.**
+  * **The nine `0x84` squares on `3.11`** with no sign on them — decoration or nine removed
+    records, and nothing here separates them. Same shape as 279's eight holes.
+  * **`0x9A` and `0x20`** are above any fold-change you like and below the bar on count. A second
+    line of evidence would make either cheap to adopt.
+  * **Nothing reads `SignBoard`.** Named because the evidence is in hand.
 * **What 280 left.**
   * **The client does not know about the side.** `MapSign.MustBeReadFrom` is on the shared record so
     both halves have it, and nothing on the client asks. A rule enforced on one side of the split
     needs its counterpart on the other — unmeasured and unasked.
-  * **Whether a BURIED sign has a side.** Kind `0x07`'s neighbours are open 120/147/142/127 of 183,
-    which is no side on the face of it, and nobody has asked it properly.
+  * ~~Whether a BURIED sign has a side.~~ **ASKED AT 281 and the answer is a different question**:
+    it has no side (120/147/142/127 of 183 open) and its own square is WALKABLE on 142 of 183, so
+    the thing to ask is whether the walk should stand ON it rather than beside it.
 * **What 279 left.**
   * ~~Whether the walk should obey the side.~~ **DONE AT 280** — the exported record carried the
     kind already (239), so it was the rule and not the plumbing. 0 maps, 0 flags, 2 signs.
