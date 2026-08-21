@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-300`, 3179 tests green.
+`claude-301`, 3186 tests green.
 
 Standing rules — do not break these:
 
@@ -549,16 +549,40 @@ Traps worth carrying:
     which fixture does not cover what you thought; this is the other direction, and the first time
     it has been recorded here.**
 
+62. **MEASURE A WORRY BEFORE FIXING IT, AND OVER THE GRID THE RUN ACTUALLY USES** (261). 260's
+    "423 of 425 maps are layered and the walk is flat" is a worry. Filled over `map.Collision` it
+    came out at **8397 squares across 50 maps** — and that number is about the code: **water in
+    this cartridge is COLLISION-ZERO** and is made solid by a metatile behaviour, so the fill was
+    walking on the sea. Over `GridFor(false)`, the grid the run steps against, it is **751 squares
+    on ONE map**. **Before believing a loss, check which grid you filled.**
+
+63. **THE LEFTOVER WAS NOT A BRIDGE, IT WAS WATER — AND IT NAMES A FAULT IN ANOTHER READING**
+    (261). All 751 lost squares are at **elevation 1, which is the sea**: 22250 squares carry it
+    and the behaviour pass already makes 21185 solid. Asking what the other 1065 carry gives
+    **four behaviours at elevation 1 on 100% of their squares in sixteen megabytes** — `0x1B`
+    (751), `0x52` (142), `0x53` (45), `0x50` (42) — against 0-1% for every other behaviour on the
+    list, and `0x13` in between at 80%. No band boundary needed. **`0x1B`'s 751 are exactly the
+    751 ROUTE 17 squares the layered fill loses**: one value and one number from two directions
+    that did not know about each other. **NOT ADOPTED** — each is on one or two maps, below the bar
+    237 set when it declined `[0x89] = 2`. `MetatileBehaviour.IsWater` is a READ list; leave it.
+
+64. **NOT EVERY GREEN CONTROL IS A MISSING FIXTURE** (261). 257's and 258's green controls were
+    each a rule nothing checked and each earned one. 261's — walking the fill's four directions in
+    the other order — cannot be: a flood fill's answer does not depend on visit order, so there is
+    nothing there to guard. **Ask whether the thing the break changed can affect the answer at
+    all** before writing a test for it; a fixture for a property that holds by construction is a
+    test named for a discrimination it does not make.
+
 ## Where things are
 
-Read `claude/milestone-260-the-elevation-in-every-record.md` first, then `259`, `258`, `257`,
+Read `claude/milestone-261-what-the-layers-cost.md` first, then `260`, `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
 `250`, `249`, `248`, `247`, `246`, `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
 `238`, `237`,
 `236`, `235`, `234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
-**Thirty-three faults closed and every one was in this project, not on the cartridge.** A walk that
+**Thirty-four faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
 script" list; a list ranked by a count instead of by what it costs; a party that could not gain
 a level; a roadmap line that called a fix a cost; a continuation that carried flags and not
@@ -603,7 +627,9 @@ map number, removed until now by an off-map test that had no idea what it was ca
 260 **an ELEVATION in all four event records that nothing reads** — `object +8`, `warp +4`,
 `trigger +4`, `sign +4`, named against the map's own block nibble at 86-98% against floors of
 ~44%, with three genuine disagreements in 3863 records, on a world where 423 of 425 maps are
-layered and the walk is flat.
+layered and the walk is flat; and at 261 **four metatile behaviours that are at sea level on 100%
+of their squares and are in no water list** — `0x1B`, `0x52`, `0x53`, `0x50`, 980 squares, found
+because the layered fill lost exactly `0x1B`'s 751 on ROUTE 17.
 
 `246` is the read that is not a command, and the literal-pool test for whether compiled code holds
 a number — both live inside `--namespaces`, which is now the fullest single instrument in the
@@ -657,7 +683,22 @@ dotnet run -c Release --project src/Tools/RomDump -- firered.gba --buried
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --operands
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --dropped
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --unread
+dotnet run -c Release --project src/Tools/RomDump -- firered.gba --layers
 ```
+
+`--layers` is what 260's elevation would cost the walk (261), and it changes nothing. The flat
+fill and the layered fill are ONE fill with one predicate swapped — the flat run passes a rule
+that always says yes — so they cannot differ for any reason but the rule, which is MODELLED
+(equal elevations, or nought on either side). Over `GridFor(false)`, the grid the run steps
+against: **751 squares on ONE map, 3.35 ROUTE 17, 0.94%**, and nought maps. Over `map.Collision`
+it says 8397 across 50 maps and that number is about the code — **water here is collision-ZERO**
+and is made solid by a behaviour. All 751 are at **elevation 1, which is the sea**: 22250 squares
+carry it, the behaviour pass makes 21185 solid, and the 1065 left over give **four behaviours at
+elevation 1 on 100% of their squares in the image** — `0x1B` 751, `0x52` 142, `0x53` 45, `0x50`
+42 — against 0-1% for the rest, with `0x13` at 80% in between. `0x1B`'s 751 ARE the ROUTE 17 751.
+**Not adopted**: one or two maps each, below 237's bar. It also prints the cross-layer pairs —
+675 join two non-nought layers, 269 of them 3-beside-4, the bridges — and the flat walk crosses
+every one at no cost.
 
 `--unread` is which bytes of an event record nothing in this project reads (260), and it does not
 keep a list of offsets — `Rom.WatchReads` records what the readers actually touched, so it cannot
@@ -1091,6 +1132,11 @@ the four event lists lose NOTHING to the off-map filter: warps 0/1294, triggers 
 every event record carries the ELEVATION of its own square and nothing reads it (260): object +8,
   warp +4, trigger +4, sign +4 — 97.6/93.2/86.0/87.3% against ~44%, 3 of 3863 genuinely disagree
 423 of 425 maps carry more than one elevation among their own squares; the walk is two-dimensional
+  and it costs 751 squares on ONE map (3.35 ROUTE 17) and NOUGHT maps — all 751 are water (261)
+elevation 1 is the SEA: 22250 squares, 21185 already solid from behaviours, 1065 left over
+0x1B/0x52/0x53/0x50 are at elevation 1 on 100% of their squares in the image and are in no water
+  list — 980 squares, 1-2 maps each, NOT ADOPTED (below 237's bar); 0x13 is 80% and is open
+675 walkable pairs join two different non-nought layers, 269 of them 3-beside-4 — the bridges
 object +3/+11/+22/+23 and trigger +5/+10/+11 are nought in EVERY record in the game — spare (260)
 object +14 is unread on the 1199 non-trainers and is nought on 1197 of them; two are not (260)
 the map scan is 2915 entries at 1959 addresses, 90624 command reads at 24491 byte positions
