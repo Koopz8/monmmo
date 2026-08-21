@@ -709,6 +709,32 @@ Traps worth carrying:
     what names their own blocks is a literal in code, which the climb had said per site since 191.
     **Before believing a proximity test, ask what it would find if the thing were merely nearby.**
 
+104. **COUNT THE FIELD INSTEAD OF ASSERTING WHAT IT HOLDS** (279). 248 filtered signs on
+    `kind == 7` and this project has said "there are two kinds of sign" ever since. Tallied, the
+    byte takes **FIVE** values — 0x00 x422, 0x01 x73, 0x03 x14, 0x04 x10, 0x07 x183 — and **519
+    script signs are four kinds read as one**. The tally cost four lines and it is the third time a
+    table thought to hold one kind held two (248's buried signs, 259's clones, this). It also makes
+    248's reading stronger: every one of the 519 holds a ROM pointer and NONE of the 183 buried
+    ones does, so the kind byte separates the two record shapes perfectly.
+
+103. **THE KIND BYTE IS WHICH SIDE YOU READ THE SIGN FROM** (279). 242 reads a sign from its own
+    square or any of the four around it, so the walkable NEIGHBOURS of a kind are the test. **0x01
+    is read from the SOUTH — 73 of 73, floor 0.0046%. 0x03 from the WEST — 14 of 14, floor 0.0217%.
+    0x04 from the EAST — 10 of 10, floor 0.0517%.** The floor is kind 0x00's own rates (87.2%,
+    54.7%, 46.9%), which is the kind that names no side. **And the opposite side is open 0 of 14 and
+    0 of 10** — which is what turns "one side is always open" into "this side and not that one".
+    **97 signs are readable from ONE side and this project reads them from four**; 68 of them have
+    another walkable neighbour, which is the blast radius (9). `0x02` never occurs and would be
+    north — inferred, not read.
+
+102. **A PERFECT SCORE IS WORTH WHAT ITS FLOOR IS SMALL, AND TWO OF THE ROWS PROVE IT** (279). The
+    six buried records that set the spare bit are 6 of 6 on three different properties. *Its item is
+    named by NO script* is 68 of 183, so six in a row is one chance in 440. *Its own square is
+    walkable* is 142 of 183 — one in five. *The count is one* is 171 of 183 — two in three. All
+    three read "6/6" and only the first is anything, and the last two are kept in the table for
+    exactly that reason. **And the property is not the bit**: 62 other records hold it without
+    setting it, so it is a thing the six have and not what the bit means.
+
 101. **EVERY BLOCK OF SCRIPT THIS PROJECT KNOWS LIES IN 2.5% OF THE FILE** (278). 3888 blocks and
     435 flag sites, all of them, between `0x08160487` and `0x081C5528` — 404 KiB, three of
     sixty-four slices. The populations read against them span 91% (outside ALONE), 92% (outside IN A
@@ -865,15 +891,15 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-278-script-land-is-two-and-a-half-per-cent.md` first, then `277`, then
-`276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
+Read `claude/milestone-279-the-kind-byte-was-read-as-two-values.md` first, then `278`, then
+`277`, then `276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
 `250`, `249`, `248`, `247`, `246`, `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
 `238`, `237`,
 `236`, `235`, `234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
-**Fifty faults closed and every one was in this project, not on the cartridge.** A walk that
+**Fifty-one faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
 script" list; a list ranked by a count instead of by what it costs; a party that could not gain
 a level; a roadmap line that called a fix a cost; a continuation that carried flags and not
@@ -976,7 +1002,11 @@ match, real script reaches the 38's distance in NONE of 102 where in runs it rea
 and at 278 **that whole argument, which turns on a choice nothing can measure** — the cut is about
 the shape of a sample of the REFERENCE, only 3 of the 38 lie inside the reference's span, and at
 that size the two cuts are not even different. It is MODELLED and marked so, and 273 -> 276 -> 277
-was three milestones arguing about an assumption.
+was three milestones arguing about an assumption; and at 279 **the sign record's KIND byte, read as
+two values since 248 and taking FIVE** — 519 script signs are four kinds read as one, and three of
+those kinds name the SIDE you have to stand on to read the sign (0x01 south 73/73, 0x03 west 14/14,
+0x04 east 10/10, against the commonest kind's 87%, 55% and 47%, with the opposite side open 0 of 14
+and 0 of 10). **242's four-square rule is three squares too many for 97 signs.**
 
 `246` is the read that is not a command, and the literal-pool test for whether compiled code holds
 a number — both live inside `--namespaces`, which is now the fullest single instrument in the
@@ -1543,6 +1573,14 @@ BUT THE RUN ALSO TAKES FLAGS BACK: 164 ever on at the floor against the 160 it s
   costs 0 maps at all six settings, and only that direction can be non-empty — the walk is
   monotone in flags, asserted in TheFlagsItTookBackTests rather than believed
 702 signs: 519 a script at 360 addresses on 143 maps, 183 a hidden item — `--export-world` (239)
+  THE KIND BYTE TAKES FIVE VALUES, NOT TWO (279): 0x00 x422, 0x01 x73, 0x03 x14, 0x04 x10, 0x07 x183.
+    All 519 script kinds hold a ROM pointer; 0 of the 183 buried do — the byte separates the two
+    record shapes perfectly. And 0x01 is read from the SOUTH (73/73, floor 0.0046%), 0x03 from the
+    WEST (14/14, 0.0217%), 0x04 from the EAST (10/10, 0.0517%), floors off kind 0x00's own 87.2% /
+    54.7% / 46.9%; the OPPOSITE side is open 0 of 14 and 0 of 10. 0x02 never occurs (north, INFERRED)
+    **242's four-square rule is three squares too many for 97 signs** and 68 of them have another
+    walkable neighbour. NOT ADOPTED — the exported map record carries no kind, and what it costs in
+    flags is not measured
   317 of the 519 RUN at the floor (214 addresses, 79 maps); 465 at the widest (327, 134) — 242
     241 said 215 and 328: it keyed the read set on (map, ADDRESS) and a sign is a SQUARE. The
     address and map columns were right throughout. 224 for the THIRD time, this one self-inflicted
@@ -1813,8 +1851,14 @@ still work.**
   * ~~Is anything only underground?~~ **ASKED AT 249.** 21 kinds are, which is below the base
     rate's 30.3, and **nothing that is asked for has no other source** — no wall has a shovel in
     front of it.
-  * **The eight unused indices** — 7, 16, 40, 43, 44, 45, 46, 124, four of them consecutive — and
-    **the spare bit**, set by 6 records whose every other field is ordinary.
+  * ~~The eight unused indices and the spare bit.~~ **BOTH READ AT 279, and both end in a wall.**
+    The holes are only readable against the order the slots are handed out in, and it is NOT map
+    order (12 of 79 maps hold their slots in more than one run — `3.42` in three) and NOT address
+    order (40 of the 182 steps up the index go DOWN the file); no other sign kind claims them,
+    because every other kind holds a pointer. The spare bit's six all name an item NO script names
+    — 68 of 183, one chance in 440 — and 62 other records hold that property without setting the
+    bit, so it is a thing the six have and not what the bit means. **What the bit DOES is engine
+    behaviour.** The chase is what found the kind byte.
 * ~~The trigger's other half.~~ **ASKED AT 250 and FINISHED AT 257.** 43 of the 228 name a
   variable NOTHING writes, all of them `0x405F` — and 250's "42 of those can never fire" is wrong:
   251 put `copyvar`'s destination in the write tables and four `copyvar 0x405F, 0x4001` sites on
@@ -1866,6 +1910,12 @@ still work.**
   as a look. What is left: `0x4001`'s other two flag sites, and whether
   `EverywhereInTheImage.Reads` should stop counting `0x1A arg2` at all (244 marked the output
   rather than moving quoted numbers, and that decision is owed a re-run).
+* **What 279 left.**
+  * **Whether the walk should obey the side.** 97 signs, 68 with somewhere else to stand. A change
+    to the RUN and a DECISION. The exported map record carries no sign kind, so it needs plumbing
+    first — 239's shape again, when `MapData` carried no sign list at all.
+  * **`0x02` is absent and would be north.** Inferred, and no cartridge evidence can settle it.
+  * **What the spare bit DOES** is engine behaviour — the sixth wall of that kind.
 * **What 278 left.** The cut is measured where it can be and marked MODELLED where it cannot. Owed:
   * **There is no route to measuring it for the 38** — it would need known real script OUTSIDE
     script-land, and there is none. The fifth wall of that kind (248's base, 257's starting nought,
