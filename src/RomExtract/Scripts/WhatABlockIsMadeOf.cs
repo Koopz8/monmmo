@@ -83,28 +83,6 @@ public static class WhatABlockIsMadeOf
     }
 
     /// <summary>
-    /// The largest share of <paramref name="mixed"/> that could be drawn from
-    /// <paramref name="real"/> rather than from <paramref name="junk"/>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>A bound rather than an estimate, and it is exact arithmetic.</b> If a population is a
-    /// mixture — a share <c>f</c> of the real thing and the rest junk — then its distance from the
-    /// real thing is exactly <c>(1 - f)</c> times the junk's distance from it, because total
-    /// variation is linear in a mixture. So <c>f = 1 - d(mixed, real) / d(junk, real)</c>, and
-    /// there is no fitting and no threshold anywhere in it.
-    /// </para>
-    /// <para>
-    /// <b>It is only as good as the junk model</b>, which is why the caller prints the distance
-    /// between the two junk populations as well: if the thing standing in for junk is not what
-    /// this population's junk looks like, the bound is about the stand-in.
-    /// </para>
-    /// <para>
-    /// Nought when the mixture is no closer to the real thing than the junk is, negative
-    /// clamped away — "less real than junk" is not a share of anything.
-    /// </para>
-    /// </remarks>
-    /// <summary>
     /// The population cut into consecutive disjoint groups of <paramref name="howMany"/> blocks,
     /// each tallied — the one place a group is ever made.
     /// </summary>
@@ -126,23 +104,26 @@ public static class WhatABlockIsMadeOf
     /// <c>--the-ruler</c> prints the band both ways so the size of that choice is visible.
     /// </para>
     /// <para>
-    /// <b>Two questions are asked of these groups and they share this loop</b> — a band
-    /// (<c>SamplingBand</c>) and the bound (<c>BoundPerGroup</c>). 258's fault was a second copy
-    /// of a walk written for a second question, which left the suite guarding the other copy.
+    /// <b>Four questions are asked of these groups and they share <c>Cuts</c></b> — a band
+    /// (<c>SamplingBand</c>), the bound (<c>BoundPerGroup</c>), a group against the REST of its
+    /// own population (<c>AgainstTheRest</c>) and a group against another population entirely
+    /// (<c>AgainstAnother</c>). 258's fault was a second copy of a walk written for a second
+    /// question, which left the suite guarding the other copy.
     /// </para>
     /// </remarks>
     public static IEnumerable<HowOftenEachCommand> Groups(
-        Rom rom, IReadOnlyList<uint> population, int howMany)
+        Rom rom, IReadOnlyList<uint> population, int howMany) =>
+        Cuts(population, howMany).Select(at => In(rom, population.Skip(at).Take(howMany)));
+
+    /// <summary>Where each consecutive disjoint group starts — the one place a group is cut.</summary>
+    public static IEnumerable<int> Cuts(IReadOnlyList<uint> population, int howMany)
     {
         // Nought would make the step below no step at all. A sample LARGER than the population
         // needs no check: the loop's own condition never admits a group, which a break aimed at
         // the removed check proved by coming back green (219).
         if (howMany <= 0) yield break;
 
-        for (int at = 0; at + howMany <= population.Count; at += howMany)
-        {
-            yield return In(rom, population.Skip(at).Take(howMany));
-        }
+        for (int at = 0; at + howMany <= population.Count; at += howMany) yield return at;
     }
 
     /// <summary>A population in the order the cartridge holds it, so a group is neighbours.</summary>
@@ -165,6 +146,47 @@ public static class WhatABlockIsMadeOf
 
         return [.. Groups(rom, population, howMany).Select(g => Distance(g, whole)).Order()];
     }
+
+    /// <summary>
+    /// Each consecutive group's distance from the REST of its own population — one end of a scale,
+    /// measured at the sample size and with nothing compared against itself.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b><c>SamplingBand</c> scores a group against a whole that CONTAINS it</b> (276), which
+    /// pulls every distance down by the share of the whole the group is: 38 blocks of 435 makes
+    /// the band about a tenth too tight. That was harmless while the band was only being asked
+    /// whether some other population fell inside it, and it is not harmless when the band is the
+    /// end of a scale something is read against.
+    /// </para>
+    /// <para>
+    /// The rest is everything on both sides of the cut, so it is the same blocks the whole holds
+    /// minus the group and nothing else.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<double> AgainstTheRest(
+        Rom rom, IReadOnlyList<uint> population, int howMany) =>
+        [
+            .. Cuts(population, howMany)
+                .Select(
+                    at => Distance(
+                        In(rom, population.Skip(at).Take(howMany)),
+                        In(rom, population.Take(at).Concat(population.Skip(at + howMany)))))
+                .Order(),
+        ];
+
+    /// <summary>
+    /// Each consecutive group's distance from a DIFFERENT population — the other end of the same
+    /// scale, and the shape a population being read is measured in.
+    /// </summary>
+    /// <remarks>
+    /// The thing being read is scored against one whole population, so the end it is read against
+    /// has to be scored the same way. <c>AgainstTheRest</c> cannot do it: the two populations are
+    /// different bodies of blocks and there is no rest to take.
+    /// </remarks>
+    public static IReadOnlyList<double> AgainstAnother(
+        Rom rom, IReadOnlyList<uint> population, int howMany, HowOftenEachCommand other) =>
+        [.. Groups(rom, population, howMany).Select(g => Distance(g, other)).Order()];
 
     /// <summary>
     /// The bound asked of every consecutive group of <paramref name="howMany"/> blocks, against a
@@ -213,6 +235,34 @@ public static class WhatABlockIsMadeOf
         return at <= 0 ? ([], 0) : (SamplingBand(rom, population, at), at);
     }
 
+    /// <summary>
+    /// The largest share of <paramref name="mixed"/> that could be drawn from
+    /// <paramref name="real"/> rather than from <paramref name="junk"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>A bound rather than an estimate, and it is exact arithmetic.</b> If a population is a
+    /// mixture — a share <c>f</c> of the real thing and the rest junk — then its distance from the
+    /// real thing is exactly <c>(1 - f)</c> times the junk's distance from it, because total
+    /// variation is linear in a mixture. So <c>f = 1 - d(mixed, real) / d(junk, real)</c>, and
+    /// there is no fitting and no threshold anywhere in it.
+    /// </para>
+    /// <para>
+    /// <b>It is only as good as the junk model</b>, which is why the caller prints the distance
+    /// between the two junk populations as well: if the thing standing in for junk is not what
+    /// this population's junk looks like, the bound is about the stand-in.
+    /// </para>
+    /// <para>
+    /// Nought when the mixture is no closer to the real thing than the junk is, negative
+    /// clamped away — "less real than junk" is not a share of anything.
+    /// </para>
+    /// <para>
+    /// <b>AND IT READS NOUGHT ON A POPULATION THAT IS HALF REAL SCRIPT</b> (275). Putting real
+    /// script at distance nought from the reference is the fault; <c>BetweenTheEnds</c> is the
+    /// version with both ends measured. This is kept because 268 and 274 are quoted off it and a
+    /// number nobody can reproduce is worse than a number that is wrong.
+    /// </para>
+    /// </remarks>
     public static double HowMuchCouldBeReal(
         HowOftenEachCommand mixed, HowOftenEachCommand real, HowOftenEachCommand junk)
     {
@@ -240,4 +290,58 @@ public static class WhatABlockIsMadeOf
     /// </remarks>
     public static double BetweenTheEnds(double distance, double realEnd, double junkEnd) =>
         junkEnd <= realEnd ? 0 : Math.Clamp((junkEnd - distance) / (junkEnd - realEnd), 0, 1);
+
+    /// <summary>
+    /// How often a group of this size lands AT LEAST as far away as the thing being read — the
+    /// count-independent version of "inside the band".
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>A band's top is a MAXIMUM, and a maximum is a property of how many times you looked</b>
+    /// (276). Eleven groups of the maps' own flag sites top out at 0.451; a hundred and two groups
+    /// of the maps' own scripts reach 0.826, and their top climbs 0.222, 0.236, 0.278, 0.345,
+    /// 0.826 as the count goes 4, 11, 25, 50, 102. So "outside the band" is a verdict against a
+    /// threshold that moves with the sample count, and 273's reading of the 38 was one.
+    /// </para>
+    /// <para>
+    /// A rate has a denominator — trap 8's whole point — and looking more does not inflate it. It
+    /// is the number to quote and the number to compare between two populations.
+    /// </para>
+    /// </remarks>
+    public static double AtLeastAsFar(IReadOnlyList<double> band, double distance) =>
+        band.Count == 0 ? double.NaN : (double)band.Count(d => d >= distance) / band.Count;
+
+    /// <summary>
+    /// The same share read between two ends that are BANDS rather than points — every corner of
+    /// them, least and most.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>An end measured at the sample size is a band and not a number</b> (276). 275 took its
+    /// ends off whole populations of hundreds and read a thirty-eight-block row against them,
+    /// which is trap 8's shape one level up: the ends were measured on more evidence than the
+    /// thing being read. Measured at the same size they have a spread, and the honest reading is
+    /// the range that spread admits.
+    /// </para>
+    /// <para>
+    /// <b>A <c>Least</c> of nought is the reading saying it cannot exclude anything</b> — it is
+    /// what a corner where the two bands cross produces, and a crossing is exactly a scale with
+    /// no length.
+    /// </para>
+    /// </remarks>
+    public static (double Least, double Most) BetweenTheEnds(
+        double distance, IReadOnlyList<double> realEnd, IReadOnlyList<double> junkEnd)
+    {
+        if (realEnd.Count == 0 || junkEnd.Count == 0) return (double.NaN, double.NaN);
+
+        double[] corners =
+        [
+            BetweenTheEnds(distance, realEnd.Min(), junkEnd.Min()),
+            BetweenTheEnds(distance, realEnd.Min(), junkEnd.Max()),
+            BetweenTheEnds(distance, realEnd.Max(), junkEnd.Min()),
+            BetweenTheEnds(distance, realEnd.Max(), junkEnd.Max()),
+        ];
+
+        return (corners.Min(), corners.Max());
+    }
 }

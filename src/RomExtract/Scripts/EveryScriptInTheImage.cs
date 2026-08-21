@@ -194,7 +194,7 @@ public static class EveryScriptInTheImage
         Nudged(rom, pointed, by).Count;
 
     /// <summary>
-    /// The nudge as a POPULATION rather than a count: the same pointers, aimed
+    /// The nudge as a POPULATION rather than a count: the same ADDRESSES, aimed
     /// <paramref name="by"/> bytes off, and the ones that still decode.
     /// </summary>
     /// <remarks>
@@ -208,6 +208,12 @@ public static class EveryScriptInTheImage
     /// <para>
     /// Same loop as <c>NudgedFloor</c>, which now counts what this returns. Two questions about
     /// one nudge, one place that performs it (258).
+    /// </para>
+    /// <para>
+    /// <b>The addresses need not be pointer targets</b> (276). Aimed at the sites where the flag
+    /// sweep found a <c>setflag</c>, it is the local junk model that reading has never had: the
+    /// same bytes read from a boundary that is not one, in THIS image, so a mixture group can be
+    /// tallied from one file. The reversal cannot be that and lives in another image besides.
     /// </para>
     /// </remarks>
     public static IReadOnlyList<uint> Nudged(Rom rom, IEnumerable<uint> pointed, int by) =>

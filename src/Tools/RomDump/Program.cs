@@ -11275,10 +11275,20 @@ public static class Program
                 bool overlapsJunk = band.Min() <= knownJunk.Max() && band.Max() >= knownJunk.Min();
                 bool underReal = band.Max() < knownReal.Min();
 
+                // AND THE SAME COMPARISON AS A RATE (276). "Outside the band" is a comparison
+                // against a MAXIMUM and a maximum grows with how many groups were taken — the
+                // boundary reading in `--flags` tops out at 0.236 over eleven groups of real
+                // script and 0.826 over a hundred and two. A rate has a denominator and cannot be
+                // inflated by looking more, so both are printed and the counts are visible.
                 Console.WriteLine(
                     $"      {name,-26} {band.Min():P1}..{band.Max():P1} —"
                     + (overlapsJunk ? " OVERLAPS THE KNOWN JUNK BAND" : " is outside the known junk band")
                     + (underReal ? " and is entirely BELOW the known real band" : " and reaches into the known real band"));
+                Console.WriteLine(
+                    $"      {string.Empty,-26} as a rate:"
+                    + $" {knownReal.Count(d => d <= band.Max())}/{knownReal.Count} known-REAL group(s)"
+                    + $" read at or below this row's top, {knownJunk.Count(d => d >= band.Min())}/{knownJunk.Count}"
+                    + " known-JUNK group(s) at or above its bottom");
             }
 
             // AND THE SIZE ACTUALLY BEING BOUNDED, which is 274's outstanding item. The maps' own
@@ -14761,7 +14771,9 @@ public static class Program
             Console.WriteLine(
                 $"        SO: {fromReal:F3} from the maps' own is {(couldBeReal ? "INSIDE" : "OUTSIDE")} that band"
                 + $" and {fromJunk:F3} from the reversal's is {(couldBeJunk ? "INSIDE" : "OUTSIDE")} its band"
-                + $" — {(couldBeJunk && !couldBeReal ? "these are the reversal's kind and not the maps'" : couldBeReal && !couldBeJunk ? "these are the maps' kind" : couldBeReal ? "the bands overlap here and this cannot tell them apart" : "neither, which is a fact about the bands")}");
+                + $" — {(couldBeJunk && !couldBeReal ? "these are the reversal's kind and not the maps'" : couldBeReal && !couldBeJunk ? "these are the maps' kind" : couldBeReal ? "the bands overlap here and this cannot tell them apart" : "neither, which is a fact about the bands")}"
+                + "  [273's verdict, and 276 below shows it is too strong — the band it is read"
+                + " off has eleven groups and a band's top is a maximum]");
 
             Console.WriteLine(
                 $"        the mixture bound says at most {share:P0}"
@@ -14770,6 +14782,242 @@ public static class Program
                         + " measured on thousands of blocks and this distance on tens, and a small sample is"
                         + " farther from anything. The clamp is the sample size, not a finding."
                     : "."));
+
+            // AND THE ENDS AT THE SAMPLE SIZE (276).
+            //
+            // 273 put a band under the 38's distance and read the verdict off two one-sided band
+            // tests, which is right as far as it goes. What it cannot produce is a SHARE, and 275
+            // showed why the share the mixture bound produces is worthless: it puts real script
+            // at nought from the reference. Both ends measured — and measured on THIRTY-EIGHT
+            // BLOCKS, not on the hundreds and thousands each population happens to hold — is the
+            // scale this row should have been read against all along.
+            List<uint> openedInOrder = [.. WhatABlockIsMadeOf.InFileOrder(openedSites)];
+
+            IReadOnlyList<double> realEnd =
+                WhatABlockIsMadeOf.AgainstTheRest(rom, openedInOrder, unnamedSites.Count);
+
+            Console.WriteLine();
+            Console.WriteLine(
+                $"        THE ENDS AT {unnamedSites.Count} (276) — both measured on"
+                + $" {unnamedSites.Count} blocks, because a distance read against ends measured on"
+                + " hundreds is trap 8 one level up:");
+            // AND A RATE, NOT AN IN-OR-OUT. "Outside the band" is a comparison against a MAXIMUM,
+            // and a maximum grows with how many groups were taken: eleven groups of the maps' own
+            // sites top out at 0.451 and a hundred groups of the maps' own scripts reach 0.826.
+            // The count-independent version is how OFTEN a group of this size is at least as far
+            // as the thing being read — a number with a denominator, which is what 273's verdict
+            // never had (8).
+            string Rate38(IReadOnlyList<double> at) =>
+                at.Count == 0
+                    ? "-"
+                    : $"{at.Count(d => d >= fromReal)}/{at.Count}"
+                        + $" = {WhatABlockIsMadeOf.AtLeastAsFar(at, fromReal):P1}";
+
+            Console.WriteLine();
+            Console.WriteLine(
+                $"          {"end",-46} {"band at " + unnamedSites.Count,18}   groups"
+                + $"   at least as far as the 38 ({fromReal:F3})");
+            Console.WriteLine(
+                $"          {"REAL: the maps' own sites, each against the REST",-46}"
+                + $" {$"{realEnd.Min():F3}..{realEnd.Max():F3}",18}   {realEnd.Count,6}"
+                + $"   {Rate38(realEnd)}");
+            Console.WriteLine(
+                $"          {"  the same, against a whole that CONTAINS the group",-46}"
+                + $" {$"{band.Min():F3}..{band.Max():F3}",18}   {band.Count,6}"
+                + $"   {Rate38(band)}"
+                + $"   <- {(double)unnamedSites.Count / openedInOrder.Count:P1} of that whole IS the group");
+
+            // AND A SECOND REAL END, DERIVED ANOTHER WAY. 435 sites supply eleven groups of 38 and
+            // the claim being made is about the TOP of that band, which is a tail read off eleven
+            // numbers. The maps' own SCRIPTS are a different population of the same kind — real
+            // script, reached from the map scan rather than from a flag site — and they supply a
+            // hundred. If the two tops disagree, the eleven were not enough.
+            List<uint> ownScripts =
+                [.. WhatABlockIsMadeOf.InFileOrder(TheMapScansBlocks(rom).Opened)];
+
+            IReadOnlyList<double> otherReal =
+                WhatABlockIsMadeOf.AgainstTheRest(rom, ownScripts, unnamedSites.Count);
+
+            Console.WriteLine(
+                $"          {"REAL: the maps' own SCRIPTS, another derivation",-46}"
+                + $" {$"{otherReal.Min():F3}..{otherReal.Max():F3}",18}   {otherReal.Count,6}"
+                + $"   {Rate38(otherReal)}");
+
+            // AND THE TOP OF THAT BAND AS THE GROUP COUNT GROWS, which is the whole reason the
+            // rate exists. A maximum is not a property of the population; it is a property of how
+            // many times you looked.
+            Console.WriteLine(
+                "            its top over the first k groups: "
+                + string.Join(
+                    ", ",
+                    new[] { 4, 11, 25, 50, otherReal.Count }
+                        .Where(k => k <= otherReal.Count)
+                        .Select(k => $"k={k} {otherReal.Take(k).Max():F3}")));
+
+            // THE JUNK END, MORE THAN ONE OF THEM (275's lesson: the junk model is worth twenty
+            // points and the calibration may not be able to choose). The reversal is 273's. The
+            // NUDGED SITE is the local one: the same bytes read from a boundary that is not one,
+            // in THIS image, which is the only kind a mixture group can be built out of.
+            var junkEnds =
+                new List<(string Name, Rom From, IReadOnlyList<uint> Blocks, IReadOnlyList<double> Band)>();
+
+            void AddJunkEnd(string name, Rom from, IReadOnlyList<uint> blocks) =>
+                junkEnds.Add(
+                    (name, from, blocks,
+                        WhatABlockIsMadeOf.AgainstAnother(from, blocks, unnamedSites.Count, real)));
+
+            AddJunkEnd(
+                "JUNK: the reversal's sites",
+                backwards,
+                [.. WhatABlockIsMadeOf.InFileOrder(reversedSites)]);
+
+            foreach (int by in new[] { 4, 16, 64 })
+            {
+                HashSet<uint> offBoundary = [.. EveryScriptInTheImage.Nudged(rom, openedInOrder, by)];
+
+                int shared = offBoundary.Count(openedInOrder.Contains);
+
+                offBoundary.ExceptWith(openedInOrder);
+
+                AddJunkEnd(
+                    $"JUNK: the maps' own sites NUDGED +{by} ({shared} shared, dropped)",
+                    rom,
+                    WhatABlockIsMadeOf.InFileOrder(offBoundary));
+            }
+
+            foreach ((string name, _, IReadOnlyList<uint> blocks, IReadOnlyList<double> at) in junkEnds)
+            {
+                Console.WriteLine(
+                    $"          {name,-46} {(at.Count == 0 ? "too few" : $"{at.Min():F3}..{at.Max():F3}"),18}"
+                    + $"   {at.Count,6}   {Rate38(at)}   of {blocks.Count} block(s)");
+            }
+
+            // AND THE READING, AT EVERY CORNER OF THE TWO BANDS. A least of nought is the two
+            // ends crossing, which is a scale with no length and is the reading saying so.
+            Console.WriteLine();
+            Console.WriteLine(
+                $"          the 38 sit {fromReal:F3} from the maps' own. Read between the ends:");
+
+            foreach ((string name, _, _, IReadOnlyList<double> at) in junkEnds)
+            {
+                (double least, double most) = WhatABlockIsMadeOf.BetweenTheEnds(fromReal, realEnd, at);
+
+                bool cross = at.Count > 0 && at.Min() <= realEnd.Max();
+
+                Console.WriteLine(
+                    $"            {name,-46} "
+                    + (double.IsNaN(least) ? "no band" : $"{least,7:P1}..{most:P1}")
+                    + (cross ? "   <- THE ENDS CROSS at this size: no scale, so no share" : string.Empty));
+            }
+
+            // AND MIXTURES AT THIS SIZE, which are the only rows whose answer was fixed before the
+            // arithmetic (275). Each group is so many of the maps' OWN sites and the rest junk,
+            // scored against the maps' own MINUS the real blocks in it — the same exclusion the
+            // real end is measured with, so the 100% row IS the real end.
+            (string mixName, Rom _, IReadOnlyList<uint> mixJunk, IReadOnlyList<double> mixBand) =
+                junkEnds.First(j => ReferenceEquals(j.From, rom));
+
+            Console.WriteLine();
+            Console.WriteLine(
+                $"        AND MIXTURES AT {unnamedSites.Count}, so many of the maps' own sites and"
+                + $" the rest from \"{mixName}\" — the only junk model in THIS image, and a group"
+                + " has to be tallied from one file. The share is fixed before the arithmetic:");
+
+            var misses = new List<double>();
+
+            foreach (int pct in new[] { 0, 25, 50, 75, 100 })
+            {
+                int fromOwn = unnamedSites.Count * pct / 100;
+                int fromJunkSide = unnamedSites.Count - fromOwn;
+
+                int groups = Math.Min(
+                    fromOwn == 0 ? int.MaxValue : openedInOrder.Count / fromOwn,
+                    fromJunkSide == 0 ? int.MaxValue : mixJunk.Count / fromJunkSide);
+
+                var read = new List<(double Least, double Most)>();
+                var far = new List<double>();
+
+                for (var g = 0; g < groups; g++)
+                {
+                    List<uint> group =
+                    [
+                        .. openedInOrder.Skip(g * fromOwn).Take(fromOwn),
+                        .. mixJunk.Skip(g * fromJunkSide).Take(fromJunkSide),
+                    ];
+
+                    HashSet<uint> mine = [.. group];
+
+                    HowOftenEachCommand rest =
+                        WhatABlockIsMadeOf.In(rom, openedInOrder.Where(a => !mine.Contains(a)));
+
+                    double away = WhatABlockIsMadeOf.Distance(WhatABlockIsMadeOf.In(rom, group), rest);
+
+                    far.Add(away);
+                    read.Add(WhatABlockIsMadeOf.BetweenTheEnds(away, realEnd, mixBand));
+                }
+
+                if (read.Count > 0)
+                {
+                    misses.Add(
+                        Math.Max(
+                            Math.Abs(read.Min(r => r.Least) - (pct / 100.0)),
+                            Math.Abs(read.Max(r => r.Most) - (pct / 100.0))));
+                }
+
+                // THE DISTANCE COLUMN IS THE ONE THAT CAN STILL SAY SOMETHING. A share needs two
+                // ends that do not cross; a distance needs neither, and whether it moves with the
+                // share at all is the question the crossing raises.
+                Console.WriteLine(
+                    $"          {pct,3}% the maps' own ({fromOwn,3} + {fromJunkSide,3})"
+                    + $"  distance {(far.Count == 0 ? "-" : $"{far.Min():F3}..{far.Max():F3}"),14}"
+                    + "  reads "
+                    + (read.Count == 0
+                        ? "-"
+                        : $"{read.Min(r => r.Least):P1}..{read.Max(r => r.Most):P1}")
+                    + $"   from {read.Count} group(s)");
+            }
+
+            Console.WriteLine(
+                misses.Count == 0
+                    ? "          no mixture row could be built, so there is no error bar here"
+                    : $"          THE WORST MIXTURE ROW IS OFF BY {misses.Max():P1}. At"
+                        + $" {unnamedSites.Count} blocks this reading cannot resolve better than"
+                        + " that, whatever the corners above say.");
+
+            // AND WHAT SURVIVES, WORKED OUT RATHER THAN LEFT TO BE READ.
+            //
+            // Two instruments die here and one lives. Interpolating a share needs two ends that
+            // do not cross, and they cross. "Outside the band" needs a band whose TOP means
+            // something, and a top is a maximum: it grows with how many groups were taken, so the
+            // 0.451 the eleven site-groups reach is a threshold set by having looked eleven
+            // times. What is left is a RATE, which has a denominator and cannot be inflated by
+            // looking more.
+            double realRate = WhatABlockIsMadeOf.AtLeastAsFar(otherReal, fromReal);
+
+            IReadOnlyList<double> reversalEnd = junkEnds[0].Band;
+
+            double junkRate = WhatABlockIsMadeOf.AtLeastAsFar(reversalEnd, fromReal);
+
+            Console.WriteLine();
+            Console.WriteLine(
+                $"        SO AT {unnamedSites.Count} BLOCKS NO SHARE CAN BE READ — the ends cross"
+                + " under every junk model available, and a mixture of KNOWN share reads 0%..100%"
+                + " including its pure rows. AND \"OUTSIDE THE BAND\" IS NOT A VERDICT EITHER:"
+                + " a band's top is a MAXIMUM and a maximum grows with how many groups were taken"
+                + $" — the maps' own scripts top out at {otherReal.Take(11).Max():F3} over eleven"
+                + $" groups and {otherReal.Max():F3} over {otherReal.Count}.");
+            Console.WriteLine(
+                $"        WHAT IS LEFT IS A RATE. A {unnamedSites.Count}-block group of real"
+                + $" script is at least as far as the 38 in {realRate:P1} of cases"
+                + $" ({otherReal.Count(d => d >= fromReal)}/{otherReal.Count}), and one of the"
+                + $" reversal's sites in {junkRate:P1}"
+                + $" ({reversalEnd.Count(d => d >= fromReal)}/{reversalEnd.Count})"
+                + (realRate > 0
+                    ? $" — {junkRate / realRate:F1} times likelier junk than real."
+                    : " — real never reaches it, so the ratio has no denominator.")
+                + " THAT IS EVIDENCE AND IT IS NOT \"these are the reversal\'s kind and not the"
+                + " maps\'\": 273's verdict was read off a band of eleven groups and is TOO STRONG."
+                + " The direction survives.");
 
             // PER SITE, the weak version: how many of each block's commands are among the sixteen
             // the maps' own scripts use most. Printed beside the population bound so the reader
