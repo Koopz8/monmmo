@@ -242,45 +242,49 @@ public static class WhatABlockIsMadeOf
             return (Cut.Consecutive, 0, 0, 0, [], []);
         }
 
-        int slices = read.Count;
-
+        // TWO SLICINGS, FOR TWO QUESTIONS. How far a population is spread compared with the
+        // reference is asked over the span they BOTH cover; what shape a sample of the reference
+        // has is asked over the REFERENCE'S OWN span, because that is the only place its samples
+        // can be. Mixing the two makes the second unanswerable whenever the reference is small —
+        // every group of it lands in one slice of the wide span, and the lean is a coin toss.
         uint from = Math.Min(reference.Min(), read.Min());
         uint to = Math.Max(reference.Max(), read.Max());
 
-        int Of(IEnumerable<int> group) =>
-            Touches(group.Select(i => reference[i]), from, to, slices);
-
-        IReadOnlyList<int> runs =
-            [.. Cuts(reference.Count, read.Count, Cut.Consecutive).Select(Of).Order()];
-
-        IReadOnlyList<int> scattered =
-            [.. Cuts(reference.Count, read.Count, Cut.Interleaved).Select(Of).Order()];
-
-        int here = Touches(read, from, to, slices);
-        int whole = Touches(reference, from, to, slices);
+        int here = Touches(read, from, to, read.Count);
+        int whole = Touches(reference, from, to, read.Count);
 
         uint own = reference.Min();
         uint upTo = reference.Max();
 
-        int inside = read.Count(at => at >= own && at <= upTo);
+        List<uint> fits = [.. read.Where(at => at >= own && at <= upTo)];
 
-        if (runs.Count == 0 || scattered.Count == 0)
+        // AND THE KNOWN ROWS AT THE SIZE THERE IS EVIDENCE FOR. Three members cannot touch more
+        // than three slices, so comparing them with groups of thirty-eight is a comparison the
+        // small side cannot win however it is shaped.
+        int Of(IEnumerable<int> group) =>
+            Touches(group.Select(i => reference[i]), own, upTo, fits.Count);
+
+        IReadOnlyList<int> runs =
+            [.. Cuts(reference.Count, fits.Count, Cut.Consecutive).Select(Of).Order()];
+
+        IReadOnlyList<int> scattered =
+            [.. Cuts(reference.Count, fits.Count, Cut.Interleaved).Select(Of).Order()];
+
+        if (fits.Count < 2 || runs.Count == 0 || scattered.Count == 0)
         {
-            return (Cut.Consecutive, here, whole, inside, runs, scattered);
+            return (Cut.Consecutive, here, whole, fits.Count, runs, scattered);
         }
 
-        // Measured on the members that are INSIDE the reference's span, because those are the only
-        // ones whose shape can be compared with a group cut from it.
-        int fits = Touches(read.Where(at => at >= own && at <= upTo), from, to, slices);
+        int shape = Touches(fits, own, upTo, fits.Count);
 
-        double toRuns = Math.Abs(fits - runs.Average());
-        double toScatter = Math.Abs(fits - scattered.Average());
+        double toRuns = Math.Abs(shape - runs.Average());
+        double toScatter = Math.Abs(shape - scattered.Average());
 
         return (
             toScatter <= toRuns ? Cut.Interleaved : Cut.Consecutive,
             here,
             whole,
-            inside,
+            fits.Count,
             runs,
             scattered);
     }

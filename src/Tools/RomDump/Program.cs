@@ -14904,15 +14904,19 @@ public static class Program
 
             Console.WriteLine();
             Console.WriteLine(
-                $"        WHICH CUT MATCHES THE {unnamedSites.Count} (278) — the span both"
-                + $" populations cover, in {unnamedSites.Count} equal slices, and how many of them"
-                + " a group of that size lands in:");
+                $"        WHICH CUT MATCHES THE {unnamedSites.Count} (278). Two slicings, for two"
+                + " questions: how far each population is spread is asked over the span they BOTH"
+                + " cover, and what shape a sample of the reference has is asked over the"
+                + " REFERENCE'S OWN span, because that is the only place its samples can be.");
             Console.WriteLine(
-                $"          a CONSECUTIVE group of {unnamedSites.Count} of the maps' own sites"
-                + $" touches {inRuns.Min()}..{inRuns.Max()} slice(s) ({inRuns.Count} group(s))");
+                $"          a CONSECUTIVE group of {fitsInside} of the maps' own sites touches"
+                + $" {inRuns.Min()}..{inRuns.Max()} slice(s) of script-land ({inRuns.Count} group(s))");
             Console.WriteLine(
-                $"          an INTERLEAVED group of {unnamedSites.Count} touches"
-                + $" {asScatter.Min()}..{asScatter.Max()} ({asScatter.Count} group(s))");
+                $"          an INTERLEAVED group of {fitsInside} touches"
+                + $" {asScatter.Min()}..{asScatter.Max()} ({asScatter.Count} group(s))"
+                + (inRuns.Min() == asScatter.Min() && inRuns.Max() == asScatter.Max()
+                    ? "  <- THE SAME, so at this size the two cuts are not even different"
+                    : string.Empty));
             Console.WriteLine(
                 $"          THE WHOLE REFERENCE — all {openedInOrder.Count} of the maps' own sites"
                 + $" — touches {footprint}, and no group cut from it can beat that");
@@ -14922,15 +14926,13 @@ public static class Program
             List<uint> spreadScripts =
                 [.. WhatABlockIsMadeOf.InFileOrder(TheMapScansBlocks(rom).Opened)];
 
-            (_, _, int scriptFootprint, _, IReadOnlyList<int> scriptRuns, IReadOnlyList<int> scriptScatter) =
+            (_, _, int scriptFootprint, _, _, _) =
                 WhatABlockIsMadeOf.WhichCut(
                     spreadScripts, [.. WhatABlockIsMadeOf.InFileOrder(unnamedSites)]);
 
             Console.WriteLine(
                 $"          the maps' own SCRIPTS — {spreadScripts.Count} blocks, the other real"
-                + $" population — touch {scriptFootprint} as a whole, and a group of"
-                + $" {unnamedSites.Count} of them touches {scriptRuns.Min()}..{scriptRuns.Max()} in"
-                + $" runs and {scriptScatter.Min()}..{scriptScatter.Max()} scattered");
+                + $" population — touch {scriptFootprint} of the wide slicing as a whole");
             // AND THE ARGUMENT FROM POSITION, which needs no command mix at all. If every block
             // of script this cartridge is known to hold lives in one stretch of the file, then a
             // site OUTSIDE that stretch is evidence on its own — and the share of the file the

@@ -132,6 +132,34 @@ public sealed class WhereAPopulationLivesTests
             $"the reading touched {touches} where the whole reference touched {footprint}");
     }
 
+    /// <summary>
+    /// <b>The lean is taken off the members INSIDE the reference, not off all of them.</b> A
+    /// population that is a scatter over the file but whose inside members are a RUN reads as the
+    /// consecutive cut — because the cut is a question about the reference, and the members
+    /// outside it say nothing about how a sample of it should be shaped. Without this the two
+    /// readings are the same on every fixture where everything is inside, which is a break that
+    /// comes back green.
+    /// </summary>
+    [Fact]
+    public void TheLeanIsTakenOffTheMembersInsideTheReference()
+    {
+        IReadOnlyList<uint> reference = Spread(100, 10);
+
+        // Four in a run inside the reference, six far outside it.
+        IReadOnlyList<uint> read =
+        [
+            1400, 1410, 1420, 1430,
+            50000, 60000, 70000, 80000, 90000, 100000,
+        ];
+
+        (Cut which, int touches, int footprint, int inside, _, _) =
+            WhatABlockIsMadeOf.WhichCut(reference, read);
+
+        Assert.Equal(4, inside);
+        Assert.True(touches > footprint, $"{touches} against {footprint}");
+        Assert.Equal(Cut.Consecutive, which);
+    }
+
     /// <summary>An empty population on either side is no reading, not a default.</summary>
     [Fact]
     public void NothingOnEitherSideIsNoReading()
