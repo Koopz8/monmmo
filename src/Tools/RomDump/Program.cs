@@ -13082,7 +13082,25 @@ public static class Program
 
             HashSet<string> reached = [.. played.Reached];
 
+            // REACHING A MAP AND STANDING ON A SQUARE ARE TWO FACTS (282). This asked the first
+            // and called it the second: "the widest walk stands on 182 of 183" was the count of
+            // buried items whose MAP it got to, and 281 found 41 of the 183 sit on squares
+            // nothing can stand on at all. Both are printed now, and the difference between them
+            // is what a map-level answer could not see.
+            HashSet<(string, GridPosition)> feet = [.. played.StoodOn];
+
             List<Buried> standing = [.. buried.Where(b => reached.Contains(b.MapId))];
+
+            List<Buried> underfoot =
+                [.. buried.Where(b => feet.Contains((b.MapId, new GridPosition(b.X, b.Y))))];
+
+            List<Buried> beside =
+                [
+                    .. buried.Where(
+                        b => new[] { (0, -1), (0, 1), (-1, 0), (1, 0) }.Any(
+                            side => feet.Contains(
+                                (b.MapId, new GridPosition(b.X + side.Item1, b.Y + side.Item2))))),
+                ];
 
             // AND THE ONES IT NEVER STANDS ON, at the widest setting only — one line, because
             // the interesting number at the top of this table is how few there are.
@@ -13097,12 +13115,60 @@ public static class Program
             }
 
             Console.WriteLine(
-                $"    {at.Command,-42} {standing.Count,3} of {buried.Count} buried thing(s) on"
+                $"    {at.Command,-42} map reached {standing.Count,3}   BESIDE {beside.Count,3}"
+                + $"   UNDERFOOT {underfoot.Count,3}   of {buried.Count}, on"
                 + $" {standing.Select(b => b.MapId).Distinct().Count(),3} of"
-                + $" {buried.Select(b => b.MapId).Distinct().Count()} map(s) it reaches,"
-                + $" {standing.Select(b => b.Item).Where(i => i != 0).Distinct().Count(),3} distinct item(s)");
+                + $" {buried.Select(b => b.MapId).Distinct().Count()} map(s)");
         }
 
+        // AND THE DENOMINATOR UNDERFOOT ACTUALLY HAS. 41 of the 183 sit on squares nothing can
+        // stand on (281), so "137 of 183" is a number with the wrong bottom half: the widest run
+        // stands on 137 of the 142 it COULD.
+        {
+            Dictionary<string, LoadedMap> everyMap =
+                library.All().ToDictionary(m => WorldExporter.MapId(m.Bank, m.Number));
+
+            bool Standable(Buried one)
+            {
+                if (!everyMap.TryGetValue(one.MapId, out LoadedMap? map)) return false;
+
+                var square = new GridPosition(one.X, one.Y);
+
+                CollisionGrid grid = map.GridFor(false);
+
+                return grid.Contains(square) && grid.IsWalkable(square);
+            }
+
+            List<Buried> solid = [.. buried.Where(one => !Standable(one))];
+
+            byte? Behaviour(Buried one)
+            {
+                if (!everyMap.TryGetValue(one.MapId, out LoadedMap? map)) return null;
+
+                int at = (one.Y * map.Collision.Width) + one.X;
+
+                return at >= 0 && at < map.Behaviours.Length ? map.Behaviours[at] : null;
+            }
+
+            Console.WriteLine(
+                $"    AND THE DENOMINATOR: {buried.Count - solid.Count} of the {buried.Count} sit on"
+                + $" a square somebody could stand on, so the widest run's UNDERFOOT is out of"
+                + $" that and not out of {buried.Count}.");
+            Console.WriteLine(
+                $"    the {solid.Count} on SOLID squares can never be stood on at any setting —"
+                + " what they stand on: "
+                + string.Join(
+                    ", ",
+                    solid.GroupBy(Behaviour).OrderByDescending(g => g.Count())
+                        .Select(g => $"0x{g.Key:X2} x{g.Count()}"))
+                + $", on {solid.Select(one => one.MapId).Distinct().Count()} map(s)");
+        }
+
+        Console.WriteLine(
+            "    THE FIRST COLUMN IS THE ONE 249 QUOTED and it is a count of MAPS reached, not of"
+            + " squares stood on (282). A buried item is in the ground — 281 measured its own"
+            + $" square walkable on 142 of {buried.Count} — so UNDERFOOT is the column that"
+            + " matches what the record is, and BESIDE is the sign rule asked of the wrong kind.");
         Console.WriteLine(
             "    and NONE of them is collected at any of the six, because a buried sign has no"
             + " script and the walk runs scripts. That is the size of what 239 left.");

@@ -600,6 +600,23 @@ public sealed record Attempt(
     /// </remarks>
     public IReadOnlyList<string> ReachedOnlyWithWhatItTookBack { get; init; } = [];
 
+    /// <summary>Every square the walk actually stood on, on the pass it stopped on (282).</summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Reaching a MAP and standing on a SQUARE are two different facts and this record only
+    /// carried the first.</b> 249 asked how much of the buried list the run walks over and
+    /// answered it with <c>Reached</c> — which is the map — so "the widest walk stands on 182 of
+    /// 183" was the count of buried items whose MAP it got to. 281 then found that 41 of the 183
+    /// sit on squares nothing can stand on at all, and a map-level answer cannot see one of them.
+    /// </para>
+    /// <para>
+    /// The walk has always had this — <c>Reach.Stood</c> is what every reach number is counted
+    /// off — and it stopped at the edge of the <c>Attempt</c>. It is the final pass's set, which
+    /// is what every other number here is: the state of the pass the loop stopped on.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyCollection<(string MapId, GridPosition Square)> StoodOn { get; init; } = [];
+
 
     /// <summary>
     /// How many attempts at a fight failed, which is more than the number of trainers that beat
@@ -1949,6 +1966,7 @@ public static class Autoplayer
                     .ThenBy(s => s.Address),
             ],
             ReachedOnlyWithWhatItTookBack = onlyWithThose,
+            StoodOn = stoodAtTheEnd,
             FightAttemptsLost = lost,
             Carried = bag.Entries,
             SurfMove = rules.SurfMove,
