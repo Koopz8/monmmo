@@ -129,6 +129,31 @@ public sealed class WhichNeighbourIsOnThatSideTests
     }
 
     /// <summary>
+    /// <b>And the crossing has to be ABOVE the neighbour's offset as well as below its far end.</b>
+    /// A neighbour set ten rows down does not reach row five, and a rule that only checked the far
+    /// end would hand it back with a negative arrival — an off-grid square, and the same silent
+    /// refusal the whole fault was made of. Listed first here on purpose: with only the far end
+    /// checked it wins.
+    /// </summary>
+    [Fact]
+    public void ANeighbourSetBelowTheCrossingDoesNotCoverIt()
+    {
+        MapData map = Map(
+            "1.0", Wide, 30,
+            new MapConnection(ConnectionSide.Left, 10, "1.1"),
+            new MapConnection(ConnectionSide.Left, 0, "1.2"));
+
+        Dictionary<string, MapData> world = new()
+        {
+            ["1.1"] = Map("1.1", Wide, 10),
+            ["1.2"] = Map("1.2", Wide, 10),
+        };
+
+        Assert.Equal("1.2", map.ConnectionOn(
+            ConnectionSide.Left, new GridPosition(0, 5), id => world.GetValueOrDefault(id))?.MapId);
+    }
+
+    /// <summary>
     /// The top and bottom edges are measured along X rather than Y, which is the other half of
     /// the rule and the half a fixture about one side alone would never reach.
     /// </summary>
