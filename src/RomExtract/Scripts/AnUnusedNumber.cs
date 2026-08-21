@@ -83,6 +83,68 @@ public static class AnUnusedNumber
             }),
         ]);
 
+    // ---------------------------------------------------------------- a bound's nudge (284)
+
+    /// <summary>One window of ids, and what a sweep found in it.</summary>
+    /// <param name="First">The lowest id in the window.</param>
+    /// <param name="Last">The highest.</param>
+    public sealed record Window(int First, int Last)
+    {
+        public int Ids => Last - First + 1;
+
+        /// <summary>The high bytes this window spans, which is what makes floors comparable.</summary>
+        public IReadOnlyList<int> HighBytes =>
+            [.. Enumerable.Range(First >> 8, (Last >> 8) - (First >> 8) + 1)];
+
+        public override string ToString() => $"0x{First:X4}..0x{Last:X4}";
+    }
+
+    /// <summary>
+    /// Windows of the same width as <c>first..last</c>, laid end to end ABOVE it — the nudge for
+    /// a sweep that takes a bound rather than an id (284).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A sweep filtered on <c>1..355</c> cannot be asked for an unused id, because every id in
+    /// the range is used; the thing that can be moved is the range. Above rather than around,
+    /// because below <c>1</c> there is one id and it is <c>0</c>.
+    /// </para>
+    /// <para>
+    /// <b>These windows do NOT share the real one's high bytes</b> and so they are a floor for a
+    /// different pattern — read them for the spread and read
+    /// <see cref="SameHighByteAbove"/> for the answer. Printing both is the whole point: the
+    /// distance between them is the size of the high-byte effect, measured rather than assumed.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<Window> WindowsAbove(
+        int first, int last, int howMany, int ceiling = 0xFFFF)
+    {
+        int width = last - first + 1;
+
+        var windows = new List<Window>();
+
+        for (int at = last + 1; at + width - 1 <= ceiling && windows.Count < howMany; at += width)
+            windows.Add(new Window(at, at + width - 1));
+
+        return windows;
+    }
+
+    /// <summary>
+    /// The ids above <paramref name="last"/> that share its high byte — the one floor for a bound
+    /// that is matched on the byte the accident rate actually depends on (284).
+    /// </summary>
+    /// <remarks>
+    /// Nought when <paramref name="last"/> is the top of its high byte, which is the honest answer
+    /// and not an error: a cartridge whose last move id ends a page affords no matched floor at
+    /// all, and saying so beats quoting an unmatched one.
+    /// </remarks>
+    public static Window? SameHighByteAbove(int last)
+    {
+        int top = last | 0xFF;
+
+        return last >= top ? null : new Window(last + 1, top);
+    }
+
     /// <summary>
     /// The variable sweep's floor for one variable: <see cref="EverywhereInTheImage.Writes"/> asked
     /// of its unused neighbours — all four writing commands, the same as the reading.

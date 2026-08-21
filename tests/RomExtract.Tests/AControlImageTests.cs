@@ -203,4 +203,65 @@ public sealed class AControlImageTests
         Assert.Contains(0x08000300u, aligned);
         Assert.Contains(0x08000380u, aligned);
     }
+
+    // ------------------------------------------------------------------- the seam (269, 284)
+
+    /// <summary>
+    /// <b>THE JOIN IS A PLACE AND IT HAS AN ADDRESS (284).</b> 269 said a rotation joins the end
+    /// of the file to the beginning and left it there for nine milestones. It is
+    /// <c>length - shift</c>: the byte there is the file's first byte, and the byte before it is
+    /// the file's last.
+    /// </summary>
+    [Fact]
+    public void TheSeamIsWhereTheFilesFirstByteLands()
+    {
+        var image = new byte[0x100];
+
+        for (var i = 0; i < image.Length; i++) image[i] = (byte)(i + 1);
+
+        var rom = new Rom(image);
+
+        const int By = 0x40;
+
+        int seam = AControlImage.Seam(rom, By);
+        Rom rotated = AControlImage.Rotated(rom, By);
+
+        Assert.Equal(0xC0, seam);
+        Assert.Equal(image[0], rotated.Span[seam]);
+        Assert.Equal(image[^1], rotated.Span[seam - 1]);
+    }
+
+    /// <summary>
+    /// A rotation of nothing joins nothing — the file is itself and there is no seam to find.
+    /// Without this, "the seam is at length" would read as a place inside the image.
+    /// </summary>
+    [Fact]
+    public void ARotationOfNothingHasNoSeam()
+    {
+        var rom = new Rom(new byte[0x100]);
+
+        Assert.Equal(0, AControlImage.Seam(rom, 0));
+
+        // And a rotation of a whole file is a rotation of nothing, which is the same answer.
+        Assert.Equal(0, AControlImage.Seam(rom, 0x100));
+    }
+
+    /// <summary>
+    /// A read CROSSES the join when it starts on one side and ends on the other. Starting on the
+    /// join crosses nothing — every byte it touches came from the head of the file, in the order
+    /// the file has them — and neither does ending exactly on it.
+    /// </summary>
+    [Fact]
+    public void CrossingIsStartingBeforeAndEndingPast()
+    {
+        const int Seam = 100;
+
+        Assert.True(AControlImage.CrossesTheSeam(Seam, 98, 4));
+        Assert.True(AControlImage.CrossesTheSeam(Seam, 99, 2));
+
+        Assert.False(AControlImage.CrossesTheSeam(Seam, 100, 40));
+        Assert.False(AControlImage.CrossesTheSeam(Seam, 96, 4));
+        Assert.False(AControlImage.CrossesTheSeam(Seam, 101, 40));
+        Assert.False(AControlImage.CrossesTheSeam(Seam, 10, 4));
+    }
 }

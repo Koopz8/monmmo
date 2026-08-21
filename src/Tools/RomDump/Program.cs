@@ -10978,13 +10978,19 @@ public static class Program
         Console.WriteLine("  1. SCRIPT BLOCKS REACHABLE FROM AN ALIGNED POINTER (267, 268)");
         Console.WriteLine("      control              named   entries   blocks");
 
+        var blocksIn = new Dictionary<string, IReadOnlyCollection<uint>>();
+
         foreach ((string name, Rom image) in controls)
         {
             TheImagesScripts found = EveryScriptInTheImage.In(image);
 
+            blocksIn[name] = found.Blocks;
+
             Console.WriteLine(
                 $"      {name,-18} {found.Pointed,7}  {found.Entries.Count,8}  {found.Blocks.Count,7}");
         }
+
+        WriteTheSeam(rom, offsets, blocksIn);
 
         // AND THE ONE THAT KEEPS THE REGION. A rotation of four megabytes moves a pointer out of
         // the part of the file scripts live in, so it measures whether THAT part decodes. The
@@ -14558,6 +14564,258 @@ public static class Program
     /// which is trap one, and this is the instrument that stops it applying here.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// The nudge this sweep has been owed since 272 — a bound's floor is a WINDOW (284).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// 272 gave <c>Moves</c> and <c>Writes</c> a nudge: ask the same sweep for a number the
+    /// cartridge does not use. <c>AsksWhoKnows</c> filters on a RANGE, so there is no unused id
+    /// to ask for — every id in <c>1..N</c> is a move. What moves is the range.
+    /// </para>
+    /// <para>
+    /// <b>And the high byte is the whole game.</b> The pattern is <c>7C LL HH</c> and this file
+    /// is 10.5% nought, so a window elsewhere on the number line is a floor for a different
+    /// pattern. Both are printed, and the distance between them is the size of that effect.
+    /// </para>
+    /// </remarks>
+    private static void WriteTheMoveWindowFloor(Rom rom, int mostMoves, int[] covered)
+    {
+        (int Sites, int Reads, int Opened, int Offers) Sweep(int first, int last)
+        {
+            IReadOnlyList<MoveSite> found =
+                EverywhereInTheImage.AsksWhoKnows(rom, first, last, covered);
+
+            return (
+                found.Count,
+                found.Count(s => s.ReadsAsAScript),
+                found.Count(s => s.Opened),
+                found.Count(s => s.ReadsAsAScript && s.Offers));
+        }
+
+        (int sites, int reads, int opened, int offers) = Sweep(1, mostMoves);
+
+        Console.WriteLine();
+        Console.WriteLine(
+            "  THE NUDGE, owed since 272 (284). This sweep takes a BOUND, so its floor is the same"
+            + " window of ids moved to where no move can be — asked of the same file, with the"
+            + " same command byte and the same three bytes' worth of luck.");
+        Console.WriteLine();
+
+        AnUnusedNumber.Window? matched = AnUnusedNumber.SameHighByteAbove(mostMoves);
+
+        if (matched is null)
+        {
+            Console.WriteLine(
+                $"    NO MATCHED FLOOR: {mostMoves} ends its high byte, so there is no unused id"
+                + " sharing it. Nothing here can control for the byte the accident rate depends"
+                + " on, and saying so beats quoting an unmatched floor as if it were one.");
+        }
+        else
+        {
+            // THE MATCHED FLOOR. Same high byte, same file, same pattern — only the low byte
+            // differs, and it is the one thing that is supposed to matter.
+            (int mSites, int mReads, int mOpened, int mOffers) = Sweep(matched.First, matched.Last);
+
+            int high = mostMoves >> 8;
+            int firstOfPage = high << 8;
+            int used = mostMoves - firstOfPage + 1;
+
+            (int pSites, int pReads, int pOpened, int pOffers) = Sweep(firstOfPage, mostMoves);
+
+            Console.WriteLine(
+                $"    THE MATCHED FLOOR — high byte 0x{high:X2}, the only one this cartridge"
+                + " affords, because every id below it is a move:");
+            Console.WriteLine(
+                "                                ids   sites  per id   read on  per id   opened   OFFERS");
+            Console.WriteLine(
+                $"      USED   0x{firstOfPage:X4}..0x{mostMoves:X4}  {used,4}  {pSites,6}"
+                + $"  {Per(pSites, used)}  {pReads,8}  {Per(pReads, used)}  {pOpened,7}  {pOffers,7}");
+            Console.WriteLine(
+                $"      UNUSED {matched}  {matched.Ids,4}  {mSites,6}"
+                + $"  {Per(mSites, matched.Ids)}  {mReads,8}  {Per(mReads, matched.Ids)}"
+                + $"  {mOpened,7}  {mOffers,7}");
+            Console.WriteLine(
+                $"      so a used id is named {Fold(pSites, used, mSites, matched.Ids)} as often and"
+                + $" reads on {Fold(pReads, used, mReads, matched.Ids)} as often — and the OFFER,"
+                + " which is the shape this project has always said separates a scene from three"
+                + $" lucky bytes, is {Fold(pOffers, used, mOffers, matched.Ids)}");
+        }
+
+        // AND THE UNMATCHED WINDOWS, for the spread and for the size of the high-byte effect.
+        IReadOnlyList<AnUnusedNumber.Window> windows =
+            AnUnusedNumber.WindowsAbove(1, mostMoves, 16);
+
+        List<(AnUnusedNumber.Window At, int Sites, int Reads, int Offers)> found =
+        [
+            .. windows.Select(w =>
+            {
+                (int s, int r, _, int o) = Sweep(w.First, w.Last);
+
+                return (At: w, Sites: s, Reads: r, Offers: o);
+            }),
+        ];
+
+        int[] bySites = [.. found.Select(f => f.Sites).Order()];
+        int[] byReads = [.. found.Select(f => f.Reads).Order()];
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    AND {found.Count} UNMATCHED WINDOWS of the same width above it — a floor for a"
+            + " DIFFERENT pattern, printed for the spread and for what the mismatch costs:");
+        Console.WriteLine(
+            $"      the real 0x0001..0x{mostMoves:X4}: {sites} site(s), {reads} reading on");
+        Console.WriteLine(
+            $"      the windows: {bySites[0]}..{bySites[^1]} site(s), median {bySites[bySites.Length / 2]};"
+            + $" {byReads[0]}..{byReads[^1]} reading on, median {byReads[byReads.Length / 2]}");
+        Console.WriteLine(
+            $"      {found.Count(f => f.Sites >= sites)} of {found.Count} window(s) find as many"
+            + $" site(s) as the real range, and {found.Count(f => f.Reads >= reads)} as many"
+            + " reading on");
+
+        foreach ((AnUnusedNumber.Window at, int s, int r, int o) in
+                 found.OrderByDescending(f => f.Sites).Take(4))
+        {
+            Console.WriteLine($"        {at}  {s,5} site(s)  {r,4} read on  {o,3} offer");
+        }
+
+        // AND EVERY ID AT ONCE, which is the largest denominator this question has. An offer is
+        // a yes-or-no followed by a field effect, read straight on from the site; if that shape
+        // turns up by accident anywhere in sixteen megabytes, it turns up here.
+        (int aSites, int aReads, _, int aOffers) = Sweep(mostMoves + 1, 0xFFFF);
+
+        Console.WriteLine(
+            $"      and the real range's own offers: {offers}, of {opened} site(s) the map scan"
+            + " opens");
+        Console.WriteLine(
+            $"      EVERY id this cartridge has no move for, all {0xFFFF - mostMoves} of them in"
+            + $" one sweep: {aSites} site(s), {aReads} reading on, and {aOffers} OFFER(S)."
+            + $" The real {mostMoves} ids give {offers}.");
+        Console.WriteLine(
+            "      READ THE MATCHED ONE. An unmatched window is a floor for a pattern whose third"
+            + " byte is rarer than the real one's, and the gap between the two answers is that"
+            + " and nothing about moves.");
+        Console.WriteLine();
+
+        static string Per(int count, int ids) => $"{(double)count / ids,6:0.000}";
+
+        static string Fold(int a, int ofA, int b, int ofB) =>
+            b == 0
+                ? "against a floor of NOUGHT"
+                : $"{(double)a / ofA / ((double)b / ofB):0.0}x";
+    }
+
+    /// <summary>
+    /// What the rotation's join is worth — 269's last owed item (284).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A rotation joins the end of the file to the beginning, so at exactly one place in sixteen
+    /// megabytes four bytes are adjacent that never were. 269 said so and left it there, and
+    /// "obviously nought" has been wrong in this project often enough (272's error bar, 282's
+    /// denominator) that it gets a number.
+    /// </para>
+    /// <para>
+    /// Measured as a BAND rather than a crossing, because a block is kept as an address and not
+    /// as a span: a read that started more than one block's length before the join could not
+    /// reach it, so it is enough to count the hits near the join and compare with what a band of
+    /// that width holds anywhere else. If the join manufactured hits, its band would be full.
+    /// </para>
+    /// </remarks>
+    private static void WriteTheSeam(
+        Rom rom, IReadOnlyList<int> offsets, IReadOnlyDictionary<string, IReadOnlyCollection<uint>> blocks)
+    {
+        // Wider than any block this reader produces, on purpose: the number to beat is nought,
+        // and a band too wide can only make it harder to reach.
+        const int Band = 4096;
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"      AND THE SEAM (269, measured at 284). Each rotation joins the file's end to its"
+            + $" beginning; a band of {Band} byte(s) either side of the join is wider than any"
+            + " block this reader makes, so an artefact of the join has to be in it.");
+
+        Console.WriteLine(
+            "        AND THE FLOOR IS EVERY OTHER BAND, not an expectation. Blocks clump — this"
+            + " project has known that since 205 and quotes it in --who-knows — so \"how many"
+            + " would fall here if they fell anywhere\" is the independence assumption that has"
+            + " been wrong every time it has been checked. The floor here is the same band width"
+            + " slid over the whole image.");
+        Console.WriteLine();
+        Console.WriteLine(
+            "        rotation          join     blocks   in the band   bands as full   median   most");
+
+        var over = 0;
+        var beaten = 0;
+        var crossed = 0;
+
+        foreach (int by in offsets)
+        {
+            int seam = AControlImage.Seam(rom, by);
+            IReadOnlyCollection<uint> found = blocks[$"ROTATED 0x{by:X6}"];
+
+            int[] at = [.. found.Select(b => (int)(b - Rom.BaseAddress))];
+
+            int inBand = at.Count(o => Math.Abs(o - seam) < Band);
+
+            // Every band of the same width, laid end to end — the seam's own band is one of them.
+            int bands = rom.Length / (2 * Band);
+            var counted = new int[bands];
+
+            foreach (int o in at)
+            {
+                int which = o / (2 * Band);
+
+                if (which >= 0 && which < bands) counted[which]++;
+            }
+
+            int[] sorted = [.. counted.Order()];
+            int asFull = counted.Count(c => c >= inBand);
+
+            over += found.Count;
+            if (asFull <= bands / 20) beaten++;
+
+            Console.WriteLine(
+                $"        ROTATED 0x{by:X6}  0x{seam:X6}  {found.Count,7}  {inBand,11}"
+                + $"  {asFull,13}  {sorted[bands / 2],7}  {sorted[^1],5}");
+
+            // AND THE DECIDING TEST, for the ones in the band: does the read actually cross the
+            // join? A full band is a hint; a block that starts on one side of the join and ends
+            // on the other is the artefact itself, and it is a yes or a no per block.
+            if (inBand == 0) continue;
+
+            Rom image = AControlImage.Rotated(rom, by);
+
+            foreach (int o in at.Where(o => Math.Abs(o - seam) < Band).Order())
+            {
+                List<ScriptCommand> read =
+                    ScriptReader.ReadAll(image, Rom.BaseAddress + (uint)o);
+
+                int end = read.Count == 0
+                    ? o
+                    : read[^1].Offset + 1 + read[^1].Arguments.Length;
+
+                crossed += AControlImage.CrossesTheSeam(seam, o, end - o) ? 1 : 0;
+
+                Console.WriteLine(
+                    $"          0x{o:X6} reads {end - o,5} byte(s) and"
+                    + $" {(AControlImage.CrossesTheSeam(seam, o, end - o) ? "CROSSES the join" : "stops on its own side")}");
+            }
+        }
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"      {beaten} of {offsets.Count} rotation(s) put the join's band inside the top"
+            + $" twentieth of bands — and of every block in every band, {crossed} actually CROSS"
+            + $" the join, out of {over} across the {offsets.Count} rotation(s). A full band is a"
+            + " hint about a neighbourhood; a crossing is the artefact, and it is a yes or a no"
+            + " per block.");
+        Console.WriteLine(
+            "      The independence floor would have called four blocks in one band a"
+            + " twenty-eight-fold enrichment; the clumped floor calls it the top 0.3% of bands;"
+            + " the crossing test settles it. THIS CLOSES 269's last owed item.");
+    }
+
     private static void WriteWhoKnows(Rom rom)
     {
         Console.WriteLine();
@@ -14602,6 +14860,8 @@ public static class Program
         Console.WriteLine(
             "    if those two are the same number the list below is noise and the only honest"
             + " thing to do with it is throw it away");
+
+        WriteTheMoveWindowFloor(rom, moves.Count, covered);
 
         // AND THE FLOOR THAT KEEPS THE REGION (270): see --the-control. The reversal's nought is
         // about a file with no jump pointers in it; the same pointers aimed past the window are

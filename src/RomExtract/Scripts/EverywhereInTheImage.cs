@@ -652,7 +652,29 @@ public static class EverywhereInTheImage
     /// cartridge's own move table rather than from a number written here.
     /// </para>
     /// </summary>
-    public static IReadOnlyList<MoveSite> AsksWhoKnows(Rom rom, int mostMoves, int[]? covered = null)
+    public static IReadOnlyList<MoveSite> AsksWhoKnows(Rom rom, int mostMoves, int[]? covered = null) =>
+        AsksWhoKnows(rom, 1, mostMoves, covered);
+
+    /// <summary>
+    /// The same sweep over an arbitrary RANGE of move ids — the shape its own floor needs (284).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// 272 gave the flag and variable sweeps a nudge by asking them for a number the cartridge
+    /// does not use (<see cref="AnUnusedNumber"/>), and could not give this one the same thing
+    /// because it takes a BOUND rather than an id. A bound's nudge is a WINDOW: the same width of
+    /// ids, moved to somewhere no move can be, asked of the same file.
+    /// </para>
+    /// <para>
+    /// <b>And the window has to keep the high byte where it can.</b> The pattern is
+    /// <c>7C LL HH</c> and this file's bytes are nowhere near uniform — <c>0x00</c> is 10.5% of
+    /// it — so a window at the other end of the number line is a floor for a different pattern.
+    /// See <see cref="AnUnusedNumber.SameHighByteAbove"/>, which is the only matched floor this
+    /// cartridge affords.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<MoveSite> AsksWhoKnows(
+        Rom rom, int leastMove, int mostMove, int[]? covered = null)
     {
         var sites = new List<MoveSite>();
 
@@ -662,7 +684,7 @@ public static class EverywhereInTheImage
 
             int move = rom.ReadU16(offset + 1);
 
-            if (move < 1 || move > mostMoves) continue;
+            if (move < leastMove || move > mostMove) continue;
 
             (uint question, int effect) = TheOffer(rom, Rom.BaseAddress + (uint)offset);
 

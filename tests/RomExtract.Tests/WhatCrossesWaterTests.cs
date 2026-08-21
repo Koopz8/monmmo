@@ -108,6 +108,44 @@ public class WhatCrossesWaterTests
     }
 
     /// <summary>
+    /// <b>And the same sweep takes a RANGE, which is what its own floor needs (284).</b> A sweep
+    /// filtered on <c>1..355</c> has no unused id to be asked for — every id in it is a move — so
+    /// the nudge 272 gave the flag and variable sweeps had to move the whole window instead. Here
+    /// the window is moved onto the id the fixture uses and off it again.
+    /// </summary>
+    [Fact]
+    public void TheSweepTakesARangeSoItsOwnFloorCanBeAWindow()
+    {
+        var rom = new Rom(Image(move: 900));
+
+        Assert.Empty(EverywhereInTheImage.AsksWhoKnows(rom, 1, 355));
+        Assert.Single(EverywhereInTheImage.AsksWhoKnows(rom, 356, 1000));
+        Assert.Empty(EverywhereInTheImage.AsksWhoKnows(rom, 901, 1000));
+
+        // And the bound overload is the range starting at one — the same answer, so the two
+        // cannot drift apart.
+        Assert.Equal(
+            EverywhereInTheImage.AsksWhoKnows(new Rom(Image()), 355).Count,
+            EverywhereInTheImage.AsksWhoKnows(new Rom(Image()), 1, 355).Count);
+    }
+
+    /// <summary>
+    /// And a site found through a moved window is the SAME site, offer and all — otherwise the
+    /// floor would be measuring a weaker version of the thing it is a floor for.
+    /// </summary>
+    [Fact]
+    public void AWindowedSiteIsReadTheSameWayAsARealOne()
+    {
+        MoveSite through = Assert.Single(
+            EverywhereInTheImage.AsksWhoKnows(new Rom(Image(move: 900)), 356, 1000)
+                .Where(s => s.ReadsAsAScript));
+
+        Assert.Equal(900, through.Move);
+        Assert.True(through.Offers);
+        Assert.Equal(TheEffect, through.FieldEffect);
+    }
+
+    /// <summary>
     /// And the floor under all of it: the same sweep on the image backwards. This one is a
     /// claim about the instrument rather than about the cartridge — a control that cannot come
     /// back with a number is not a control.

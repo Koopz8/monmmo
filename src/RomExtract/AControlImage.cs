@@ -71,6 +71,42 @@ public static class AControlImage
     }
 
     /// <summary>
+    /// Where a rotation joins the end of the file to the beginning (284).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>269 left this unmeasured and it has been owed ever since.</b> <see cref="Rotated"/>
+    /// copies <c>from[(i + shift) % length]</c>, so the byte at <c>length - shift</c> is the
+    /// first one taken from the head of the file and the byte before it is the last one taken
+    /// from the tail. Those two were never adjacent, and anything read across that join is an
+    /// artefact of the control rather than a hit in it.
+    /// </para>
+    /// <para>
+    /// One place in sixteen megabytes, so the honest expectation is nought — but "obviously
+    /// nought" is what this project says right before it counts something (272, 282). It is a
+    /// number, so it gets counted.
+    /// </para>
+    /// </remarks>
+    public static int Seam(Rom rom, int by)
+    {
+        int length = rom.Length;
+        int shift = ((by / 4 * 4) % length + length) % length;
+
+        return shift == 0 ? 0 : length - shift;
+    }
+
+    /// <summary>
+    /// Whether a read of <paramref name="width"/> bytes starting at <paramref name="offset"/>
+    /// crosses <paramref name="seam"/> — starts before the join and ends past it.
+    /// </summary>
+    /// <remarks>
+    /// A read that starts exactly ON the seam crosses nothing: every byte it touches came from
+    /// the head of the file, in the order the file has them.
+    /// </remarks>
+    public static bool CrossesTheSeam(int seam, int offset, int width) =>
+        offset < seam && offset + width > seam;
+
+    /// <summary>
     /// A spread of rotations, so that one lucky offset is not the answer.
     /// </summary>
     /// <remarks>

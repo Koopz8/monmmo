@@ -113,4 +113,77 @@ public sealed class AnUnusedNumberTests
         Assert.Equal(0, empty.MedianSites);
         Assert.Equal(0, empty.MaxSites);
     }
+
+    // ------------------------------------------------------------ a BOUND's nudge (284)
+
+    /// <summary>
+    /// A sweep filtered on <c>1..N</c> has no unused id to be asked for, because every id in the
+    /// range is used. What moves is the RANGE, and the windows are the same width laid end to end
+    /// above it.
+    /// </summary>
+    [Fact]
+    public void TheWindowsAboveAreTheSameWidthLaidEndToEnd()
+    {
+        IReadOnlyList<AnUnusedNumber.Window> found = AnUnusedNumber.WindowsAbove(1, 10, 3);
+
+        Assert.Equal([(11, 20), (21, 30), (31, 40)], found.Select(w => (w.First, w.Last)));
+        Assert.All(found, w => Assert.Equal(10, w.Ids));
+    }
+
+    /// <summary>
+    /// And a window that would run past the top of the number space is not returned short — a
+    /// narrower window is a floor for a smaller sample, which is 273's whole finding one list over.
+    /// </summary>
+    [Fact]
+    public void AWindowThatWouldNotFitIsNotReturnedNarrow()
+    {
+        IReadOnlyList<AnUnusedNumber.Window> found =
+            AnUnusedNumber.WindowsAbove(1, 10, howMany: 5, ceiling: 35);
+
+        Assert.Equal([(11, 20), (21, 30)], found.Select(w => (w.First, w.Last)));
+    }
+
+    /// <summary>
+    /// <b>THE THING (284).</b> The accident rate of <c>7C LL HH</c> depends on HH as much as on
+    /// LL, so the only floor worth reading is one that keeps the high byte — the unused ids above
+    /// the bound, inside its own page.
+    /// </summary>
+    [Fact]
+    public void TheMatchedFloorIsTheRestOfTheBoundsOwnHighByte()
+    {
+        AnUnusedNumber.Window? found = AnUnusedNumber.SameHighByteAbove(0x0163);
+
+        Assert.NotNull(found);
+        Assert.Equal((0x0164, 0x01FF), (found.First, found.Last));
+        Assert.Equal(156, found.Ids);
+        Assert.Equal([0x01], found.HighBytes);
+    }
+
+    /// <summary>
+    /// And a bound that ends its high byte affords NO matched floor, which is nought rather than
+    /// an error and rather than an unmatched window quietly standing in for one.
+    /// </summary>
+    [Fact]
+    public void ABoundThatEndsItsPageAffordsNoMatchedFloor()
+    {
+        Assert.Null(AnUnusedNumber.SameHighByteAbove(0x01FF));
+        Assert.Null(AnUnusedNumber.SameHighByteAbove(0x00FF));
+
+        // And one id short of the end still affords one, of exactly one id.
+        AnUnusedNumber.Window? one = AnUnusedNumber.SameHighByteAbove(0x01FE);
+
+        Assert.NotNull(one);
+        Assert.Equal(1, one.Ids);
+    }
+
+    /// <summary>
+    /// A window that spans pages says so, which is what makes an unmatched floor readable AS
+    /// unmatched rather than being quoted as though it were the other kind.
+    /// </summary>
+    [Fact]
+    public void AWindowNamesEveryHighByteItSpans()
+    {
+        Assert.Equal([0x01, 0x02], new AnUnusedNumber.Window(0x0164, 0x02C6).HighBytes);
+        Assert.Equal([0x01], new AnUnusedNumber.Window(0x0164, 0x01FF).HighBytes);
+    }
 }
