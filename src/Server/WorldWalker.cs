@@ -16,6 +16,38 @@ public sealed record Standing(string MapId, GridPosition Square, int LocalId, in
         $"{MapId} {Square} is somebody (object {LocalId}, movement {MovementType})";
 }
 
+/// <summary>Somewhere a walk stood: one square of one map.</summary>
+public readonly record struct Somewhere(string MapId, GridPosition Square)
+{
+    public override string ToString() => $"{MapId} {Square}";
+}
+
+/// <summary>
+/// One step the walk actually took, from where to where, and by what.
+/// </summary>
+/// <remarks>
+/// <b>Recorded rather than re-derived.</b> Asking whether the walk can get BACK needs the same
+/// edges it went forward along; a second idea of what a step is would measure the difference
+/// between two authors instead — 241's rule, and 261 was caught by it. So the walker hands out
+/// the edges it took and <c>TheWayBack</c> traverses that and nothing else.
+/// </remarks>
+/// <param name="How">
+/// Which kind of edge — a step, a hop, a map edge, a door. Not needed to answer the question and
+/// kept anyway, because "these squares cannot get back" and "the only way in was a door" are the
+/// finding and its explanation, and the second costs a string.
+/// </param>
+public sealed record AStepTaken(Somewhere From, Somewhere To, string How)
+{
+    public const string Step = "step";
+    public const string Hop = "hop";
+    public const string Edge = "map edge";
+    public const string Door = "door";
+    public const string Scripted = "scripted door";
+    public const string Boat = "boat";
+
+    public override string ToString() => $"{From} -{How}-> {To}";
+}
+
 /// <summary>What a walk of the world found.</summary>
 public sealed record Reach(
     IReadOnlyCollection<string> Maps,
@@ -62,6 +94,16 @@ public sealed record Reach(
     /// </para>
     /// </summary>
     public IReadOnlyCollection<(string MapId, GridPosition Square)> Stood { get; init; } = [];
+
+    /// <summary>
+    /// The square the walk began on.
+    /// <para>
+    /// Chosen inside the walk when no caller says where, and never reported until something needed
+    /// to ask a question ABOUT the start rather than from it. "Can this square get back to the
+    /// beginning" is that question, and it cannot be asked of a beginning nobody printed.
+    /// </para>
+    /// </summary>
+    public Somewhere Start { get; init; }
 }
 
 /// <summary>
@@ -108,7 +150,8 @@ public static class WorldWalker
         GridPosition? startSquare = null,
         bool throughScriptedDoors = false,
         bool ridingTheBoat = false,
-        IReadOnlyDictionary<(string MapId, int LocalId), GridPosition>? movedTo = null)
+        IReadOnlyDictionary<(string MapId, int LocalId), GridPosition>? movedTo = null,
+        ICollection<AStepTaken>? steps = null)
     {
         IReadOnlyCollection<int> known = moves ?? [];
 
@@ -186,9 +229,23 @@ public static class WorldWalker
         // cosmetic: somebody standing on the wrong side of a boulder is on the wrong side
         // of everything behind it, and a walk that began at the first walkable square of
         // the map would report the whole world open to them.
-        queue.Enqueue((start, startSquare is { } begin && GridOf(start).IsWalkable(begin)
+        GridPosition first = startSquare is { } begin && GridOf(start).IsWalkable(begin)
             ? begin
-            : GridOf(start).FirstWalkable()));
+            : GridOf(start).FirstWalkable();
+
+        queue.Enqueue((start, first));
+
+        // Every enqueue is a step somebody took, so every enqueue goes through here. Recording
+        // the edges beside the enqueues rather than after them is what stops the record and the
+        // walk from being two accounts of one journey — a walk that added a queue and forgot the
+        // record would report a square nothing can get back from, and be wrong quietly.
+        void Go(MapData fromMap, GridPosition from, MapData toMap, GridPosition to, string how)
+        {
+            steps?.Add(new AStepTaken(
+                new Somewhere(fromMap.Id, from), new Somewhere(toMap.Id, to), how));
+
+            queue.Enqueue((toMap, to));
+        }
 
         var seen = new HashSet<(string, GridPosition)>();
         var doorsWalked = new HashSet<string>();
@@ -244,7 +301,8 @@ public static class WorldWalker
                             ? Arrival(behind, behind.Warps[door.TargetWarpId], there)
                             : there.FirstWalkable();
 
-                    if (there.IsWalkable(landing)) queue.Enqueue((behind, landing));
+                    if (there.IsWalkable(landing))
+                        Go(map, from, behind, landing, AStepTaken.Scripted);
                 }
             }
 
@@ -271,7 +329,7 @@ public static class WorldWalker
                     // around, so nothing is invented when it will not take a passenger.
                     GridPosition landing = port.Ferry!.Arrival;
 
-                    if (ashore.IsWalkable(landing)) queue.Enqueue((port, landing));
+                    if (ashore.IsWalkable(landing)) Go(map, from, port, landing, AStepTaken.Boat);
                 }
             }
 
@@ -294,7 +352,8 @@ public static class WorldWalker
                     GridPosition arrival = GameWorld.AcrossEdge(
                         from, SideFor(direction), map, neighbour, edge.Offset);
 
-                    if (GridOf(neighbour).IsWalkable(arrival)) queue.Enqueue((neighbour, arrival));
+                    if (GridOf(neighbour).IsWalkable(arrival))
+                        Go(map, from, neighbour, arrival, AStepTaken.Edge);
 
                     continue;
                 }
@@ -305,7 +364,8 @@ public static class WorldWalker
                 // walker that asked "can I stand there" first would never ask this.
                 if (map.HopOnto(next, direction, hops) is { } landing)
                 {
-                    if (ObjectOn(map, landing) is null || throughPeople) queue.Enqueue((map, landing));
+                    if (ObjectOn(map, landing) is null || throughPeople)
+                        Go(map, from, map, landing, AStepTaken.Hop);
 
                     continue;
                 }
@@ -350,7 +410,7 @@ public static class WorldWalker
                     }
                 }
 
-                queue.Enqueue((map, next));
+                Go(map, from, map, next, AStepTaken.Step);
             }
 
             // Doors, which are squares like any other once they have been stood on.
@@ -367,7 +427,7 @@ public static class WorldWalker
                 continue;
             }
 
-            queue.Enqueue((target, Arrival(target, warp, GridOf(target))));
+            Go(map, from, target, Arrival(target, warp, GridOf(target)), AStepTaken.Door);
         }
 
         return new Reach(
@@ -382,6 +442,7 @@ public static class WorldWalker
             // handful that are in a list of six hundred that are not.
             People = [.. standing.Where(s => !seen.Contains((s.MapId, s.Square)))],
             Shore = [.. shore.DistinctBy(w => (w.MapId, w.Square))],
+            Start = new Somewhere(start.Id, first),
         };
     }
 

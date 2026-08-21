@@ -214,6 +214,7 @@ public static class Program
         if (options.Dropped) WriteDropped(rom);
         if (options.Unread) WriteUnread(rom);
         if (options.Layers) WriteLayers(rom);
+        if (options.TheWayBack) WriteTheWayBack(rom, options.StartAt);
         if (options.Water) WriteWater(rom);
         if (options.Operands) WriteOperands(rom);
         if (options.Slots.Count > 0) WriteSlots(rom, options.Slots);
@@ -7665,6 +7666,246 @@ public static class Program
                         .OrderByDescending(a => a.Value)
                         .Take(6)
                         .Select(a => $"0x{a.Key.Beside:X2} x{a.Value}")));
+        }
+    }
+
+    /// <summary>
+    /// Whether the places the walk gets to can get back to where it started.
+    /// </summary>
+    /// <remarks>
+    /// Every reach number this project prints is a forward number over a graph with one-way
+    /// edges in it. The walk hands out the edges it took; the reverse traversal is of that
+    /// record and of nothing else, so the two cannot disagree about what a step is.
+    /// </remarks>
+    private static void WriteTheWayBack(Rom rom, string startAt)
+    {
+        Console.WriteLine();
+        Console.WriteLine("THE WAY BACK");
+        Console.WriteLine();
+
+        WorldData world = WorldExporter.Export(rom);
+        MapData first = world.Find(startAt) ?? world.Maps.First();
+
+        int[] field =
+        [
+            .. world.Maps.SelectMany(m => m.Objects).Where(o => o.IsObstacle)
+                .Select(o => o.ShiftedBy).Distinct(),
+        ];
+
+        Console.WriteLine(
+            $"  walked from {first.Id} ({first.Name}); the boat and the scripted doors are OFF,"
+            + " which is what those levers say by default");
+        Console.WriteLine();
+
+        foreach ((string name, int[]? moves, bool people, bool surf) in new[]
+        {
+            ("no move, nobody stepping aside", (int[]?)null, false, false),
+            ("with moves, through people", field, true, false),
+            ("with moves, through people, surfing", field, true, true),
+        })
+        {
+            var steps = new List<AStepTaken>();
+
+            Reach reach = WorldWalker.Walk(
+                world, first.Id, moves, throughPeople: people, surfing: surf, steps: steps);
+
+            var stood = reach.Stood.Select(s => new Somewhere(s.MapId, s.Square)).ToList();
+
+            IReadOnlyList<Somewhere> stranded = TheWayBack.Stranded(
+                stood, steps.Select(s => (s.From, s.To)), reach.Start);
+
+            Console.WriteLine($"    {name}");
+            Console.WriteLine(
+                $"      {stood.Count} square(s) stood on over {reach.Maps.Count} map(s),"
+                + $" {steps.Count} step(s) taken");
+            Console.WriteLine(
+                $"      {stood.Count - stranded.Count} can get back to {reach.Start},"
+                + $" {stranded.Count} CANNOT");
+
+            if (stranded.Count == 0)
+            {
+                Console.WriteLine("      nothing is stranded at this setting");
+                Console.WriteLine();
+
+                continue;
+            }
+
+            // Which maps, and how much of each — a map with three stranded squares and a map
+            // that is stranded whole are the same line otherwise, and only one of them is a
+            // room you cannot leave.
+            Dictionary<string, int> onMap = stood.GroupBy(s => s.MapId)
+                .ToDictionary(g => g.Key, g => g.Count());
+
+            var byMap = stranded.GroupBy(s => s.MapId)
+                .Select(g => (Map: g.Key, Stuck: g.Count(), Whole: onMap[g.Key]))
+                .OrderByDescending(m => m.Stuck)
+                .ToList();
+
+            Console.WriteLine(
+                $"      on {byMap.Count} map(s), {byMap.Count(m => m.Stuck == m.Whole)} of them"
+                + " stranded WHOLE");
+
+            foreach ((string map, int stuck, int whole) in byMap.Take(12))
+            {
+                Console.WriteLine(
+                    $"        {map,-8} {world.Find(map)?.Name ?? "?",-22} {stuck,5} of {whole,5}"
+                    + (stuck == whole ? "  the whole map" : ""));
+            }
+
+            if (byMap.Count > 12) Console.WriteLine($"        ... and {byMap.Count - 12} more");
+
+            // And what got in, which is the explanation rather than the finding.
+            var strandedSet = stranded.ToHashSet();
+
+            var into = steps.Where(s => strandedSet.Contains(s.To) && !strandedSet.Contains(s.From))
+                .GroupBy(s => s.How)
+                .Select(g => (g.Key, Count: g.Count()))
+                .OrderByDescending(g => g.Count)
+                .ToList();
+
+            Console.WriteLine(
+                "      the last step in was: "
+                + (into.Count == 0
+                    ? "nothing — no step from outside reaches any of them"
+                    : string.Join(", ", into.Select(i => $"{i.Key} x{i.Count}"))));
+
+            // AND WHERE THEY ARE. A count of one-way ways in is a number; the ways themselves
+            // are places somebody can go and look at, which is the difference between this and
+            // a claim.
+            foreach (AStepTaken door in steps
+                .Where(s => strandedSet.Contains(s.To) && !strandedSet.Contains(s.From))
+                .DistinctBy(s => (s.From, s.To))
+                .Take(24))
+            {
+                Console.WriteLine(
+                    $"        {door.From.MapId,-8} {world.Find(door.From.MapId)?.Name ?? "?",-20}"
+                    + $" {door.From.Square} -{door.How}-> {door.To.MapId}"
+                    + $" ({world.Find(door.To.MapId)?.Name ?? "?"}) {door.To.Square}");
+            }
+
+            Console.WriteLine();
+        }
+
+        WriteTheDoorsBothWays(world);
+    }
+
+    /// <summary>
+    /// The same question asked of the map data alone, which does not know the walk exists.
+    /// </summary>
+    private static void WriteTheDoorsBothWays(WorldData world)
+    {
+        Console.WriteLine("  AND THE DOORS, ASKED WITHOUT WALKING ANYWHERE");
+        Console.WriteLine(
+            "    a warp names a MAP and an INDEX into that map's own warp list. Nothing in the"
+            + " format makes that a pair.");
+        Console.WriteLine();
+
+        foreach ((string what, int shift) in new[]
+        {
+            ("the door each one names", 0),
+            ("CONTROL: the NEXT door along on the same map", 1),
+        })
+        {
+            IReadOnlyList<ADoorAndItsOther> doors = TheDoorOnTheOtherSide.In(world, shift);
+
+            List<ADoorAndItsOther> ordinary =
+                [.. doors.Where(d => !d.DecidedAtRuntime && d.TheDoorIsThere)];
+
+            Console.WriteLine($"    {what}");
+            Console.WriteLine(
+                $"      {doors.Count} warp(s): {doors.Count(d => d.DecidedAtRuntime)} decided at"
+                + $" runtime, {doors.Count(d => !d.DecidedAtRuntime && !d.TheMapIsThere)} name a"
+                + " map this world file does not have,"
+                + $" {doors.Count(d => d.TheMapIsThere && !d.TheDoorIsThere)} name a warp that map"
+                + " does not have");
+            Console.WriteLine(
+                $"      of the {ordinary.Count} left:"
+                + $" {ordinary.Count(d => d.NamesThisDoorBack)} name THIS door back,"
+                + $" {ordinary.Count(d => d.NamesTheMapBack && !d.NamesThisDoorBack)} come back to"
+                + " this map by another door,"
+                + $" {ordinary.Count(d => !d.NamesTheMapBack)} ONE WAY");
+            Console.WriteLine();
+        }
+
+        List<ADoorAndItsOther> oneWay =
+        [
+            .. TheDoorOnTheOtherSide.In(world)
+                .Where(d => !d.DecidedAtRuntime && d.TheDoorIsThere && !d.NamesTheMapBack),
+        ];
+
+        Console.WriteLine($"    THE ONE-WAY DOORS — {oneWay.Count} of them");
+
+        foreach (ADoorAndItsOther door in oneWay.Take(20))
+        {
+            Console.WriteLine(
+                $"      {door.MapId,-8} {world.Find(door.MapId)?.Name ?? "?",-22} warp"
+                + $" {door.Index,2} {door.Square} -> {door.TargetMapId}"
+                + $" ({world.Find(door.TargetMapId)?.Name ?? "?"}) warp {door.TargetIndex}");
+        }
+
+        if (oneWay.Count > 20) Console.WriteLine($"      ... and {oneWay.Count - 20} more");
+
+        // AND THE PREDICTION. A map whose every exit is the runtime sentinel is a room this
+        // walker cannot leave, and that is readable off the warp lists alone — no walk, no
+        // start, no levers. Which of them the walk actually gets into is the other half, and
+        // the two halves were written for different questions.
+        List<MapData> noWayOut =
+            [.. world.Maps.Where(m => m.Warps.Count > 0 && m.Warps.All(w => w.IsDynamic))];
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    AND {noWayOut.Count} MAP(S) WHOSE EVERY EXIT IS THE RUNTIME SENTINEL — read off"
+            + " the warp lists, with nothing walked");
+
+        // AND THE THIRD KIND OF EDGE. A world is made of steps, borders and doors; the steps are
+        // symmetric unless a ledge says otherwise and the doors are above, so the borders are the
+        // only edge nobody had asked this of.
+        var borders = TheDoorOnTheOtherSide.Borders(world).ToList();
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    AND THE BORDERS — {borders.Count} join(s),"
+            + $" {borders.Count(b => b.Back)} declared back from the other side,"
+            + $" {borders.Count(b => !b.Back)} NOT");
+
+        foreach ((string map, ConnectionSide side, string other, bool _) in
+            borders.Where(b => !b.Back).Take(12))
+        {
+            // And what the far map says instead, which is the difference between "one way" and
+            // "the far side joins somebody else along that edge".
+            MapData? far = world.Find(other);
+
+            string says = far is null ? "no such map here"
+                : far.Connections.Count == 0 ? "declares no joins at all"
+                : "declares " + string.Join(
+                    ", ", far.Connections.Select(c => $"{c.Side} -> {c.MapId}"));
+
+            Console.WriteLine(
+                $"      {map,-8} {world.Find(map)?.Name ?? "?",-22} {side,-5} -> {other}"
+                + $" ({far?.Name ?? "?"}), which {says}");
+        }
+
+        IReadOnlyList<ADoorAndItsOther> everyDoor = TheDoorOnTheOtherSide.In(world);
+
+        foreach (MapData room in noWayOut)
+        {
+            List<ADoorAndItsOther> inbound =
+                [.. everyDoor.Where(d => d.TargetMapId == room.Id && !d.DecidedAtRuntime)];
+
+            Console.WriteLine(
+                $"      {room.Id,-8} {room.Name,-22} {room.Warps.Count} exit(s),"
+                + $" {inbound.Count} door(s) in from"
+                + $" {inbound.Select(d => d.MapId).Distinct().Count()} map(s),"
+                + $" {room.Objects.Count} object(s)");
+
+            if (inbound.Count > 0)
+            {
+                Console.WriteLine(
+                    "        in from: " + string.Join(
+                        ", ",
+                        inbound.Select(d => d.MapId).Distinct().Take(8)
+                            .Select(m => $"{m} ({world.Find(m)?.Name ?? "?"})")));
+            }
         }
     }
 
@@ -16380,6 +16621,9 @@ public static class Program
         /// <summary>What a flat walk would lose if a step had to stay on its own layer.</summary>
         public bool Layers { get; private init; }
 
+        /// <summary>Which of the squares the walk reaches can get back to where it began.</summary>
+        public bool TheWayBack { get; private init; }
+
         /// <summary>Which metatile behaviours are the sea, asked without the elevation nibble.</summary>
         public bool Sea { get; private init; }
 
@@ -16613,6 +16857,7 @@ public static class Program
             var droppedEvents = false;
             var unreadBytes = false;
             var layers = false;
+            var theWayBack = false;
             var sea = false;
             var operands = false;
             var moved = new List<int>();
@@ -16904,6 +17149,9 @@ public static class Program
                         break;
                     case "--layers":
                         layers = true;
+                        break;
+                    case "--the-way-back":
+                        theWayBack = true;
                         break;
                     case "--sea":
                         sea = true;
@@ -17270,6 +17518,7 @@ public static class Program
                 Dropped = droppedEvents,
                 Unread = unreadBytes,
                 Layers = layers,
+                TheWayBack = theWayBack,
                 Sea = sea,
                 Operands = operands,
                 Moved = moved,
