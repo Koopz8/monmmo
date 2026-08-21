@@ -108,6 +108,82 @@ public static class WhatIsBuried
     }
 
     /// <summary>
+    /// Every sign's KIND byte on every map, tallied — so "there is no third kind" is measured.
+    /// </summary>
+    /// <remarks>
+    /// <b>A hole in the index is a slot nothing claims</b> (279), and the first thing to ask is
+    /// whether some OTHER kind of sign record claims it. That is a count, and counting it beats
+    /// asserting it: this project has twice found a second kind of record inside a table it
+    /// thought held one (259's clones, 248's buried signs themselves).
+    /// </remarks>
+    public static (IReadOnlyDictionary<int, int> Kinds, IReadOnlyDictionary<int, int> Pointers)
+        KindsOfSign(Rom rom, IEnumerable<LoadedMap> maps)
+    {
+        var kinds = new Dictionary<int, int>();
+        var pointers = new Dictionary<int, int>();
+
+        foreach (LoadedMap map in maps)
+        {
+            if (EventLayout.Table(rom, map.EventsPointer, EventLayout.Signs, SignSizeBytes)
+                is not { } list)
+            {
+                continue;
+            }
+
+            (int table, int count) = list;
+
+            for (var i = 0; i < count; i++)
+            {
+                int kind = rom.ReadU8(table + (i * SignSizeBytes) + KindOffset);
+
+                kinds[kind] = kinds.GetValueOrDefault(kind) + 1;
+
+                uint word = rom.ReadU32(table + (i * SignSizeBytes) + WordOffset);
+
+                if (word >> 24 == 0x08) pointers[kind] = pointers.GetValueOrDefault(kind) + 1;
+            }
+        }
+
+        return (kinds, pointers);
+    }
+
+    /// <summary>One sign's kind byte and where it stands.</summary>
+    public sealed record ASign(string MapId, int At, int X, int Y, int Kind, uint Word);
+
+    /// <summary>Every sign on every map, with its kind — not just the buried ones.</summary>
+    public static List<ASign> EverySign(Rom rom, IEnumerable<LoadedMap> maps)
+    {
+        var found = new List<ASign>();
+
+        foreach (LoadedMap map in maps)
+        {
+            if (EventLayout.Table(rom, map.EventsPointer, EventLayout.Signs, SignSizeBytes)
+                is not { } list)
+            {
+                continue;
+            }
+
+            (int table, int count) = list;
+
+            for (var i = 0; i < count; i++)
+            {
+                int at = table + (i * SignSizeBytes);
+
+                found.Add(
+                    new ASign(
+                        WorldExporter.MapId(map.Bank, map.Number),
+                        at,
+                        (short)rom.ReadU16(at),
+                        (short)rom.ReadU16(at + 2),
+                        rom.ReadU8(at + KindOffset),
+                        rom.ReadU32(at + WordOffset)));
+            }
+        }
+
+        return found;
+    }
+
+    /// <summary>
     /// Whether a set of numbers is a dense index: every value from nought to the largest, each
     /// exactly once.
     /// <para>

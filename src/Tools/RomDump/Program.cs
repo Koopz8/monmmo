@@ -12285,6 +12285,21 @@ public static class Program
         if (all.Count > 30) Console.WriteLine($"    ... and {all.Count - 30} more");
     }
 
+    /// <summary>Whether a buried sign's own square is one somebody could stand on.</summary>
+    private static bool Standable(MapLibrary library, Buried one)
+    {
+        LoadedMap? map = library.All()
+            .FirstOrDefault(m => WorldExporter.MapId(m.Bank, m.Number) == one.MapId);
+
+        if (map is null) return false;
+
+        var square = new GridPosition(one.X, one.Y);
+
+        CollisionGrid grid = map.GridFor(false);
+
+        return grid.Contains(square) && grid.IsWalkable(square);
+    }
+
     private static void WriteBuried(Rom rom)
     {
         Console.WriteLine();
@@ -12419,6 +12434,266 @@ public static class Program
 
         // AND THE INDICES NOTHING USES, which is the other half of "183 of 191".
         HashSet<int> used = [.. buried.Select(b => b.Third)];
+
+        // WHAT THE TOP BIT MARKS (279).
+        //
+        // 248 found the fourth byte is a count with one bit spare, and six records set that bit
+        // while every other field on them is ordinary. What the bit DOES is engine behaviour and
+        // is not readable here. What CAN be read is what the six have in common, and the item
+        // table is three fields this project already reads — a price, a pocket and a hold effect
+        // — none of which was built for this question and none of which can have been tuned to
+        // agree with it.
+        {
+            Dictionary<int, ItemRecord> byId = ItemTable.Locate(rom) is { } records
+                ? ItemTable.Read(rom, records).ToDictionary(i => i.Id)
+                : [];
+
+            HashSet<int> namedByAScript =
+            [
+                .. ItemMentions.Of(rom, library, [.. names.Keys.Where(id => id != 0)])
+                    .Select(m => m.ItemId),
+            ];
+
+            Dictionary<int, int> howManyPlaces =
+                buried.GroupBy(b => b.Item).ToDictionary(g => g.Key, g => g.Count());
+
+            List<Buried> marked = [.. buried.Where(b => b.Fourth >= 0x80)];
+
+            // THE FLOOR IS EXACT AND IS NOT A MODEL. Drawing six of the 183 records without
+            // replacement, the chance that all six come from the k that hold a property is
+            // C(k,6)/C(183,6) — a product of six fractions, no independence assumed and no
+            // distribution fitted.
+            double Chance(int k)
+            {
+                double odds = 1;
+
+                for (var i = 0; i < marked.Count; i++)
+                {
+                    odds *= (double)(k - i) / (buried.Count - i);
+                }
+
+                return Math.Max(0, odds);
+            }
+
+            Console.WriteLine();
+            Console.WriteLine(
+                $"  AND WHAT THE {marked.Count} WITH THE SPARE BIT HAVE IN COMMON (279) — every"
+                + " candidate this project can read, with the exact chance that six drawn from the"
+                + $" {buried.Count} would all hold it:");
+            Console.WriteLine();
+            Console.WriteLine($"    {"property",-40} {"of the six",11} {"of all",10}   chance");
+
+            foreach ((string what, Func<Buried, bool> holds) in
+                     new (string, Func<Buried, bool>)[]
+                     {
+                         ("its item is named by NO script", b => !namedByAScript.Contains(b.Item)),
+                         ("its item is buried in ONE place", b => howManyPlaces[b.Item] == 1),
+                         ("it does something when HELD", b => byId.GetValueOrDefault(b.Item)?.HoldEffect > 0),
+                         ("it cannot be bought (price 0)", b => byId.GetValueOrDefault(b.Item)?.Price == 0),
+                         ("its own square is walkable", b => Standable(library, b)),
+                         ("the count is one", b => (b.Fourth & 0x7F) == 1),
+                     })
+            {
+                int all = buried.Count(holds);
+                int six = marked.Count(holds);
+
+                Console.WriteLine(
+                    $"    {what,-40} {$"{six}/{marked.Count}",11} {$"{all}/{buried.Count}",10}"
+                    + $"   {Chance(all):P3}"
+                    + (six == marked.Count && Chance(all) < 0.01 ? "   <- all of them" : string.Empty));
+            }
+
+            Console.WriteLine();
+            Console.WriteLine(
+                "    the six, with what the item table says about each:");
+
+            foreach (Buried one in marked)
+            {
+                ItemRecord? what = byId.GetValueOrDefault(one.Item);
+
+                Console.WriteLine(
+                    $"      {one.MapId,-6} ({one.X,3},{one.Y,3})  index {one.Third,3}  item {one.Item,3}"
+                    + $"  {NameOfItem(one.Item),-14} price {what?.Price,5}  pocket {what?.Pocket,-10}"
+                    + $" hold effect {what?.HoldEffect,3}");
+            }
+
+            Console.WriteLine(
+                "    AND IT IS NOT ANY OF THEM: the property all six hold is held by dozens of"
+                + " records that do NOT set the bit, so it is a thing the six have and not the"
+                + " thing the bit means. What the bit DOES is engine behaviour and is not read.");
+        }
+
+        // AND WHAT ORDER THE INDEX IS IN (279).
+        //
+        // 248 established the third byte is a dense index and left eight holes in it. A hole is
+        // only readable against the order the slots are handed out in, so that is the thing to
+        // measure — and it is neither of the two orders this project has.
+        {
+            var perMap = buried.GroupBy(b => b.MapId)
+                .Select(g => (Map: g.Key, Slots: g.Select(b => b.Third).Order().ToList()))
+                .ToList();
+
+            static int Runs(IReadOnlyList<int> slots) =>
+                1 + slots.Zip(slots.Skip(1)).Count(pair => pair.Second != pair.First + 1);
+
+            List<(string Map, List<int> Slots)> split =
+                [.. perMap.Where(m => Runs(m.Slots) > 1).OrderBy(m => m.Slots[0])];
+
+            List<Buried> inIndexOrder = [.. buried.OrderBy(b => b.Third)];
+
+            int backwards = inIndexOrder.Zip(inIndexOrder.Skip(1)).Count(pair => pair.Second.At < pair.First.At);
+
+            List<int> holes =
+                [.. Enumerable.Range(0, buried.Max(b => b.Third) + 1)
+                    .Where(i => buried.All(b => b.Third != i))];
+
+            Console.WriteLine();
+            Console.WriteLine(
+                $"  AND WHAT ORDER THE INDEX IS HANDED OUT IN (279) — a hole is only readable"
+                + " against that, and it is NEITHER of the two orders this project has:");
+            Console.WriteLine(
+                $"    NOT map order: {split.Count} of the {perMap.Count} maps hold their slots in"
+                + " more than one run —");
+
+            foreach ((string map, List<int> slots) in split.Take(6))
+            {
+                Console.WriteLine(
+                    $"      {map,-6} {slots.Count} record(s) in {Runs(slots)} run(s): {string.Join(", ", slots)}");
+            }
+
+            if (split.Count > 6) Console.WriteLine($"      ... and {split.Count - 6} more");
+
+            Console.WriteLine(
+                $"    NOT address order: {backwards} of the {inIndexOrder.Count - 1} steps up the"
+                + " index go DOWN the file");
+            int top = buried.Max(b => b.Third);
+
+            int early = holes.Count(h => h * 4 <= top);
+
+            int longest = 1;
+            var running = 1;
+
+            for (var i = 1; i < holes.Count; i++)
+            {
+                running = holes[i] == holes[i - 1] + 1 ? running + 1 : 1;
+                longest = Math.Max(longest, running);
+            }
+
+            Console.WriteLine(
+                $"    so the {buried.Count} slots are handed out in an order the cartridge does not"
+                + $" otherwise expose, and the holes are read against nothing. {early} of the"
+                + $" {holes.Count} are in the first quarter of the range and {longest} of those are"
+                + " consecutive.");
+
+            // AND WHETHER SOMETHING ELSE IN THE SIGN LISTS CLAIMS THEM, counted rather than
+            // asserted. This project has twice found a second kind of record inside a table it
+            // thought held one (248 here, 259's clones), so "there is no third kind" is a tally.
+            (IReadOnlyDictionary<int, int> signKinds, IReadOnlyDictionary<int, int> signPointers) =
+                WhatIsBuried.KindsOfSign(rom, library.All());
+
+            Console.WriteLine();
+            Console.WriteLine(
+                $"    AND THE SIGN KIND BYTE TAKES {signKinds.Count} VALUES, NOT TWO (279). This"
+                + " project reads every one that is not the buried kind as an ordinary script sign."
+                + " Two questions of each: are its four bytes a POINTER, and which of its four"
+                + " neighbours can be stood on:");
+
+            // AND WHETHER THE KIND SAYS WHICH WAY YOU FACE. 242 established that this project
+            // reads a sign from its own square or any of the four around it, and that its own
+            // square is solid. If the kind picks a side, then the walkable NEIGHBOURS of a sign
+            // of that kind sit on one side — and this project reads 97 signs from three squares
+            // the record does not allow.
+            Dictionary<string, LoadedMap> everyMap =
+                library.All().ToDictionary(m => WorldExporter.MapId(m.Bank, m.Number));
+
+            bool Open(string mapId, int x, int y)
+            {
+                if (!everyMap.TryGetValue(mapId, out LoadedMap? map)) return false;
+
+                var square = new GridPosition(x, y);
+
+                CollisionGrid grid = map.GridFor(false);
+
+                return grid.Contains(square) && grid.IsWalkable(square);
+            }
+
+            (string Name, int Dx, int Dy)[] sides =
+                [("north", 0, -1), ("south", 0, 1), ("west", -1, 0), ("east", 1, 0)];
+
+            List<WhatIsBuried.ASign> allSigns = WhatIsBuried.EverySign(rom, library.All());
+
+            bool OpenSide(WhatIsBuried.ASign one, int side) =>
+                Open(one.MapId, one.X + sides[side].Dx, one.Y + sides[side].Dy);
+
+            // THE FLOOR IS THE COMMONEST KIND'S OWN RATE, which is the only population of signs
+            // big enough to have one and the only one whose kind says nothing.
+            List<WhatIsBuried.ASign> ordinary = [.. allSigns.Where(one => one.Kind == 0x00)];
+
+            double[] openRate =
+                [.. Enumerable.Range(0, 4).Select(i => (double)ordinary.Count(one => OpenSide(one, i)) / ordinary.Count)];
+
+            Console.WriteLine(
+                $"      {"kind",6} {"records",9} {"a pointer",11}   {"north",13} {"south",13}"
+                + $" {"west",13} {"east",13}");
+
+            foreach ((int kind, int howMany) in signKinds.OrderByDescending(k => k.Value))
+            {
+                List<WhatIsBuried.ASign> these = [.. allSigns.Where(one => one.Kind == kind)];
+
+                string Side(int i)
+                {
+                    int open = these.Count(one => OpenSide(one, i));
+
+                    return open == these.Count
+                        ? $"{open}/{these.Count} ALL"
+                        : $"{open}/{these.Count}";
+                }
+
+                Console.WriteLine(
+                    $"      {$"0x{kind:X2}",6} {howMany,9}"
+                    + $" {$"{signPointers.GetValueOrDefault(kind)}/{howMany}",11}"
+                    + $"   {Side(0),13} {Side(1),13} {Side(2),13} {Side(3),13}");
+            }
+
+            Console.WriteLine(
+                "      the floor is kind 0x00's own rate, which is the kind that names no side: "
+                + string.Join(", ", sides.Select((side, i) => $"{side.Name} {openRate[i]:P1}")));
+
+            // AND WHICH SIDE EACH KIND NAMES, worked out rather than left to be read — with the
+            // chance that many in a row would all be open by the ordinary kind's rate.
+            foreach ((int kind, int howMany) in signKinds.Where(k => k.Key is not (0x00 or 0x07)))
+            {
+                List<WhatIsBuried.ASign> these = [.. allSigns.Where(one => one.Kind == kind)];
+
+                if (WhichWayASignIsRead.TheSideAllOfThemHaveOpen(
+                        [.. these.Select(one => Enumerable.Range(0, 4).Select(i => OpenSide(one, i)).ToArray())])
+                    is not { } side)
+                {
+                    Console.WriteLine(
+                        $"      kind 0x{kind:X2} names NO ONE SIDE — either none is open on all of"
+                        + " them or more than one is, and choosing between two would be a verdict"
+                        + " about the loop's order");
+
+                    continue;
+                }
+
+                int forbidden = these.Count(
+                    one => Enumerable.Range(0, 4).Any(i => i != side && OpenSide(one, i)));
+
+                // AND THE OTHER HALF OF IT: the OPPOSITE side. If these squares merely had a lot
+                // of open neighbours, the far side would be open about as often as the near one
+                // is. On two of the three kinds it is open NEVER.
+                int across = WhichWayASignIsRead.Across(side);
+
+                Console.WriteLine(
+                    $"      KIND 0x{kind:X2} IS READ FROM THE {sides[side].Name.ToUpperInvariant()}:"
+                    + $" {howMany} of {howMany}, against a floor of {Math.Pow(openRate[side], howMany):P4}"
+                    + $" — the {sides[across].Name} side is open"
+                    + $" {these.Count(one => OpenSide(one, across))} of {howMany}, and {forbidden}"
+                    + " of them have SOME other walkable neighbour, which is what reading them from"
+                    + " four squares costs");
+            }
+        }
 
         Console.WriteLine(
             "    the indices nothing uses: "
