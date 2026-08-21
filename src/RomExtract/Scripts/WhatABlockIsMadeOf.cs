@@ -104,6 +104,43 @@ public static class WhatABlockIsMadeOf
     /// clamped away — "less real than junk" is not a share of anything.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// How far a sample of <paramref name="howMany"/> blocks drawn from one population sits from
+    /// that whole population — the sampling band for a count that small.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>A distance measured on few blocks is inflated by sampling noise alone</b>, and a
+    /// population of thirty-odd blocks compared against one of hundreds cannot be read without
+    /// knowing by how much. This splits the big population into consecutive groups of
+    /// <paramref name="howMany"/> and gives each group's distance from the whole.
+    /// </para>
+    /// <para>
+    /// <b>Consecutive rather than drawn at random</b>, for the reason 269 gave about rotation
+    /// offsets: a control that cannot be reproduced from the file alone is a control nobody can
+    /// check, and this project has no source of randomness it is willing to put in a measurement.
+    /// Consecutive groups are, if anything, the conservative choice — blocks near each other in
+    /// the file are more alike, so a group of neighbours is FARTHER from the whole than a
+    /// scattered sample would be, and the band this returns is wider than the true one.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<double> SamplingBand(
+        Rom rom, IReadOnlyList<uint> population, int howMany)
+    {
+        if (howMany <= 0 || population.Count < howMany) return [];
+
+        HowOftenEachCommand whole = In(rom, population);
+
+        var found = new List<double>();
+
+        for (int at = 0; at + howMany <= population.Count; at += howMany)
+        {
+            found.Add(Distance(In(rom, population.Skip(at).Take(howMany)), whole));
+        }
+
+        return [.. found.Order()];
+    }
+
     public static double HowMuchCouldBeReal(
         HowOftenEachCommand mixed, HowOftenEachCommand real, HowOftenEachCommand junk)
     {

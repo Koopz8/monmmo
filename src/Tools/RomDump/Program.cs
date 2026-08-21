@@ -14126,6 +14126,114 @@ public static class Program
                 Console.WriteLine($"             ... and {bucket.Count() - 8} more");
         }
 
+        // AND WHAT THE UNNAMED ONES ARE MADE OF (273). 268's axis: the command mix of a population
+        // of blocks, between the real thing at one end and junk at the other, with the mixture
+        // bound as arithmetic. All three populations are the SAME SHAPE — a block read from a
+        // setflag or clearflag site to its end — so they differ only in where the sites came
+        // from: the map scan's own, the reversal's, and the 38.
+        List<uint> unnamedSites =
+        [
+            .. sorted.Where(f => f.By == WhatTheBoundaryIs.Named.Nothing).Select(f => f.Site.Address),
+        ];
+
+        if (unnamedSites.Count > 0)
+        {
+            List<uint> openedSites =
+                [.. moved.Values.SelectMany(v => v).Where(v => v.Opened && v.ReadsAsAScript).Select(v => v.Address)];
+
+            Rom backwards = AControlImage.Backwards(rom);
+
+            List<uint> reversedSites =
+            [
+                .. EverywhereInTheImage.EveryFlagMoved(backwards).Values.SelectMany(v => v)
+                    .Where(v => v.ReadsAsAScript).Select(v => v.Address),
+            ];
+
+            HowOftenEachCommand real = WhatABlockIsMadeOf.In(rom, openedSites);
+            HowOftenEachCommand junk = WhatABlockIsMadeOf.In(backwards, reversedSites);
+            HowOftenEachCommand these = WhatABlockIsMadeOf.In(rom, unnamedSites);
+
+            Console.WriteLine();
+            Console.WriteLine(
+                $"      and what the {unnamedSites.Count} unnamed are MADE OF (273) — the command mix of the block"
+                + " read from each site, against the same shape from the map scan's own sites and from the"
+                + " reversal's:");
+            Console.WriteLine(
+                $"        {"population",-28} {"blocks",7} {"per block",10}   {"from the maps'",15}   {"from the reversal's",19}");
+
+            foreach ((string name, HowOftenEachCommand mix) in new[]
+                     {
+                         ("the maps' own sites", real), ("the reversal's sites", junk), ("the 38", these),
+                     })
+            {
+                Console.WriteLine(
+                    $"        {name,-28} {mix.Blocks,7} {mix.Length,10:F1}   {WhatABlockIsMadeOf.Distance(mix, real),15:F3}"
+                    + $"   {WhatABlockIsMadeOf.Distance(mix, junk),19:F3}");
+            }
+
+            double share = WhatABlockIsMadeOf.HowMuchCouldBeReal(these, real, junk);
+
+            // AND THE SAMPLING BAND, because a distance measured on 38 blocks is inflated by
+            // sampling noise alone and the number above is meaningless without it (82). The
+            // maps' own sites, in consecutive groups of the same size, each against their own
+            // whole: that is what a population of this size scores when it IS the real thing.
+            IReadOnlyList<double> band =
+                WhatABlockIsMadeOf.SamplingBand(rom, openedSites, unnamedSites.Count);
+
+            IReadOnlyList<double> junkBand =
+                WhatABlockIsMadeOf.SamplingBand(backwards, reversedSites, unnamedSites.Count);
+
+            Console.WriteLine(
+                $"        a sample of {unnamedSites.Count} drawn from the maps' own scores {band.Min():F3}..{band.Max():F3}"
+                + $" from the whole ({band.Count} group(s)); one drawn from the reversal's scores"
+                + $" {junkBand.Min():F3}..{junkBand.Max():F3} from ITS whole ({junkBand.Count})");
+
+            // AND THE VERDICT OFF THE BANDS, not off the two whole-population distances. The
+            // 0.504 between the maps' own and the reversal is measured on hundreds and thousands
+            // of blocks; these are measured on 38, and comparing the two directly is trap 8 in the
+            // shape of a distance. Inside a band is where a population of this size lands when it
+            // IS that kind.
+            double fromReal = WhatABlockIsMadeOf.Distance(these, real);
+            double fromJunk = WhatABlockIsMadeOf.Distance(these, junk);
+
+            bool couldBeReal = fromReal <= band.Max();
+            bool couldBeJunk = fromJunk <= junkBand.Max();
+
+            Console.WriteLine(
+                $"        SO: {fromReal:F3} from the maps' own is {(couldBeReal ? "INSIDE" : "OUTSIDE")} that band"
+                + $" and {fromJunk:F3} from the reversal's is {(couldBeJunk ? "INSIDE" : "OUTSIDE")} its band"
+                + $" — {(couldBeJunk && !couldBeReal ? "these are the reversal's kind and not the maps'" : couldBeReal && !couldBeJunk ? "these are the maps' kind" : couldBeReal ? "the bands overlap here and this cannot tell them apart" : "neither, which is a fact about the bands")}");
+
+            Console.WriteLine(
+                $"        the mixture bound says at most {share:P0}"
+                + (fromReal > WhatABlockIsMadeOf.Distance(junk, real)
+                    ? " AND IT CLAMPED — but read the bands, not the clamp: the 0.504 it divides by is"
+                        + " measured on thousands of blocks and this distance on tens, and a small sample is"
+                        + " farther from anything. The clamp is the sample size, not a finding."
+                    : "."));
+
+            // PER SITE, the weak version: how many of each block's commands are among the sixteen
+            // the maps' own scripts use most. Printed beside the population bound so the reader
+            // can see which is doing the work; a short block scores anything.
+            HashSet<byte> commonest =
+                [.. real.Counts.OrderByDescending(c => c.Value).Take(16).Select(c => c.Key)];
+
+            Console.WriteLine(
+                "        per site (weak — a short block scores anything): commands, and how many are among"
+                + " the maps' sixteen commonest");
+
+            foreach (WhatTheBoundaryIs.Sorted flag in sorted.Where(f => f.By == WhatTheBoundaryIs.Named.Nothing))
+            {
+                List<ScriptCommand> block = ScriptReader.Read(rom, flag.Site.Address);
+
+                Console.WriteLine(
+                    $"          0x{flag.Flag:X4} at 0x{flag.Site.Offset:X6}  {block.Count,3} command(s),"
+                    + $" {block.Count(c => commonest.Contains(c.Code)),3} common:"
+                    + $" {string.Join(" ", block.Take(8).Select(c => ScriptCommands.NameOf(c.Code)))}"
+                    + (block.Count > 8 ? " ..." : ""));
+            }
+        }
+
         Console.WriteLine();
 
         foreach (EverywhereInTheImage.OutsideTheWorld flag in outside.Take(20))
