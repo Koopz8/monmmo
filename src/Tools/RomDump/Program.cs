@@ -11229,8 +11229,12 @@ public static class Program
 
                 foreach ((string name, Rom from, IReadOnlyList<uint> blocks) in rows)
                 {
-                    IReadOnlyList<double> band =
-                        WhatABlockIsMadeOf.BoundPerGroup(from, blocks, n, reference, junk);
+                    // SCATTERED (277). Every population here is spread over the file and cut
+                    // into runs a group is a REGION, which carries structure the thing being read
+                    // does not have. The consecutive reading is printed under the table so the
+                    // size of the choice stays visible.
+                    IReadOnlyList<double> band = WhatABlockIsMadeOf.BoundPerGroup(
+                        from, blocks, n, reference, junk, Cut.Interleaved);
 
                     read[(n, name)] = band;
 
@@ -11261,12 +11265,24 @@ public static class Program
             IReadOnlyList<double> knownReal = read[(widest, rows[0].Name)];
             IReadOnlyList<double> knownJunk = read[(widest, rows[1].Name)];
 
+            // AND THE SAME ROW CUT INTO RUNS, so the size of 277's choice is in the output rather
+            // than in a doc comment. A run of neighbours is a region of the file and carries the
+            // file's structure; a scatter carries the population's variety, which is what a
+            // population spread over sixteen megabytes actually has.
+            IReadOnlyList<double> realInRuns = WhatABlockIsMadeOf.BoundPerGroup(
+                rows[0].From, rows[0].Blocks, widest, reference, junk);
+
             Console.WriteLine();
             Console.WriteLine(
                 $"    AT {widest} — the widest size every row has two groups at — the bound reads"
                 + $" {knownReal.Min():P1}..{knownReal.Max():P1} where the answer is 100% and"
                 + $" {knownJunk.Min():P1}..{knownJunk.Max():P1} where it is 0%. THAT IS THE"
                 + " INSTRUMENT'S WHOLE RANGE at this size, and it is not 0 to 1.");
+            Console.WriteLine(
+                $"    CUT INTO RUNS INSTEAD (277) the KNOWN REAL row reads"
+                + $" {realInRuns.Min():P1}..{realInRuns.Max():P1} — the difference between the two"
+                + " is the file's regional structure, which none of these populations has, because"
+                + " every one of them is spread over the whole image.");
 
             foreach ((string name, _, _) in rows.Skip(2))
             {
@@ -11345,12 +11361,24 @@ public static class Program
                     fromReal == 0 ? int.MaxValue : realTest.Count / fromReal,
                     fromJunk == 0 ? int.MaxValue : junkTest.Count / fromJunk);
 
+                // SCATTERED on both sides (277), so a mixed group has the shape the rows above
+                // have rather than the shape of a region.
+                List<IReadOnlyList<int>> realCuts =
+                    [.. WhatABlockIsMadeOf.Cuts(realTest.Count, fromReal, Cut.Interleaved)];
+
+                List<IReadOnlyList<int>> junkCuts =
+                    [.. WhatABlockIsMadeOf.Cuts(junkTest.Count, fromJunk, Cut.Interleaved)];
+
+                groups = Math.Min(
+                    fromReal == 0 ? int.MaxValue : realCuts.Count,
+                    fromJunk == 0 ? int.MaxValue : junkCuts.Count);
+
                 var mixed = new List<uint>();
 
                 for (var g = 0; g < groups; g++)
                 {
-                    mixed.AddRange(realTest.Skip(g * fromReal).Take(fromReal));
-                    mixed.AddRange(junkTest.Skip(g * fromJunk).Take(fromJunk));
+                    if (fromReal > 0) mixed.AddRange(realCuts[g].Select(i => realTest[i]));
+                    if (fromJunk > 0) mixed.AddRange(junkCuts[g].Select(i => junkTest[i]));
                 }
 
                 scale.Add(($"{pct,3}% real, {fromReal} + {fromJunk}", mixed, groups, pct / 100.0));
@@ -11458,14 +11486,25 @@ public static class Program
             // AND WHETHER THAT CHOICE MEANS ANYTHING. If every model is calibrated about as
             // badly and their answers are far apart, the calibration has not chosen and picking
             // the lowest is picking by the answer — which is the thing 79 forbids.
+            // AND WHETHER THAT CHOICE WAS MADE BY THE ANSWER (79). The tell is not the spread of
+            // the calibration column; it is whether the model the calibration picks is also the
+            // model that gives the smallest answer. If it is, the criterion cannot be told apart
+            // from picking the number you liked. If it is not, the two are pointing different
+            // ways, which is what an independent criterion looks like.
+            double lowest = calibrated.SelectMany(c => c.Read).Min(r => r.Says);
+
+            bool alsoTheLowest = bestRead.Any(r => r.Says <= lowest + 1e-9);
+
             Console.WriteLine(
-                barSpread < answerSpread
-                    ? $"    BUT THE CALIBRATION DOES NOT DISCRIMINATE: the four models' worst-miss"
-                        + $" column spans {barSpread:P1} while their ANSWERS span {answerSpread:P1}."
-                        + $" Choosing the lowest answer on a {barSpread:P1} difference in calibration"
-                        + " is choosing by the answer. What this reading supports is the whole span."
-                    : $"    and the calibration DOES choose: the worst-miss column spans"
-                        + $" {barSpread:P1} against answers spanning {answerSpread:P1}.");
+                alsoTheLowest
+                    ? "    AND THE BEST-CALIBRATED MODEL IS ALSO THE ONE WITH THE SMALLEST ANSWER,"
+                        + " so the criterion cannot be told apart from choosing by the answer (79)."
+                        + $" The four models' worst-miss column spans {barSpread:P1} and their"
+                        + $" answers {answerSpread:P1}; what this supports is the whole span."
+                    : "    and the best-calibrated model is NOT the one with the smallest answer"
+                        + $" ({lowest:P1}), so the calibration is not choosing by the answer (79)."
+                        + $" The worst-miss column spans {barSpread:P1} and the answers"
+                        + $" {answerSpread:P1}.");
         }
 
         // AND THE ORDER THE GROUPS ARE CUT IN. 273's band takes CONSECUTIVE groups and its own
@@ -11486,7 +11525,8 @@ public static class Program
         int common = mixes.Min(m => m.Blocks.Count) / 4;
 
         Console.WriteLine(
-            $"    {"population",-26} {$"groups of {common}, set order",30} {"in FILE order",22}");
+            $"    {"population",-26} {$"groups of {common}, set order",26} {"in FILE order",22}"
+            + $" {"and SCATTERED",22}");
 
         for (var i = 0; i < mixes.Count; i++)
         {
@@ -11495,9 +11535,17 @@ public static class Program
             IReadOnlyList<double> now =
                 WhatABlockIsMadeOf.SamplingBand(mixes[i].From, mixes[i].Blocks, common);
 
+            // AND THE THIRD CHOICE (277): file order decides WHICH blocks are neighbours, and the
+            // cut decides whether a group is neighbours at all. Both are in the output because
+            // both move the answer and neither is visible from the number alone.
+            IReadOnlyList<double> scattered = WhatABlockIsMadeOf.SamplingBand(
+                mixes[i].From, mixes[i].Blocks, common, Cut.Interleaved);
+
+            string Say(IReadOnlyList<double> at) =>
+                at.Count == 0 ? "too few" : $"{at.Min():F3}..{at.Max():F3}";
+
             Console.WriteLine(
-                $"    {mixes[i].Name,-26} {(was.Count == 0 ? "too few" : $"{was.Min():F3}..{was.Max():F3}"),30}"
-                + $" {(now.Count == 0 ? "too few" : $"{now.Min():F3}..{now.Max():F3}"),22}");
+                $"    {mixes[i].Name,-26} {Say(was),26} {Say(now),22} {Say(scattered),22}");
         }
 
         Console.WriteLine();
@@ -11785,16 +11833,26 @@ public static class Program
         int common = mixes.Min(m => m.Blocks.Count) / 4;
 
         Console.WriteLine(
-            $"      {"population",-26} {"own quarters",16}   {$"groups of {common}",16}   blocks");
+            $"      {"population",-26} {"own quarters",16}   {$"groups of {common}",16}"
+            + $"   {"and SCATTERED",16}   blocks");
 
         foreach ((string name, HowOftenEachCommand mix, Rom from, IReadOnlyList<uint> blocks) in mixes)
         {
             IReadOnlyList<double> quarters = WhatABlockIsMadeOf.SamplingBand(from, blocks, blocks.Count / 4);
             IReadOnlyList<double> same = WhatABlockIsMadeOf.SamplingBand(from, blocks, common);
 
+            // AND THE SAME SIZE CUT AS A SCATTER (277). Every population here is spread over the
+            // file; cut into runs a group is a REGION and carries the file's structure. Which of
+            // the two is the right null depends on the shape of the thing being read, so both are
+            // printed and the verdict below names which it used.
+            IReadOnlyList<double> scattered =
+                WhatABlockIsMadeOf.SamplingBand(from, blocks, common, Cut.Interleaved);
+
+            string Say(IReadOnlyList<double> at) =>
+                at.Count == 0 ? "too few" : $"{at.Min():F3}..{at.Max():F3}";
+
             Console.WriteLine(
-                $"      {name,-26} {(quarters.Count == 0 ? "too few" : $"{quarters.Min():F3}..{quarters.Max():F3}"),16}"
-                + $"   {(same.Count == 0 ? "too few" : $"{same.Min():F3}..{same.Max():F3}"),16}"
+                $"      {name,-26} {Say(quarters),16}   {Say(same),16}   {Say(scattered),16}"
                 + $"   {blocks.Count,6} (quarters of {blocks.Count / 4})");
         }
 
@@ -11803,17 +11861,19 @@ public static class Program
         // the GROUP SIZE: 972-block groups are tighter than 114-block groups for no reason but
         // the count. A comparison across populations at each one's own natural split is a
         // comparison confounded by that split.
-        IReadOnlyList<double> realSame = WhatABlockIsMadeOf.SamplingBand(rom, mixes[0].Blocks, common);
-        IReadOnlyList<double> junkSame =
-            WhatABlockIsMadeOf.SamplingBand(mixes[^1].From, mixes[^1].Blocks, common);
+        IReadOnlyList<double> realSame =
+            WhatABlockIsMadeOf.SamplingBand(rom, mixes[0].Blocks, common, Cut.Interleaved);
+
+        IReadOnlyList<double> junkSame = WhatABlockIsMadeOf.SamplingBand(
+            mixes[^1].From, mixes[^1].Blocks, common, Cut.Interleaved);
 
         bool separates = realSame.Count > 0 && junkSame.Count > 0 && realSame.Max() < junkSame.Min();
 
         Console.WriteLine(
             separates
-                ? $"      AT THE COMMON SIZE THE MAPS' OWN ({realSame.Min():F3}..{realSame.Max():F3}) IS BELOW"
-                    + $" THE REVERSAL'S ({junkSame.Min():F3}..{junkSame.Max():F3}) — homogeneity discriminates"
-                : $"      AT THE COMMON SIZE THEY OVERLAP — the maps' own {realSame.Min():F3}..{realSame.Max():F3}"
+                ? $"      AT THE COMMON SIZE, SCATTERED, THE MAPS' OWN ({realSame.Min():F3}..{realSame.Max():F3})"
+                    + $" IS BELOW THE REVERSAL'S ({junkSame.Min():F3}..{junkSame.Max():F3}) — homogeneity discriminates"
+                : $"      AT THE COMMON SIZE, SCATTERED, THEY OVERLAP — the maps' own {realSame.Min():F3}..{realSame.Max():F3}"
                     + $" against the reversal's {junkSame.Min():F3}..{junkSame.Max():F3}. **HOMOGENEITY DOES NOT"
                     + " DISCRIMINATE HERE**, and the own-quarters column that looks as though it does is the"
                     + " GROUP SIZE: 972-block groups are tighter than 114-block ones for no reason but the count.");
@@ -14796,6 +14856,14 @@ public static class Program
             IReadOnlyList<double> realEnd =
                 WhatABlockIsMadeOf.AgainstTheRest(rom, openedInOrder, unnamedSites.Count);
 
+            // AND THE SAME CUT INTERLEAVED (277). Consecutive groups are conservative only if the
+            // population being READ is a run of neighbours. These 38 sites are scattered from
+            // 0x028514 to 0xEA7A8F, so a null made of runs carries the file's regional structure
+            // and the reading carries none of it. Every band below is printed both ways and the
+            // verdict is read off the INTERLEAVED one, which is the matching shape.
+            IReadOnlyList<double> realEndScattered = WhatABlockIsMadeOf.AgainstTheRest(
+                rom, openedInOrder, unnamedSites.Count, Cut.Interleaved);
+
             Console.WriteLine();
             Console.WriteLine(
                 $"        THE ENDS AT {unnamedSites.Count} (276) — both measured on"
@@ -14813,18 +14881,24 @@ public static class Program
                     : $"{at.Count(d => d >= fromReal)}/{at.Count}"
                         + $" = {WhatABlockIsMadeOf.AtLeastAsFar(at, fromReal):P1}";
 
+            string Band(IReadOnlyList<double> at) =>
+                at.Count == 0 ? "too few" : $"{at.Min():F3}..{at.Max():F3}";
+
+            string Shares(IReadOnlyList<double> at) =>
+                at.Count == 0 ? "too few" : $"{at.Min():P1}..{at.Max():P1}";
+
             Console.WriteLine();
             Console.WriteLine(
-                $"          {"end",-46} {"band at " + unnamedSites.Count,18}   groups"
-                + $"   at least as far as the 38 ({fromReal:F3})");
+                $"          {"end",-46} {"in runs",18} {"SCATTERED",18}   groups"
+                + $"   at least as far as the 38 ({fromReal:F3}), scattered");
             Console.WriteLine(
                 $"          {"REAL: the maps' own sites, each against the REST",-46}"
-                + $" {$"{realEnd.Min():F3}..{realEnd.Max():F3}",18}   {realEnd.Count,6}"
-                + $"   {Rate38(realEnd)}");
+                + $" {Band(realEnd),18} {Band(realEndScattered),18}   {realEnd.Count,6}"
+                + $"   {Rate38(realEndScattered)}");
             Console.WriteLine(
                 $"          {"  the same, against a whole that CONTAINS the group",-46}"
-                + $" {$"{band.Min():F3}..{band.Max():F3}",18}   {band.Count,6}"
-                + $"   {Rate38(band)}"
+                + $" {Band(band),18} {Band(WhatABlockIsMadeOf.SamplingBand(rom, openedInOrder, unnamedSites.Count, Cut.Interleaved)),18}"
+                + $"   {band.Count,6}   {Rate38(band)}"
                 + $"   <- {(double)unnamedSites.Count / openedInOrder.Count:P1} of that whole IS the group");
 
             // AND A SECOND REAL END, DERIVED ANOTHER WAY. 435 sites supply eleven groups of 38 and
@@ -14835,24 +14909,27 @@ public static class Program
             List<uint> ownScripts =
                 [.. WhatABlockIsMadeOf.InFileOrder(TheMapScansBlocks(rom).Opened)];
 
-            IReadOnlyList<double> otherReal =
+            IReadOnlyList<double> otherRealRuns =
                 WhatABlockIsMadeOf.AgainstTheRest(rom, ownScripts, unnamedSites.Count);
+
+            IReadOnlyList<double> otherReal = WhatABlockIsMadeOf.AgainstTheRest(
+                rom, ownScripts, unnamedSites.Count, Cut.Interleaved);
 
             Console.WriteLine(
                 $"          {"REAL: the maps' own SCRIPTS, another derivation",-46}"
-                + $" {$"{otherReal.Min():F3}..{otherReal.Max():F3}",18}   {otherReal.Count,6}"
+                + $" {Band(otherRealRuns),18} {Band(otherReal),18}   {otherReal.Count,6}"
                 + $"   {Rate38(otherReal)}");
 
             // AND THE TOP OF THAT BAND AS THE GROUP COUNT GROWS, which is the whole reason the
             // rate exists. A maximum is not a property of the population; it is a property of how
             // many times you looked.
             Console.WriteLine(
-                "            its top over the first k groups: "
+                "            its top over the first k groups (in runs): "
                 + string.Join(
                     ", ",
-                    new[] { 4, 11, 25, 50, otherReal.Count }
-                        .Where(k => k <= otherReal.Count)
-                        .Select(k => $"k={k} {otherReal.Take(k).Max():F3}")));
+                    new[] { 4, 11, 25, 50, otherRealRuns.Count }
+                        .Where(k => k <= otherRealRuns.Count)
+                        .Select(k => $"k={k} {otherRealRuns.Take(k).Max():F3}")));
 
             // THE JUNK END, MORE THAN ONE OF THEM (275's lesson: the junk model is worth twenty
             // points and the calibration may not be able to choose). The reversal is 273's. The
@@ -14864,7 +14941,8 @@ public static class Program
             void AddJunkEnd(string name, Rom from, IReadOnlyList<uint> blocks) =>
                 junkEnds.Add(
                     (name, from, blocks,
-                        WhatABlockIsMadeOf.AgainstAnother(from, blocks, unnamedSites.Count, real)));
+                        WhatABlockIsMadeOf.AgainstAnother(
+                            from, blocks, unnamedSites.Count, real, Cut.Interleaved)));
 
             AddJunkEnd(
                 "JUNK: the reversal's sites",
@@ -14885,11 +14963,12 @@ public static class Program
                     WhatABlockIsMadeOf.InFileOrder(offBoundary));
             }
 
-            foreach ((string name, _, IReadOnlyList<uint> blocks, IReadOnlyList<double> at) in junkEnds)
+            foreach ((string name, Rom from, IReadOnlyList<uint> blocks, IReadOnlyList<double> at) in junkEnds)
             {
                 Console.WriteLine(
-                    $"          {name,-46} {(at.Count == 0 ? "too few" : $"{at.Min():F3}..{at.Max():F3}"),18}"
-                    + $"   {at.Count,6}   {Rate38(at)}   of {blocks.Count} block(s)");
+                    $"          {name,-46}"
+                    + $" {Band(WhatABlockIsMadeOf.AgainstAnother(from, blocks, unnamedSites.Count, real)),18}"
+                    + $" {Band(at),18}   {at.Count,6}   {Rate38(at)}   of {blocks.Count} block(s)");
             }
 
             // AND THE READING, AT EVERY CORNER OF THE TWO BANDS. A least of nought is the two
@@ -14900,9 +14979,10 @@ public static class Program
 
             foreach ((string name, _, _, IReadOnlyList<double> at) in junkEnds)
             {
-                (double least, double most) = WhatABlockIsMadeOf.BetweenTheEnds(fromReal, realEnd, at);
+                (double least, double most) =
+                    WhatABlockIsMadeOf.BetweenTheEnds(fromReal, realEndScattered, at);
 
-                bool cross = at.Count > 0 && at.Min() <= realEnd.Max();
+                bool cross = at.Count > 0 && at.Min() <= realEndScattered.Max();
 
                 Console.WriteLine(
                     $"            {name,-46} "
@@ -14937,12 +15017,24 @@ public static class Program
                 var read = new List<(double Least, double Most)>();
                 var far = new List<double>();
 
+                // SCATTERED on both sides (277), so a mixed group has the shape the 38 have —
+                // spread over the file rather than a run of neighbours.
+                List<IReadOnlyList<int>> ownCuts =
+                    [.. WhatABlockIsMadeOf.Cuts(openedInOrder.Count, fromOwn, Cut.Interleaved)];
+
+                List<IReadOnlyList<int>> junkCuts =
+                    [.. WhatABlockIsMadeOf.Cuts(mixJunk.Count, fromJunkSide, Cut.Interleaved)];
+
+                groups = Math.Min(
+                    fromOwn == 0 ? int.MaxValue : ownCuts.Count,
+                    fromJunkSide == 0 ? int.MaxValue : junkCuts.Count);
+
                 for (var g = 0; g < groups; g++)
                 {
                     List<uint> group =
                     [
-                        .. openedInOrder.Skip(g * fromOwn).Take(fromOwn),
-                        .. mixJunk.Skip(g * fromJunkSide).Take(fromJunkSide),
+                        .. fromOwn == 0 ? [] : ownCuts[g].Select(i => openedInOrder[i]),
+                        .. fromJunkSide == 0 ? [] : junkCuts[g].Select(i => mixJunk[i]),
                     ];
 
                     HashSet<uint> mine = [.. group];
@@ -14992,32 +15084,102 @@ public static class Program
             // 0.451 the eleven site-groups reach is a threshold set by having looked eleven
             // times. What is left is a RATE, which has a denominator and cannot be inflated by
             // looking more.
-            double realRate = WhatABlockIsMadeOf.AtLeastAsFar(otherReal, fromReal);
+            // AND THE VERDICT, EVERY CLAUSE OF IT COMPUTED. 276's version asserted that the ends
+            // cross and that 273 was too strong, and both stopped being true the moment the null
+            // was cut to match the population being read. A sentence that cannot come back the
+            // other way is 231's category however carefully it was reasoned.
+            var crossing =
+                junkEnds.Where(j => j.Band.Count > 0 && j.Band.Min() <= realEndScattered.Max()).ToList();
 
             IReadOnlyList<double> reversalEnd = junkEnds[0].Band;
 
+            IReadOnlyList<double> reversalRuns = WhatABlockIsMadeOf.AgainstAnother(
+                junkEnds[0].From, junkEnds[0].Blocks, unnamedSites.Count, real);
+
+            double realRate = WhatABlockIsMadeOf.AtLeastAsFar(otherReal, fromReal);
             double junkRate = WhatABlockIsMadeOf.AtLeastAsFar(reversalEnd, fromReal);
+
+            int perBlock = Math.Min(otherReal.Count, reversalEnd.Count) / 4;
+
+            IReadOnlyList<double> realRates =
+                WhatABlockIsMadeOf.RateBand(otherReal, fromReal, perBlock, Cut.Interleaved);
+
+            IReadOnlyList<double> junkRates =
+                WhatABlockIsMadeOf.RateBand(reversalEnd, fromReal, perBlock, Cut.Interleaved);
 
             Console.WriteLine();
             Console.WriteLine(
-                $"        SO AT {unnamedSites.Count} BLOCKS NO SHARE CAN BE READ — the ends cross"
-                + " under every junk model available, and a mixture of KNOWN share reads 0%..100%"
-                + " including its pure rows. AND \"OUTSIDE THE BAND\" IS NOT A VERDICT EITHER:"
-                + " a band's top is a MAXIMUM and a maximum grows with how many groups were taken"
-                + $" — the maps' own scripts top out at {otherReal.Take(11).Max():F3} over eleven"
-                + $" groups and {otherReal.Max():F3} over {otherReal.Count}.");
+                $"        AND THE RATE, BOTH WAYS OF CUTTING THE NULL (277). The 38 are scattered"
+                + " from 0x028514 to 0xEA7A8F, so the matching null is a SCATTER; a null cut into"
+                + " runs carries the file's regional structure and the reading carries none of it:");
             Console.WriteLine(
-                $"        WHAT IS LEFT IS A RATE. A {unnamedSites.Count}-block group of real"
-                + $" script is at least as far as the 38 in {realRate:P1} of cases"
-                + $" ({otherReal.Count(d => d >= fromReal)}/{otherReal.Count}), and one of the"
-                + $" reversal's sites in {junkRate:P1}"
-                + $" ({reversalEnd.Count(d => d >= fromReal)}/{reversalEnd.Count})"
-                + (realRate > 0
-                    ? $" — {junkRate / realRate:F1} times likelier junk than real."
-                    : " — real never reaches it, so the ratio has no denominator.")
-                + " THAT IS EVIDENCE AND IT IS NOT \"these are the reversal\'s kind and not the"
-                + " maps\'\": 273's verdict was read off a band of eleven groups and is TOO STRONG."
-                + " The direction survives.");
+                $"          {"population",-32} {"rate in runs",13} {"rate SCATTERED",15}"
+                + $" {"band, scattered",17}   blocks");
+            Console.WriteLine(
+                $"          {"REAL: the maps' own SCRIPTS",-32}"
+                + $" {WhatABlockIsMadeOf.AtLeastAsFar(otherRealRuns, fromReal),13:P1}"
+                + $" {realRate,15:P1} {Shares(realRates),17}   {realRates.Count}");
+            Console.WriteLine(
+                $"          {"JUNK: the reversal's sites",-32}"
+                + $" {WhatABlockIsMadeOf.AtLeastAsFar(reversalRuns, fromReal),13:P1}"
+                + $" {junkRate,15:P1} {Shares(junkRates),17}   {junkRates.Count}");
+            Console.WriteLine(
+                realRates.Count > 0 && junkRates.Count > 0 && realRates.Max() < junkRates.Min()
+                    ? $"          THE TWO RATE BANDS DO NOT MEET — the worst real block"
+                        + $" ({realRates.Max():P1}) is below the best junk block ({junkRates.Min():P1}),"
+                        + " so the difference is bigger than either population's own spread."
+                    : "          THE TWO RATE BANDS MEET, so the difference between the two rates is"
+                        + " no bigger than the spread inside one of them, and it is not a finding.");
+
+            // AND THE OTHER THING 276 LEFT: two REAL populations that disagreed, 0/11 against
+            // 6/102. How often does a block of ELEVEN real-script groups hold none at all?
+            IReadOnlyList<double> atEleven =
+                WhatABlockIsMadeOf.RateBand(otherReal, fromReal, realEnd.Count, Cut.Interleaved);
+
+            Console.WriteLine(
+                atEleven.Count == 0
+                    ? "          not enough groups to ask what a block of eleven holds"
+                    : $"          AND 276'S TWO REAL POPULATIONS: a block of {realEnd.Count}"
+                        + $" real-SCRIPT groups holds none at or beyond {fromReal:F3} in"
+                        + $" {atEleven.Count(r => r == 0)} of {atEleven.Count}, so the sites'"
+                        + $" {realEnd.Count(d => d >= fromReal)}/{realEnd.Count} and the scripts'"
+                        + " "
+                        + (atEleven.Count(r => r == 0) * 2 >= atEleven.Count
+                            ? "own rate DO NOT disagree."
+                            : "own rate DO disagree, and the sites are the odd one."));
+
+            // AND WHICH JUNK MODEL COULD HAVE ANSWERED AT ALL. Three ways a scale fails and they
+            // are different facts: the ends CROSS (no length), or the thing being read sits
+            // BEYOND the junk end — which does not mean it is very junky, it means that model is
+            // not junk. Every nudged one fails the second way, and that is 276's finding about
+            // the nudged site arriving from another direction.
+            var beyond = junkEnds
+                .Where(j => j.Band.Count > 0 && fromReal > j.Band.Max())
+                .ToList();
+
+            Console.WriteLine();
+            Console.WriteLine(
+                $"        SO AT {unnamedSites.Count} BLOCKS, WITH THE NULL CUT TO MATCH:"
+                + $" {crossing.Count} of {junkEnds.Count} junk models have ends that CROSS, and"
+                + $" {beyond.Count} put the 38 BEYOND the junk end — which is not a strong answer"
+                + " but a broken model: the 38 cannot be more junk than junk."
+                + (beyond.Count > 0
+                    ? $" All {beyond.Count} are the NUDGED site, sitting"
+                        + $" {Band(beyond[0].Band)} where pure real script sits {Band(realEndScattered)}."
+                    : string.Empty));
+            Console.WriteLine(
+                $"        Only the reversal answers, at {Shares([.. junkEnds[0].Band.Count == 0 ? new List<double>() : new List<double> { WhatABlockIsMadeOf.BetweenTheEnds(fromReal, realEndScattered, junkEnds[0].Band).Least, WhatABlockIsMadeOf.BetweenTheEnds(fromReal, realEndScattered, junkEnds[0].Band).Most }])}"
+                + " — and that share has NO CALIBRATION, because the mixture rows it would be"
+                + " calibrated against are built out of the nudged site and read 0%..100%. THE RATE"
+                + " IS THE READING AND THE SHARE IS NOT.");
+            Console.WriteLine(
+                $"        273'S VERDICT {(realRate < junkRate ? "STANDS" : "DOES NOT STAND")}, and"
+                + " 276's withdrawal of it was an artefact of the NULL'S SHAPE: cut into runs, real"
+                + $" script reaches {fromReal:F3} in"
+                + $" {otherRealRuns.Count(d => d >= fromReal)} of {otherRealRuns.Count} and 273 looks"
+                + $" too strong; cut to match the 38's own scatter it reaches it in"
+                + $" {otherReal.Count(d => d >= fromReal)} of {otherReal.Count}, against the"
+                + $" reversal's {reversalEnd.Count(d => d >= fromReal)} of {reversalEnd.Count}.");
 
             // PER SITE, the weak version: how many of each block's commands are among the sixteen
             // the maps' own scripts use most. Printed beside the population bound so the reader

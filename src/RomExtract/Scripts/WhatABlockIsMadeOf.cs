@@ -36,6 +36,16 @@ public sealed record HowOftenEachCommand(
 /// distributions beside each other with a distance on them.
 /// </para>
 /// </summary>
+/// <summary>How a population is cut into groups (277).</summary>
+public enum Cut
+{
+    /// <summary>Runs of neighbours — the right null for a population that is itself a run.</summary>
+    Consecutive,
+
+    /// <summary>Every n-th item — the right null for a population that is a scatter.</summary>
+    Interleaved,
+}
+
 public static class WhatABlockIsMadeOf
 {
     /// <summary>Every command in every block given, tallied by code.</summary>
@@ -112,18 +122,62 @@ public static class WhatABlockIsMadeOf
     /// </para>
     /// </remarks>
     public static IEnumerable<HowOftenEachCommand> Groups(
-        Rom rom, IReadOnlyList<uint> population, int howMany) =>
-        Cuts(population, howMany).Select(at => In(rom, population.Skip(at).Take(howMany)));
+        Rom rom, IReadOnlyList<uint> population, int howMany, Cut how = Cut.Consecutive) =>
+        Cuts(population.Count, howMany, how).Select(g => In(rom, g.Select(i => population[i])));
 
     /// <summary>Where each consecutive disjoint group starts — the one place a group is cut.</summary>
-    public static IEnumerable<int> Cuts(IReadOnlyList<uint> population, int howMany)
+    public static IEnumerable<int> Cuts(IReadOnlyList<uint> population, int howMany) =>
+        Cuts(population.Count, howMany);
+
+    /// <summary>
+    /// The same cut, of a count rather than of a list — because a BAND gets cut too (277).
+    /// </summary>
+    /// <remarks>
+    /// A rate is a number like any other and 276 quoted two of them with nothing under either. The
+    /// band on a rate is the rate computed over consecutive blocks of groups, which is this loop
+    /// applied to a list of distances instead of a list of blocks. One loop, five questions.
+    /// </remarks>
+    public static IEnumerable<int> Cuts(int inAll, int howMany) =>
+        Cuts(inAll, howMany, Cut.Consecutive).Select(g => g[0]);
+
+    /// <summary>
+    /// Which items fall in each group, cut CONSECUTIVELY or INTERLEAVED — the one place a group is
+    /// ever decided.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Consecutive is only the conservative choice if the thing being read is contiguous</b>
+    /// (277). 273 argued for consecutive groups because neighbours in the cartridge are alike, so a
+    /// group of them is farther from the whole and any band off them is wider than the truth. True
+    /// — and a wider null is only conservative when the population being READ is itself a run of
+    /// neighbours. The 38 unnamed boundary sites are scattered over sixteen megabytes, from
+    /// <c>0x028514</c> to <c>0xEA7A8F</c>; against a null made of runs, the null carries the
+    /// file's regional structure and the reading carries none of it, and everything comes back
+    /// unreadable.
+    /// </para>
+    /// <para>
+    /// Interleaved is every n-th item, so each group is a scatter across the whole population. It
+    /// is exactly as reproducible from the file as consecutive is — no randomness — and it is the
+    /// matching null for a scattered population. <b>Both are printed wherever this is used, and
+    /// the difference between them is how much of a population's spread is regional structure
+    /// rather than sampling noise.</b>
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<IReadOnlyList<int>> Cuts(int inAll, int howMany, Cut how)
     {
-        // Nought would make the step below no step at all. A sample LARGER than the population
-        // needs no check: the loop's own condition never admits a group, which a break aimed at
-        // the removed check proved by coming back green (219).
+        // Nought would make the loop below no loop at all. A sample LARGER than the population
+        // needs no check: the group count comes out nought, which a break aimed at the removed
+        // check proved by coming back green (219).
         if (howMany <= 0) yield break;
 
-        for (int at = 0; at + howMany <= population.Count; at += howMany) yield return at;
+        int groups = inAll / howMany;
+
+        for (var g = 0; g < groups; g++)
+        {
+            yield return how == Cut.Consecutive
+                ? [.. Enumerable.Range(g * howMany, howMany)]
+                : [.. Enumerable.Range(0, howMany).Select(i => g + (i * groups))];
+        }
     }
 
     /// <summary>A population in the order the cartridge holds it, so a group is neighbours.</summary>
@@ -140,11 +194,11 @@ public static class WhatABlockIsMadeOf
     /// knowing by how much. This gives each consecutive group's distance from the whole.
     /// </remarks>
     public static IReadOnlyList<double> SamplingBand(
-        Rom rom, IReadOnlyList<uint> population, int howMany)
+        Rom rom, IReadOnlyList<uint> population, int howMany, Cut how = Cut.Consecutive)
     {
         HowOftenEachCommand whole = In(rom, population);
 
-        return [.. Groups(rom, population, howMany).Select(g => Distance(g, whole)).Order()];
+        return [.. Groups(rom, population, howMany, how).Select(g => Distance(g, whole)).Order()];
     }
 
     /// <summary>
@@ -165,13 +219,17 @@ public static class WhatABlockIsMadeOf
     /// </para>
     /// </remarks>
     public static IReadOnlyList<double> AgainstTheRest(
-        Rom rom, IReadOnlyList<uint> population, int howMany) =>
+        Rom rom, IReadOnlyList<uint> population, int howMany, Cut how = Cut.Consecutive) =>
         [
-            .. Cuts(population, howMany)
+            .. Cuts(population.Count, howMany, how)
                 .Select(
-                    at => Distance(
-                        In(rom, population.Skip(at).Take(howMany)),
-                        In(rom, population.Take(at).Concat(population.Skip(at + howMany)))))
+                    group => Distance(
+                        In(rom, group.Select(i => population[i])),
+                        In(
+                            rom,
+                            Enumerable.Range(0, population.Count)
+                                .Where(i => !group.Contains(i))
+                                .Select(i => population[i]))))
                 .Order(),
         ];
 
@@ -185,8 +243,12 @@ public static class WhatABlockIsMadeOf
     /// different bodies of blocks and there is no rest to take.
     /// </remarks>
     public static IReadOnlyList<double> AgainstAnother(
-        Rom rom, IReadOnlyList<uint> population, int howMany, HowOftenEachCommand other) =>
-        [.. Groups(rom, population, howMany).Select(g => Distance(g, other)).Order()];
+        Rom rom,
+        IReadOnlyList<uint> population,
+        int howMany,
+        HowOftenEachCommand other,
+        Cut how = Cut.Consecutive) =>
+        [.. Groups(rom, population, howMany, how).Select(g => Distance(g, other)).Order()];
 
     /// <summary>
     /// The bound asked of every consecutive group of <paramref name="howMany"/> blocks, against a
@@ -212,8 +274,13 @@ public static class WhatABlockIsMadeOf
         IReadOnlyList<uint> population,
         int howMany,
         HowOftenEachCommand real,
-        HowOftenEachCommand junk) =>
-        [.. Groups(rom, population, howMany).Select(g => HowMuchCouldBeReal(g, real, junk)).Order()];
+        HowOftenEachCommand junk,
+        Cut how = Cut.Consecutive) =>
+        [
+            .. Groups(rom, population, howMany, how)
+                .Select(g => HowMuchCouldBeReal(g, real, junk))
+                .Order(),
+        ];
 
     /// <summary>
     /// The widest sampling band this population can support with at least
@@ -310,6 +377,35 @@ public static class WhatABlockIsMadeOf
     /// </remarks>
     public static double AtLeastAsFar(IReadOnlyList<double> band, double distance) =>
         band.Count == 0 ? double.NaN : (double)band.Count(d => d >= distance) / band.Count;
+
+    /// <summary>
+    /// The rate, computed over consecutive blocks of <paramref name="howManyGroups"/> groups — the
+    /// band on a rate.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>276 quoted 5.9% against 33.0% and put nothing under either</b> (277). A difference of two
+    /// rates is a number, and this project's own rule about numbers is that one with no denominator
+    /// cannot come back empty (8) and one with no band cannot come back the same (273). The band
+    /// here is the rate re-computed on consecutive blocks of the population's own groups: if two
+    /// blocks of the SAME kind differ by more than the two populations do, the difference between
+    /// the populations is nothing.
+    /// </para>
+    /// <para>
+    /// Consecutive for 273's reason — reproducible from the file, and neighbours are alike, so the
+    /// spread is wider than a scattered sample's and the comparison is conservative.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<double> RateBand(
+        IReadOnlyList<double> band,
+        double distance,
+        int howManyGroups,
+        Cut how = Cut.Consecutive) =>
+        [
+            .. Cuts(band.Count, howManyGroups, how)
+                .Select(g => AtLeastAsFar([.. g.Select(i => band[i])], distance))
+                .Order(),
+        ];
 
     /// <summary>
     /// The same share read between two ends that are BANDS rather than points — every corner of
