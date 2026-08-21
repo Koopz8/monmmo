@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-298`, 3166 tests green.
+`claude-299`, 3173 tests green.
 
 Standing rules — do not break these:
 
@@ -484,16 +484,51 @@ Traps worth carrying:
     **When you add a second question about the same thing, share the computation before you write
     the test** — otherwise the suite protects one copy and the break lands on the other.
 
+54. **A FILTER WITH NO COUNT IS A FILTER THAT COULD BE REMOVING ANYTHING** (259). Four event-list
+    readers drop a record whose square is off the map, silently, before anything else sees it —
+    and 247, 250, 257 and 258 all rest on "228 triggers". Measured: **warps 0, triggers 0, signs
+    0**, so 228 is 228 and every reading built on those three lists is complete. The object table
+    loses 9 of 1648. **Ask a filter for its count before building a fourth milestone on what
+    survived it** — and take the count off the SAME reader, at the drop site, because a second
+    pass over the same tables is how 251 lost `copyvar` and 258 lost half a walk.
+
+55. **A BYTE AGAINST AN ARITHMETIC BEATS A BYTE, A POINTER AND A DECODE** (259). Two controls on
+    the nine dropped object records disagreed. *0 of 9 carry a pointer into the cartridge against
+    1583 of 1584 kept* says they are noise past a table's end, and it is one chance in ten
+    thousand billion. *9 of 9 have `localId == index + 1` against 1576 of 1576 kept* says they are
+    real. **The second is right**: trap 2 says ask which reading follows fewer edges, and this is
+    the fourth time that has decided something. Both stay in the output — a control that misled is
+    worth more in the printout than out of it.
+
+56. **A RECORD TABLE CAN HOLD TWO KINDS, AND THE KIND BYTE IS NOT THE COORDINATES** (259). The
+    nine are **clones**: `0xFF` in the byte after the graphics id, against nought on all 1639 kept
+    records, and every field after the square means something else — the byte the ordinary layout
+    calls an ELEVATION is the local id of the object being cloned, and the two halfwords it calls
+    a trainer type and a sight range are a map number and a bank. **The record's graphics id is
+    that object's graphics id on that map, 9 of 9 against a floor of 0.21**, off tables built for
+    another question. Every one hangs off the edge of its own map on the side the map it names
+    lies: the person you can see across the join.
+
+57. **THE RIGHT ANSWER FOR THE WRONG REASON IS STILL A FAULT** (259). All nine clones sit outside
+    their own map, so the off-map test removed every one and the kind byte was never needed. It is
+    decided on the kind byte now and the object list's off-map count goes **9 -> 0** — nothing in
+    any of the four lists is off the map at all. **No number moved and 3166 tests stayed green**,
+    because the records were already being dropped; what changed is that a clone landing inside
+    its own map would have been read as somebody at elevation ten with a trainer type of
+    twenty-seven. **A rule the cartridge never exercises is a rule no break can be aimed at** — so
+    the fixture carries one, and a fixture's edge case belongs ON the edge: the stray object sat
+    at `width + 5`, where `>` and `>=` agree, and a break on that boundary came back green.
+
 ## Where things are
 
-Read `claude/milestone-258-ninety-nine-and-a-walk-that-reaches-everything.md` first, then `257`,
+Read `claude/milestone-259-what-the-readers-throw-away.md` first, then `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
 `250`, `249`, `248`, `247`, `246`, `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
 `238`, `237`,
 `236`, `235`, `234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
-**Thirty-one faults closed and every one was in this project, not on the cartridge.** A walk that
+**Thirty-two faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
 script" list; a list ranked by a count instead of by what it costs; a party that could not gain
 a level; a roadmap line that called a fix a cost; a continuation that carried flags and not
@@ -532,7 +567,9 @@ carried forward through six milestones** — 42 squares filed as "can never fire
 `copyvar 0x405F, 0x4001` sites the map scan opens; and at 258 **a reachability walk that reaches
 every value in range** — 100 of 100 for every variable it has ever been given — so the three
 conditions 255 credited to a counter, and 257 called the whole of the square list's gain, were
-credited by a test that could not say no.
+credited by a test that could not say no; and at 259 **a second kind of record in the object
+table** — nine clones marked by `0xFF`, whose elevation is a local id and whose trainer type is a
+map number, removed until now by an off-map test that had no idea what it was catching.
 
 `246` is the read that is not a command, and the literal-pool test for whether compiled code holds
 a number — both live inside `--namespaces`, which is now the fullest single instrument in the
@@ -584,7 +621,22 @@ dotnet run -c Release --project src/Tools/RomDump -- firered.gba --play --moved 
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --namespaces
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --buried
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --operands
+dotnet run -c Release --project src/Tools/RomDump -- firered.gba --dropped
 ```
+
+`--dropped` is the count under every count of people, warps, triggers and signs (259). Four
+readers throw away a record whose square is off the map, silently, before anything else sees it —
+so it prints what each list loses, off the SAME readers, collected at the drop site. **Warps 0,
+triggers 0, signs 0**, so 228 is 228 and every reading built on those three lists is complete.
+The object table loses **9 of 1648**, and they are not off-map people: they are **clones**, marked
+by `0xFF` in the byte after the graphics id, where the byte the ordinary layout calls an elevation
+is a local id and the two halfwords it calls a trainer type and a sight range are a map number and
+a bank. **Their graphics id matches that object on that map 9 of 9 against a floor of 0.21.** Each
+hangs off its own map's edge on the side the named map lies. Decided on the kind byte now, so the
+object list's off-map count is **0** — nothing in any of the four lists is off the map. It prints
+three controls including the one that was WRONG (0 of 9 carry a script pointer against 1583 of
+1584 kept, which reads as proof they are noise; 9 of 9 have `localId == index + 1` against 1576 of
+1576, which is right).
 
 `--operands` is the answer to "is there a third table" and it does not read one (252). Every
 halfword-aligned operand of every command the map scan reads, scored by how much of what it names
@@ -984,6 +1036,10 @@ ALL 228 triggers have a script and a variable in 0x4000+ — so both halves of 2
 40 leave the answer alone and 9 jump somewhere the reading does not follow — those are different
 of the 40, 38 read 0x01C's or 0x01D's answer across a call that is `copyvar 0x8012, 0x8013`
 11 of the 336 have NO owner: 2 behind a jump here and 9 from 218
+the four event lists lose NOTHING to the off-map filter: warps 0/1294, triggers 0/228, signs
+  0/702, objects 0/1639 once the 9 clones are taken out on the kind byte instead (259)
+9 clone records, all on bank 3, marked 0xFF after the graphics id — elevation is a local id and
+  the trainer type is a map number; graphics id matches that object on that map 9 of 9, floor 0.21
 the map scan is 2915 entries at 1959 addresses, 90624 command reads at 24491 byte positions
 ONLY 11 of 108 command codes are read once per byte position — --the-scan says which
 by kind: person 15966 places alone, sign 3015, trigger 2134, on load 1324, on arrival 1167
@@ -1135,9 +1191,16 @@ still work.**
     the column — off the maps' own widths and heights, with two negative controls that come back
     unnamed. What is left: **whose** square (226's shape, and eight places is thin for it),
     `0x42 arg2` (one compared place, names nothing), and a name in `ScriptCommands`.
-* **Whether a dropped trigger hides a reader** (247). `MapLinkExtractor` drops trigger records
-  whose square is off the map before anything sees them. That understates the readers, which is
-  the safe direction, and nobody has printed how many.
+* ~~Whether a dropped trigger hides a reader~~ **ANSWERED AT 259: NOUGHT.** `--dropped` prints
+  what all four readers throw away — warps 0, triggers 0, signs 0, objects 9 — so 228 is 228 and
+  the trigger list 247, 250, 257 and 258 rest on is complete. The nine objects are a SECOND KIND
+  of record (clones), and after deciding on the kind byte instead of the square, nothing in any of
+  the four lists is off the map at all. What is left of it:
+  * **Whether warps and triggers have a kind byte too.** Signs do — the buried ones, 248. Nobody
+    has asked of the other two.
+  * **Whether `LoadedMap` should carry the clones.** They are readable rather than discarded now;
+    drawing a person across a map join is a rendering question this project has not asked, and it
+    is a DECISION.
 * ~~`0x026C` and `0x0807`~~ **READ AT 256**: `0x026C` alone, toggled by three signs sharing one
   block, and three is odd. `0x0807` is not a cause. What is left: **what `0x026C` is FOR** (the
   block asks a yes-or-no then branches on `0x8004`, which each sign sets differently — a shared
