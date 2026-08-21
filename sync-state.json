@@ -139,6 +139,11 @@
       "at": "2026-08-16T20:34:47.220Z",
       "channel": "devlog",
       "messageId": "1538647232083918878"
+    },
+    "discord/posts/2026-08-18-the-note-nobody-re-read.md": {
+      "at": "2026-08-21T22:42:55.977Z",
+      "channel": "devlog",
+      "messageId": "1540491419410763836"
     }
   },
   "routing": {
