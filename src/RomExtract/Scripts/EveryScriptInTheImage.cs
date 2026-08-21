@@ -5,7 +5,23 @@ namespace PokeMmo.RomExtract.Scripts;
 /// <param name="Entries">Those of them that decode to a proper end — the way-in list.</param>
 /// <param name="Blocks">Every block reachable from those entries, deduplicated.</param>
 public sealed record TheImagesScripts(
-    int Pointed, IReadOnlyCollection<uint> Entries, IReadOnlyCollection<uint> Blocks);
+    int Pointed, IReadOnlyCollection<uint> Entries, IReadOnlyCollection<uint> Blocks)
+{
+    /// <summary>
+    /// For each entry, the longest run of consecutive aligned ROM-address words that one of its
+    /// pointer sites sits in.
+    /// </summary>
+    /// <remarks>
+    /// <b>The one thing that tells a script's name from a text's.</b> Compiled code names a
+    /// script by putting its address in a literal pool, where it sits among instructions and
+    /// numbers — a run of one. A table of a hundred and fifty text pointers is a run of a hundred
+    /// and fifty, and every one of its entries is four bytes that look exactly like a script
+    /// pointer. The reversed-image floor cannot see the difference, because a table reversed is
+    /// still a table.
+    /// </remarks>
+    public IReadOnlyDictionary<uint, int> InARunOf { get; init; } =
+        new Dictionary<uint, int>();
+}
 
 /// <summary>
 /// Every script block in the file, rather than every script block a map leads to.
@@ -95,7 +111,66 @@ public static class EveryScriptInTheImage
         return new TheImagesScripts(
             aligned ? index.Count(p => p.Value.Any(o => o % 4 == 0)) : index.Count,
             entries,
-            blocks);
+            blocks)
+        {
+            InARunOf = Runs(rom, entries, index),
+        };
+    }
+
+    /// <summary>
+    /// How long a run of consecutive aligned ROM-address words each entry is named from.
+    /// </summary>
+    /// <remarks>
+    /// One pass to mark every aligned word that holds a ROM address, one pass to measure the runs
+    /// they fall in, and then each entry takes the longest run any of its own sites sits in. The
+    /// longest rather than the shortest: an address named once by a table and once by a literal
+    /// pool is named by a table, and it is the table that has to be explained away.
+    /// </remarks>
+    public static IReadOnlyDictionary<uint, int> Runs(
+        Rom rom,
+        IEnumerable<uint> entries,
+        IReadOnlyDictionary<uint, IReadOnlyList<int>> index)
+    {
+        int words = rom.Length / 4;
+        var holds = new bool[words];
+
+        for (var i = 0; i < words; i++)
+        {
+            holds[i] = rom.ReadU8((i * 4) + 3) == 0x08 && rom.IsRomAddress(rom.ReadU32(i * 4));
+        }
+
+        var run = new int[words];
+
+        for (var i = 0; i < words;)
+        {
+            if (!holds[i]) { i++; continue; }
+
+            int start = i;
+
+            while (i < words && holds[i]) i++;
+
+            for (int j = start; j < i; j++) run[j] = i - start;
+        }
+
+        var longest = new Dictionary<uint, int>();
+
+        foreach (uint entry in entries)
+        {
+            var most = 0;
+
+            foreach (int at in index.GetValueOrDefault(entry) ?? [])
+            {
+                if (at % 4 != 0) continue;
+
+                int word = at / 4;
+
+                if (word < run.Length && run[word] > most) most = run[word];
+            }
+
+            longest[entry] = most;
+        }
+
+        return longest;
     }
 
     /// <summary>The identical hunt on the image backwards.</summary>

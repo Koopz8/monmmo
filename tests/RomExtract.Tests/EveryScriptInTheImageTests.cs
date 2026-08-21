@@ -174,6 +174,70 @@ public sealed class EveryScriptInTheImageTests
     }
 
     /// <summary>
+    /// WHAT NAMES AN ADDRESS IS THE SPLIT THE REVERSED IMAGE CANNOT MAKE. Compiled code names a
+    /// script from a literal pool — one pointer among instructions. A table of text pointers is a
+    /// run of many, and every entry in it is four bytes indistinguishable from a script's address.
+    /// Reversing a table gives a table, so the floor is blind to exactly this.
+    /// <para>
+    /// Measured on the cartridge: <b>2296 of the 2337 entries the maps lead to are named alone</b>,
+    /// and 2138 of the ones they do not sit in runs of five or more.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AnAddressNamedFromATableIsToldFromOneNamedAlone()
+    {
+        var image = new byte[0x1000];
+
+        image[0x300] = End;
+        image[0x304] = End;
+
+        void Pointer(int at, uint address)
+        {
+            image[at] = (byte)address;
+            image[at + 1] = (byte)(address >> 8);
+            image[at + 2] = (byte)(address >> 16);
+            image[at + 3] = (byte)(address >> 24);
+        }
+
+        // A table of four consecutive pointers, and one on its own well away from it.
+        for (var i = 0; i < 4; i++) Pointer(0x100 + (i * 4), Short);
+
+        Pointer(0x200, 0x08000304);
+
+        TheImagesScripts found = EveryScriptInTheImage.In(new Rom(image));
+
+        Assert.Equal(4, found.InARunOf[Short]);
+        Assert.Equal(1, found.InARunOf[0x08000304u]);
+    }
+
+    /// <summary>
+    /// AND THE LONGEST RUN WINS. An address named once by a table and once by a literal pool is
+    /// named by a table — it is the table that has to be explained away, and taking the shortest
+    /// would let one stray literal launder every entry in one.
+    /// </summary>
+    [Fact]
+    public void AnAddressNamedBothWaysCountsAsTheTable()
+    {
+        var image = new byte[0x1000];
+
+        image[0x300] = End;
+
+        void Pointer(int at, uint address)
+        {
+            image[at] = (byte)address;
+            image[at + 1] = (byte)(address >> 8);
+            image[at + 2] = (byte)(address >> 16);
+            image[at + 3] = (byte)(address >> 24);
+        }
+
+        for (var i = 0; i < 3; i++) Pointer(0x100 + (i * 4), Short);
+
+        Pointer(0x200, Short);
+
+        Assert.Equal(3, EveryScriptInTheImage.In(new Rom(image)).InARunOf[Short]);
+    }
+
+    /// <summary>
     /// AND THE FLOOR IS THE SAME HUNT ON THE IMAGE BACKWARDS. Reversing keeps every byte and
     /// every byte's frequency and destroys every command boundary — so what it finds is what this
     /// hunt would find in a file with these statistics and no scripts in it. On this fixture that

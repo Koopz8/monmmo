@@ -10763,6 +10763,138 @@ public static class Program
                 + $" {Calibrate(outside),7:P0}");
         }
 
+        // AND WHAT NAMES THEM, which is the split the reversed image cannot make. Compiled code
+        // names a script from a literal pool — a run of one. A table of text pointers is a run of
+        // a hundred, and every entry in it is four bytes indistinguishable from a script pointer.
+        // A table reversed is still a table, so the floor is blind to exactly this.
+        Console.WriteLine();
+        Console.WriteLine(
+            "  AND WHAT NAMES THEM. A run is how many consecutive ALIGNED words holding a ROM"
+            + " address the pointer site sits in — a literal pool is a run of one, a pointer table"
+            + " is a run of many, and the reversed image cannot tell them apart.");
+        Console.WriteLine();
+        Console.WriteLine(
+            "    in a run of   entries   the maps lead to   they do not  |  calibration: led to / not");
+
+        TheImagesScripts named = EveryScriptInTheImage.In(rom);
+
+        foreach ((string band, Func<int, bool> holds) in new (string, Func<int, bool>)[]
+        {
+            ("1 (alone)", n => n <= 1),
+            ("2 to 4", n => n is >= 2 and <= 4),
+            ("5 to 16", n => n is >= 5 and <= 16),
+            ("17 to 64", n => n is >= 17 and <= 64),
+            ("more than 64", n => n > 64),
+        })
+        {
+            List<uint> band_ =
+                [.. named.Entries.Where(e => holds(named.InARunOf.GetValueOrDefault(e)))];
+
+            List<uint> led = [.. band_.Where(opened.Contains)];
+            List<uint> not = [.. band_.Where(e => !opened.Contains(e))];
+
+            Console.WriteLine(
+                $"    {band,-13} {band_.Count,7}   {led.Count,16}   {not.Count,11}  |"
+                + $"  {Calibrate(led),7:P0} / {Calibrate(not),7:P0}");
+        }
+
+        // AND WHAT THEY ARE MADE OF, which is the question the floor cannot answer. Two very
+        // different things look the same to a calibration row that has failed: scripts using
+        // variables only compiled code writes, and bytes that are not scripts at all. The command
+        // mix tells them apart, and it needs no outside knowledge — the maps' own scripts are one
+        // column and the reversed image is the other.
+        HashSet<uint> BlocksFrom(IEnumerable<uint> from)
+        {
+            var found = new HashSet<uint>();
+
+            foreach (uint at in from)
+            {
+                foreach (uint block in ScriptReader.Reachable(rom, at)) found.Add(block);
+            }
+
+            return found;
+        }
+
+        List<uint> alone =
+            [.. named.Entries.Where(e => named.InARunOf.GetValueOrDefault(e) <= 1)];
+
+        var mixes = new List<(string Name, HowOftenEachCommand Mix)>
+        {
+            ("the maps' own scripts", WhatABlockIsMadeOf.In(rom, opened)),
+            ("outside, named ALONE",
+                WhatABlockIsMadeOf.In(
+                    rom, BlocksFrom(alone.Where(e => !opened.Contains(e))))),
+            ("outside, named IN A TABLE",
+                WhatABlockIsMadeOf.In(
+                    rom,
+                    BlocksFrom(
+                        named.Entries.Where(
+                            e => !opened.Contains(e)
+                                && named.InARunOf.GetValueOrDefault(e) >= 5)))),
+        };
+
+        Rom backwards = new(rom.Span.ToArray().Reverse().ToArray());
+
+        mixes.Add((
+            "the reversed image",
+            WhatABlockIsMadeOf.In(backwards, EveryScriptInTheImage.In(backwards).Blocks)));
+
+        Console.WriteLine();
+        Console.WriteLine(
+            "  AND WHAT THEY ARE MADE OF. The floor is blind here — a table reversed is still a"
+            + " table — so the control is the maps' own scripts at one end and the reversed image"
+            + " at the other.");
+        Console.WriteLine();
+        Console.WriteLine(
+            "    code  " + string.Join("  ", mixes.Select(m => $"{m.Name,-25}")));
+
+        foreach (byte code in mixes[0].Mix.Counts.OrderByDescending(c => c.Value).Take(16)
+            .Select(c => c.Key))
+        {
+            Console.WriteLine(
+                $"    0x{code:X2}  "
+                + string.Join(
+                    "  ", mixes.Select(m => $"{m.Mix.ShareOf(code),9:P1}                ".Substring(0, 25))));
+        }
+
+        Console.WriteLine();
+        Console.WriteLine(
+            "    blocks"
+            + string.Join("", mixes.Select(m => $"  {m.Mix.Blocks,10}               ".Substring(0, 27))));
+        Console.WriteLine(
+            "    per   "
+            + string.Join(
+                "  ", mixes.Select(m => $"{m.Mix.Length,9:F1} commands       ".Substring(0, 25))));
+        Console.WriteLine();
+        Console.WriteLine("    every pair, as a distance (0 = the same mix, 1 = nothing shared):");
+
+        for (var i = 0; i < mixes.Count; i++)
+        {
+            for (int j = i + 1; j < mixes.Count; j++)
+            {
+                Console.WriteLine(
+                    $"      {mixes[i].Name,-26} vs {mixes[j].Name,-26}"
+                    + $" {WhatABlockIsMadeOf.Distance(mixes[i].Mix, mixes[j].Mix):F3}");
+            }
+        }
+
+        // AND THE BOUND. Total variation is linear in a mixture, so a population that is a share
+        // f of real script and the rest junk sits exactly (1-f) of the way from the real thing to
+        // the junk. No fitting, no threshold — arithmetic on two distances already printed.
+        Console.WriteLine();
+        Console.WriteLine(
+            "    the most of each that could be real script, taking the reversed image as the"
+            + " junk it would be mixed with:");
+
+        foreach ((string name, HowOftenEachCommand mix) in mixes.Skip(1).Take(2))
+        {
+            double could = WhatABlockIsMadeOf.HowMuchCouldBeReal(mix, mixes[0].Mix, mixes[^1].Mix);
+
+            Console.WriteLine(
+                $"      {name,-26} at most {could,7:P1} — about {could * mix.Blocks:F0} of"
+                + $" {mix.Blocks} block(s)");
+        }
+
         Console.WriteLine();
 
         TheImagesScripts image = EveryScriptInTheImage.In(rom);
