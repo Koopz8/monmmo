@@ -32,14 +32,15 @@ public static class WhichWayASignIsRead
     /// guard is to refuse rather than choose.
     /// </para>
     /// <para>
-    /// Nought for an empty population too. A side that every one of no signs has open is every
-    /// side, which is the same ambiguity with a smaller denominator.
+    /// Nought for an empty population too, <b>and with no check for it</b>: a side that every one
+    /// of no signs has open is every side, so all four qualify, so it is not exactly one. A guard
+    /// was written for that case and a break aimed at it came back green (279) — 219's rule, that
+    /// a guard nothing can fail is not a guard, so it was deleted rather than kept and decorated.
+    /// <c>NoSignsNamesNoSide</c> is the test that says the behaviour still holds.
     /// </para>
     /// </remarks>
     public static int? TheSideAllOfThemHaveOpen(IReadOnlyList<bool[]> open)
     {
-        if (open.Count == 0) return null;
-
         List<int> always =
         [
             .. Enumerable.Range(0, Sides.Count)
