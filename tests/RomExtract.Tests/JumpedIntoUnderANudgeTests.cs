@@ -119,6 +119,12 @@ public sealed class JumpedIntoUnderANudgeTests
         Assert.False(JumpedIntoUnderANudge.IsOnAJumpsBlock(rom, index, FirstSite, 3));
         Assert.True(JumpedIntoUnderANudge.IsOnAJumpsBlock(rom, index, SecondSite, 3));
 
+        // Nudged by the block's whole length the jump lands on the STRAY, and the stray is now on
+        // the block the nudged jump names — which a read from the un-nudged target could never
+        // reach, because the un-nudged block ends two bytes before it. This is the assertion that
+        // tells "the nudge is applied to the read" from "the nudge is applied to the lookup".
+        Assert.True(JumpedIntoUnderANudge.IsOnAJumpsBlock(rom, index, TheStray, 7));
+
         // Nudged clean past the block: the window still holds the pointer (it is 0x100 bytes
         // behind the site, inside 192 only when aimed forward enough), the block does not.
         Assert.Equal(0, JumpedIntoUnderANudge.CountOnABlock(rom, index, [FirstSite, SecondSite, TheStray], 0x20));
@@ -170,6 +176,22 @@ public sealed class JumpedIntoUnderANudgeTests
         Assert.Equal([FirstSite, SecondSite], found.Select(f => f.Site));
         Assert.All(found, f => Assert.Equal(0x101, f.By.Offset));
         Assert.All(found, f => Assert.True(f.By.AJump));
+    }
+
+    /// <summary>
+    /// A block named twice — by the jump and by a literal — is one entry per site, not two. A
+    /// count of how many sites are on a named block must not grow with how many things name it.
+    /// </summary>
+    [Fact]
+    public void OnABlockReportsEachSiteOnceHoweverManyThingsNameItsBlock()
+    {
+        Rom rom = Image(withTheLiteral: true);
+        IReadOnlyDictionary<uint, IReadOnlyList<int>> index = EverywhereInTheImage.PointerIndex(rom);
+
+        IReadOnlyList<(uint Site, NamesIt By)> found =
+            JumpedIntoUnderANudge.OnABlock(rom, index, [FirstSite, SecondSite, TheStray], orALiteral: true);
+
+        Assert.Equal([FirstSite, SecondSite], found.Select(f => f.Site));
     }
 
     [Fact]
