@@ -10808,10 +10808,248 @@ public static class Program
             Console.WriteLine($"      {name,-18} {wrote,9}  {read,5}  {never,11}");
         }
 
+        // 4 AND 5. THE JUMPED-INTO READINGS (175, 191) — the two this project has that are about
+        // an ADDRESS and whose floor was the reversal. 269 built the nudge and applied it to one
+        // sweep; this applies it to the two that were owed.
+        WriteJumpedIntoUnderTheNudge(rom, scripts);
+
+        // 6. THE TWO THAT WERE NAMED AS OWED AND ARE NOT ADDRESS-SHAPED. The coin chain walks a
+        // fall-through and the field-effect sweep is a one-byte pattern; neither follows a
+        // pointer, so a rotation must be a no-op for both — and the way to know that is to run
+        // it, not to read the code and say so.
+        Console.WriteLine();
+        Console.WriteLine("  6. THE COIN-CHAIN AND FIELD-EFFECT SWEEPS (208, 233) — content-relative, or not?");
+        Console.WriteLine("      control              coin chains   sums   |  dofieldeffect sites   read on   words");
+
+        foreach ((string name, Rom image) in controls)
+        {
+            IReadOnlyList<TheCoinCase.Ceiling> chains = TheCoinCase.Ceilings(image);
+            (int sites, int readsOn, int words) = FieldEffectNumbers.Sweep(image);
+
+            Console.WriteLine(
+                $"      {name,-18} {chains.Count,11}  {chains.Select(c => c.Sum).Distinct().Count(),5}"
+                + $"   |  {sites,19}  {readsOn,8}  {words,6}");
+        }
+
+        Console.WriteLine(
+            "      identical at every rotation means neither follows a pointer: the reversal is"
+            + " their control and stays so. A rotation that MOVED one would mean it was following"
+            + " an address after all.");
+
         Console.WriteLine();
         Console.WriteLine(
             "  a reading whose reversed floor and rotated floor disagree is a reading whose"
             + " control was measuring the wrong thing.");
+    }
+
+    /// <summary>
+    /// The jumped-into test — a flag site, or a who-knows site, that a jump lands on — asked
+    /// against the nudge rather than the reversal.
+    /// </summary>
+    private static void WriteJumpedIntoUnderTheNudge(Rom rom, IReadOnlyList<SetsAFlag> scripts)
+    {
+        int[] covered = EverywhereInTheImage.Opened(rom, scripts);
+        IReadOnlyDictionary<uint, IReadOnlyList<int>> index = EverywhereInTheImage.PointerIndex(rom);
+
+        // THE FLAG SIDE, the population --flags reports: every unopened site that reads as a
+        // setflag or clearflag, and the gating flags nothing in the world moves.
+        IReadOnlyDictionary<int, IReadOnlyList<FlagSite>> moved =
+            EverywhereInTheImage.EveryFlagMoved(rom, covered);
+
+        List<FlagSite> unopened = [.. moved.Values.SelectMany(s => s).Where(s => !s.Opened)];
+
+        WorldData world = WorldExporter.Export(rom);
+        var gates = new FlagGates(world);
+
+        (IReadOnlyCollection<int> turnedOn, IReadOnlyCollection<int> turnedOff) =
+            WhatItIsWaitingFor.ReallyTouches(rom, scripts, out _);
+
+        var inTheWorld = new HashSet<int>(turnedOn.Concat(turnedOff));
+
+        List<(int Key, uint Site)> boundary =
+        [
+            .. gates.All
+                .Select(g => g.Flag)
+                .Where(f => !inTheWorld.Contains(f) && moved.ContainsKey(f))
+                .SelectMany(f => moved[f].Where(s => !s.Opened).Select(s => (f, s.Address))),
+        ];
+
+        int boundaryFlags = boundary.Select(b => b.Key).Distinct().Count();
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  4. A FLAG SITE SOMETHING JUMPS INTO (175) — {unopened.Count} unopened site(s) in the file,"
+            + $" and {boundary.Count} of them on {boundaryFlags} gating flag(s) nothing in the world moves");
+        Console.WriteLine(
+            $"      the window is {JumpedIntoUnderANudge.Slack} byte(s) before the site, the same reach"
+            + " the reading uses; a nudge shorter than that slides the window onto itself and says so");
+        Console.WriteLine(
+            "      and THREE PREDICATES, because only the control can say which one is evidence (265):"
+            + " WITHIN THE WINDOW is the reading as it has stood since 175 — a jump-owned pointer"
+            + " lands in the 192 bytes before the site; ON A JUMP'S BLOCK needs the jump's own target,"
+            + " read from its boundary, to reach the site as a command; ON A JUMP'S OR A LITERAL'S BLOCK"
+            + " also lets an aligned word no command owns name it — code, or a table — and never"
+            + " four loose bytes, which are the accident being measured");
+        Console.WriteLine();
+        Console.WriteLine(
+            "                           WITHIN THE WINDOW          ON A JUMP'S BLOCK          ON A JUMP'S OR A LITERAL'S BLOCK");
+        Console.WriteLine(
+            "      control              sites      gated  flags  |  sites      gated  flags  |  sites      gated  flags");
+
+        string Row(string name, int by)
+        {
+            IEnumerable<uint> all = unopened.Select(s => s.Address);
+            IEnumerable<uint> gated = boundary.Select(b => b.Site);
+
+            string Cell(int sites, int gatedSites, int flags) =>
+                $"{sites,5} {(double)sites / Math.Max(1, unopened.Count),6:P1}  {gatedSites,3}/{boundary.Count,-3} {flags,3}/{boundaryFlags}";
+
+            return $"      {name,-18} "
+                + Cell(
+                    JumpedIntoUnderANudge.Count(rom, index, all, by),
+                    JumpedIntoUnderANudge.Count(rom, index, gated, by),
+                    JumpedIntoUnderANudge.GroupsWithOne(rom, index, boundary, by))
+                + "  |  "
+                + Cell(
+                    JumpedIntoUnderANudge.CountOnABlock(rom, index, all, by),
+                    JumpedIntoUnderANudge.CountOnABlock(rom, index, gated, by),
+                    JumpedIntoUnderANudge.GroupsWithOne(rom, index, boundary, by, onTheBlock: true))
+                + "  |  "
+                + Cell(
+                    JumpedIntoUnderANudge.CountOnABlock(rom, index, all, by, orALiteral: true),
+                    JumpedIntoUnderANudge.CountOnABlock(rom, index, gated, by, orALiteral: true),
+                    JumpedIntoUnderANudge.GroupsWithOne(rom, index, boundary, by, onTheBlock: true, orALiteral: true));
+        }
+
+        Console.WriteLine(Row("as named", 0));
+
+        // THE REVERSAL, off the same function the reading has always used for it, so the number
+        // printed here is the one --flags prints.
+        (int noiseSites, int noiseJumped, _) = EverywhereInTheImage.NoiseFloor(rom);
+
+        Console.WriteLine(
+            $"      {"BACKWARDS",-18} {noiseJumped,5} {(double)noiseJumped / Math.Max(1, noiseSites),6:P1}"
+            + $"  (of {noiseSites} — no map scan, no world, no boundary: the one column --flags prints)");
+
+        foreach (int by in JumpedIntoUnderANudge.Nudges)
+        {
+            Console.WriteLine(
+                Row($"+{by} bytes", by)
+                + (JumpedIntoUnderANudge.InsideTheWindow(by) ? "   <- inside the window" : ""));
+        }
+
+        // AND THE VERDICT, WORKED OUT FROM THE ROWS ABOVE rather than read off them: the floor
+        // is the nudges OUTSIDE the window, and a reading is above it only if it beats the worst
+        // of them.
+        int[] outside = [.. JumpedIntoUnderANudge.Nudges.Where(by => !JumpedIntoUnderANudge.InsideTheWindow(by))];
+
+        void Verdict(string what, Func<int, int> count)
+        {
+            int named = count(0);
+            int[] floor = [.. outside.Select(count)];
+
+            // A control with variance is not a control until its variance is printed (82): a
+            // margin smaller than the spread of the floor's own rows is inside the noise.
+            int spread = floor.Max() - floor.Min();
+            int margin = named - floor.Max();
+
+            Console.WriteLine(
+                $"      {what,-34} as named {named,4}   floor {floor.Min(),4}..{floor.Max(),-4}"
+                + (margin <= 0
+                    ? "  ON THE FLOOR"
+                    : margin <= spread
+                        ? $"  above by {margin}, INSIDE the floor's own spread of {spread}"
+                        : $"  ABOVE THE FLOOR by {margin}, against a spread of {spread}"));
+        }
+
+        Console.WriteLine();
+        Verdict("within the window, sites", by => JumpedIntoUnderANudge.Count(rom, index, unopened.Select(s => s.Address), by));
+        Verdict("within the window, boundary flags", by => JumpedIntoUnderANudge.GroupsWithOne(rom, index, boundary, by));
+        Verdict("on a jump's block, sites", by => JumpedIntoUnderANudge.CountOnABlock(rom, index, unopened.Select(s => s.Address), by));
+        Verdict("on a jump's block, boundary flags", by => JumpedIntoUnderANudge.GroupsWithOne(rom, index, boundary, by, onTheBlock: true));
+        Verdict("or a literal's, sites", by => JumpedIntoUnderANudge.CountOnABlock(rom, index, unopened.Select(s => s.Address), by, orALiteral: true));
+        Verdict("or a literal's, boundary flags", by => JumpedIntoUnderANudge.GroupsWithOne(rom, index, boundary, by, onTheBlock: true, orALiteral: true));
+
+        // AND THE ONES THAT PASS THE STRICT TEST ON THE BOUNDARY, BY NAME. A count of one is a
+        // name or it is nothing.
+        foreach (bool orALiteral in new[] { false, true })
+        {
+            IReadOnlyList<(uint Site, NamesIt By)> strict =
+                JumpedIntoUnderANudge.OnABlock(rom, index, boundary.Select(b => b.Site), orALiteral: orALiteral);
+
+            Console.WriteLine(
+                $"      on the boundary, {(orALiteral ? "ON A JUMP'S OR A LITERAL'S BLOCK" : "ON A JUMP'S BLOCK")}: {strict.Count} site(s)");
+
+            // THE CROSS-CHECK (263): the script a new game runs is located by a different reader
+            // for a different question, and it sets flags in a row. If the literal-named block
+            // is that one, this column has found the opening from the other side and nothing new.
+            NewGameState? opening = NewGameLocator.Locate(rom);
+
+            int inTheOpening = opening is null
+                ? 0
+                : strict.Count(s => ScriptReader.Read(rom, opening.Address).Any(c => c.Offset == rom.ToOffsetOrNull(s.Site)));
+
+            if (opening is not null && strict.Count > 0)
+            {
+                Console.WriteLine(
+                    $"        {inTheOpening} of the {strict.Count} are commands of the NEW-GAME script at"
+                    + $" 0x{opening.Address:X8}, which sets {opening.Flags.Count} flag(s) before the first"
+                    + " frame — the same block, read from the other side");
+            }
+
+            foreach ((uint site, NamesIt by) in strict)
+            {
+                int flag = boundary.First(b => b.Site == site).Key;
+
+                bool opens = opening is not null
+                    && ScriptReader.Read(rom, opening.Address).Any(c => c.Offset == rom.ToOffsetOrNull(site));
+
+                if (opens) continue;
+
+                Console.WriteLine($"        0x{flag:X4} at 0x{site:X8}  named by {by}");
+            }
+        }
+
+        // THE MOVE SIDE, the population --who-knows reports: every site that asks who knows a
+        // move and reads on to a proper end.
+        List<MoveData> moves = MoveExtractor.Extract(rom);
+
+        List<MoveSite> real =
+            [.. EverywhereInTheImage.AsksWhoKnows(rom, moves.Count, covered).Where(s => s.ReadsAsAScript)];
+
+        (_, _, int moveFloorJumped, _) = EverywhereInTheImage.MoveNoiseFloor(rom, moves.Count);
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  5. A WHO-KNOWS-A-MOVE SITE SOMETHING JUMPS INTO (191) — {real.Count} site(s) read on to an end");
+        Console.WriteLine("      control              within the window   on a jump's block   on a jump's or a literal's block");
+
+        string MoveRow(string name, int by) =>
+            $"      {name,-18} {JumpedIntoUnderANudge.Count(rom, index, real.Select(s => s.Address), by),6} of {real.Count,-6}"
+            + $"   {JumpedIntoUnderANudge.CountOnABlock(rom, index, real.Select(s => s.Address), by),6} of {real.Count,-6}"
+            + $"      {JumpedIntoUnderANudge.CountOnABlock(rom, index, real.Select(s => s.Address), by, orALiteral: true),6} of {real.Count}";
+
+        Console.WriteLine(MoveRow("as named", 0));
+        Console.WriteLine($"      {"BACKWARDS",-18} {moveFloorJumped,6}             (one column, the one --who-knows prints)");
+
+        foreach (int by in JumpedIntoUnderANudge.Nudges)
+        {
+            Console.WriteLine(
+                MoveRow($"+{by} bytes", by)
+                + (JumpedIntoUnderANudge.InsideTheWindow(by) ? "   <- inside the window" : ""));
+        }
+
+        Console.WriteLine();
+        Verdict("within the window, sites (moves)", by => JumpedIntoUnderANudge.Count(rom, index, real.Select(s => s.Address), by));
+        Verdict("on a jump's block (moves)", by => JumpedIntoUnderANudge.CountOnABlock(rom, index, real.Select(s => s.Address), by));
+        Verdict("or a literal's (moves)", by => JumpedIntoUnderANudge.CountOnABlock(rom, index, real.Select(s => s.Address), by, orALiteral: true));
+
+        foreach ((uint site, NamesIt by) in JumpedIntoUnderANudge.OnABlock(rom, index, real.Select(s => s.Address), orALiteral: true))
+        {
+            MoveSite which = real.First(s => s.Address == site);
+
+            Console.WriteLine($"        move {which.Move,3} at 0x{site:X8}  on a block named by {by}");
+        }
     }
 
     /// <summary>
