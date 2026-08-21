@@ -10020,6 +10020,24 @@ public static class Program
 
         IReadOnlyDictionary<uint, IReadOnlyList<int>> index = EverywhereInTheImage.PointerIndex(rom);
 
+        // THE NUDGE FOR A THREE-BYTE SWEEP (272). A flag id the cartridge does not use — named by
+        // no script the maps open, gating nothing, not set by a new game — has every site the
+        // sweep finds for it by accident, with the same high byte's worth of luck. The nearest
+        // sixteen such ids are the floor under each count below.
+        WorldData world = WorldExporter.Export(rom);
+        var gates = new FlagGates(world);
+
+        var used = new HashSet<int>(gates.All.Select(g => g.Flag).Concat(world.FlagsAtStart));
+
+        foreach ((int flag, IReadOnlyList<FlagSite> moved) in EverywhereInTheImage.EveryFlagMoved(rom, covered))
+        {
+            if (moved.Any(m => m.Opened)) used.Add(flag);
+        }
+
+        Console.WriteLine(
+            $"  and the floor under each count is the same sweep asked for ids the cartridge does not use"
+            + $" — {used.Count} id(s) are used: named by an opened script, gating something, or set by a new game");
+
         var sites = new Dictionary<int, IReadOnlyList<FlagSite>>();
 
         foreach (int flag in flags)
@@ -10028,11 +10046,19 @@ public static class Program
 
             sites[flag] = found;
 
+            AnUnusedNumber.Floor floor = AnUnusedNumber.ForAFlag(rom, flag, used.Contains);
+
             Console.WriteLine();
             Console.WriteLine(
                 $"  0x{flag:X4} — {found.Count} site(s) in the file, "
                 + $"{found.Count(s => s.ReadsAsAScript)} of which read as script, "
                 + $"{found.Count(s => s.Opened)} of which the map scan opened");
+            Console.WriteLine(
+                $"    the {floor.Over} nearest UNUSED ids with the same high byte"
+                + $" ({string.Join(", ", floor.Neighbours.Take(3).Select(n => $"0x{n.Number:X4}"))}, ...):"
+                + $" median {floor.MedianSites} site(s), most {floor.MaxSites} (0x{floor.MaxSitesAt:X4}); reading as script median"
+                + $" {floor.MedianReads}, most {floor.MaxReads}"
+                + (used.Contains(flag) ? "" : "  <- this id is itself UNUSED by that rule"));
 
             // AND HOW MANY OF THEM ARE THE SAME PLACE TWICE.
             //
@@ -13690,16 +13716,34 @@ public static class Program
                 + $"x{band.Max(v => v.Value)}, quietest x{band.Min(v => v.Value)}");
         }
 
+        // THE NUDGE FOR A THREE-BYTE SWEEP (272): a variable id the map scan neither writes nor
+        // reads has every site by accident, with the same high byte's worth of luck.
+        BothNamespaces namespaces = TwoNamespacesOneNumber.Of(rom, scripts.Select(s => s.Address));
+
+        var usedVariables = new HashSet<int>(namespaces.Variables.Keys);
+
+        Console.WriteLine(
+            $"  and the floor under each count is the same sweep asked for ids the map scan never names"
+            + $" — {usedVariables.Count} variable id(s) are named");
+
         foreach (int which in variables)
         {
             IReadOnlyList<VariableSite> sites = EverywhereInTheImage.Writes(rom, which, covered);
 
             List<VariableSite> real = [.. sites.Where(s => s.ReadsAsAScript)];
 
+            AnUnusedNumber.Floor floor = AnUnusedNumber.ForAVariable(rom, which, usedVariables.Contains);
+
             Console.WriteLine();
             Console.WriteLine(
                 $"  0x{which:X4} — {sites.Count} site(s) in the file, {real.Count} of which read as"
                 + $" script, {real.Count(s => s.Opened)} of which the map scan opened");
+            Console.WriteLine(
+                $"    the {floor.Over} nearest UNNAMED ids with the same high byte"
+                + $" ({string.Join(", ", floor.Neighbours.Take(3).Select(n => $"0x{n.Number:X4}"))}, ...):"
+                + $" median {floor.MedianSites} site(s), most {floor.MaxSites} (0x{floor.MaxSitesAt:X4}); reading as script median"
+                + $" {floor.MedianReads}, most {floor.MaxReads}"
+                + (usedVariables.Contains(which) ? "" : "  <- this id is itself UNNAMED by the map scan"));
 
             if (real.Count == 0)
             {
