@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-303`, 3195 tests green.
+`claude-304`, 3197 tests green.
 
 Standing rules — do not break these:
 
@@ -270,11 +270,15 @@ Traps worth carrying:
 
 27. **A FIELD READING NEEDS A TABLE FROM SOMEWHERE ELSE** (248). "These four bytes are an item,
     an index and a count" is three claims about byte offsets and every one of them parses. What
-    makes it a reading is that **all 183 first halfwords resolve to a name in the item table's
-    308 entries** — a location this project built for a different question, which cannot have
-    been tuned to agree. A wrong offset does not score 183 of 183 against an independent table.
+    makes it a reading is that **171 of the 171 first halfwords that are not NOUGHT resolve to a
+    name in the item table's 307 NAMED entries** — a location this project built for a different
+    question, which cannot have been tuned to agree. A wrong offset does not score 171 of 171
+    against an independent table.
     **When you split a record into fields, find something already in the repository that can
-    disagree with the split, and print how often it does not.**
+    disagree with the split, and print how often it does not** — and **count the blanks out**.
+    248 said "183 of 183 against 308 entries" and twelve of the 183 resolve to entry 0, which the
+    table calls `????????`. The same command said so nine lines further down for sixteen
+    milestones (264).
 
 28. **TWO BYTES AGREEING EXACTLY IS WORTH MORE THAN EITHER** (248). Twelve of the 183 name no
     item; twelve carry a count above one; they are the same twelve and there are NOUGHT of either
@@ -615,16 +619,31 @@ Traps worth carrying:
     Two directions, one number. **Nothing else in the gate reading has one**, and a reading with
     no independent agreement is a reading nobody has tested.
 
+71. **A PLACEHOLDER IS NOT A NAME, AND COUNTING ONE IS HOW A TEST STOPS BEING ABLE TO FAIL**
+    (264). 248's evidence that a buried sign's first halfword is an item id was "all 183 resolve
+    to a name in the item table's 308 entries". **Twelve resolve to entry NOUGHT**, which this
+    cartridge's table calls `????????` — and `--buried` said so nine lines further down, printing
+    "308 entries" and "307 items in the table" in one output for sixteen milestones. Stated
+    honestly the reading is STRONGER: **171 of 171 against 307 named entries**. **When a lookup
+    table has a blank entry, a hit on it is not a hit.**
+
+72. **ONE MILESTONE MOVED FIVE LINES OF THE BLOCK AND RE-RAN NONE OF THEM** (264). Nine block
+    lines had drifted since 231's audit and **five are downstream of 252 alone**, which put
+    `specialvar`'s destination and `0x42 arg0` into the operand tables: the variable population
+    went 106 -> 115, and every place count and floor computed off it moved with it. **When you
+    change what a table contains, grep the block for the population it feeds** — not for the
+    number you changed, which appears nowhere.
+
 ## Where things are
 
-Read `claude/milestone-263-what-the-gates-hold.md` first, then `262`, `261`, `260`, `259`, `258`, `257`,
+Read `claude/milestone-264-the-block-re-run.md` first, then `263`, `262`, `261`, `260`, `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
 `250`, `249`, `248`, `247`, `246`, `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
 `238`, `237`,
 `236`, `235`, `234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
-**Thirty-five faults closed and every one was in this project, not on the cartridge.** A walk that
+**Thirty-six faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
 script" list; a list ranked by a count instead of by what it costs; a party that could not gain
 a level; a roadmap line that called a fix a cost; a continuation that carried flags and not
@@ -817,8 +836,11 @@ are the point — `specialvar`'s answer (324/324 both, 0 only-a-column) and `cop
 ONE compared place and is reported as unsettled. **Whose square it is, is not read.**
 
 `--buried` reads the four bytes a buried sign keeps where every other sign keeps a script pointer
-(248): an item id, an INDEX and a count with one spare bit. **All 183 item ids resolve to a name
-in the item table's 308 entries** — a location made for another question — and the third byte is
+(248): an item id, an INDEX and a count with one spare bit. **171 of the 171 item ids that are not
+NOUGHT resolve to a name in the item table's 307 NAMED entries** — a location made for another
+question. 248 said "183 of 183 against 308 entries" and twelve of those resolve to entry 0, which
+the table calls `????????`; counting a placeholder as a hit is how a test that could have failed
+stops being able to, and the honest count is the stronger one (264). The third byte is
 **183 distinct values in 0..190**, eight unused (7, 16, 40, 43, 44, 45, 46, 124). The same item is
 buried in up to twelve places, so the memory cannot be the item; it is the index, and the flag is
 a base plus it. **The base hunt comes back UNANSWERABLE and says so**: 3 gaps in the flag number
@@ -1134,7 +1156,8 @@ doors announce themselves in 0x4001 x63, 0x8008 x25, 0x8004 x23, 0x4002 x6 — T
 5 places guard a coin hand-over; every bound plus its own gift is 10000; 0 chains in the reversal
 2 places sell coins for money at 20 each — READ; 3 price lists, 15 rows, all READ
 the floor is asked for money in ONE place and it is the coin counter; 8 at --say-yes and above
-the widest run sets 212 of the 322 gating flags — 110 gates it never opens; 199 at the floor
+the widest run sets 213 of the 322 gating flags — 109 gates it never opens; 199 at the floor
+  (264: it was 212/110)
   the floor's own gating count went 121 -> 123 at 239 and the widest run's 212/110 did not move
 BUT THE RUN ALSO TAKES FLAGS BACK: 164 ever on at the floor against the 160 it stops with (240)
   4 / 6 / 4 / 10 / 9 / 6 taken back at the six settings; 3 of the floor's 4 are on at the start
@@ -1153,8 +1176,9 @@ BUT THE RUN ALSO TAKES FLAGS BACK: 164 ever on at the floor against the 160 it s
   every control stops with "nothing more opened", so signs ARE what makes the run cycle (241)
   the RUN could not see ONE of them until 239, because MapData carried no sign list at all
   they move NO map count at any lever setting — not one square of this game is behind a sign
-those 110 are 35 no opener, 30 never run, 16 never picked up, 15 obstacles, 7 boundary, 7 TAKEN
-  BACK (240) — the sixth bucket, first in the order, and it took from THREE of the other five
+those 109 are 35 no opener, 30 never run, 16 never picked up, 15 obstacles, 8 past the boundary,
+  5 TAKEN BACK (240) — the sixth bucket, first in the order, and it took from THREE of the other
+  five. RE-RUN AT 264: the last two were 7 and 7 and the total was 110
 35 and 15 are the same at every lever setting, which is how a property of the FILE has to behave
 3 scripts hold 27 gating flags: CUT and ROCK SMASH (15, 2 scripts), STRENGTH (12, 1) — CHECKED
 322 gating flags hold 605 objects; 2 hold none (the boat's). 15 tree-and-rock gates hold 146,
@@ -1164,19 +1188,21 @@ those 110 are 35 no opener, 30 never run, 16 never picked up, 15 obstacles, 7 bo
 of the 295: 272 hold one, 10 hold 5-16, 8 hold 2-4, 3 hold more than 16, 2 hold nothing;
   21 hold MORE THAN ONE, 175 objects between them — "62 gates hold 240 people" is WITHDRAWN
 the 12 STRENGTH boulders are SEAFOAM and VICTORY ROAD, and their flags split THREE ways
-766 places call 63 routines the widest run cannot answer; 186 have an answer nothing branches on
+860 places call 75 routines the widest run cannot answer; 276 of the places, across 58 routines,
+  have an answer nothing branches on — RE-RUN AT 264, it was 766/63/186
 --routines: 1118 branching sites at 437 byte positions in the file; 48 routines are branched on
 0x188's one place comes to nothing
 0x4059 has one writer and NO readers anywhere; 0x4055 has 21 readers against a floor of 0
-7 of the 106 variables the map scan WRITES are never looked at by any command: 5 past the boundary
+7 of the 115 variables the map scan WRITES are never looked at by any command: 5 past the boundary
   (0x4010, 0x8001, 0x8002, 0x800B, 0x8012) and 2 NOWHERE in the image (0x4026, 0x403E) — and
   NOTHING this cartridge writes goes unconsulted (245 -> 246 -> 247, population corrected at 251)
-  it was 90 variables until 251 put copyvar's destination in the write table — 16 more
+  it was 90 variables until 251 put copyvar's destination in the write table — 16 more, and 106
+    until 252 added specialvar's destination and 0x42 arg0 — nine more, unrecorded until 264
   it was 26 by the commands alone: 21 of those are read by a map header or a TRIGGER, neither of
   which is a command — 0x407C on NINETEEN maps, 0x400F on 8, 0x400E on 8, 0x4062 on 4
   the value-naming operand hid NOUGHT of them, measured both ways — 244's fault does not reach here
-the load denominator: 33 of 106 against a reversed 5 (50 against 37 WITHOUT the instruction, which
-  is why the instruction is in the rule) (246, 251); 0x4000 is loaded 1 time against a reversed 0
+the load denominator: 34 of 115 against a reversed 5 (57 WITHOUT the instruction, which is why the
+  instruction is in the rule) (246, 251, re-run 264); 0x4000 is loaded 1 time against a reversed 0
 every READING operand's written-ness: 0x19 arg2 93%, 0x21 arg0 98%, 0x22 arg0/arg2 100%, and the
   value-naming 0x1A arg2 at 2% — the whole shortfall is TWO numbers, 0x8013 and 0x4025 (251)
 0x4010, 0x4026 and 0x403E are BIRTH ISLAND 2.56's on-load, three setvars in a row, and all three
@@ -1271,12 +1297,13 @@ asked of (routine, 0x8004): 269 pairs, 95 in more than one place, and NOUGHT of 
 25 of the 178 routines take a 0x8004 in the run before a call; 0x194/0x173/0x174 take 18/16/16
 0x9C is 7 byte positions and SEVEN distinct words — a column; 3 of them are the obstacle scripts
 exactly ONE conditional in the map scan has a 0x27 its target lacks, and it is 0x0AB's
-ONE number is named both as a flag and as a variable in the map scan — 0x4001, floor 1.71 (244)
+ONE number is named both as a flag and as a variable in the map scan — 0x4001, floor 1.73 (244,
+  re-run 264; the floor was 1.71 before 252 changed the population)
   243 said 27; 26 of them were 0x1A's SECOND WORD, which is a value unless it is a variable id
   0x1A arg2 names 149 numbers and 3 are ever written; every other reading operand is 75-100%
   the bands, READ not asserted: flags 0x0000+ 237n/347p and 0x4000+ 1n/4p; variables
-    0x4000+ 77n/841p and 0x8000+ 14n/2897p, with 0x1A arg2's 145n/501p outside both
-  the whole-IMAGE version of the same question says 2117 / 12659 / 1182 — throw it away
+    0x4000+ 77n/856p and 0x8000+ 16n/3428p, with 0x1A arg2's 145n/501p outside both (264)
+  the whole-IMAGE version of the same question says 2117 / 14308 / 1333 — throw it away (264)
 0x9C is dofieldeffect, named in ONE place since 233 and privately in EverywhereInTheImage since 191
 6 moves pair with 6 numbers: CUT 2, SURF 9, ROCK SMASH 37, STRENGTH 40, WATERFALL 43, DIVE 44
 the only repeated move (DIVE, twice) repeats its number — ONE agreement, not six
