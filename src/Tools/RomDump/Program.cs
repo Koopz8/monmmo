@@ -220,6 +220,7 @@ public static class Program
         if (options.Operands) WriteOperands(rom);
         if (options.OperandsEverywhere) WriteOperandsEverywhere(rom);
         if (options.TheControl) WriteTheControl(rom);
+        if (options.TheRuler) WriteTheRuler(rom);
         if (options.Slots.Count > 0) WriteSlots(rom, options.Slots);
         if (options.ReadFrom.Count > 0) WriteBlocks(rom, options.ReadFrom);
         if (options.Closure) WriteClosure(rom, options.RoutineAnswers, options.StartAt);
@@ -11096,6 +11097,498 @@ public static class Program
     }
 
     /// <summary>
+    /// The mixture bound, asked of populations whose answer is known before it is run (275).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// 268 bounded how much of the script outside the maps could be real; 273 found a distance
+    /// whose whole answer was its sample size; 274 found that 268's bound had no band under it
+    /// either and could only say "between 121 and about 1266". All three were arguments about how
+    /// much sampling noise a number carries. <b>None of them ran the bound on something whose
+    /// answer was already known</b>, and two such populations are free.
+    /// </para>
+    /// <para>
+    /// It also gives the junk model a second candidate. The bound divides by d(junk, real) and is
+    /// only as good as what stands in for junk — its own doc comment says so — and the reversed
+    /// image is the one control 268 showed to be blind to exactly this file's accidents.
+    /// </para>
+    /// </remarks>
+    private static void WriteTheRuler(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("THE RULER — THE BOUND ASKED OF THINGS WHOSE ANSWER IS KNOWN");
+        Console.WriteLine();
+        Console.WriteLine(
+            "  268's bound is one number with nothing to compare it against, and 273 and 274 both"
+            + " found a distance whose whole answer was its sample size. Two populations settle"
+            + " what it CAN read: a held-out half of the maps' own scripts, which is real script"
+            + " and must come back 100%, and a held-out half of the junk model, which must come"
+            + " back 0%. Neither has ever been run through it.");
+
+        (_, HashSet<uint> opened) = TheMapScansBlocks(rom);
+        TheImagesScripts named = EveryScriptInTheImage.In(rom);
+
+        IReadOnlyList<APopulation> mixes = ThePopulations(rom, opened, named, inFileOrder: true);
+
+        APopulation real = mixes[0];
+        APopulation reversal = mixes[^1];
+        List<APopulation> outside = [.. mixes.Skip(1).Take(2)];
+
+        static (IReadOnlyList<uint> First, IReadOnlyList<uint> Second) Halve(
+            IReadOnlyList<uint> all) =>
+            ([.. all.Take(all.Count / 2)], [.. all.Skip(all.Count / 2)]);
+
+        // THE JUNK MODEL, WITH A SECOND CANDIDATE. The nudge (269) is this project's control for
+        // anything that follows a pointer and it has only ever produced a COUNT. As a population
+        // it is these same pointers aimed a few bytes off, in THIS file, with THIS file's bytes —
+        // which is what the reversal cannot be.
+        Console.WriteLine();
+        Console.WriteLine(
+            "  THE JUNK MODEL. The bound divides by d(junk, real) and its own documentation says"
+            + " it is only as good as what stands in for junk. Until now that has been the"
+            + " reversed image — 456 blocks, and the one control 268 showed to be blind here"
+            + " because a table reversed is still a table. The nudge is the other one, and it has"
+            + " only ever been a count.");
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    {"junk model",-24} {"entries",8} {"blocks",8} {"of the maps' own",17}"
+            + $" {"from the maps' own",19} {"from the reversal",18}");
+
+        IReadOnlyList<uint> targets = EveryScriptInTheImage.Aligned(rom);
+
+        var junks = new List<(string Name, Rom From, IReadOnlyList<uint> Blocks)>
+        {
+            ("the reversed image", reversal.From, reversal.Blocks),
+        };
+
+        foreach (int by in new[] { 4, 64, 1024, 4096 })
+        {
+            IReadOnlyList<uint> entries = EveryScriptInTheImage.Nudged(rom, targets, by);
+
+            HashSet<uint> blocks = BlocksFrom(rom, entries);
+
+            int shared = blocks.Count(opened.Contains);
+
+            blocks.ExceptWith(opened);
+
+            junks.Add(
+                ($"the nudge, +{by} byte(s)", rom, WhatABlockIsMadeOf.InFileOrder(blocks)));
+
+            Console.WriteLine(
+                $"    {junks[^1].Name,-24} {entries.Count,8} {blocks.Count,8} {shared,17}"
+                + $" {WhatABlockIsMadeOf.Distance(WhatABlockIsMadeOf.In(rom, junks[^1].Blocks), real.Mix),19:F3}"
+                + $" {WhatABlockIsMadeOf.Distance(WhatABlockIsMadeOf.In(rom, junks[^1].Blocks), reversal.Mix),18:F3}");
+        }
+
+        Console.WriteLine(
+            $"    {junks[0].Name,-24} {"-",8} {reversal.Blocks.Count,8} {0,17}"
+            + $" {WhatABlockIsMadeOf.Distance(reversal.Mix, real.Mix),19:F3} {"-",18}");
+        Console.WriteLine(
+            "    the shared column is blocks the nudge lands on that the map scan ALSO opens, and"
+            + " they are taken out — a junk model holding known-real blocks is not one.");
+
+        // THE RULER ITSELF. Every row scored against ONE reference, which holds none of the
+        // blocks in any row: a group compared against a whole it is part of is closer to it for
+        // that reason alone, which is the fault 274's own-quarters column had.
+        int[] ladder = [57, 114, 228, 486, 972, 1944];
+
+        // WHICH JUNK MODEL IS CHOSEN BY THE MIXTURES AND NOT BY THE ANSWER (79). Each model gets
+        // the same known shares put through it and the worst miss is its calibration.
+        var calibrated = new List<(string Name, double Bar, IReadOnlyList<(string Name, double Says)> Read)>();
+
+        foreach ((string junkName, Rom junkFrom, IReadOnlyList<uint> junkBlocks) in junks)
+        {
+            (IReadOnlyList<uint> junkRef, IReadOnlyList<uint> junkTest) = Halve(junkBlocks);
+            (IReadOnlyList<uint> realRef, IReadOnlyList<uint> realTest) = Halve(real.Blocks);
+
+            HowOftenEachCommand reference = WhatABlockIsMadeOf.In(rom, realRef);
+            HowOftenEachCommand junk = WhatABlockIsMadeOf.In(junkFrom, junkRef);
+
+            List<(string Name, Rom From, IReadOnlyList<uint> Blocks)> rows =
+            [
+                ("KNOWN REAL, must read 100%", rom, realTest),
+                ("KNOWN JUNK, must read 0%", junkFrom, junkTest),
+                (outside[0].Name, rom, outside[0].Blocks),
+                (outside[1].Name, rom, outside[1].Blocks),
+            ];
+
+            Console.WriteLine();
+            Console.WriteLine(
+                $"  THE RULER, junk = {junkName} (its first half; the second half is the KNOWN JUNK"
+                + $" row). Reference = the maps' own FIRST {realRef.Count} block(s), which holds"
+                + $" none of any row. d(junk, real) = {WhatABlockIsMadeOf.Distance(junk, reference):F3}.");
+            Console.WriteLine();
+            Console.WriteLine(
+                "    group" + string.Join("", rows.Select(r => $"   {r.Name}".PadRight(29)[..29])));
+
+            var read = new Dictionary<(int, string), IReadOnlyList<double>>();
+
+            foreach (int n in ladder)
+            {
+                var cells = new List<string>();
+
+                foreach ((string name, Rom from, IReadOnlyList<uint> blocks) in rows)
+                {
+                    IReadOnlyList<double> band =
+                        WhatABlockIsMadeOf.BoundPerGroup(from, blocks, n, reference, junk);
+
+                    read[(n, name)] = band;
+
+                    cells.Add(
+                        (band.Count == 0
+                            ? "   -"
+                            : $"   {band.Min(),7:P1}..{band.Max(),7:P1} x{band.Count}")
+                        .PadRight(29)[..29]);
+                }
+
+                Console.WriteLine($"    {n,5}" + string.Join("", cells));
+            }
+
+            // AND THE VERDICT, WORKED OUT. The widest size every row can supply two groups at is
+            // where the ruler has both ends marked; a band of one group is not a band (274).
+            int widest = ladder.LastOrDefault(
+                n => rows.All(r => read[(n, r.Name)].Count >= 2),
+                0);
+
+            if (widest == 0)
+            {
+                Console.WriteLine(
+                    "    NO SIZE HAS TWO GROUPS IN EVERY ROW — this junk model cannot be a ruler.");
+
+                continue;
+            }
+
+            IReadOnlyList<double> knownReal = read[(widest, rows[0].Name)];
+            IReadOnlyList<double> knownJunk = read[(widest, rows[1].Name)];
+
+            Console.WriteLine();
+            Console.WriteLine(
+                $"    AT {widest} — the widest size every row has two groups at — the bound reads"
+                + $" {knownReal.Min():P1}..{knownReal.Max():P1} where the answer is 100% and"
+                + $" {knownJunk.Min():P1}..{knownJunk.Max():P1} where it is 0%. THAT IS THE"
+                + " INSTRUMENT'S WHOLE RANGE at this size, and it is not 0 to 1.");
+
+            foreach ((string name, _, _) in rows.Skip(2))
+            {
+                IReadOnlyList<double> band = read[(widest, name)];
+
+                bool overlapsJunk = band.Min() <= knownJunk.Max() && band.Max() >= knownJunk.Min();
+                bool underReal = band.Max() < knownReal.Min();
+
+                Console.WriteLine(
+                    $"      {name,-26} {band.Min():P1}..{band.Max():P1} —"
+                    + (overlapsJunk ? " OVERLAPS THE KNOWN JUNK BAND" : " is outside the known junk band")
+                    + (underReal ? " and is entirely BELOW the known real band" : " and reaches into the known real band"));
+            }
+
+            // AND THE SIZE ACTUALLY BEING BOUNDED, which is 274's outstanding item. The maps' own
+            // half cannot supply two groups of 2671, so the ceiling is read at the largest size
+            // it can supply one — and one group is reported as one group.
+            IReadOnlyList<double> ceiling = read[(ladder[^1], rows[0].Name)];
+
+            if (ceiling.Count > 0)
+            {
+                Console.WriteLine(
+                    $"    AND AT {ladder[^1]}, the largest a held-out half of {real.Blocks.Count}"
+                    + $" can supply, real script reads {ceiling.Max():P1} — a ceiling from"
+                    + $" {ceiling.Count} group(s), which is not a band.");
+            }
+
+            // AND A MIXTURE WHOSE SHARE IS KNOWN. The bound's whole claim is that total variation
+            // is linear in a mixture, and nothing has ever handed it a mixture it made itself.
+            // Two marks on a ruler say what its ends read; this says what everything between them
+            // reads. Only where the junk lives in the SAME image as the real blocks — a group is
+            // tallied from one file, and the reversal is a different one.
+            if (!ReferenceEquals(junkFrom, rom))
+            {
+                Console.WriteLine(
+                    "    NO MIXTURE ROW: this junk model is a different image, and a group is"
+                    + " tallied from one file.");
+
+                continue;
+            }
+
+            Console.WriteLine();
+            Console.WriteLine(
+                $"    THE SCALE, AND MIXTURES MADE HERE TO CHECK IT. Groups of {widest}, each"
+                + " so many known-real blocks and the rest known junk, in a share this command"
+                + " chose. 268's bound divides by d(junk, real) and so puts real script at NOUGHT"
+                + " from the reference; the held-out half says where that end really is, and a"
+                + " mixture of known share says whether reading between the two measured ends"
+                + " works.");
+            Console.WriteLine();
+            Console.WriteLine(
+                $"      {"population",-30} {"distance",8} {"268's bound",12} {"between the ends",17}"
+                + $" {"off by",8}   groups");
+
+            double realEnd = double.NaN;
+            double junkEnd = double.NaN;
+
+            var scale = new List<(string Name, IReadOnlyList<uint> Blocks, int Groups, double Truth)>();
+
+            foreach (int pct in new[] { 0, 25, 50, 75, 100 })
+            {
+                int fromReal = widest * pct / 100;
+                int fromJunk = widest - fromReal;
+
+                int groups = Math.Min(
+                    fromReal == 0 ? int.MaxValue : realTest.Count / fromReal,
+                    fromJunk == 0 ? int.MaxValue : junkTest.Count / fromJunk);
+
+                var mixed = new List<uint>();
+
+                for (var g = 0; g < groups; g++)
+                {
+                    mixed.AddRange(realTest.Skip(g * fromReal).Take(fromReal));
+                    mixed.AddRange(junkTest.Skip(g * fromJunk).Take(fromJunk));
+                }
+
+                scale.Add(($"{pct,3}% real, {fromReal} + {fromJunk}", mixed, groups, pct / 100.0));
+            }
+
+            // THE TWO ENDS FIRST, off the same construction as every row between them, so the
+            // scale and the things read against it cannot come from different measurements.
+            realEnd = WhatABlockIsMadeOf.Distance(
+                WhatABlockIsMadeOf.In(rom, scale[^1].Blocks), reference);
+            junkEnd = WhatABlockIsMadeOf.Distance(
+                WhatABlockIsMadeOf.In(rom, scale[0].Blocks), reference);
+
+            var offBy = new List<double>();
+            var readAs = new List<(string Name, double Says)>();
+
+            foreach ((string name, IReadOnlyList<uint> blocks, int groups, double truth) in
+                     scale.Concat(
+                         rows.Skip(2).Select(
+                             r => (r.Name, r.Blocks, r.Blocks.Count / widest, double.NaN))))
+            {
+                HowOftenEachCommand mix = WhatABlockIsMadeOf.In(rom, blocks);
+
+                double distance = WhatABlockIsMadeOf.Distance(mix, reference);
+
+                double says = WhatABlockIsMadeOf.BetweenTheEnds(distance, realEnd, junkEnd);
+
+                if (double.IsNaN(truth)) readAs.Add((name, says));
+                else offBy.Add(Math.Abs(says - truth));
+
+                Console.WriteLine(
+                    $"      {name,-30} {distance,8:F3}"
+                    + $" {WhatABlockIsMadeOf.HowMuchCouldBeReal(mix, reference, junk),12:P1}"
+                    + $" {says,17:P1}"
+                    + $" {(double.IsNaN(truth) ? "-" : $"{says - truth:+0.0 %;-0.0 %;0.0 %}"),8}"
+                    + $"   {groups}");
+            }
+
+            Console.WriteLine(
+                $"      the scale runs {realEnd:F3} (real script against ANOTHER SAMPLE OF ITSELF)"
+                + $" to {junkEnd:F3}, not 0 to {junkEnd:F3} — and the 50% row is what says whether"
+                + " reading between them is worth anything.");
+
+            // AND THE ERROR BAR, WHICH IS THE WORST MIXTURE ROW. A reading is worth what its
+            // known cases are close: the mixtures are the only rows here whose answer was fixed
+            // before the arithmetic ran, so the largest miss among them is what any other row
+            // could be out by. 268's bound reads NOUGHT on the 50% row, and a bound that says
+            // "at most nothing" about a population that is half real script is not a bound.
+            double bar = offBy.Count == 0 ? double.NaN : offBy.Max();
+
+            Console.WriteLine(
+                $"      THE WORST MIXTURE ROW IS OFF BY {bar:P1}, and that is the error bar under"
+                + " every row: "
+                + string.Join(
+                    ", ",
+                    readAs.Select(r => $"{r.Name} reads {r.Says:P1}, so under about {r.Says + bar:P1}")));
+            Console.WriteLine(
+                $"      268's OWN COLUMN READS {WhatABlockIsMadeOf.HowMuchCouldBeReal(WhatABlockIsMadeOf.In(rom, scale[2].Blocks), reference, junk):P1}"
+                + " ON THE 50% ROW — a population that is half real script by construction. That is"
+                + " what its \"at most 3.1%\" is worth.");
+
+            calibrated.Add((junkName, bar, readAs));
+        }
+
+        // AND THE CHOICE, MADE ON THE CALIBRATION. A junk model that reads a 25/50/75 mixture
+        // back to within a few points is one this file's accidents look like; one that reads 75%
+        // as 49.5% is not, however tidy its answer. The answer column is printed beside the
+        // calibration column on purpose — the reader can see the two are not being confused.
+        if (calibrated.Count > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine(
+                "  WHICH JUNK MODEL, DECIDED BY THE MIXTURES AND NOT BY THE ANSWER (79). The"
+                + " calibration column is the worst miss on a share this command fixed in advance;"
+                + " the answer columns are what the same scale then reads:");
+            Console.WriteLine();
+            Console.WriteLine(
+                $"    {"junk model",-24} {"worst mixture miss",19}"
+                + string.Join("", calibrated[0].Read.Select(r => $"   {r.Name}".PadRight(29)[..29])));
+
+            foreach ((string name, double bar, IReadOnlyList<(string Name, double Says)> says) in
+                     calibrated.OrderBy(c => c.Bar))
+            {
+                Console.WriteLine(
+                    $"    {name,-24} {bar,19:P1}"
+                    + string.Join("", says.Select(r => $"   {r.Says,7:P1}".PadRight(29)[..29])));
+            }
+
+            (string best, double bestBar, IReadOnlyList<(string Name, double Says)> bestRead) =
+                calibrated.MinBy(c => c.Bar);
+
+            double barSpread = calibrated.Max(c => c.Bar) - calibrated.Min(c => c.Bar);
+
+            double answerSpread =
+                calibrated.SelectMany(c => c.Read).Max(r => r.Says)
+                - calibrated.SelectMany(c => c.Read).Min(r => r.Says);
+
+            Console.WriteLine();
+            Console.WriteLine(
+                $"    the best-calibrated is {best} at {bestBar:P1}, and what it reads is "
+                + string.Join(
+                    "; ",
+                    bestRead.Select(r => $"{r.Name} {r.Says:P1} (so under about {r.Says + bestBar:P1})"))
+                + ".");
+
+            // AND WHETHER THAT CHOICE MEANS ANYTHING. If every model is calibrated about as
+            // badly and their answers are far apart, the calibration has not chosen and picking
+            // the lowest is picking by the answer — which is the thing 79 forbids.
+            Console.WriteLine(
+                barSpread < answerSpread
+                    ? $"    BUT THE CALIBRATION DOES NOT DISCRIMINATE: the four models' worst-miss"
+                        + $" column spans {barSpread:P1} while their ANSWERS span {answerSpread:P1}."
+                        + $" Choosing the lowest answer on a {barSpread:P1} difference in calibration"
+                        + " is choosing by the answer. What this reading supports is the whole span."
+                    : $"    and the calibration DOES choose: the worst-miss column spans"
+                        + $" {barSpread:P1} against answers spanning {answerSpread:P1}.");
+        }
+
+        // AND THE ORDER THE GROUPS ARE CUT IN. 273's band takes CONSECUTIVE groups and its own
+        // documentation says that is the conservative choice because neighbours in the file are
+        // alike. Every caller reached it with a list built out of a HashSet, so "consecutive" has
+        // meant "consecutive in whatever order the set enumerated" — which is not what the
+        // argument is about. This is the size of that.
+        Console.WriteLine();
+        Console.WriteLine(
+            "  AND THE ORDER THE GROUPS ARE CUT IN. A band is taken off CONSECUTIVE groups and"
+            + " that is only the conservative choice 273 claimed if consecutive means neighbours"
+            + " in the CARTRIDGE. Every population reached it out of a HashSet. Both orders, same"
+            + " populations, same size:");
+        Console.WriteLine();
+
+        IReadOnlyList<APopulation> asBuilt = ThePopulations(rom, opened, named, inFileOrder: false);
+
+        int common = mixes.Min(m => m.Blocks.Count) / 4;
+
+        Console.WriteLine(
+            $"    {"population",-26} {$"groups of {common}, set order",30} {"in FILE order",22}");
+
+        for (var i = 0; i < mixes.Count; i++)
+        {
+            IReadOnlyList<double> was =
+                WhatABlockIsMadeOf.SamplingBand(asBuilt[i].From, asBuilt[i].Blocks, common);
+            IReadOnlyList<double> now =
+                WhatABlockIsMadeOf.SamplingBand(mixes[i].From, mixes[i].Blocks, common);
+
+            Console.WriteLine(
+                $"    {mixes[i].Name,-26} {(was.Count == 0 ? "too few" : $"{was.Min():F3}..{was.Max():F3}"),30}"
+                + $" {(now.Count == 0 ? "too few" : $"{now.Min():F3}..{now.Max():F3}"),22}");
+        }
+
+        Console.WriteLine();
+    }
+
+    /// <summary>
+    /// One body of blocks, the image it was read from, and what it is made of.
+    /// </summary>
+    /// <remarks>
+    /// EACH POPULATION KEEPS ITS BLOCK LIST AND THE IMAGE IT WAS READ FROM, so the sampling band
+    /// (273) and the bound (275) can be asked of it. A distance is not readable without one: the
+    /// 38 sat 0.601 from the maps' own where a 38-block sample of the maps' OWN scripts sits at
+    /// 0.220-0.360.
+    /// </remarks>
+    private sealed record APopulation(
+        string Name, HowOftenEachCommand Mix, Rom From, IReadOnlyList<uint> Blocks);
+
+    /// <summary>
+    /// Every script the map scan opens and every block reachable from one — the population this
+    /// project trusts, built in ONE place because two readings need it (224).
+    /// </summary>
+    private static (List<SetsAFlag> Scan, HashSet<uint> Opened) TheMapScansBlocks(Rom rom)
+    {
+        MapLibrary library = MapLibrary.Open(rom);
+        List<SetsAFlag> scan = [.. library.All().SelectMany(EveryScriptOn)];
+
+        // Walked the same way as the whole-image population, so the two differ for one reason:
+        // where they started.
+        var opened = new HashSet<uint>();
+
+        foreach (SetsAFlag script in scan)
+        {
+            foreach (uint block in ScriptReader.Reachable(rom, script.Address)) opened.Add(block);
+        }
+
+        return (scan, opened);
+    }
+
+    /// <summary>Every block reachable from any of these entries, in the given image.</summary>
+    private static HashSet<uint> BlocksFrom(Rom rom, IEnumerable<uint> from)
+    {
+        var found = new HashSet<uint>();
+
+        foreach (uint at in from)
+        {
+            foreach (uint block in ScriptReader.Reachable(rom, at)) found.Add(block);
+        }
+
+        return found;
+    }
+
+    /// <summary>
+    /// The four populations 268's reading is made of, built in ONE place.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>--operands-everywhere</c> and <c>--the-ruler</c> both need them and 224's fault is what
+    /// happens when two readings roll their own copy of the same list: five copies of "every
+    /// script on a map" disagreed with each other for three milestones.
+    /// </para>
+    /// <para>
+    /// <paramref name="inFileOrder"/> decides whether each list comes back sorted by address.
+    /// It matters to nothing but the sampling band, and to that it matters a great deal: a band
+    /// is taken off CONSECUTIVE groups, and consecutive is only the conservative choice 273
+    /// claimed if consecutive means "neighbours in the cartridge". Out of a <c>HashSet</c> it
+    /// does not.
+    /// </para>
+    /// </remarks>
+    private static IReadOnlyList<APopulation> ThePopulations(
+        Rom rom, HashSet<uint> opened, TheImagesScripts named, bool inFileOrder)
+    {
+        List<uint> alone =
+            [.. named.Entries.Where(e => named.InARunOf.GetValueOrDefault(e) <= 1)];
+
+        Rom backwards = new(rom.Span.ToArray().Reverse().ToArray());
+
+        var mixes = new List<APopulation>();
+
+        void Add(string name, Rom from, IEnumerable<uint> blocks)
+        {
+            IReadOnlyList<uint> list =
+                inFileOrder ? WhatABlockIsMadeOf.InFileOrder(blocks) : [.. blocks];
+
+            mixes.Add(new APopulation(name, WhatABlockIsMadeOf.In(from, list), from, list));
+        }
+
+        Add("the maps' own scripts", rom, opened);
+        Add("outside, named ALONE", rom, BlocksFrom(rom, alone.Where(e => !opened.Contains(e))));
+        Add(
+            "outside, named IN A TABLE",
+            rom,
+            BlocksFrom(
+                rom,
+                named.Entries.Where(
+                    e => !opened.Contains(e) && named.InARunOf.GetValueOrDefault(e) >= 5)));
+        Add("the reversed image", backwards, EveryScriptInTheImage.In(backwards).Blocks);
+
+        return mixes;
+    }
+
+    /// <summary>
     /// The operand sweep asked of the whole file rather than of the 0.6% the maps point at.
     /// </summary>
     private static void WriteOperandsEverywhere(Rom rom)
@@ -11104,17 +11597,7 @@ public static class Program
         Console.WriteLine("EVERY OPERAND, ASKED OF THE WHOLE IMAGE");
         Console.WriteLine();
 
-        MapLibrary library = MapLibrary.Open(rom);
-        List<SetsAFlag> scan = [.. library.All().SelectMany(EveryScriptOn)];
-
-        // The map scan's own blocks, walked the same way, so the two populations differ for one
-        // reason: where they started.
-        var opened = new HashSet<uint>();
-
-        foreach (SetsAFlag script in scan)
-        {
-            foreach (uint block in ScriptReader.Reachable(rom, script.Address)) opened.Add(block);
-        }
+        (List<SetsAFlag> scan, HashSet<uint> opened) = TheMapScansBlocks(rom);
 
         (byte Code, int At) calibration = (0x21, 0);
 
@@ -11218,44 +11701,12 @@ public static class Program
         // variables only compiled code writes, and bytes that are not scripts at all. The command
         // mix tells them apart, and it needs no outside knowledge — the maps' own scripts are one
         // column and the reversed image is the other.
-        HashSet<uint> BlocksFrom(IEnumerable<uint> from)
-        {
-            var found = new HashSet<uint>();
-
-            foreach (uint at in from)
-            {
-                foreach (uint block in ScriptReader.Reachable(rom, at)) found.Add(block);
-            }
-
-            return found;
-        }
-
-        List<uint> alone =
-            [.. named.Entries.Where(e => named.InARunOf.GetValueOrDefault(e) <= 1)];
-
-        Rom backwards = new(rom.Span.ToArray().Reverse().ToArray());
-
-        // EACH POPULATION KEEPS ITS BLOCK LIST AND THE IMAGE IT WAS READ FROM, so the sampling
-        // band (273) can be asked of it. A distance is not readable without one: the 38 sat 0.601
-        // from the maps' own where a 38-block sample of the maps' OWN scripts sits at 0.220-0.360.
-        var mixes = new List<(string Name, HowOftenEachCommand Mix, Rom From, IReadOnlyList<uint> Blocks)>();
-
-        void Add(string name, Rom from, IEnumerable<uint> blocks)
-        {
-            List<uint> list = [.. blocks];
-
-            mixes.Add((name, WhatABlockIsMadeOf.In(from, list), from, list));
-        }
-
-        Add("the maps' own scripts", rom, opened);
-        Add("outside, named ALONE", rom, BlocksFrom(alone.Where(e => !opened.Contains(e))));
-        Add(
-            "outside, named IN A TABLE",
-            rom,
-            BlocksFrom(
-                named.Entries.Where(
-                    e => !opened.Contains(e) && named.InARunOf.GetValueOrDefault(e) >= 5)));
-        Add("the reversed image", backwards, EveryScriptInTheImage.In(backwards).Blocks);
+        // IN FILE ORDER (275). Every band below is taken off CONSECUTIVE groups and that is only
+        // the conservative choice 273 argued for if consecutive means neighbours in the
+        // CARTRIDGE. Until 275 these lists arrived out of a HashSet, so it did not, and the
+        // maps' own band at groups of 114 was 0.163..0.425 where in file order it is 0.156..0.703.
+        // `--the-ruler` prints both orders side by side.
+        List<APopulation> mixes = [.. ThePopulations(rom, opened, named, inFileOrder: true)];
 
         Console.WriteLine();
         Console.WriteLine(
@@ -11393,6 +11844,13 @@ public static class Program
                         + $" ({band.Count} group(s)) — give that back and it is at most {generous:P1}."
                         + $" {at} is SMALLER than {blocks.Count} and a smaller sample is noisier, so that is"
                         + " an over-correction and the true bound is between the two.");
+            Console.WriteLine(
+                "        BOTH NUMBERS ON THIS ROW ARE SUPERSEDED (275). Subtracting a band from"
+                + " the numerator corrects the wrong thing: the bound divides by d(junk, real) and"
+                + " so puts real script at NOUGHT from the reference, where a held-out half of the"
+                + " maps' own scripts is a measured distance away. `--the-ruler` measures both"
+                + " ends of that scale and checks it against mixtures of known share — and this"
+                + " bound reads NOUGHT on a group that is half real script by construction.");
         }
 
         Console.WriteLine();
@@ -14262,16 +14720,32 @@ public static class Program
             // sampling noise alone and the number above is meaningless without it (82). The
             // maps' own sites, in consecutive groups of the same size, each against their own
             // whole: that is what a population of this size scores when it IS the real thing.
-            IReadOnlyList<double> band =
+            // IN FILE ORDER (275). A band is taken off CONSECUTIVE groups and 273's own
+            // documentation says that is the conservative choice because neighbours in the file
+            // are alike — which is true of neighbours in the CARTRIDGE and not of neighbours in
+            // whatever order a dictionary enumerated. This list arrives keyed by flag number.
+            // Both orders are printed and the VERDICT is read off the file-order one, because
+            // that is the band the argument for consecutive groups is about.
+            IReadOnlyList<double> band = WhatABlockIsMadeOf.SamplingBand(
+                rom, WhatABlockIsMadeOf.InFileOrder(openedSites), unnamedSites.Count);
+
+            IReadOnlyList<double> junkBand = WhatABlockIsMadeOf.SamplingBand(
+                backwards, WhatABlockIsMadeOf.InFileOrder(reversedSites), unnamedSites.Count);
+
+            IReadOnlyList<double> asBuilt =
                 WhatABlockIsMadeOf.SamplingBand(rom, openedSites, unnamedSites.Count);
 
-            IReadOnlyList<double> junkBand =
+            IReadOnlyList<double> junkAsBuilt =
                 WhatABlockIsMadeOf.SamplingBand(backwards, reversedSites, unnamedSites.Count);
 
             Console.WriteLine(
                 $"        a sample of {unnamedSites.Count} drawn from the maps' own scores {band.Min():F3}..{band.Max():F3}"
                 + $" from the whole ({band.Count} group(s)); one drawn from the reversal's scores"
                 + $" {junkBand.Min():F3}..{junkBand.Max():F3} from ITS whole ({junkBand.Count})");
+            Console.WriteLine(
+                $"        IN FILE ORDER, which is what makes consecutive groups conservative (275)."
+                + $" Cut in the order the sites happened to be listed they are"
+                + $" {asBuilt.Min():F3}..{asBuilt.Max():F3} and {junkAsBuilt.Min():F3}..{junkAsBuilt.Max():F3}");
 
             // AND THE VERDICT OFF THE BANDS, not off the two whole-population distances. The
             // 0.504 between the maps' own and the reversal is measured on hundreds and thousands
@@ -17760,6 +18234,8 @@ public static class Program
         /// <summary>Every floor in this project, asked of a control that keeps the structure.</summary>
         public bool TheControl { get; private init; }
 
+        public bool TheRuler { get; private init; }
+
         /// <summary>
         /// With <c>--play</c>: every time the run turned these FLAGS on or off, with the script
         /// and the pass. The flag half of <c>--trace</c>, which watches a variable.
@@ -17991,6 +18467,7 @@ public static class Program
             var theWayBack = false;
             var operandsEverywhere = false;
             var theControl = false;
+            var theRuler = false;
             var whichWay = false;
             var sea = false;
             var operands = false;
@@ -18301,6 +18778,9 @@ public static class Program
                         break;
                     case "--the-control":
                         theControl = true;
+                        break;
+                    case "--the-ruler":
+                        theRuler = true;
                         break;
                     case "--moved":
                     {
@@ -18667,6 +19147,7 @@ public static class Program
                 Operands = operands,
                 OperandsEverywhere = operandsEverywhere,
                 TheControl = theControl,
+                TheRuler = theRuler,
                 Moved = moved,
                 Slots = slots,
                 ReadFrom = readFrom,

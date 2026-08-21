@@ -105,44 +105,93 @@ public static class WhatABlockIsMadeOf
     /// </para>
     /// </remarks>
     /// <summary>
-    /// How far a sample of <paramref name="howMany"/> blocks drawn from one population sits from
-    /// that whole population — the sampling band for a count that small.
+    /// The population cut into consecutive disjoint groups of <paramref name="howMany"/> blocks,
+    /// each tallied — the one place a group is ever made.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// <b>A distance measured on few blocks is inflated by sampling noise alone</b>, and a
-    /// population of thirty-odd blocks compared against one of hundreds cannot be read without
-    /// knowing by how much. This splits the big population into consecutive groups of
-    /// <paramref name="howMany"/> and gives each group's distance from the whole.
-    /// </para>
     /// <para>
     /// <b>Consecutive rather than drawn at random</b>, for the reason 269 gave about rotation
     /// offsets: a control that cannot be reproduced from the file alone is a control nobody can
     /// check, and this project has no source of randomness it is willing to put in a measurement.
     /// Consecutive groups are, if anything, the conservative choice — blocks near each other in
     /// the file are more alike, so a group of neighbours is FARTHER from the whole than a
-    /// scattered sample would be, and the band this returns is wider than the true one.
+    /// scattered sample would be, and any band taken off them is wider than the true one.
+    /// </para>
+    /// <para>
+    /// <b>That argument is about the FILE and it is only true if the caller hands the population
+    /// over in file order</b> (275). A list that came out of a <c>HashSet</c> is in whatever order
+    /// the set happened to enumerate, and neighbours in it are not neighbours in the cartridge —
+    /// the groups are then a scatter and the band is NARROWER than the documentation claims, which
+    /// is the unsafe direction. <c>InFileOrder</c> is how a caller says so, and
+    /// <c>--the-ruler</c> prints the band both ways so the size of that choice is visible.
+    /// </para>
+    /// <para>
+    /// <b>Two questions are asked of these groups and they share this loop</b> — a band
+    /// (<c>SamplingBand</c>) and the bound (<c>BoundPerGroup</c>). 258's fault was a second copy
+    /// of a walk written for a second question, which left the suite guarding the other copy.
     /// </para>
     /// </remarks>
-    public static IReadOnlyList<double> SamplingBand(
+    public static IEnumerable<HowOftenEachCommand> Groups(
         Rom rom, IReadOnlyList<uint> population, int howMany)
     {
         // Nought would make the step below no step at all. A sample LARGER than the population
         // needs no check: the loop's own condition never admits a group, which a break aimed at
         // the removed check proved by coming back green (219).
-        if (howMany <= 0) return [];
-
-        HowOftenEachCommand whole = In(rom, population);
-
-        var found = new List<double>();
+        if (howMany <= 0) yield break;
 
         for (int at = 0; at + howMany <= population.Count; at += howMany)
         {
-            found.Add(Distance(In(rom, population.Skip(at).Take(howMany)), whole));
+            yield return In(rom, population.Skip(at).Take(howMany));
         }
-
-        return [.. found.Order()];
     }
+
+    /// <summary>A population in the order the cartridge holds it, so a group is neighbours.</summary>
+    public static IReadOnlyList<uint> InFileOrder(IEnumerable<uint> population) =>
+        [.. population.Order()];
+
+    /// <summary>
+    /// How far a sample of <paramref name="howMany"/> blocks drawn from one population sits from
+    /// that whole population — the sampling band for a count that small.
+    /// </summary>
+    /// <remarks>
+    /// <b>A distance measured on few blocks is inflated by sampling noise alone</b>, and a
+    /// population of thirty-odd blocks compared against one of hundreds cannot be read without
+    /// knowing by how much. This gives each consecutive group's distance from the whole.
+    /// </remarks>
+    public static IReadOnlyList<double> SamplingBand(
+        Rom rom, IReadOnlyList<uint> population, int howMany)
+    {
+        HowOftenEachCommand whole = In(rom, population);
+
+        return [.. Groups(rom, population, howMany).Select(g => Distance(g, whole)).Order()];
+    }
+
+    /// <summary>
+    /// The bound asked of every consecutive group of <paramref name="howMany"/> blocks, against a
+    /// reference and a junk model that hold none of them.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>This is what makes the bound readable</b> (275). <c>HowMuchCouldBeReal</c> on a whole
+    /// population is one number with nothing to compare it against, and 273 and 274 both found a
+    /// distance whose whole answer was its sample size. Asked group by group it has a spread; run
+    /// on a population whose answer is KNOWN — a held-out half of the real thing, which must come
+    /// back 1, and a held-out slice of the junk, which must come back 0 — that spread is a ruler
+    /// with both ends marked, and the size the ruler can be marked at is a measurement rather
+    /// than an argument.
+    /// </para>
+    /// <para>
+    /// The reference must contain none of the blocks being scored, or a group is being compared
+    /// against a whole it is part of and is closer to it for that reason alone.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<double> BoundPerGroup(
+        Rom rom,
+        IReadOnlyList<uint> population,
+        int howMany,
+        HowOftenEachCommand real,
+        HowOftenEachCommand junk) =>
+        [.. Groups(rom, population, howMany).Select(g => HowMuchCouldBeReal(g, real, junk)).Order()];
 
     /// <summary>
     /// The widest sampling band this population can support with at least
@@ -171,4 +220,24 @@ public static class WhatABlockIsMadeOf
 
         return apart == 0 ? 0 : Math.Max(0, 1 - (Distance(mixed, real) / apart));
     }
+
+    /// <summary>
+    /// The same share read between two ends that were both MEASURED, rather than between nought
+    /// and the junk's distance.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b><c>HowMuchCouldBeReal</c> puts real script at distance nought from the reference and it
+    /// is not there</b> (275). The reference is a sample of real script and so is anything being
+    /// scored against it, so two halves of the maps' own scripts sit a real distance apart — and
+    /// every reading that divides by <c>d(junk, real)</c> alone is measuring off a scale whose top
+    /// mark is somewhere it never checked. A held-out half says where that mark is.
+    /// </para>
+    /// <para>
+    /// Nought when the two ends are the wrong way round or on top of each other: a scale with no
+    /// length cannot be read, and returning something from one would be inventing it.
+    /// </para>
+    /// </remarks>
+    public static double BetweenTheEnds(double distance, double realEnd, double junkEnd) =>
+        junkEnd <= realEnd ? 0 : Math.Clamp((junkEnd - distance) / (junkEnd - realEnd), 0, 1);
 }

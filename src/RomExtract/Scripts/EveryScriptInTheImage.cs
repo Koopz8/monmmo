@@ -191,7 +191,30 @@ public static class EveryScriptInTheImage
     /// </para>
     /// </remarks>
     public static int NudgedFloor(Rom rom, IEnumerable<uint> pointed, int by) =>
-        pointed.Count(at => ScriptReader.ReadsAsAScript(rom, (uint)(at + by)));
+        Nudged(rom, pointed, by).Count;
+
+    /// <summary>
+    /// The nudge as a POPULATION rather than a count: the same pointers, aimed
+    /// <paramref name="by"/> bytes off, and the ones that still decode.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>A count cannot be asked what it is made of</b> (275). The nudge has been this project's
+    /// floor for anything that follows a pointer since 269 and it has only ever produced a
+    /// number; the mixture bound needs a junk model it can tally, and the reversed image — the
+    /// only one it has ever had — is the one control 268 showed to be blind here, and supplies
+    /// 456 blocks where this supplies thousands.
+    /// </para>
+    /// <para>
+    /// Same loop as <c>NudgedFloor</c>, which now counts what this returns. Two questions about
+    /// one nudge, one place that performs it (258).
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<uint> Nudged(Rom rom, IEnumerable<uint> pointed, int by) =>
+        [
+            .. pointed.Select(at => (uint)(at + by))
+                .Where(at => ScriptReader.ReadsAsAScript(rom, at)),
+        ];
 
     /// <summary>Every aligned address something points at, decoding or not — the nudge's list.</summary>
     public static IReadOnlyList<uint> Aligned(Rom rom)
