@@ -11692,6 +11692,56 @@ public static class Program
                     + $" {gates.Behind(gate.Flag).Count} object(s) —"
                     + $" {string.Join(", ", gates.Behind(gate.Flag).Take(4).Select(h => $"{h.MapId} p{h.LocalId}"))}");
             }
+
+            // AND THE OBJECT SIDE, WHICH NOTHING HAS EVER PRINTED.
+            //
+            // Every line above counts GATES. The prompt has quoted four numbers about what
+            // those gates HOLD — "62 gates hold 240 people", "146 trees and rocks", "158
+            // objects" — since milestone 190, and no instrument in this repository printed one
+            // of them. A number nothing computes cannot come back wrong, which is worse than a
+            // number that is stale (231's rule, and this is the debt it left marked).
+            HashSet<int> obstacleFlags = [.. asked.Select(g => g.Flag)];
+
+            List<int> ordinary =
+                [.. gates.All.Select(g => g.Flag).Where(f => !obstacleFlags.Contains(f))];
+
+            WhatGatesHold all = WhatTheGatesHold.Of(gates, gates.All.Select(g => g.Flag));
+            WhatGatesHold trees = WhatTheGatesHold.Of(gates, obstacles.Select(g => g.Flag));
+            WhatGatesHold boulders = WhatTheGatesHold.Of(gates, staying.Select(g => g.Flag));
+            WhatGatesHold everyObstacle = WhatTheGatesHold.Of(gates, obstacleFlags);
+            WhatGatesHold rest = WhatTheGatesHold.Of(gates, ordinary);
+
+            Console.WriteLine();
+            Console.WriteLine("        AND WHAT THE GATES HOLD, which is the half nothing printed:");
+            Console.WriteLine(
+                $"          {all.Gates,4} gating flag(s) hold {all.Objects} object(s) in all"
+                + $" — {all.HoldingNothing} of them hold none, which is the boat's");
+            Console.WriteLine(
+                $"          {trees.Gates,4} hold a tree or a rock and take it off the map —"
+                + $" {trees.Objects} object(s)");
+            Console.WriteLine(
+                $"          {boulders.Gates,4} hold a boulder and never take it off —"
+                + $" {boulders.Objects} object(s)");
+            Console.WriteLine(
+                $"          {everyObstacle.Gates,4} obstacle gate(s) between them —"
+                + $" {everyObstacle.Objects} object(s)");
+            Console.WriteLine(
+                $"          {rest.Gates,4} hold anything else — {rest.Objects} object(s)");
+
+            // AND THE SHAPE OF IT, because a total says nothing about whether one gate holds
+            // thirty-two people or thirty-two gates hold one each — and 190's "62 gates hold
+            // 240 people" is a claim about exactly that.
+            Console.WriteLine(
+                $"          of the {rest.Gates} others, "
+                + string.Join(
+                    ", ",
+                    WhatTheGatesHold.Shape(gates, ordinary).Select(s => $"{s.Gates} {s.Band}")));
+
+            Console.WriteLine(
+                $"          {rest.HoldingSeveral} of them hold MORE THAN ONE —"
+                + $" {rest.InTheSeveral} object(s) between them. 190 said \"62 gates hold 240"
+                + " people\" and no split this produces is that, so the number is WITHDRAWN"
+                + " rather than corrected — nothing ever computed it and nothing reproduces it");
         }
 
         foreach ((ShutBecause why, int count) in WhyTheGatesAreShut.Counted(shut))
