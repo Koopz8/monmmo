@@ -709,6 +709,19 @@ Traps worth carrying:
     what names their own blocks is a literal in code, which the climb had said per site since 191.
     **Before believing a proximity test, ask what it would find if the thing were merely nearby.**
 
+111. **A SIDE CAN CARRY MORE THAN ONE NEIGHBOUR** (285). `ConnectionOn` returned
+    `Connections.FirstOrDefault(c => c.Side == side)`. Exactly ONE side in this cartridge carries
+    more than one — `3.60` WATER PATH declares GREEN PATH at offset 0, SIX ISLAND at 40 and
+    `3.61` RUIN VALLEY at 80 off its left edge — so every square stepping west off it was sent to
+    GREEN PATH whatever row it stood on, the arrival landed off GREEN PATH's grid, the walkability
+    check refused it, and **the crossing silently did not happen**. Worth **+7 maps, +1305 squares
+    and +5848 squares that could not get back**, and it moved the floor table's boat rows from 381
+    to 388. **A fault that DELETES an edge reports nothing at all** — look for those where a
+    lookup takes the first of something the format allows several of.
+
+    And it overturned 283 two milestones later: the five DOTTED HOLE signs filed as "a puzzle
+    nothing in the walk solves" are on RUIN VALLEY, which is the third neighbour.
+
 110. **A FLOOR FOR A THREE-BYTE PATTERN MUST SHARE THE HIGH BYTE** (284). `7C LL HH` turns up by
     accident at a rate that depends on HH at least as much as on LL, and this file is 10.5%
     nought. The move sweep's real range scores **ten-fold on sites and twenty on reading on**
@@ -947,7 +960,7 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-284-the-offer-against-a-floor-of-nought.md` first, then `283`, then `282`,
+Read `claude/milestone-285-one-side-three-neighbours.md` first, then `284`, then `283`, then `282`,
 then `281`, then `280`, then `279`, then `278`, then `277`, then `276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
 `250`, `249`, `248`, `247`, `246`, `245`, `244`, `243`,
@@ -955,7 +968,7 @@ then `281`, then `280`, then `279`, then `278`, then `277`, then `276`, then `27
 `238`, `237`,
 `236`, `235`, `234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
-**Fifty-six faults closed and every one was in this project, not on the cartridge.** A walk that
+**Fifty-seven faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
 script" list; a list ranked by a count instead of by what it costs; a party that could not gain
 a level; a roadmap line that called a fix a cost; a continuation that carried flags and not
@@ -1078,7 +1091,11 @@ sweep's floor being a floor for a different pattern** — `7C LL HH`'s accident 
 high byte, this file is 10.5% nought, and the ten-fold and twenty-fold the whole-image windows give
 are **3.0 and 1.9** against the unused half of the bound's own page, so `--who-knows`'s 600 and 101
 are close to noise and the "about 1.0 by accident" it has printed since 191 is 272's fault one
-sweep over.
+sweep over; and at 285 **`ConnectionOn` taking the FIRST connection on a side** — one side in the
+world carries three neighbours, `3.60` WATER PATH's left edge, so every square stepping west off it
+went to the wrong map, arrived off that map's grid and had its crossing dropped without a word:
+**+7 maps, +1305 squares, +5848 that could not get back**, the floor table's boat rows 381 -> 388,
+and 283's "five signs in the DOTTED HOLE that nothing solves" turning out to be this.
 
 `246` is the read that is not a command, and the literal-pool test for whether compiled code holds
 a number — both live inside `--namespaces`, which is now the fullest single instrument in the
@@ -1185,6 +1202,13 @@ And it prints the sampling band THREE ways, because three separate choices move 
 visible from the number: hash order, FILE order (275), and SCATTERED rather than in runs (277). The
 maps' own at groups of 114 goes 0.163..0.425 (hash) to 0.156..0.703 (file order, runs) to
 **0.068..0.185** (file order, scattered).
+
+`--the-way-back` is the second column (265, extended at 285): six settings now — the three walking
+ones, **RIDING THE LIFTS** (MODELLED: every door that names a sentinel room is a door out of it),
+the boat, and **the control that takes ONE NEIGHBOUR PER SIDE**, which is the rule before 285 and
+the only way to price that fix. It prints the blast radius first (1 side of 1 map, of 116 joins),
+then the rows, then the two subtractions. It also names the LAST STEP IN to the stranded part,
+which is what makes the number a place rather than a claim.
 
 `--the-control` is the floor, re-asked (269) — **and since 270 it asks the jumped-into readings
 against it** (sections 4 and 5): three predicates side by side, WITHIN THE WINDOW as it has stood,
@@ -1575,16 +1599,29 @@ delta to it.
                                             crossing water: nobody ever knew move 57 — a wall
 --play --say-yes                            243 / 234 in 6, party of 4 at 67, 10 of 155 handed twice
 --play --say-yes --in-order                 243 / 236 in 6, party of FIVE at 67, 0 of 152 handed twice
---play --say-yes --boat                     381 / 295 in 7, party of 4 at 77, 11 of 204 handed twice
---play --say-yes --boat --in-order          381 / 296 in 7, party of FIVE at 77, 0 of 200 handed twice
---play --say-yes --boat --surf --in-order   381 / 295 in 5, party of five at 75, 0 of 200 handed twice
+--play --say-yes --boat                     388 / 300 in 7, party of 4 at 78, 11 of 207 handed twice
+--play --say-yes --boat --in-order          388 / 301 in 7, party of FIVE at 78, 0 of 203 handed twice
+--play --say-yes --boat --surf --in-order   388 / 300 in 5, party of five at 75, 0 of 203 handed twice
                                             <- --surf now costs ONE flag, not two (239)
+                                            <- THE BOAT ROWS MOVED AT 285: 381 -> 388 maps. One
+                                               side of one map carries three neighbours and the
+                                               walk took the first (trap 111)
 
 the differences, printed by subtracting two of those same six rows:
   --say-yes  (MODELLED)  +60 maps, +74 flags, +0 passes, -2 party
-  --boat     (MODELLED)  +138 maps, +61 flags (+60 with --in-order on), +1 pass, +0 party
+  --boat     (MODELLED)  +145 maps, +66 flags (+65 with --in-order on), +1 pass, +0 party
+                         <- +138 and +61 until 285
   --in-order (stricter)  +0 maps, +2 flags (+1 with --boat on), +0 passes, +1 party
   --surf     (override)  +0 maps, -1 flag, -2 passes, +0 party
+
+AND THE SECOND COLUMN (265, asked of all six at 285) — reaching and returning are two facts and
+every number above is the first one:
+  --play                    37179 stood,  46 cannot get back on 3 map(s), 3 whole
+  --play --say-yes          69260 stood,  48 cannot get back on 4 map(s), 3 whole
+  --play --say-yes --boat  105105 stood, 284 cannot get back on 7 map(s), 4 whole
+  the --in-order and --surf rows are the same to within two squares. What is left stranded is
+  ICEFALL CAVE (177, entered by eight ledge hops), the three lift cabins, and FUCHSIA's 2 —
+  ledges and sentinel rooms, which are one-way by construction
 
 --play stops because a pass opened nothing new. THE OTHER FIVE STOP BECAUSE THE STATE CAME BACK
 TO ONE IT HAD ALREADY BEEN IN — a CYCLE, not a fixed point (239). That is a third answer and not
@@ -1687,10 +1724,11 @@ BUT THE RUN ALSO TAKES FLAGS BACK: 164 ever on at the floor against the 160 it s
     all four neighbours 0x00 and shut — not a sign board and not a collision reading of that kind
   the 56 unread at the widest: 36 on maps it never reached, 19 walls on maps it walks, and
     EXACTLY ONE nothing could ever stand beside — 10.6 (4,1), 0x0816C153, same at every lever
-  AT NO SETTING (283, `--the-floor`): the floor leaves 204 and the union of the six leaves **55**
-    — 36 reach / 18 walls / 1 the file. The prompt's "191 that run at no setting" was never a
-    number this project could produce. The 36 are 26 on 1.96 MT. EMBER, 5 one apiece in the
-    DOTTED HOLE (1.116-1.120), 3 on 1.62, 1 on 1.102, 1 on 3.61. The 18 are TEN on 12.0 CINNABAR
+  AT NO SETTING (283, `--the-floor`): the floor leaves 204 and the union of the six leaves **49**
+    — 30 reach / 18 walls / 1 the file. The prompt's "191 that run at no setting" was never a
+    number this project could produce. The 30 are 26 on 1.96 MT. EMBER, 3 on 1.62 and 1 on 1.102
+    — **285 took the DOTTED HOLE's five and RUIN VALLEY's one out of this bucket** (it was 55 and
+    36 for two milestones, and the "puzzle nothing solves" was a walker fault). The 18 are TEN on 12.0 CINNABAR
     ISLAND in five adjacent PAIRS, 3 on 10.9, 2 on 14.2, and one each on 1.60 and 35.1 — and
     **0 of the 18 needs a swimmer** (asked again with the water shut; one of the six runs surfs)
   A WIDE SIGN OR A WIDE WALK (283): 1.114 0x08163F5A's 154 reads in one run are **22 records on
@@ -2125,17 +2163,18 @@ still work.**
   * **`--ledges`' axis columns are interior counts too** — 950 of 954 in an east–west run is a
     share of the interior, and what the eight ring squares do has not been asked.
 * **What 265 left.** `--the-way-back` printed the second column for the first time; what is owed:
-  * **What the lifts are worth.** The walk gets into `10.6`, `1.58` and `1.46` and models each as
-    a room with no exit. Joining every floor with a door into a lift is the same upper bound the
-    boat already takes; the difference it makes to reach has never been measured. A lever, and
-    MODELLED.
+  * ~~**What the lifts are worth.**~~ **DONE AT 285** — `ridingTheLifts`, MODELLED: every door
+    that names a sentinel room is a door out of it. Worth **0 maps, +180 squares and 46 squares
+    that could not get back and now can**, which is 46 of the 48 265 reported. The two left are
+    FUCHSIA's ledge pocket.
   * **The other six sentinel rooms** — `0.0`-`0.4` and `2.11` TRAINER TOWER — are entered by a
     script, so `--through-scripted-doors` is the setting that would walk into them. Not run.
   * **The two one-way borders.** `3.50` and `3.51` both name `3.14` THREE ISLAND upward and it
-    names `3.49` downward. Neither is reached without the boat, so what a walker crossing north
-    from either actually comes back onto is unmeasured.
-  * **The floor table has six rows and one column.** 265 asked three settings; `--the-floor`'s own
-    six have not been asked whether they can get back.
+    names `3.49` downward. **Reachable since 285** — the boat rows reach them now — so this is
+    measurable for the first time and was not measured there.
+  * ~~**The floor table has six rows and one column.**~~ **DONE AT 285** — `Attempt` carries
+    `CannotGetBack` and `TheLastStepIn`, and `--the-floor` prints the second column for all six.
+    46 / 48 / 48 / 284 / 284 / 284, and the 284 is ICEFALL CAVE's ledges plus the lift cabins.
 * **`9.6`'s puzzle** — fifteen doors, `0x8004` against `0x8008`. Read far enough to say what it
   is; it is NOT why the run cycles, whatever 239 said.
 * **`3.57 sign (9,43)`** — the LEMONADE example that has been quoted in this prompt for
