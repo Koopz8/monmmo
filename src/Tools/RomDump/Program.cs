@@ -10970,6 +10970,22 @@ public static class Program
         Verdict("or a literal's, sites", by => JumpedIntoUnderANudge.CountOnABlock(rom, index, unopened.Select(s => s.Address), by, orALiteral: true));
         Verdict("or a literal's, boundary flags", by => JumpedIntoUnderANudge.GroupsWithOne(rom, index, boundary, by, onTheBlock: true, orALiteral: true));
 
+        // AND THE WINDOW SHUT (271). 192 is a number nothing derived; with the window at nought
+        // "within the window" is "a jump aims exactly here", and the ladder is a control at every
+        // width rather than only past 192.
+        Console.WriteLine();
+        Console.WriteLine("      and with the window at NOUGHT — a jump aimed exactly at the site:");
+        Console.WriteLine("      control              sites   gated  flags");
+
+        foreach (int by in new[] { 0 }.Concat(JumpedIntoUnderANudge.Nudges))
+        {
+            Console.WriteLine(
+                $"      {(by == 0 ? "as named" : $"+{by} bytes"),-18} "
+                + $"{JumpedIntoUnderANudge.Count(rom, index, unopened.Select(s => s.Address), by, slack: 0),5}"
+                + $"   {JumpedIntoUnderANudge.Count(rom, index, boundary.Select(b => b.Site), by, slack: 0),3}/{boundary.Count,-3}"
+                + $" {JumpedIntoUnderANudge.GroupsWithOne(rom, index, boundary, by, slack: 0),3}/{boundaryFlags}");
+        }
+
         // AND THE ONES THAT PASS THE STRICT TEST ON THE BOUNDARY, BY NAME. A count of one is a
         // name or it is nothing.
         foreach (bool orALiteral in new[] { false, true })
@@ -14028,13 +14044,52 @@ public static class Program
         Console.WriteLine(
             "        unreachable by reading scripts however many are opened");
 
+        // SORTED BY WHAT NAMES THE SCRIPT (271), because "jumped into" is the region and not the
+        // block (270). The opening first, then a jump's own block, then a literal's, then nothing
+        // — and the last bucket is the one 269 showed an accident looks like.
+        NewGameState? opening = NewGameLocator.Locate(rom);
+
+        IReadOnlyList<WhatTheBoundaryIs.Sorted> sorted =
+            WhatTheBoundaryIs.Sort(rom, index, outside, opening?.Address);
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"      the {outside.Count}, by the strongest thing that names the script moving each (271):");
+
+        foreach (IGrouping<WhatTheBoundaryIs.Named, WhatTheBoundaryIs.Sorted> bucket in
+                 sorted.GroupBy(f => f.By).OrderBy(g => g.Key))
+        {
+            string what = bucket.Key switch
+            {
+                WhatTheBoundaryIs.Named.TheOpening =>
+                    $"a command of the NEW-GAME script at 0x{opening?.Address:X8} — set before the first frame, in FlagsAtStart",
+                WhatTheBoundaryIs.Named.AJumpsBlock => "a command of a block a JUMP names, read from the jump's target",
+                WhatTheBoundaryIs.Named.ALiteralsBlock => "a command of a block an aligned LITERAL names — code, or a table",
+                _ => "reads as a script and NOTHING in the file names the block it is on",
+            };
+
+            Console.WriteLine($"        {bucket.Count(),3}  {what}");
+
+            foreach (WhatTheBoundaryIs.Sorted flag in bucket.Take(bucket.Key == WhatTheBoundaryIs.Named.TheOpening ? 0 : 8))
+            {
+                Console.WriteLine(
+                    $"             0x{flag.Flag:X4} at 0x{flag.Site.Offset:X6} {(flag.Site.Sets ? "set" : "clear")}"
+                    + (flag.What is null ? "" : $"  <- {flag.What}"));
+            }
+
+            if (bucket.Key != WhatTheBoundaryIs.Named.TheOpening && bucket.Count() > 8)
+                Console.WriteLine($"             ... and {bucket.Count() - 8} more");
+        }
+
+        Console.WriteLine();
+
         foreach (EverywhereInTheImage.OutsideTheWorld flag in outside.Take(20))
         {
             IReadOnlyList<FlagSite> worst = flag.JumpedInto.Count > 0 ? flag.JumpedInto : flag.Unopened;
 
             Console.WriteLine(
                 $"      0x{flag.Flag:X4}  {flag.Unopened.Count} site(s) nothing opens, "
-                + $"{flag.JumpedInto.Count} of them jumped into — "
+                + $"{flag.JumpedInto.Count} of them within 192 bytes of a jump — "
                 + string.Join(", ", worst.Take(3).Select(s => $"0x{s.Offset:X6} {(s.Sets ? "set" : "clear")}")));
         }
 
