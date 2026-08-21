@@ -6368,6 +6368,7 @@ public static class Program
         foreach (TheFloorTable.Difference difference in TheFloorTable.Differences(rows))
             Console.WriteLine("    " + difference.Said);
 
+        WriteTheWayBackAtEverySetting(world, everyRun);
         WriteTheSignsAtNoSetting(world, everyRun);
 
         Console.WriteLine();
@@ -6375,6 +6376,105 @@ public static class Program
             "  Paste the rows above into the prompt whole. Do not apply a delta to them — the"
             + " deltas are printed from the same six runs, so a table kept by hand from these"
             + " lines is exactly the drift this command exists to end.");
+    }
+
+    /// <summary>
+    /// The second column, asked of all six settings — 265's last owed item (285).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Every reach number in this project is forward.</b> 265 said so, added the second column
+    /// to <c>--the-way-back</c>'s three settings, and ended with "the floor table's six rows have
+    /// not been asked". They are asked here, out of the same six runs the rows come from, on the
+    /// edges each run actually took.
+    /// </para>
+    /// </remarks>
+    private static void WriteTheWayBackAtEverySetting(
+        WorldData world, IReadOnlyList<(TheFloorTable.Setting At, Attempt Played)> everyRun)
+    {
+        Console.WriteLine();
+        Console.WriteLine("  AND THE WAY BACK, AT EVERY SETTING (265, asked at 285)");
+        Console.WriteLine(
+            "    reaching and returning are two facts and every number above is the first one."
+            + " Each row is that run's own squares over that run's own edges.");
+        Console.WriteLine();
+        Console.WriteLine(
+            "      setting                                     stood   cannot get back   maps   whole");
+
+        foreach ((TheFloorTable.Setting at, Attempt played) in everyRun)
+        {
+            var byMap = played.CannotGetBack.GroupBy(s => s.MapId)
+                .Select(g => (Map: g.Key, Stuck: g.Count()))
+                .ToList();
+
+            Dictionary<string, int> stoodOn = played.StoodOn.GroupBy(s => s.MapId)
+                .ToDictionary(g => g.Key, g => g.Count());
+
+            int whole = byMap.Count(m => stoodOn.GetValueOrDefault(m.Map) == m.Stuck);
+
+            Console.WriteLine(
+                $"      {at.Command,-42} {played.StoodOn.Count,6}  {played.CannotGetBack.Count,15}"
+                + $"  {byMap.Count,5}  {whole,6}");
+        }
+
+        // AND WHICH MAPS, over the six — a count that moves with a lever is about the lever and
+        // a set of maps that does not is about the cartridge (211).
+        IReadOnlyList<string> everywhere =
+        [
+            .. everyRun.SelectMany(r => r.Played.CannotGetBack.Select(s => s.MapId))
+                .Distinct()
+                .Order(StringComparer.Ordinal),
+        ];
+
+        Console.WriteLine(
+            $"    {everywhere.Count} map(s) hold a stranded square at ANY setting: "
+            + string.Join(
+                ", ",
+                everywhere.Select(m => $"{m} {world.Find(m)?.Name ?? "?"}")));
+
+        // AND WHERE THE BIG ONE IS. A jump from 48 to six thousand between two rows is either a
+        // fact about the archipelago or a fact about how the boat is modelled, and a count
+        // cannot tell those apart — the maps can.
+        (TheFloorTable.Setting worst, Attempt itsRun) =
+            everyRun.MaxBy(r => r.Played.CannotGetBack.Count);
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    the widest of them — {worst.Command} — by map:");
+
+        Dictionary<string, int> stood = itsRun.StoodOn.GroupBy(s => s.MapId)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        foreach (var group in itsRun.CannotGetBack.GroupBy(s => s.MapId)
+                     .Select(g => (Map: g.Key, Stuck: g.Count()))
+                     .OrderByDescending(g => g.Stuck))
+        {
+            Console.WriteLine(
+                $"      {group.Map,-8} {world.Find(group.Map)?.Name ?? "?",-20} {group.Stuck,6} of"
+                + $" {stood.GetValueOrDefault(group.Map),6}"
+                + (stood.GetValueOrDefault(group.Map) == group.Stuck ? "  the whole map" : ""));
+        }
+
+        // AND THE WAY IN, which is the explanation rather than the finding — 265's own
+        // diagnostic, and the difference between a number and a place somebody can look at.
+        Console.WriteLine(
+            "      the last step in was: "
+            + string.Join(
+                ", ",
+                itsRun.TheLastStepIn.GroupBy(s => s.How)
+                    .Select(g => $"{g.Key} x{g.Count()}")
+                    .OrderByDescending(g => g)));
+
+        foreach (var step in itsRun.TheLastStepIn
+                     .Where(s => s.FromMap != s.ToMap)
+                     .DistinctBy(s => (s.FromMap, s.ToMap))
+                     .OrderBy(s => s.ToMap, StringComparer.Ordinal))
+        {
+            Console.WriteLine(
+                $"        {step.FromMap,-8} {world.Find(step.FromMap)?.Name ?? "?",-20}"
+                + $" {step.From} -{step.How}-> {step.ToMap} ({world.Find(step.ToMap)?.Name ?? "?"})"
+                + $" {step.To}");
+        }
     }
 
     /// <summary>
@@ -8025,22 +8125,58 @@ public static class Program
             + " which is what those levers say by default");
         Console.WriteLine();
 
-        foreach ((string name, int[]? moves, bool people, bool surf) in new[]
+        // THE BLAST RADIUS, read off the world file with nothing walked (285). A side with two
+        // neighbours on it is a side the old rule could only ever answer one way.
+        var crowded = world.Maps
+            .SelectMany(m => m.Connections.GroupBy(c => c.Side)
+                .Where(g => g.Count() > 1)
+                .Select(g => (Map: m, g.Key, Count: g.Count())))
+            .ToList();
+
+        Console.WriteLine(
+            $"  {crowded.Count} side(s) across {crowded.Select(c => c.Map.Id).Distinct().Count()}"
+            + $" map(s) carry more than one neighbour — {world.Maps.Sum(m => m.Connections.Count)}"
+            + " join(s) in the world. Until 285 the walk took the FIRST on each side and the"
+            + " crossing was dropped whenever the arrival fell outside it:");
+
+        foreach ((MapData m, ConnectionSide side, int count) in crowded
+                     .OrderByDescending(c => c.Count).ThenBy(c => c.Map.Id, StringComparer.Ordinal))
         {
-            ("no move, nobody stepping aside", (int[]?)null, false, false),
-            ("with moves, through people", field, true, false),
-            ("with moves, through people, surfing", field, true, true),
+            Console.WriteLine(
+                $"    {m.Id,-8} {m.Name,-20} {side,-5} x{count}  "
+                + string.Join(
+                    ", ",
+                    m.Connections.Where(c => c.Side == side)
+                        .OrderBy(c => c.Offset)
+                        .Select(c => $"{c.MapId} ({world.Find(c.MapId)?.Name ?? "?"}) @{c.Offset}")));
+        }
+
+        Console.WriteLine();
+
+        var rows = new List<(string Name, int Stood, int Maps, int Stuck)>();
+
+        foreach ((string name, int[]? moves, bool people, bool surf, bool lifts, bool boat, bool old) in new[]
+        {
+            ("no move, nobody stepping aside", (int[]?)null, false, false, false, false, false),
+            ("with moves, through people", field, true, false, false, false, false),
+            ("with moves, through people, surfing", field, true, true, false, false, false),
+            ("with moves, through people, surfing, RIDING THE LIFTS (MODELLED)", field, true, true, true, false, false),
+            ("+ the boat (MODELLED) — the only setting that reaches WATER PATH", field, true, true, true, true, false),
+            ("CONTROL: the same run, ONE NEIGHBOUR PER SIDE (the rule before 285)", field, true, true, true, true, true),
         })
         {
             var steps = new List<AStepTaken>();
 
             Reach reach = WorldWalker.Walk(
-                world, first.Id, moves, throughPeople: people, surfing: surf, steps: steps);
+                world, first.Id, moves, throughPeople: people, surfing: surf, steps: steps,
+                ridingTheBoat: boat, ridingTheLifts: lifts, firstOnEachSide: old);
 
             var stood = reach.Stood.Select(s => new Somewhere(s.MapId, s.Square)).ToList();
 
             IReadOnlyList<Somewhere> stranded = TheWayBack.Stranded(
                 stood, steps.Select(s => (s.From, s.To)), reach.Start);
+
+            rows.Add((name, stood.Count, reach.Maps.Count, stranded.Count));
 
             Console.WriteLine($"    {name}");
             Console.WriteLine(
@@ -8113,6 +8249,40 @@ public static class Program
 
             Console.WriteLine();
         }
+
+        // AND THE TWO SUBTRACTIONS, off the rows above rather than off a memory of an earlier
+        // build (241). One is a MODELLED lever and one is a fault this milestone closed, and
+        // they are printed the same way because the arithmetic is the same.
+        Console.WriteLine("    WHAT THE TWO LEVERS ARE WORTH, subtracted from the rows above");
+
+        void Difference(string said, string from, string to)
+        {
+            (string _, int wasStood, int wasMaps, int wasStuck) = rows.First(r => r.Name == from);
+            (string _, int stood, int maps, int stuck) = rows.First(r => r.Name == to);
+
+            Console.WriteLine(
+                $"      {said}: {maps - wasMaps:+#;-#;+0} map(s), {stood - wasStood:+#;-#;+0}"
+                + $" square(s) stood on, and {wasStuck - stuck:+#;-#;+0} square(s) that could not"
+                + " get back and now can");
+        }
+
+        Difference(
+            "THE LIFTS (MODELLED, 265's owed item)",
+            "with moves, through people, surfing",
+            "with moves, through people, surfing, RIDING THE LIFTS (MODELLED)");
+
+        Difference(
+            "285's FIX — every neighbour on a side, not the first",
+            "CONTROL: the same run, ONE NEIGHBOUR PER SIDE (the rule before 285)",
+            "+ the boat (MODELLED) — the only setting that reaches WATER PATH");
+
+        Console.WriteLine(
+            "      one side in the whole world carries more than one neighbour and it is the"
+            + " only way out of the Sevii 6/7 cluster, so a fault with a blast radius of ONE"
+            + " EDGE was worth thousands of squares. 190's rule in reverse: a fix that changes"
+            + " no headline is not evidence it was not a fix, and this one changes several.");
+
+        Console.WriteLine();
 
         WriteTheDoorsBothWays(world);
     }

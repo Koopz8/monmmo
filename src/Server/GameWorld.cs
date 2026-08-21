@@ -972,7 +972,7 @@ public sealed class GameWorld
         MapData map = _world.Find(player.MapId) ?? StartingMap;
         ConnectionSide side = SideFor(direction);
 
-        if (map.ConnectionOn(side) is not { } connection)
+        if (map.ConnectionOn(side, player.Square, id => _world.Find(id)) is not { } connection)
         {
             LastEdgeRefusal = $"{side} edge of {map.Id}: no connection";
             return [Stay(player)];

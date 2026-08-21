@@ -296,8 +296,67 @@ public sealed record MapData(string Id, string Name, int Width, int Height, byte
     public Warp? WarpAt(GridPosition square) =>
         Warps.FirstOrDefault(w => w.X == square.X && w.Y == square.Y);
 
-    public MapConnection? ConnectionOn(ConnectionSide side) =>
-        Connections.FirstOrDefault(c => c.Side == side);
+    /// <summary>
+    /// The map across one edge of this one, at the square being stepped off from.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>A side can carry MORE THAN ONE neighbour, and this returned the first for twenty
+    /// milestones (285).</b> <c>3.60</c> WATER PATH declares three maps off its left edge —
+    /// GREEN PATH at offset 0, SIX ISLAND at 40, <c>3.61</c> at 80 — and every square stepping
+    /// west off it was sent to GREEN PATH whatever row it stood on. The arrival then landed
+    /// outside GREEN PATH's grid, failed the walkability check, and the crossing simply did not
+    /// happen: a fault that DELETES edges and reports nothing.
+    /// </para>
+    /// <para>
+    /// Which one is the right one is not a guess. <c>AcrossEdge</c> puts the arrival at
+    /// <c>from.Y - offset</c> (or <c>from.X - offset</c> along the top and bottom), so the
+    /// neighbour that covers this crossing is the one whose grid contains that coordinate. At
+    /// most one can, because the offsets lay them end to end.
+    /// </para>
+    /// <para>
+    /// A neighbour this world file does not hold cannot be measured that way, so it is kept as
+    /// the answer of last resort — a caller reporting "a map this file lacks" must still see it.
+    /// </para>
+    /// </remarks>
+    /// <param name="side">Which edge is being stepped off.</param>
+    /// <param name="from">The square being stepped off from, on THIS map.</param>
+    /// <param name="find">How to look a neighbour up; nought for a map this world does not hold.</param>
+    public MapConnection? ConnectionOn(
+        ConnectionSide side, GridPosition from, Func<string, MapData?> find)
+    {
+        MapConnection? unknown = null;
+
+        foreach (MapConnection candidate in Connections)
+        {
+            if (candidate.Side != side) continue;
+
+            if (find(candidate.MapId) is not { } neighbour)
+            {
+                unknown ??= candidate;
+
+                continue;
+            }
+
+            if (Covers(side, from, neighbour, candidate.Offset)) return candidate;
+        }
+
+        return unknown;
+    }
+
+    /// <summary>Whether a crossing off <paramref name="side"/> lands inside this neighbour.</summary>
+    private static bool Covers(
+        ConnectionSide side, GridPosition from, MapData neighbour, int offset)
+    {
+        int along = side is ConnectionSide.Up or ConnectionSide.Down
+            ? from.X - offset
+            : from.Y - offset;
+
+        return along >= 0
+            && along < (side is ConnectionSide.Up or ConnectionSide.Down
+                ? neighbour.Width
+                : neighbour.Height);
+    }
 
     public byte BehaviourAt(GridPosition square)
     {

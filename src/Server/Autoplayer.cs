@@ -581,6 +581,31 @@ public sealed record Attempt(
     /// <summary>Every flag any script turned on or off during the run, in order.</summary>
     public IReadOnlyList<MovedAFlag> FlagMoves { get; init; } = [];
 
+    /// <summary>
+    /// The squares it stood on that cannot get back to where it started (265, 285).
+    /// </summary>
+    /// <remarks>
+    /// Every reach number this project prints is FORWARD. 265 added the second column to one
+    /// walk and left the floor table's six rows unasked; this is that column, carried on the
+    /// run itself so the six settings answer it in the same process they are measured in (241).
+    /// The edges are the walk's own, which is 265's rule and the only reason the number means
+    /// anything.
+    /// </remarks>
+    public IReadOnlyCollection<(string MapId, GridPosition Square)> CannotGetBack { get; init; } = [];
+
+    /// <summary>
+    /// The steps that go from somewhere that can get back into somewhere that cannot — the way
+    /// in to the one-way part of the world.
+    /// </summary>
+    /// <remarks>
+    /// 265's own diagnostic, and the reason its floor reading was believable: "24029 cannot get
+    /// back" is a number, and "the way into all of them is eighteen ledge hops on ROUTE 4" is a
+    /// place somebody can go and look at.
+    /// </remarks>
+    public IReadOnlyCollection<(string FromMap, GridPosition From, string ToMap, GridPosition To, string How)>
+        TheLastStepIn
+    { get; init; } = [];
+
     /// <summary>Every sign the walk stood in front of, and how many times over the run.</summary>
     /// <remarks>
     /// Keyed by (map, address). 519 sign scripts sit at 360 addresses because blocks are
@@ -1835,9 +1860,23 @@ public static class Autoplayer
             }
         }
 
+        // THE EDGES OF THE WALK THAT PRODUCES THE ANSWER, kept so the run can be asked whether
+        // it can get BACK (265, asked of all six settings at 285). 265's rule is that the way
+        // back must be traversed over the edges the walk itself took: a second idea of what a
+        // step is measures the difference between two authors, not the difference between
+        // reaching and returning.
+        var walked = new List<AStepTaken>();
+
         Reach last = WorldWalker.Walk(
             world, startMapId, moves, surfing: surfing || KnowsHowToCross(rules, moves), flagsSet: flags, asIfGone: gone,
-            ridingTheBoat: ridingTheBoat, movedTo: moved);
+            ridingTheBoat: ridingTheBoat, movedTo: moved, steps: walked);
+
+        IReadOnlyList<(string MapId, GridPosition Square)> cannotGetBack = TheWayBack.Stranded(
+            last.Stood.Select(s => (s.MapId, s.Square)),
+            walked.Select(s => ((s.From.MapId, s.From.Square), (s.To.MapId, s.To.Square))),
+            (last.Start.MapId, last.Start.Square));
+
+        HashSet<(string, GridPosition)> stuck = [.. cannotGetBack];
 
         // WHAT THE RUN TOOK BACK, and whether it cost anything.
         //
@@ -1967,6 +2006,18 @@ public static class Autoplayer
             ],
             ReachedOnlyWithWhatItTookBack = onlyWithThose,
             StoodOn = stoodAtTheEnd,
+            CannotGetBack = cannotGetBack,
+            TheLastStepIn =
+            [
+                .. walked
+                    .Where(step =>
+                        stuck.Contains((step.To.MapId, step.To.Square))
+                        && !stuck.Contains((step.From.MapId, step.From.Square)))
+                    .Select(step => (
+                        step.From.MapId, step.From.Square, step.To.MapId, step.To.Square,
+                        step.How.ToString()))
+                    .Distinct(),
+            ],
             FightAttemptsLost = lost,
             Carried = bag.Entries,
             SurfMove = rules.SurfMove,

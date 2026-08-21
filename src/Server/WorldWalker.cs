@@ -151,7 +151,9 @@ public static class WorldWalker
         bool throughScriptedDoors = false,
         bool ridingTheBoat = false,
         IReadOnlyDictionary<(string MapId, int LocalId), GridPosition>? movedTo = null,
-        ICollection<AStepTaken>? steps = null)
+        ICollection<AStepTaken>? steps = null,
+        bool ridingTheLifts = false,
+        bool firstOnEachSide = false)
     {
         IReadOnlyCollection<int> known = moves ?? [];
 
@@ -174,6 +176,33 @@ public static class WorldWalker
         var grids = new Dictionary<string, CollisionGrid>();
         var objects = new Dictionary<string, Dictionary<GridPosition, MapObject>>();
         var maps = world.Maps.ToDictionary(m => m.Id);
+
+        // WHICH FLOORS HAVE A DOOR INTO A ROOM, built once. The lift lever needs the warp
+        // list read backwards — every warp in the world whose target is this map — and that
+        // is a join over all 425 maps, which is not a thing to do inside the walk's own loop
+        // (the same lesson the grids below are here for).
+        Dictionary<string, List<(MapData Floor, Warp Back)>>? intoRoom = null;
+
+        IReadOnlyList<(MapData Floor, Warp Back)> DoorsInto(string mapId)
+        {
+            if (intoRoom is null)
+            {
+                intoRoom = [];
+
+                foreach (MapData floor in world.Maps)
+                {
+                    foreach (Warp back in floor.Warps.Where(w => !w.IsDynamic))
+                    {
+                        if (!intoRoom.TryGetValue(back.TargetMapId, out List<(MapData, Warp)>? doors))
+                            intoRoom[back.TargetMapId] = doors = [];
+
+                        doors.Add((floor, back));
+                    }
+                }
+            }
+
+            return intoRoom.GetValueOrDefault(mapId, []);
+        }
 
         CollisionGrid GridOf(MapData map)
         {
@@ -342,7 +371,18 @@ public static class WorldWalker
                 if (!grid.Contains(next))
                 {
                     // Off the edge, which is a way between maps rather than a wall.
-                    if (map.ConnectionOn(SideFor(direction)) is not { } edge) continue;
+                    // WHICH neighbour, which is a question about the square and not only
+                    // about the side (285): a map can declare several maps off one edge, and
+                    // taking the first sent every square stepping west off WATER PATH to a map
+                    // that does not reach that far and then dropped the crossing silently.
+                    // `firstOnEachSide` is the old rule, kept so the difference is a
+                    // subtraction in one process rather than a memory of an earlier build (241).
+                    MapConnection? across = firstOnEachSide
+                        ? map.Connections.FirstOrDefault(c => c.Side == SideFor(direction))
+                        : map.ConnectionOn(
+                            SideFor(direction), from, id => maps.GetValueOrDefault(id));
+
+                    if (across is not { } edge) continue;
                     if (!maps.TryGetValue(edge.MapId, out MapData? neighbour))
                     {
                         beyond.Add(edge.MapId);
@@ -419,7 +459,22 @@ public static class WorldWalker
             // A door that leads back the way you came leads nowhere new, and counting it
             // as a map this world file does not have is how nineteen ordinary exits came
             // to be reported as holes.
-            if (warp.IsDynamic) continue;
+            //
+            // 265 CALLED THAT HALF A READING and it stayed that way for twenty milestones:
+            // the sentinel is understood well enough not to be a hole and not well enough to
+            // come back out through, so the walk steps into three lift cabins and stands in
+            // each of them forever. `ridingTheLifts` is the upper bound — every door that
+            // names this room is a door out of it — and it is MODELLED, exactly like the
+            // boat's every-dock (285).
+            if (warp.IsDynamic)
+            {
+                if (!ridingTheLifts) continue;
+
+                foreach ((MapData floor, Warp back) in DoorsInto(map.Id))
+                    Go(map, from, floor, back.Square, AStepTaken.Door);
+
+                continue;
+            }
 
             if (!maps.TryGetValue(warp.TargetMapId, out MapData? target))
             {

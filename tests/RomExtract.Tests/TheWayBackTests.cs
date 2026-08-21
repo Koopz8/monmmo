@@ -251,4 +251,93 @@ public sealed class TheWayBackTests
         Assert.Equal(Route, chosen.Start.MapId);
         Assert.Contains((Route, chosen.Start.Square), chosen.Stood);
     }
+
+    // ---------------------------------------------------------------- the lifts (265, 285)
+
+    /// <summary>
+    /// Two floors with a door each into one cabin, and the cabin's own exit is the runtime
+    /// sentinel — which is what a lift is on this cartridge, and what nine maps look like.
+    /// </summary>
+    private static WorldData Lift()
+    {
+        MapData Floor(string id, string cabin) =>
+            new(id, id, 4, 4, new byte[16])
+            {
+                Warps = [new Warp(1, 1, TargetWarpId: 0, cabin)],
+            };
+
+        var cabin = new MapData("1.9", "cabin", 4, 4, new byte[16])
+        {
+            Warps = [new Warp(2, 2, TargetWarpId: 0, $"{Warp.Dynamic}.{Warp.Dynamic}")],
+        };
+
+        return new WorldData([Floor("1.0", "1.9"), Floor("1.1", "1.9"), cabin]);
+    }
+
+    private static (Reach Reach, IReadOnlyList<AStepTaken> Steps) Ride(
+        WorldData world, bool lifts)
+    {
+        var steps = new List<AStepTaken>();
+
+        return (WorldWalker.Walk(world, "1.0", steps: steps, ridingTheLifts: lifts), steps);
+    }
+
+    /// <summary>
+    /// <b>THE THING (265's owed item, done at 285).</b> The walk steps into a lift cabin and
+    /// stands in it forever: <c>Warp.Dynamic</c> was derived so the cabin's exit would not be
+    /// reported as a hole in the world, and understanding it that far is understanding it half
+    /// way. With the lever on, every door that names the cabin is a door out of it.
+    /// </summary>
+    [Fact]
+    public void ALiftCabinIsARoomWithNoExitUntilTheLeverSaysOtherwise()
+    {
+        WorldData world = Lift();
+
+        (Reach shut, IReadOnlyList<AStepTaken> shutSteps) = Ride(world, lifts: false);
+
+        // It gets in, and 1.1 is on the far side of the cabin, so it never gets there.
+        Assert.Contains("1.9", shut.Maps);
+        Assert.DoesNotContain("1.1", shut.Maps);
+
+        Assert.NotEmpty(TheWayBack.Stranded(
+            shut.Stood.Select(s => (s.MapId, s.Square)),
+            shutSteps.Select(s => ((s.From.MapId, s.From.Square), (s.To.MapId, s.To.Square))),
+            (shut.Start.MapId, shut.Start.Square)));
+    }
+
+    /// <summary>
+    /// And with the lever on it comes back out, onto every floor with a door in — which is the
+    /// same upper bound the boat's every-dock takes, and MODELLED for the same reason: which
+    /// floor the cabin would really put you on is a runtime answer nothing here can read.
+    /// </summary>
+    [Fact]
+    public void RidingTheLiftsReachesEveryFloorWithADoorIn()
+    {
+        WorldData world = Lift();
+
+        (Reach open, IReadOnlyList<AStepTaken> openSteps) = Ride(world, lifts: true);
+
+        Assert.Contains("1.9", open.Maps);
+        Assert.Contains("1.1", open.Maps);
+
+        Assert.Empty(TheWayBack.Stranded(
+            open.Stood.Select(s => (s.MapId, s.Square)),
+            openSteps.Select(s => ((s.From.MapId, s.From.Square), (s.To.MapId, s.To.Square))),
+            (open.Start.MapId, open.Start.Square)));
+    }
+
+    /// <summary>
+    /// And the sentinel is still not a hole. 265 derived <c>Warp.Dynamic</c> to stop nineteen
+    /// ordinary exits being reported as maps this world file does not have, and the lever must
+    /// not put that back — <c>127.127</c> is never a destination, at either setting.
+    /// </summary>
+    [Fact]
+    public void TheSentinelIsNeverAMapTheWorldIsMissing()
+    {
+        WorldData world = Lift();
+
+        Assert.Empty(Ride(world, lifts: false).Reach.Beyond);
+        Assert.Empty(Ride(world, lifts: true).Reach.Beyond);
+        Assert.DoesNotContain($"{Warp.Dynamic}.{Warp.Dynamic}", Ride(world, lifts: true).Reach.Maps);
+    }
 }
