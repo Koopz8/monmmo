@@ -709,6 +709,15 @@ Traps worth carrying:
     what names their own blocks is a literal in code, which the climb had said per site since 191.
     **Before believing a proximity test, ask what it would find if the thing were merely nearby.**
 
+108. **REACHING A MAP IS NOT STANDING ON A SQUARE** (282). 249 asked how much of the buried list
+    the walk goes over and answered it with `Reached`, which is a list of MAPS — so *the widest walk
+    stands on 182 of 183* was the count of buried items whose map it got to. Asked of the squares:
+    **map reached 182, BESIDE 177, UNDERFOOT 137**. And the denominator is not 183 either — **142
+    sit on a square somebody could stand on**, so it is 137 of 142. The walk has always had the
+    squares (`Reach.Stood`); they stopped at the edge of the `Attempt`. This is 265's shape one
+    level down: reaching and returning were two facts and this project printed one, and here
+    reaching and STANDING were two and it printed one.
+
 107. **TO NAME A BYTE, COUNT THE BYTE'S SQUARES AND NOT THE THINGS ON THEM** (281). *179 signs
     stand on `0x84`* names nothing — it reads the same whether that byte is a sign board or every
     wall in the game, and those are opposite findings. Asked the other way: **189 squares of `0x84`
@@ -916,15 +925,15 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-281-a-scale-with-both-ends-measured-was-a-byte-nobody-had-counted.md`
-first, then `280`, then `279`, then `278`, then `277`, then `276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
+Read `claude/milestone-282-reaching-a-map-is-not-standing-on-a-square.md` first, then `281`,
+then `280`, then `279`, then `278`, then `277`, then `276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
 `250`, `249`, `248`, `247`, `246`, `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
 `238`, `237`,
 `236`, `235`, `234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
-**Fifty-three faults closed and every one was in this project, not on the cartridge.** A walk that
+**Fifty-four faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
 script" list; a list ranked by a count instead of by what it costs; a party that could not gain
 a level; a roadmap line that called a fix a cost; a continuation that carried flags and not
@@ -1035,7 +1044,9 @@ and 0 of 10). **242's four-square rule is three squares too many for 97 signs** 
 obey the record, which costs **0 maps, 0 flags and 2 signs** at every lever setting, against the 68
 of 97 the records said could be over-read; and at 281 **242's own rule that a sign's own square is
 SOLID**, which is true of all 97 that name a side and false of 85 of the 422 that name none — and
-the buried kind is walkable on 142 of 183, because a thing you dig up is in the ground.
+the buried kind is walkable on 142 of 183, because a thing you dig up is in the ground; and at 282
+**249's own "the widest walk stands on 182 of 183", which is a count of MAPS reached** — asked of
+the squares it is 137, out of the 142 that can be stood on at all.
 
 `246` is the read that is not a command, and the literal-pool test for whether compiled code holds
 a number — both live inside `--namespaces`, which is now the fullest single instrument in the
@@ -1278,8 +1289,8 @@ the same twelve both ways, nought either way — and all twelve are on `10.14`, 
 — which is BELOW the floor of 30.3 the base rate gives, printed beside it. The finding is the
 NEGATIVE: 9 items are asked for by a script, 3 of those are buried, and **NOUGHT is asked for AND
 has no other source**, so the run's total inability to dig costs it no reach at all. It also runs
-the six settings and prints how much the walk stands on: **182 of 183 at the widest, on 78 of 79
-maps, and it collects none of them** — the one it never even stands on is `1.62 (35,5)`, an ELIXIR
+the six settings and prints how much the walk stands on: **UNDERFOOT on 137 of the 142 it could be at the widest — the 182 of 183 quoted since 249 is a
+count of MAPS reached (282) — on 78 of 79 maps, and it collects none of them** — the one it never even stands on is `1.62 (35,5)`, an ELIXIR
 at index 33.
 
 `--play --signs` is the fourth list with **its own control in the same process**: which sign
@@ -1885,6 +1896,10 @@ still work.**
   * ~~The run never picks any of them up.~~ **MEASURED AT 249**: the widest walk stands on 182
     of the 183, on 78 of the 79 maps, and collects none — 101/122/122/182/182/182 across the six
     settings, printed by `--buried`. The one it never stands on is `1.62 (35,5)`, an ELIXIR.
+    **282: THOSE SIX ARE MAPS REACHED.** Asked of the squares it is BESIDE 89/119/119/177/177/177
+    and UNDERFOOT 58/83/83/137/137/137, out of the **142** that sit on a square anybody can stand
+    on — the other 41 are on solid ground (0x00 x35, 0x9A x4, 0x08 x2) across 29 maps and can never
+    be stood on at any setting.
     Making it collect them is a change to the RUN and a decision: 249 showed it moves no reach,
     so it would move only what the party ends with.
   * ~~Is anything only underground?~~ **ASKED AT 249.** 21 kinds are, which is below the base
