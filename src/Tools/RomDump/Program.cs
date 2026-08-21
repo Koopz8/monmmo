@@ -215,6 +215,7 @@ public static class Program
         if (options.Unread) WriteUnread(rom);
         if (options.Layers) WriteLayers(rom);
         if (options.TheWayBack) WriteTheWayBack(rom, options.StartAt);
+        if (options.WhichWay) WriteWhichWay(rom, options.StartAt);
         if (options.Water) WriteWater(rom);
         if (options.Operands) WriteOperands(rom);
         if (options.Slots.Count > 0) WriteSlots(rom, options.Slots);
@@ -7667,6 +7668,95 @@ public static class Program
                         .Take(6)
                         .Select(a => $"0x{a.Key.Beside:X2} x{a.Value}")));
         }
+    }
+
+    /// <summary>
+    /// Which way each ledge byte is hopped, printed rather than quoted in a doc comment.
+    /// </summary>
+    private static void WriteWhichWay(Rom rom, string startAt)
+    {
+        Console.WriteLine();
+        Console.WriteLine("WHICH WAY A LEDGE IS HOPPED");
+        Console.WriteLine();
+
+        WorldData world = WorldExporter.Export(rom);
+        MapData first = world.Find(startAt) ?? world.Maps.First();
+
+        byte[] ledges =
+        [
+            .. world.Maps.SelectMany(m => m.Behaviours).Where(MetatileBehaviour.IsLedge).Distinct()
+                .Concat(MetatileBehaviour.Hops.Keys)
+                .Distinct()
+                .Order(),
+        ];
+
+        // How many squares each byte has in the whole world, so "stood beside" has a denominator.
+        // Without one, "9" and "9 of 39" are the same line and only the second says the sweep
+        // never got near the thing it was deciding about.
+        Dictionary<byte, int> inTheWorld = ledges.ToDictionary(
+            b => b,
+            b => world.Maps.Sum(
+                m => WhichWayALedgeIsHopped.Census(m.Behaviours, m.Width, m.Height, b).All));
+
+        Console.WriteLine(
+            $"  {ledges.Length} ledge byte(s), each tried every way, walked from {first.Id}"
+            + " through people so that only the ledges differ");
+        // ON THE OUTER RING, counted separately because --ledges cannot see one. That command's
+        // loops start at 1 and stop at width-1 so it can look at a square's neighbours, so its
+        // totals are of INTERIOR ledges and have been quoted as totals since they were taken.
+        // A hop from the ring lands off the map, and MapData.HopOnto refuses it — so every one
+        // of these is a wall to this project, and whether the cartridge hops across a map join
+        // is a question nobody has asked.
+        Dictionary<byte, int> onTheRing = ledges.ToDictionary(
+            b => b,
+            b => world.Maps.Sum(
+                m => WhichWayALedgeIsHopped.Census(m.Behaviours, m.Width, m.Height, b).OnTheRing));
+
+        Console.WriteLine(
+            "  in the world: " + string.Join(
+                ", ",
+                ledges.Select(b => $"0x{b:X2} on {inTheWorld[b]} square(s) ({onTheRing[b]} on a"
+                    + " map's outer ring)"))
+            + $"; 0x{MetatileBehaviour.HopUnused:X2} is a name on nought, which is why it has no row");
+        Console.WriteLine(
+            $"  {ledges.Sum(b => inTheWorld[b])} ledge square(s) in all, of which"
+            + $" {ledges.Sum(b => onTheRing[b])} are on a ring — `--ledges` counts the interior"
+            + " only and its totals have been quoted as totals");
+        Console.WriteLine(
+            "  the assignment this project uses: " + string.Join(
+                ", ",
+                MetatileBehaviour.Hops.Select(h => $"0x{h.Key:X2} {h.Value.ToString().ToLowerInvariant()}")));
+        Console.WriteLine();
+
+        foreach ((string what, IReadOnlyDictionary<byte, Direction>? alongside) in new[]
+        {
+            ("EACH BYTE ON ITS OWN, everything else a wall — the original derivation", null),
+            ("AND WITH THE OTHERS AT THEIR MEASURED VALUES — the run it could not do",
+                MetatileBehaviour.Hops),
+        })
+        {
+            Console.WriteLine($"  {what}");
+            Console.WriteLine(
+                "      byte  way      maps  squares  stranded  its own squares stood beside");
+
+            foreach (byte ledge in ledges)
+            {
+                foreach (AnAssignment tried in
+                    WhichWayALedgeIsHopped.Sweep(world, first.Id, ledge, alongside))
+                {
+                    Console.WriteLine(
+                        $"      0x{tried.Behaviour:X2}  {tried.Name,-7} {tried.Maps,4}"
+                        + $"  {tried.Stood,7}  {tried.Stranded,8}"
+                        + $"  {tried.Beside,5} of {inTheWorld[tried.Behaviour]}");
+                }
+
+                Console.WriteLine();
+            }
+        }
+
+        Console.WriteLine(
+            "  a direction whose row equals the WALL row changed nothing, and a byte whose"
+            + " 'stood beside' is nought could not have.");
     }
 
     /// <summary>
@@ -15371,6 +15461,13 @@ public static class Program
 
         var sides = new SortedDictionary<byte, (int Count, int AlongX, int AlongY, int[] Walkable, int[] Higher, int[] Lower)>();
 
+        // THE WHOLE RECTANGLE, counted separately from the loops below, which start at 1 and stop
+        // at width-1 so that every square they examine has four neighbours. That is right for the
+        // columns they print and it means the Count they build is of INTERIOR squares — a number
+        // this project has quoted as a total since it was taken (954 for 0x3B, where the world
+        // has 962). Both are printed now, with the difference named.
+        var everywhere = new SortedDictionary<byte, (int All, int OnTheRing)>();
+
         Direction[] ways = [Direction.Up, Direction.Down, Direction.Left, Direction.Right];
 
         foreach ((int bank, int number, MapHeaderRecord header) in banks.AllMaps)
@@ -15384,6 +15481,15 @@ public static class Program
             if (behaviours.Length < width * height) continue;
 
             CollisionGrid collision = header.Layout.ReadCollision(rom);
+
+            foreach (byte ledge in behaviours.Where(MetatileBehaviour.IsLedge).Distinct())
+            {
+                (int all, int ring) =
+                    WhichWayALedgeIsHopped.Census(behaviours, width, height, ledge);
+
+                everywhere.TryGetValue(ledge, out var was);
+                everywhere[ledge] = (was.All + all, was.OnTheRing + ring);
+            }
 
             byte At(int x, int y) => behaviours[y * width + x];
             int Up(int x, int y) => new MapBlock(blocks[y * width + x]).Elevation;
@@ -15437,9 +15543,14 @@ public static class Program
         foreach ((byte behaviour, var tally) in sides)
         {
             Console.WriteLine();
+            (int all, int ring) = everywhere.GetValueOrDefault(behaviour);
+
             Console.WriteLine(
-                $"  0x{behaviour:X2}  {tally.Count} squares, " +
-                $"{tally.AlongX} of them in an east–west run, {tally.AlongY} in a north–south one " +
+                $"  0x{behaviour:X2}  {all} squares in the world, {ring} of them on a map's outer" +
+                $" ring and NOT examined here — the {tally.Count} below are the interior");
+            Console.WriteLine(
+                $"        {tally.AlongX} of them in an east–west run, {tally.AlongY} in a " +
+                $"north–south one " +
                 $"-> hopped {(tally.AlongX > tally.AlongY ? "north or south" : "east or west")}");
 
             for (int i = 0; i < ways.Length; i++)
@@ -16624,6 +16735,9 @@ public static class Program
         /// <summary>Which of the squares the walk reaches can get back to where it began.</summary>
         public bool TheWayBack { get; private init; }
 
+        /// <summary>Which way each ledge byte is hopped, measured rather than quoted.</summary>
+        public bool WhichWay { get; private init; }
+
         /// <summary>Which metatile behaviours are the sea, asked without the elevation nibble.</summary>
         public bool Sea { get; private init; }
 
@@ -16858,6 +16972,7 @@ public static class Program
             var unreadBytes = false;
             var layers = false;
             var theWayBack = false;
+            var whichWay = false;
             var sea = false;
             var operands = false;
             var moved = new List<int>();
@@ -17152,6 +17267,9 @@ public static class Program
                         break;
                     case "--the-way-back":
                         theWayBack = true;
+                        break;
+                    case "--which-way":
+                        whichWay = true;
                         break;
                     case "--sea":
                         sea = true;
@@ -17519,6 +17637,7 @@ public static class Program
                 Unread = unreadBytes,
                 Layers = layers,
                 TheWayBack = theWayBack,
+                WhichWay = whichWay,
                 Sea = sea,
                 Operands = operands,
                 Moved = moved,

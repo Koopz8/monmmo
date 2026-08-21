@@ -86,13 +86,21 @@ public static class MetatileBehaviour
     /// <para>
     /// The four names above came from another game's table and only one of the four
     /// facts in them survived contact with this cartridge. 0x3A does not appear on a
-    /// single square of the world; 0x3B is on 954 of the 1034 that exist.
+    /// single square of the world; 0x3B is on 962 of the 1042 that exist.
+    /// </para>
+    /// <para>
+    /// <b>962 and 1042, corrected at 266.</b> This said 954 of 1034 for seventy milestones, which
+    /// is `--ledges`' count — and `--ledges` loops from 1 to width-1 so every square it looks at
+    /// has four neighbours, so what it counts is the INTERIOR. Eight of 0x3B's squares sit on a
+    /// map's outer ring. A hop from there lands off the map and <c>WorldData.HopOnto</c> refuses
+    /// it, so all eight are walls to this project; whether the cartridge hops a player across a
+    /// map join has never been asked. Both numbers are in `--ledges`' own output now.
     /// </para>
     /// <para>
     /// The axis is not a guess. A ledge is the edge of a step in the ground, so it runs
     /// along the direction it is <em>not</em> hopped along, and the runs are unambiguous:
-    /// 950 of 0x3B's 954 squares sit in an east–west run and none in a north–south one,
-    /// while every one of 0x38's and 0x39's sit in north–south runs and none in
+    /// 950 of 0x3B's 954 interior squares sit in an east–west run and none in a north–south one,
+    /// while 38 of 0x38's 39 and all 41 of 0x39's sit in north–south runs and none in
     /// east–west ones. So 0x3B is hopped north or south, and the other two east or west.
     /// </para>
     /// <para>
@@ -100,9 +108,18 @@ public static class MetatileBehaviour
     /// project could find — the elevation nibble is zero on every ledge square, which is
     /// the value meaning "whatever is around it", so it cannot say which side is the step
     /// up. What decides it is the world itself: a hop is one-way, and the assignment that
-    /// is right is the one that leaves the cartridge's own geography connected. That is
+    /// is right is the one that opens the most of the cartridge's own geography. That is
     /// measured rather than argued, by walking the world under each assignment and
-    /// counting the maps a player can reach.
+    /// counting the maps a player can reach — which is `--which-way` (266).
+    /// </para>
+    /// <para>
+    /// <b>"Leaves the geography CONNECTED" is what this used to say, and it is not what was
+    /// measured.</b> Reach and connectedness are different questions on a graph with one-way
+    /// edges, which a ledge is the definition of, and nothing could ask the second until 265.
+    /// Asked: 0x3B south reaches 211 maps and strands <b>35328 of the 46433 squares it stands
+    /// on</b>, while 0x3B north reaches 38 and strands 247. **By connectedness the chosen answer
+    /// is the worst of the four.** The criterion that decides this is REACH and the sentence says
+    /// so now.
     /// </para>
     /// </summary>
     public static Direction? Hop(byte behaviour) =>
@@ -128,12 +145,22 @@ public static class MetatileBehaviour
     /// out of ROUTE 4, which is the road to CERULEAN.
     /// </para>
     /// <para>
-    /// 0x38 is not decided by this and is written down as an inference rather than a
-    /// measurement: no direction changes the reach by a single map, because its 39
-    /// squares are all on optional ground. It is given west because it is the other
-    /// east–west byte and 0x39 is east — which is an argument from the shape of the
-    /// table, not evidence, and is worth remembering if something on CYCLING ROAD ever
-    /// reads as a wall it should not be.
+    /// <b>0x38 was an inference and is now MEASURED (266).</b> Each byte on its own could never
+    /// have decided it: with everything else a wall the walk stands beside <b>9 of its 39
+    /// squares</b>, so all five rows come out identical and read like four directions agreeing.
+    /// The reason written down here — "its 39 squares are all on optional ground" — was a guess
+    /// at why, and the real reason is that the walk never got there.
+    /// </para>
+    /// <para>
+    /// Run with the other two at their measured values, which is the experiment one-byte-at-a-time
+    /// cannot do, the walk stands beside 24 of the 39 and <b>west is the only direction that
+    /// changes anything</b>: 46790 squares against 46568 for the wall and for all three other
+    /// directions, at 212 maps either way. So the inference was right, it is not an inference any
+    /// more, and it was decided by squares rather than by maps.
+    /// </para>
+    /// <para>
+    /// The seven numbers above are `--which-way`'s, reproduced to the digit at 266 after seventy
+    /// milestones in which nothing in this repository printed one of them.
     /// </para>
     /// </summary>
     public static readonly IReadOnlyDictionary<byte, Direction> Hops =
