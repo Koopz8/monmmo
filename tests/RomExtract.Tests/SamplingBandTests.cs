@@ -140,6 +140,43 @@ public sealed class SamplingBandTests
     }
 
     /// <summary>
+    /// The widest band a population can support with four groups (274).
+    /// <para>
+    /// Asking for a sample as big as the population gives one group, and a band of one group is
+    /// not a band — 268's own numbers were first printed with exactly that and it read as a
+    /// range. This backs off to the largest size that still yields the groups asked for.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TheWidestBandBacksOffUntilItHasEnoughGroups()
+    {
+        (Rom rom, List<uint> blocks) = Image(40, 10);
+
+        // 40 blocks cannot give four groups of 40, or of 20 — it gives four of ten.
+        (IReadOnlyList<double> band, int at) = WhatABlockIsMadeOf.WidestBand(rom, blocks, 40);
+
+        Assert.Equal(10, at);
+        Assert.Equal(4, band.Count);
+
+        // Asked for less than it could support, it gives what was asked for and no more.
+        (IReadOnlyList<double> small, int smallAt) = WhatABlockIsMadeOf.WidestBand(rom, blocks, 5);
+
+        Assert.Equal(5, smallAt);
+        Assert.Equal(8, small.Count);
+    }
+
+    [Fact]
+    public void APopulationTooSmallForTheGroupsAskedForHasNoBandAtAll()
+    {
+        (Rom rom, List<uint> blocks) = Image(3, 3);
+
+        (IReadOnlyList<double> band, int at) = WhatABlockIsMadeOf.WidestBand(rom, blocks, 10);
+
+        Assert.Empty(band);
+        Assert.Equal(0, at);
+    }
+
+    /// <summary>
     /// The reading 273 rests on, in miniature: a population that IS the other kind sits outside
     /// the first kind's band, and a distance alone could not have said so.
     /// </summary>

@@ -144,6 +144,26 @@ public static class WhatABlockIsMadeOf
         return [.. found.Order()];
     }
 
+    /// <summary>
+    /// The widest sampling band this population can support with at least
+    /// <paramref name="leastGroups"/> disjoint groups, and the group size it was taken at.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>A band of one group is not a band</b>, and asking for a sample as big as the population
+    /// gives exactly that. Sampling noise falls as the sample grows, so a band measured at a
+    /// SMALLER size than the one in question is an over-estimate of the noise at that size — which
+    /// is the conservative direction for anything the band is then handed to.
+    /// </para>
+    /// </remarks>
+    public static (IReadOnlyList<double> Band, int At) WidestBand(
+        Rom rom, IReadOnlyList<uint> population, int wanted, int leastGroups = 4)
+    {
+        int at = Math.Min(wanted, population.Count / leastGroups);
+
+        return at <= 0 ? ([], 0) : (SamplingBand(rom, population, at), at);
+    }
+
     public static double HowMuchCouldBeReal(
         HowOftenEachCommand mixed, HowOftenEachCommand real, HowOftenEachCommand junk)
     {

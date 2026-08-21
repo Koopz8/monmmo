@@ -11233,26 +11233,29 @@ public static class Program
         List<uint> alone =
             [.. named.Entries.Where(e => named.InARunOf.GetValueOrDefault(e) <= 1)];
 
-        var mixes = new List<(string Name, HowOftenEachCommand Mix)>
-        {
-            ("the maps' own scripts", WhatABlockIsMadeOf.In(rom, opened)),
-            ("outside, named ALONE",
-                WhatABlockIsMadeOf.In(
-                    rom, BlocksFrom(alone.Where(e => !opened.Contains(e))))),
-            ("outside, named IN A TABLE",
-                WhatABlockIsMadeOf.In(
-                    rom,
-                    BlocksFrom(
-                        named.Entries.Where(
-                            e => !opened.Contains(e)
-                                && named.InARunOf.GetValueOrDefault(e) >= 5)))),
-        };
-
         Rom backwards = new(rom.Span.ToArray().Reverse().ToArray());
 
-        mixes.Add((
-            "the reversed image",
-            WhatABlockIsMadeOf.In(backwards, EveryScriptInTheImage.In(backwards).Blocks)));
+        // EACH POPULATION KEEPS ITS BLOCK LIST AND THE IMAGE IT WAS READ FROM, so the sampling
+        // band (273) can be asked of it. A distance is not readable without one: the 38 sat 0.601
+        // from the maps' own where a 38-block sample of the maps' OWN scripts sits at 0.220-0.360.
+        var mixes = new List<(string Name, HowOftenEachCommand Mix, Rom From, IReadOnlyList<uint> Blocks)>();
+
+        void Add(string name, Rom from, IEnumerable<uint> blocks)
+        {
+            List<uint> list = [.. blocks];
+
+            mixes.Add((name, WhatABlockIsMadeOf.In(from, list), from, list));
+        }
+
+        Add("the maps' own scripts", rom, opened);
+        Add("outside, named ALONE", rom, BlocksFrom(alone.Where(e => !opened.Contains(e))));
+        Add(
+            "outside, named IN A TABLE",
+            rom,
+            BlocksFrom(
+                named.Entries.Where(
+                    e => !opened.Contains(e) && named.InARunOf.GetValueOrDefault(e) >= 5)));
+        Add("the reversed image", backwards, EveryScriptInTheImage.In(backwards).Blocks);
 
         Console.WriteLine();
         Console.WriteLine(
@@ -11301,13 +11304,95 @@ public static class Program
             "    the most of each that could be real script, taking the reversed image as the"
             + " junk it would be mixed with:");
 
-        foreach ((string name, HowOftenEachCommand mix) in mixes.Skip(1).Take(2))
+        // AND TWO THINGS 268 PRINTED NO ERROR BAR FOR (274).
+        //
+        // First, is each population ONE KIND OF THING? Its own quarters against its own whole
+        // say so: a body of real script is made of the same commands throughout, and a body of
+        // accidents is made of whatever the bytes happened to be. This costs nothing and it is a
+        // property of each population ALONE — no other population is involved, so it cannot be
+        // an artefact of the comparison.
+        Console.WriteLine();
+        Console.WriteLine(
+            "    IS EACH ONE KIND OF THING? its own quarters against its own whole (274) — a body of"
+            + " real script is the same commands throughout; a body of accidents is whatever the bytes were:");
+
+        // AT ONE COMMON GROUP SIZE, or the four rows are not comparable: a band measured on
+        // 667-block groups is tighter than one on 114-block groups for no reason but the size,
+        // and the smallest population here has a quarter of 114. Both columns are printed —
+        // the quarters, which is each population's natural split, and the common size, which is
+        // the one the four rows can be read against each other.
+        int common = mixes.Min(m => m.Blocks.Count) / 4;
+
+        Console.WriteLine(
+            $"      {"population",-26} {"own quarters",16}   {$"groups of {common}",16}   blocks");
+
+        foreach ((string name, HowOftenEachCommand mix, Rom from, IReadOnlyList<uint> blocks) in mixes)
+        {
+            IReadOnlyList<double> quarters = WhatABlockIsMadeOf.SamplingBand(from, blocks, blocks.Count / 4);
+            IReadOnlyList<double> same = WhatABlockIsMadeOf.SamplingBand(from, blocks, common);
+
+            Console.WriteLine(
+                $"      {name,-26} {(quarters.Count == 0 ? "too few" : $"{quarters.Min():F3}..{quarters.Max():F3}"),16}"
+                + $"   {(same.Count == 0 ? "too few" : $"{same.Min():F3}..{same.Max():F3}"),16}"
+                + $"   {blocks.Count,6} (quarters of {blocks.Count / 4})");
+        }
+
+        // AND THE VERDICT, WORKED OUT RATHER THAN LEFT TO BE READ. The own-quarters column
+        // separates cleanly and the common-size column does not, which means the separation was
+        // the GROUP SIZE: 972-block groups are tighter than 114-block groups for no reason but
+        // the count. A comparison across populations at each one's own natural split is a
+        // comparison confounded by that split.
+        IReadOnlyList<double> realSame = WhatABlockIsMadeOf.SamplingBand(rom, mixes[0].Blocks, common);
+        IReadOnlyList<double> junkSame =
+            WhatABlockIsMadeOf.SamplingBand(mixes[^1].From, mixes[^1].Blocks, common);
+
+        bool separates = realSame.Count > 0 && junkSame.Count > 0 && realSame.Max() < junkSame.Min();
+
+        Console.WriteLine(
+            separates
+                ? $"      AT THE COMMON SIZE THE MAPS' OWN ({realSame.Min():F3}..{realSame.Max():F3}) IS BELOW"
+                    + $" THE REVERSAL'S ({junkSame.Min():F3}..{junkSame.Max():F3}) — homogeneity discriminates"
+                : $"      AT THE COMMON SIZE THEY OVERLAP — the maps' own {realSame.Min():F3}..{realSame.Max():F3}"
+                    + $" against the reversal's {junkSame.Min():F3}..{junkSame.Max():F3}. **HOMOGENEITY DOES NOT"
+                    + " DISCRIMINATE HERE**, and the own-quarters column that looks as though it does is the"
+                    + " GROUP SIZE: 972-block groups are tighter than 114-block ones for no reason but the count.");
+
+        // Second, the bound itself. It divides two distances measured on populations of different
+        // sizes, and 273 found a bound whose whole answer was its sample size. The band here is
+        // taken at the widest size the maps' own can support with four groups, which is SMALLER
+        // than the population being bounded — and smaller means noisier, so handing that much
+        // distance back over-corrects, and the result is an upper bound on an upper bound.
+        Console.WriteLine();
+        Console.WriteLine(
+            "    the most of each that could be real script, taking the reversed image as the junk"
+            + " it would be mixed with — and again with the sampling band given back:");
+
+        foreach ((string name, HowOftenEachCommand mix, Rom from, IReadOnlyList<uint> blocks) in mixes.Skip(1).Take(2))
         {
             double could = WhatABlockIsMadeOf.HowMuchCouldBeReal(mix, mixes[0].Mix, mixes[^1].Mix);
 
+            (IReadOnlyList<double> band, int at) =
+                WhatABlockIsMadeOf.WidestBand(rom, mixes[0].Blocks, blocks.Count);
+
+            double fromReal = WhatABlockIsMadeOf.Distance(mix, mixes[0].Mix);
+            double apart = WhatABlockIsMadeOf.Distance(mixes[^1].Mix, mixes[0].Mix);
+
+            double slack = band.Count == 0 ? 0 : band.Max();
+
+            double generous = apart <= 0 ? 0 : Math.Max(0, 1 - (Math.Max(0, fromReal - slack) / apart));
+
             Console.WriteLine(
-                $"      {name,-26} at most {could,7:P1} — about {could * mix.Blocks:F0} of"
-                + $" {mix.Blocks} block(s)");
+                $"      {name,-26} at most {could,7:P1} — about {could * mix.Blocks:F0} of {mix.Blocks} block(s)");
+            Console.WriteLine(
+                $"        {fromReal:F3} from the maps' own, which is {fromReal / apart:P0} of the"
+                + $" {apart:F3} to the reversal");
+            Console.WriteLine(
+                band.Count == 0
+                    ? "        no band: the maps' own cannot supply four groups this size"
+                    : $"        a sample of {at} of the maps' OWN blocks scores {band.Min():F3}..{band.Max():F3}"
+                        + $" ({band.Count} group(s)) — give that back and it is at most {generous:P1}."
+                        + $" {at} is SMALLER than {blocks.Count} and a smaller sample is noisier, so that is"
+                        + " an over-correction and the true bound is between the two.");
         }
 
         Console.WriteLine();
