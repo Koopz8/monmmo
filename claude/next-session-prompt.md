@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-299`, 3173 tests green.
+`claude-300`, 3179 tests green.
 
 Standing rules — do not break these:
 
@@ -519,16 +519,46 @@ Traps worth carrying:
     the fixture carries one, and a fixture's edge case belongs ON the edge: the stray object sat
     at `width + 5`, where `>` and `>=` agree, and a break on that boundary came back green.
 
+58. **DO NOT WRITE DOWN WHICH BYTES YOUR READER READS — WATCH IT** (260). The question "which
+    bytes of an event record does nothing in this project look at" needs a list of consumed
+    offsets, and a hand-kept one goes stale the first time a field is added: 220, 224, 251, 258.
+    `Rom.WatchReads` records what a reader ACTUALLY touched, so the sweep cannot disagree with the
+    reader — it is the reader. **When a measurement needs to know what some code does, run the
+    code and watch it, rather than restating it.**
+
+59. **A BYTE NOTHING READS IS NOT A FINDING; ONE THAT ALSO VARIES IS** (260). `object +3`, `+11`,
+    `+22`, `+23` and `trigger +5`, `+10`, `+11` are nought in every record in the game — that is
+    what spare looks like, and a sweep that reported them would have listed every padding byte in
+    the cartridge as a discovery. The whole instrument is the difference.
+
+60. **THE SAME ALPHABET IN FOUR INDEPENDENTLY-DERIVED LAYOUTS IS FOUR THINGS SAYING ONE WORD**
+    (260). `object +8`, `warp +4`, `trigger +4` and `sign +4` all take values from {0,1,3,4,5},
+    dominated by 3 — and two of those four record sizes this project DERIVED rather than knew.
+    Named against `MapBlock.Elevation`, a nibble read for drawing: **97.6% / 87.3% / 86.0% / 93.2%
+    against floors of ~44%**, and once nought is split out as the wildcard, **three records in
+    3863 genuinely disagree**. Every event record carries the elevation of its own square and this
+    project reads none of them. The floor is the share of EACH MAP'S OWN squares at the value the
+    record carries — a whole-cartridge base rate would have been the wrong denominator, because a
+    map that is all one elevation must contribute nothing.
+
+61. **A PREDICTION CAN BE WRONG ABOUT THE CODE RATHER THAN THE FIXTURE** (260). A control break —
+    clearing the read-watch between maps — was predicted to kill nothing, on the reasoning that
+    byte positions are absolute and no two maps' records overlap. Both true, and not what the code
+    does: the record values are checked AFTER every map has been read, so clearing empties the set
+    for all but the last. It killed one, correctly. **Trap 32 says a missed prediction tells you
+    which fixture does not cover what you thought; this is the other direction, and the first time
+    it has been recorded here.**
+
 ## Where things are
 
-Read `claude/milestone-259-what-the-readers-throw-away.md` first, then `258`, `257`,
+Read `claude/milestone-260-the-elevation-in-every-record.md` first, then `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
 `250`, `249`, `248`, `247`, `246`, `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
 `238`, `237`,
 `236`, `235`, `234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
-**Thirty-two faults closed and every one was in this project, not on the cartridge.** A walk that
+**Thirty-three faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
 script" list; a list ranked by a count instead of by what it costs; a party that could not gain
 a level; a roadmap line that called a fix a cost; a continuation that carried flags and not
@@ -569,7 +599,11 @@ every value in range** — 100 of 100 for every variable it has ever been given 
 conditions 255 credited to a counter, and 257 called the whole of the square list's gain, were
 credited by a test that could not say no; and at 259 **a second kind of record in the object
 table** — nine clones marked by `0xFF`, whose elevation is a local id and whose trainer type is a
-map number, removed until now by an off-map test that had no idea what it was catching.
+map number, removed until now by an off-map test that had no idea what it was catching; and at
+260 **an ELEVATION in all four event records that nothing reads** — `object +8`, `warp +4`,
+`trigger +4`, `sign +4`, named against the map's own block nibble at 86-98% against floors of
+~44%, with three genuine disagreements in 3863 records, on a world where 423 of 425 maps are
+layered and the walk is flat.
 
 `246` is the read that is not a command, and the literal-pool test for whether compiled code holds
 a number — both live inside `--namespaces`, which is now the fullest single instrument in the
@@ -622,7 +656,21 @@ dotnet run -c Release --project src/Tools/RomDump -- firered.gba --namespaces
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --buried
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --operands
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --dropped
+dotnet run -c Release --project src/Tools/RomDump -- firered.gba --unread
 ```
+
+`--unread` is which bytes of an event record nothing in this project reads (260), and it does not
+keep a list of offsets — `Rom.WatchReads` records what the readers actually touched, so it cannot
+go stale against them. **A byte nothing reads is not a finding; one that also VARIES is.** Seven
+spare bytes on an object, four on a trigger, and one field on each of the four lists: `object +8`,
+`warp +4`, `trigger +4`, `sign +4` all hold values from {0,1,3,4,5}. **It is the ELEVATION of the
+square the record stands on**, named against `MapBlock.Elevation` — a nibble this project reads
+for drawing — at **97.6% / 93.2% / 86.0% / 87.3% against floors of ~44%**, and once nought is
+split out as the wildcard, **3 records in 3863 genuinely disagree**. The floor is the share of EACH
+MAP'S OWN squares at the value the record carries, because a map that is all one elevation must
+contribute nothing. **423 of 425 maps are layered and this project's collision reading is flat.**
+Its positive control is in its own table: `sign +8/+10/+11` are the buried item, index and count
+248 found by hexdump, surfaced here from cold.
 
 `--dropped` is the count under every count of people, warps, triggers and signs (259). Four
 readers throw away a record whose square is off the map, silently, before anything else sees it —
@@ -1040,6 +1088,11 @@ the four event lists lose NOTHING to the off-map filter: warps 0/1294, triggers 
   0/702, objects 0/1639 once the 9 clones are taken out on the kind byte instead (259)
 9 clone records, all on bank 3, marked 0xFF after the graphics id — elevation is a local id and
   the trainer type is a map number; graphics id matches that object on that map 9 of 9, floor 0.21
+every event record carries the ELEVATION of its own square and nothing reads it (260): object +8,
+  warp +4, trigger +4, sign +4 — 97.6/93.2/86.0/87.3% against ~44%, 3 of 3863 genuinely disagree
+423 of 425 maps carry more than one elevation among their own squares; the walk is two-dimensional
+object +3/+11/+22/+23 and trigger +5/+10/+11 are nought in EVERY record in the game — spare (260)
+object +14 is unread on the 1199 non-trainers and is nought on 1197 of them; two are not (260)
 the map scan is 2915 entries at 1959 addresses, 90624 command reads at 24491 byte positions
 ONLY 11 of 108 command codes are read once per byte position — --the-scan says which
 by kind: person 15966 places alone, sign 3015, trigger 2134, on load 1324, on arrival 1167
