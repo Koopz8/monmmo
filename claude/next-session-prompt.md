@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-305`, 3216 tests green.
+`claude-306`, 3226 tests green.
 
 Standing rules — do not break these:
 
@@ -654,16 +654,29 @@ Traps worth carrying:
     Two predicates on one question, and only one of them is evidence. **Print both and let the
     control say which.**
 
+76. **A RULE'S JUSTIFICATION IS A NUMBER LIKE ANY OTHER, AND NOBODY RE-RAN IT** (266). Which way
+    each ledge is hopped is decided by seven numbers in a doc comment that **no instrument
+    printed**. All seven reproduced to the digit — and the criterion the comment NAMES ("leaves
+    the geography connected") is not the one it measured (maps reached), and by the named one the
+    chosen answer is the worst of the four. **A number in prose beside the rule it justifies is
+    231's category even when the rule is right.**
+
+77. **ONE VARIABLE AT A TIME CANNOT DECIDE A VARIABLE THAT IS BEHIND ANOTHER** (266). `0x38` was
+    an inference for seventy milestones because "no direction changes the reach" — and with
+    everything else a wall the walk stands beside **9 of its 39 squares**. Four identical rows
+    mean either "the world does not care" or "the sweep never got there", and only a denominator
+    tells them apart. With the other two bytes at their measured values it is decided in one run.
+
 ## Where things are
 
-Read `claude/milestone-265-the-way-back.md` first, then `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
+Read `claude/milestone-266-which-way-a-ledge-is-hopped.md` first, then `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
 `250`, `249`, `248`, `247`, `246`, `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
 `238`, `237`,
 `236`, `235`, `234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
-**Thirty-seven faults closed and every one was in this project, not on the cartridge.** A walk that
+**Thirty-eight faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
 script" list; a list ranked by a count instead of by what it costs; a party that could not gain
 a level; a roadmap line that called a fix a cost; a continuation that carried flags and not
@@ -722,7 +735,10 @@ cabins and can never leave one** — `Warp.Dynamic` was derived so the walker wo
 nineteen ordinary exits holes, and it stops there: the sentinel is understood on the way in and
 not on the way out, so three maps are counted as reached and are rooms with no exit. **And the
 larger half of that one is not a bug at all but a reading**: every reach number in this file is
-forward, 24029 of the floor's 35142 squares cannot get back, and nothing had ever asked.
+forward, 24029 of the floor's 35142 squares cannot get back, and nothing had ever asked; and at
+266 **`--ledges` reporting interior counts as totals** — 954 for `0x3B` where the world has 962,
+because its loops start at 1 so every square it examines has four neighbours, and eight ledge
+squares sit on a map's outer ring where a hop lands off the map and `HopOnto` refuses it.
 
 `246` is the read that is not a command, and the literal-pool test for whether compiled code holds
 a number — both live inside `--namespaces`, which is now the fullest single instrument in the
@@ -779,7 +795,15 @@ dotnet run -c Release --project src/Tools/RomDump -- firered.gba --unread
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --layers
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --sea
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --the-way-back
+dotnet run -c Release --project src/Tools/RomDump -- firered.gba --which-way
 ```
+
+`--which-way` is the ledge assignment, printed instead of quoted (266). Every ledge byte tried
+every way and left a wall, twice: **each on its own**, which is the original derivation and
+reproduces all seven of its numbers, and **with the others at their measured values**, which is
+the run it could not do. Four columns — maps, squares, stranded, and how many of the byte's own
+squares the walk stood beside, which is the denominator that tells "the world does not care" from
+"the sweep never got there".
 
 `--the-way-back` asks whether the places the walk gets to can get back to where it began (265).
 The walker hands out the edges it TAKES — every enqueue goes through one function that records
@@ -1266,6 +1290,17 @@ elevation 1 is NOT the sea: 0x15 is at elevation 1 on 59.6% of its squares, 0x10
   known water 0 times in 3004 and 0x52/0x53 carry people at 3.5%/4.4% against NORMAL's 1.39% (262)
 0x1B is 751 squares on ROUTE 17 bordered only by itself and 0xD0 (336 pairs); neither is named
 675 walkable pairs join two different non-nought layers, 269 of them 3-beside-4 — the bridges
+1042 ledge squares — 0x38 on 39, 0x39 on 41, 0x3B on 962, 0x3A a name on nought. `--ledges` says
+  954 for 0x3B and that is its INTERIOR: 8 sit on a map's outer ring, where a hop lands off the
+  map and HopOnto refuses it, so all 8 are walls here (266)
+the hop assignment is MEASURED and `--which-way` prints it (266). Each byte alone, everything else
+  a wall: 0x3B down 211 maps / up 38 / east 34 / west 34; 0x39 east 36 / west 34; 0x38 any 34 —
+  all seven reproduce to the digit. **0x38 is no longer an inference**: alone it stands beside 9
+  of its 39 squares so no direction could differ, and with the other two at their measured values
+  it stands beside 24 and WEST is the only direction that changes anything — 46790 squares against
+  46568, at 212 maps either way. 0x39 east firms up the same way (212/46790 against 211/46655)
+  and the criterion is REACH — by connectedness 0x3B down is the WORST of the four, stranding
+  35328 of 46433. The comment said connected and measured reached; it says reached now
 REACHING IS NOT RETURNING and until 265 only one of them was ever printed. `--the-way-back`:
   the floor stands on 35142 squares over 174 maps and 24029 of them CANNOT get back — 140 maps,
     137 stranded WHOLE, and the way into every one is EIGHTEEN LEDGE HOPS on 3.22 ROUTE 4
@@ -1455,6 +1490,13 @@ still work.**
   as a look. What is left: `0x4001`'s other two flag sites, and whether
   `EverywhereInTheImage.Reads` should stop counting `0x1A arg2` at all (244 marked the output
   rather than moving quoted numbers, and that decision is owed a re-run).
+* **What 266 left.** `--which-way` settled the ledge table; what is owed:
+  * **Whether a ledge on a map's outer ring hops across the join.** Eight squares, all `0x3B`,
+    all walls here. `WorldWalker` crosses borders; `MapData.HopOnto` does not know borders exist.
+  * **The sweep starts at PALLET TOWN with no moves.** A byte whose ground is behind CUT rather
+    than behind another ledge is exactly where `0x38` was, and that lever was not varied.
+  * **`--ledges`' axis columns are interior counts too** — 950 of 954 in an east–west run is a
+    share of the interior, and what the eight ring squares do has not been asked.
 * **What 265 left.** `--the-way-back` printed the second column for the first time; what is owed:
   * **What the lifts are worth.** The walk gets into `10.6`, `1.58` and `1.46` and models each as
     a room with no exit. Joining every floor with a door into a lift is the same upper bound the
