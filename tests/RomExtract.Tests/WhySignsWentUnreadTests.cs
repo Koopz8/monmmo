@@ -223,6 +223,142 @@ public sealed class WhySignsWentUnreadTests
         Assert.Empty(WhySignsWentUnread.Of(world, played.SignsRead, [.. played.Reached]));
     }
 
+    // ------------------------------------------------------- the side, in the SORTING (283)
+
+    /// <summary>A five-by-five room, walkable except where said.</summary>
+    private static MapData Room(params (int X, int Y)[] solid)
+    {
+        var collision = new byte[25];
+
+        foreach ((int x, int y) in solid) collision[(y * 5) + x] = 1;
+
+        return new MapData("1.0", "room", 5, 5, collision);
+    }
+
+    /// <summary>
+    /// <b>THE THING (283).</b> A sign whose kind names the SOUTH, with the south square walled and
+    /// the other three open, is a sign nothing can ever read — and this class sorted it as a reach
+    /// problem until now, because it asked 242's five-square question about a sign 280 reads from
+    /// one. One rule in two places disagreeing is the fault; the walk had the new one.
+    /// </summary>
+    [Fact]
+    public void ASignWhoseNamedSideIsAWallIsNotAReachProblem()
+    {
+        var world = new WorldData(
+        [
+            Room((2, 2), (2, 3)) with { Signs = [new MapSign(2, 2, MapSign.FromTheSouth, TheSign)] },
+        ]);
+
+        Assert.Equal(
+            UnreadBecause.NothingCouldStandBesideIt,
+            Assert.Single(WhySignsWentUnread.Of(world, [], ["1.0"])).Why);
+    }
+
+    /// <summary>
+    /// And the control, in the same process: with the side ignored the very same sign is a reach
+    /// problem, because three of its four neighbours are open. This is the whole difference the
+    /// parameter buys, and on the cartridge it is worth nothing — 279 read the side FROM the named
+    /// square being walkable on every record of those kinds, so no sign in the file can fail it.
+    /// The difference is real, and only a fixture can show it.
+    /// </summary>
+    [Fact]
+    public void AndWithTheSideIgnoredTheSameSignIsAReachProblem()
+    {
+        var world = new WorldData(
+        [
+            Room((2, 2), (2, 3)) with { Signs = [new MapSign(2, 2, MapSign.FromTheSouth, TheSign)] },
+        ]);
+
+        Assert.Equal(
+            UnreadBecause.ItNeverGotToThatWall,
+            Assert.Single(WhySignsWentUnread.Of(world, [], ["1.0"], obeySignSides: false)).Why);
+    }
+
+    /// <summary>
+    /// And a sign of the same kind with its named side OPEN is a reach problem, so the rule is
+    /// about the square and not about the kind. Without this, "every sign of kind one is
+    /// unreadable" passes the test above.
+    /// </summary>
+    [Fact]
+    public void ASignWhoseNamedSideIsOpenIsStillAReachProblem()
+    {
+        var world = new WorldData(
+        [
+            Room((2, 2)) with { Signs = [new MapSign(2, 2, MapSign.FromTheSouth, TheSign)] },
+        ]);
+
+        Assert.Equal(
+            UnreadBecause.ItNeverGotToThatWall,
+            Assert.Single(WhySignsWentUnread.Of(world, [], ["1.0"])).Why);
+    }
+
+    // ------------------------------------------------------------ at NO setting (283)
+
+    /// <summary>
+    /// <b>A sign read at ONE setting is read.</b> Six lever settings walk six distances, so one
+    /// run's unread list is a fact about that lever — and "the sign scripts that run at no
+    /// setting" has been in this project's prompt since 241 with no instrument that could answer
+    /// it.
+    /// </summary>
+    [Fact]
+    public void ASignOneRunReadIsNotUnreadAtNoSetting()
+    {
+        var world = new WorldData(
+        [
+            Column("1.0", 0, 0, 0) with { Signs = [new MapSign(0, 2, Kind: 0, TheSign)] },
+        ]);
+
+        RanASign it = new("1.0", new GridPosition(0, 2), TheSign, 1);
+
+        Assert.Empty(WhySignsWentUnread.AtNoSetting(
+            world, [([], ["1.0"]), ([it], ["1.0"])]));
+
+        // And the run that missed it, asked alone, still says it missed it.
+        Assert.Single(WhySignsWentUnread.Of(world, [], ["1.0"]));
+    }
+
+    /// <summary>
+    /// And REACHED is unioned too: a map one setting reaches is not a map nothing reaches, so a
+    /// sign on it is the third answer rather than the second.
+    /// </summary>
+    [Fact]
+    public void AMapOneRunReachedIsReached()
+    {
+        var world = new WorldData(
+        [
+            Column("1.0", 0, 0, 0) with { Signs = [new MapSign(0, 2, Kind: 0, TheSign)] },
+        ]);
+
+        Assert.Equal(
+            UnreadBecause.ItNeverGotToThatWall,
+            Assert.Single(WhySignsWentUnread.AtNoSetting(world, [([], []), ([], ["1.0"])])).Why);
+
+        Assert.Equal(
+            UnreadBecause.OnAMapItNeverReached,
+            Assert.Single(WhySignsWentUnread.AtNoSetting(world, [([], []), ([], [])])).Why);
+    }
+
+    /// <summary>
+    /// No runs at all is every scripted sign unread, sorted by the file first — the union of
+    /// nothing, which is the shape that would otherwise quietly report a clean sweep.
+    /// </summary>
+    [Fact]
+    public void NoRunsAtAllIsEverySignUnread()
+    {
+        var world = new WorldData(
+        [
+            Column("1.0", 0, 1, 1) with { Signs = [new MapSign(0, 2, Kind: 0, TheSign)] },
+            Column("2.0", 0, 0, 0) with { Signs = [new MapSign(0, 2, Kind: 0, TheOtherSign)] },
+        ]);
+
+        IReadOnlyList<UnreadSign> none = WhySignsWentUnread.AtNoSetting(world, []);
+
+        Assert.Equal(2, none.Count);
+        Assert.Equal(
+            [UnreadBecause.NothingCouldStandBesideIt, UnreadBecause.OnAMapItNeverReached],
+            none.Select(u => u.Why));
+    }
+
     /// <summary>
     /// And every scripted sign is accounted for exactly once — read or unread, never both and
     /// never neither. Without this a classifier that quietly drops a case reads as a clean

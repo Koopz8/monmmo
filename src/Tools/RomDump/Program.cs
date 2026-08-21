@@ -6320,6 +6320,10 @@ public static class Program
 
         List<TheFloorTable.Row> rows = [];
 
+        // Kept, because the six runs are the only six runs and asking anything of ALL of them
+        // needs all of them at once — which is what "at no setting" means (283).
+        List<(TheFloorTable.Setting At, Attempt Played)> everyRun = [];
+
         foreach (TheFloorTable.Setting at in TheFloorTable.Settings)
         {
             // A FRESH SAVE EACH TIME. Both of these are written into as a run goes, and a run
@@ -6336,6 +6340,7 @@ public static class Program
                 remembered, at.InOrder, doorsTo);
 
             rows.Add(TheFloorTable.Read(at, played, world.Maps.Count));
+            everyRun.Add((at, played));
 
             Console.WriteLine($"    ran {at.Command}");
         }
@@ -6363,11 +6368,178 @@ public static class Program
         foreach (TheFloorTable.Difference difference in TheFloorTable.Differences(rows))
             Console.WriteLine("    " + difference.Said);
 
+        WriteTheSignsAtNoSetting(world, everyRun);
+
         Console.WriteLine();
         Console.WriteLine(
             "  Paste the rows above into the prompt whole. Do not apply a delta to them — the"
             + " deltas are printed from the same six runs, so a table kept by hand from these"
             + " lines is exactly the drift this command exists to end.");
+    }
+
+    /// <summary>
+    /// The fourth list over all six settings at once: which sign scripts run at NO setting, and
+    /// why (283).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This prompt has carried "the 191 sign scripts that run at no setting — reach, or a square
+    /// nothing can stand beside, not separated" since 241. The separation exists — it is
+    /// <see cref="WhySignsWentUnread"/>, written at 249 — but it has only ever been asked of ONE
+    /// run, and a sign the floor cannot reach is not a sign nothing reaches. Six settings walk
+    /// six different distances and the union of them is the only honest denominator.
+    /// </para>
+    /// <para>
+    /// Everything here is subtracted from the six runs above rather than remembered, which is why
+    /// it lives in this command rather than in <c>--play</c>: <c>--play</c> is one setting.
+    /// </para>
+    /// </remarks>
+    private static void WriteTheSignsAtNoSetting(
+        WorldData world, IReadOnlyList<(TheFloorTable.Setting At, Attempt Played)> everyRun)
+    {
+        List<(string MapId, MapSign Sign)> scripted =
+        [
+            .. world.Maps.SelectMany(m => m.Signs.Where(s => s.HasScript).Select(s => (m.Id, s))),
+        ];
+
+        Console.WriteLine();
+        Console.WriteLine("  THE FOURTH LIST AT EVERY SETTING (283)");
+        Console.WriteLine(
+            $"    {scripted.Count} scripted sign(s) in the world, at"
+            + $" {scripted.Select(s => s.Sign.ScriptAddress).Distinct().Count()} address(es). Each"
+            + " row is ONE setting; the union underneath is the thing 241 asked for and nothing"
+            + " has ever printed.");
+        Console.WriteLine();
+        Console.WriteLine(
+            "      setting                                    read   of them  never got  nothing can");
+        Console.WriteLine(
+            "                                                        unread   to a wall  stand there");
+
+        foreach ((TheFloorTable.Setting at, Attempt played) in everyRun)
+        {
+            IReadOnlyList<UnreadSign> theirs =
+                WhySignsWentUnread.Of(world, played.SignsRead, [.. played.Reached]);
+
+            Console.WriteLine(
+                $"      {at.Command,-42} {played.SignsRead.Count,4}    {theirs.Count,4}"
+                + $"       {theirs.Count(u => u.Why == UnreadBecause.ItNeverGotToThatWall),4}"
+                + $"        {theirs.Count(u => u.Why == UnreadBecause.NothingCouldStandBesideIt),4}");
+        }
+
+        IReadOnlyList<UnreadSign> never = WhySignsWentUnread.AtNoSetting(
+            world, everyRun.Select(r => ((IEnumerable<RanASign>)r.Played.SignsRead, r.Played.Reached.AsEnumerable())));
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    AT NO SETTING: {never.Count} of the {scripted.Count} scripted sign(s) — read by"
+            + $" none of the {everyRun.Count} runs. And why:");
+
+        foreach ((UnreadBecause why, int signs) in WhySignsWentUnread.Counted(never))
+            Console.WriteLine($"      {signs,4}  {Unread(why)}");
+
+        // THE CONTROL, and it is a control on the BUCKETING rather than on the walk. The six runs
+        // above obey the side (280); this asks the same six runs' leftovers under 242's older
+        // five-square rule, so what moves is what the side rule alone is worth to the separation.
+        IReadOnlyList<UnreadSign> loose = WhySignsWentUnread.AtNoSetting(
+            world,
+            everyRun.Select(r => ((IEnumerable<RanASign>)r.Played.SignsRead, r.Played.Reached.AsEnumerable())),
+            obeySignSides: false);
+
+        IReadOnlyList<UnreadSign> moved =
+        [
+            .. never.Where(u => u.Why == UnreadBecause.NothingCouldStandBesideIt)
+                .Where(u => !loose.Any(
+                    o => o.MapId == u.MapId && o.Square == u.Square
+                        && o.Why == UnreadBecause.NothingCouldStandBesideIt)),
+        ];
+
+        Console.WriteLine();
+        Console.WriteLine(
+            "    AND THE CONTROL — the same six runs' leftovers sorted under 242's five-square"
+            + " rule instead of 280's side rule. The runs do not move; only the question does.");
+
+        foreach ((UnreadBecause why, int signs) in WhySignsWentUnread.Counted(loose))
+            Console.WriteLine($"      {signs,4}  {Unread(why)}");
+
+        Console.WriteLine(
+            $"    so the side rule moves {moved.Count} sign(s) out of a REACH bucket and into a"
+            + " fact about the file — a sign read from one square whose one square is a wall.");
+
+        foreach (UnreadSign one in moved.Take(12))
+            Console.WriteLine($"      {one}  kind {KindOf(one)}");
+
+        if (moved.Count > 12) Console.WriteLine($"      +{moved.Count - 12} more");
+
+        // WIDE SIGN OR WIDE WALK. 224 found that 519 sign records sit at 360 addresses, so an
+        // address read many times is either one square the walk keeps passing or several records
+        // sharing a block — and those are opposite readings of the same number.
+        Dictionary<uint, int> records = scripted
+            .GroupBy(s => s.Sign.ScriptAddress)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        var byAddress = everyRun
+            .SelectMany(r => r.Played.SignsRead)
+            .GroupBy(s => s.Address)
+            .Select(g => (
+                Address: g.Key,
+                Records: records.GetValueOrDefault(g.Key),
+                Squares: g.Select(s => (s.MapId, s.Square)).Distinct().Count(),
+                Times: g.Sum(s => s.Times),
+                Most: g.Max(s => s.Times)))
+            .OrderByDescending(a => a.Times)
+            .ThenBy(a => a.Address)
+            .ToList();
+
+        Console.WriteLine();
+        Console.WriteLine(
+            "    A WIDE SIGN OR A WIDE WALK — the most-read blocks over all six runs. RECORDS is"
+            + " how many sign records in the cartridge point at that block (224: 519 records at"
+            + " 360 addresses), SQUARES is how many of them a run actually stood at, and MOST is"
+            + " the largest count any single square got in any single run.");
+        Console.WriteLine();
+        Console.WriteLine("      address     records  squares   times   most");
+
+        foreach ((uint address, int held, int squares, int times, int most) in byAddress.Take(8))
+        {
+            Console.WriteLine(
+                $"      0x{address:X8}  {held,6}  {squares,7}  {times,6}  {most,5}");
+        }
+
+        Console.WriteLine(
+            $"    {byAddress.Count(a => a.Records > 1)} of the {byAddress.Count} block(s) any run"
+            + " read are shared by more than one record.");
+
+        // AND THE WIDEST ONE TAKEN APART, per run, because "154 times" is a product and the
+        // prompt has carried it since 241 without either factor.
+        if (byAddress.Count > 0)
+        {
+            uint widest = byAddress[0].Address;
+
+            Console.WriteLine();
+            Console.WriteLine(
+                $"    THE WIDEST BLOCK, 0x{widest:X8}, per run — its {byAddress[0].Records}"
+                + " record(s) sit on "
+                + string.Join(
+                    ", ",
+                    scripted.Where(s => s.Sign.ScriptAddress == widest)
+                        .GroupBy(s => s.MapId)
+                        .OrderByDescending(g => g.Count())
+                        .Select(g => $"{g.Key} x{g.Count()}")));
+
+            foreach ((TheFloorTable.Setting at, Attempt played) in everyRun)
+            {
+                List<RanASign> these = [.. played.SignsRead.Where(s => s.Address == widest)];
+
+                Console.WriteLine(
+                    $"      {at.Command,-42} {these.Count,3} square(s) x"
+                    + $" {(these.Count == 0 ? 0 : these.Max(s => s.Times))} pass(es) ="
+                    + $" {these.Sum(s => s.Times),4} read(s)");
+            }
+        }
+
+        string KindOf(UnreadSign one) =>
+            scripted.FirstOrDefault(s => s.MapId == one.MapId && s.Sign.Square == one.Square)
+                .Sign?.Kind.ToString() ?? "?";
     }
 
     private static void WritePlaythrough(
@@ -13154,6 +13326,43 @@ public static class Program
                 $"    AND THE DENOMINATOR: {buried.Count - solid.Count} of the {buried.Count} sit on"
                 + $" a square somebody could stand on, so the widest run's UNDERFOOT is out of"
                 + $" that and not out of {buried.Count}.");
+            // AND WHAT "SOLID" ACTUALLY SAYS. The collision field is TWO BITS, so it takes four
+            // values, and `IsWalkable` is `== 0` — every other value is a wall. If 2 or 3 mean
+            // something else, 35 buried items on "ordinary ground marked solid" are a reading
+            // rather than a fact (283).
+            var collisions = new Dictionary<int, int>();
+
+            foreach (LoadedMap map in library.All())
+            {
+                for (var y = 0; y < map.Collision.Height; y++)
+                {
+                    for (var x = 0; x < map.Collision.Width; x++)
+                    {
+                        int value = map.Collision.CollisionAt(new GridPosition(x, y));
+
+                        collisions[value] = collisions.GetValueOrDefault(value) + 1;
+                    }
+                }
+            }
+
+            Console.WriteLine(
+                "    and what SOLID says — the collision field is two bits and IsWalkable is"
+                + " `== 0`, so every other value is a wall. In the whole world: "
+                + string.Join(
+                    ", ",
+                    collisions.OrderBy(c => c.Key).Select(c => $"{c.Key} x{c.Value}")));
+
+            Console.WriteLine(
+                $"    the {solid.Count} buried on a wall carry: "
+                + string.Join(
+                    ", ",
+                    solid.GroupBy(
+                            one => everyMap.TryGetValue(one.MapId, out LoadedMap? m)
+                                ? m.Collision.CollisionAt(new GridPosition(one.X, one.Y))
+                                : -1)
+                        .OrderBy(g => g.Key)
+                        .Select(g => $"{g.Key} x{g.Count()}")));
+
             Console.WriteLine(
                 $"    the {solid.Count} on SOLID squares can never be stood on at any setting —"
                 + " what they stand on: "

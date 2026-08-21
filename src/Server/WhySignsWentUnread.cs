@@ -6,9 +6,14 @@ namespace PokeMmo.Server;
 public enum UnreadBecause
 {
     /// <summary>
-    /// <b>Nothing could ever stand beside it, at any lever setting.</b> Not one of the five
-    /// squares a sign is read from — its own and the four around it — is walkable, and that is
-    /// asked with the water opened, so no run and no player reads this one.
+    /// <b>Nothing could ever stand where it is read from, at any lever setting.</b> Not one of the
+    /// squares this sign's kind allows is walkable, and that is asked with the water opened, so no
+    /// run and no player reads this one.
+    /// <para>
+    /// WHICH squares those are is the kind's business (279, 280): one square for the 97 that name
+    /// a side, and its own plus the four around it for the rest. Asking the five-square question
+    /// about a sign the walk reads from one is a verdict about a walk nobody takes.
+    /// </para>
     /// <para>
     /// A property of the FILE. It cannot move when a lever moves, and 211's rule is that a
     /// bucket which does move was named wrongly. This is the one to check.
@@ -58,10 +63,16 @@ public static class WhySignsWentUnread
     /// <param name="world">The world the run walked.</param>
     /// <param name="read">The signs it read, from <see cref="Attempt.SignsRead"/>.</param>
     /// <param name="reached">The maps it reached.</param>
+    /// <param name="obeySignSides">
+    /// Whether a sign whose kind names a side is read from that square alone (279, 280). It has to
+    /// be the rule the run itself used or the buckets describe a walk nobody took, and it is a
+    /// parameter rather than a constant so both answers come out of one process (241).
+    /// </param>
     public static IReadOnlyList<UnreadSign> Of(
         WorldData world,
         IEnumerable<RanASign> read,
-        IReadOnlyCollection<string> reached)
+        IReadOnlyCollection<string> reached,
+        bool obeySignSides = true)
     {
         HashSet<(string, GridPosition)> already = [.. read.Select(r => (r.MapId, r.Square))];
 
@@ -89,13 +100,48 @@ public static class WhySignsWentUnread
                     map.Id,
                     sign.Square,
                     sign.ScriptAddress,
-                    !CanBeStoodBeside(grid, sign.Square) ? UnreadBecause.NothingCouldStandBesideIt
+                    !CanBeStoodBeside(grid, sign, obeySignSides)
+                        ? UnreadBecause.NothingCouldStandBesideIt
                     : !reached.Contains(map.Id) ? UnreadBecause.OnAMapItNeverReached
                     : UnreadBecause.ItNeverGotToThatWall));
             }
         }
 
         return unread;
+    }
+
+    /// <summary>
+    /// The signs no run in <paramref name="runs"/> read, with the reason — a sign read at ANY
+    /// setting is read, and a map reached at any setting is reached.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>One run's unread list is a fact about one lever setting.</b> The six settings differ in
+    /// how far they walk, so "it never got to that wall" at the floor can be "it read it" three
+    /// rows down, and a single run's buckets cannot say which signs are out of everybody's reach.
+    /// That is the number this project wanted when it wrote "the sign scripts that run at no
+    /// setting" and never had: it takes all six runs at once.
+    /// </para>
+    /// <para>
+    /// The union is over the READ list and the REACHED list separately, because they answer
+    /// separate questions and a sign can be on a map one setting reaches and another does not.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<UnreadSign> AtNoSetting(
+        WorldData world,
+        IEnumerable<(IEnumerable<RanASign> Read, IEnumerable<string> Reached)> runs,
+        bool obeySignSides = true)
+    {
+        var read = new List<RanASign>();
+        var reached = new HashSet<string>();
+
+        foreach ((IEnumerable<RanASign> those, IEnumerable<string> maps) in runs)
+        {
+            read.AddRange(those);
+            reached.UnionWith(maps);
+        }
+
+        return Of(world, read, reached, obeySignSides);
     }
 
     /// <summary>How many went unread for each reason, biggest first.</summary>
@@ -109,13 +155,22 @@ public static class WhySignsWentUnread
     ];
 
     /// <summary>
-    /// Whether any of the five squares a sign is read from is walkable — its own and the four
-    /// around it, which is the rule the walk itself uses.
+    /// Whether any square this sign can be read from is walkable — the ONE its kind names, or its
+    /// own and the four around it when its kind names none. The same rule the walk itself uses,
+    /// which is the whole point of it being here.
     /// </summary>
-    private static bool CanBeStoodBeside(CollisionGrid grid, GridPosition at) =>
-        grid.IsWalkable(at)
-        || grid.IsWalkable(at with { Y = at.Y - 1 })
-        || grid.IsWalkable(at with { Y = at.Y + 1 })
-        || grid.IsWalkable(at with { X = at.X - 1 })
-        || grid.IsWalkable(at with { X = at.X + 1 });
+    private static bool CanBeStoodBeside(CollisionGrid grid, MapSign sign, bool obeySignSides) =>
+        obeySignSides && sign.MustBeReadFrom is { } only
+            ? grid.IsWalkable(only)
+            : Around(sign.Square).Any(grid.IsWalkable);
+
+    /// <summary>242's five squares: its own, and the four around it.</summary>
+    private static IEnumerable<GridPosition> Around(GridPosition at) =>
+    [
+        at,
+        at with { Y = at.Y - 1 },
+        at with { Y = at.Y + 1 },
+        at with { X = at.X - 1 },
+        at with { X = at.X + 1 },
+    ];
 }
