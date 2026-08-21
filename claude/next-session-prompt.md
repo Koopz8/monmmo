@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-301`, 3186 tests green.
+`claude-302`, 3189 tests green.
 
 Standing rules — do not break these:
 
@@ -573,9 +573,37 @@ Traps worth carrying:
     all** before writing a test for it; a fixture for a property that holds by construction is a
     test named for a discrimination it does not make.
 
+65. **SAYING A RULE IS MODELLED IS NOT TESTING IT** (262). 261 printed its layer rule, said out
+    loud that it was modelled, and reported its output as a cost anyway. The rule is refuted:
+    every square 261 called "behind a layer" is on ONE map, and the flat fill crosses to them over
+    **336 direct neighbour pairs of `0x1B` beside `0xD0` running the length of ROUTE 17**. A road
+    whose two sides touch three hundred times is not two layers. **A difference produced by a
+    modelled rule is a number about the RULE until the rule has been tested against the
+    cartridge** — and what elevation costs the walk, as far as anything here can show, is NOUGHT.
+
+66. **100% OF X AT Y IS A FACT ABOUT Y, NOT ABOUT WHAT YOU THINK Y IS** (262). 261 found four
+    behaviours at elevation 1 on 100% of their squares, believed elevation 1 was the sea, and
+    concluded they were water. Asked two ways that cannot see an elevation — what a square BORDERS
+    and whether anything STANDS on it — all four look like ordinary ground and nothing like water:
+    `0x1B` touches a known water square **0 times in 3004**, less than NORMAL's 0.8%, and `0x52`
+    and `0x53` carry people at 3.5% and 4.4% against NORMAL's 1.39%. **And the premise was never
+    tested either**: asked the other way round, `0x15` is at elevation 1 on **59.6%** of its
+    squares. Elevation 1 is not the sea.
+
+67. **THE BAR IS WHAT MAKES A WRONG READING COST NOTHING** (262). 237 declined `[0x89] = 2` on one
+    site; 261 declined its four behaviours on one or two maps each. `MetatileBehaviour.IsWater`
+    still holds two values and 262 **had nothing to undo**. A bar that only ever costs you
+    headlines has not been tested; this one earned itself.
+
+68. **AN INSTRUMENT WHOSE KNOWN ROWS ARE IN ITS OWN OUTPUT CONTROLS ITSELF** (262). `--sea` prints
+    the two behaviours already read as water and three certainly not, beside the candidates. If
+    the tallies were wrong, water would not come back at 95.8% and ordinary ground at 0.8%. **Put
+    the things you already know into the table rather than into a comment** — it is not a fixture
+    and it runs every time.
+
 ## Where things are
 
-Read `claude/milestone-261-what-the-layers-cost.md` first, then `260`, `259`, `258`, `257`,
+Read `claude/milestone-262-the-four-are-not-the-sea.md` first, then `261`, `260`, `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
 `250`, `249`, `248`, `247`, `246`, `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
@@ -629,7 +657,10 @@ map number, removed until now by an off-map test that had no idea what it was ca
 ~44%, with three genuine disagreements in 3863 records, on a world where 423 of 425 maps are
 layered and the walk is flat; and at 261 **four metatile behaviours that are at sea level on 100%
 of their squares and are in no water list** — `0x1B`, `0x52`, `0x53`, `0x50`, 980 squares, found
-because the layered fill lost exactly `0x1B`'s 751 on ROUTE 17.
+because the layered fill lost exactly `0x1B`'s 751 on ROUTE 17 — **and at 262 that reading was
+refuted by two tests that cannot see an elevation**, along with its premise (`0x15` is at
+elevation 1 on 59.6% of its squares) and the layer rule itself; the water list was never changed,
+so the fault closed at 262 is 261's own inference and it cost nothing.
 
 `246` is the read that is not a command, and the literal-pool test for whether compiled code holds
 a number — both live inside `--namespaces`, which is now the fullest single instrument in the
@@ -684,9 +715,19 @@ dotnet run -c Release --project src/Tools/RomDump -- firered.gba --operands
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --dropped
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --unread
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --layers
+dotnet run -c Release --project src/Tools/RomDump -- firered.gba --sea
 ```
 
-`--layers` is what 260's elevation would cost the walk (261), and it changes nothing. The flat
+`--sea` asks which behaviours are water WITHOUT looking at an elevation (262): what a square
+BORDERS and whether anything STANDS on it, with the two behaviours already read as water and three
+certainly not printed in the same table — so the instrument controls itself on every run. Water is
+95.8% beside known water and ordinary ground 0.8%. **261's four are not water**: `0x1B` is
+**0 of 3004**, `0x52`/`0x53` carry people at 3.5%/4.4% against NORMAL's 1.39%. **And the premise
+fails too** — `0x15` is at elevation 1 on only **59.6%** of its squares, so elevation 1 is not the
+sea. `MetatileBehaviour.IsWater` still holds two values and was never changed.
+
+`--layers` is what 260's elevation would cost the walk (261, REFUTED at 262), and it changes
+nothing. The flat
 fill and the layered fill are ONE fill with one predicate swapped — the flat run passes a rule
 that always says yes — so they cannot differ for any reason but the rule, which is MODELLED
 (equal elevations, or nought on either side). Over `GridFor(false)`, the grid the run steps
@@ -696,9 +737,13 @@ and is made solid by a behaviour. All 751 are at **elevation 1, which is the sea
 carry it, the behaviour pass makes 21185 solid, and the 1065 left over give **four behaviours at
 elevation 1 on 100% of their squares in the image** — `0x1B` 751, `0x52` 142, `0x53` 45, `0x50`
 42 — against 0-1% for the rest, with `0x13` at 80% in between. `0x1B`'s 751 ARE the ROUTE 17 751.
-**Not adopted**: one or two maps each, below 237's bar. It also prints the cross-layer pairs —
-675 join two non-nought layers, 269 of them 3-beside-4, the bridges — and the flat walk crosses
-every one at no cost.
+**Not adopted**: one or two maps each, below 237's bar — and 262 refuted the lot, so the bar is
+why nothing had to be undone. **The RULE is refuted too**: the 751 are reached across **336 direct
+`0x1B`-beside-`0xD0` pairs running the length of ROUTE 17**, and a road whose sides touch three
+hundred times is not two layers. The command says so in its own output. **What elevation costs the
+walk is NOUGHT.** It also prints the cross-layer pairs — 675 join two non-nought layers, 269 of
+them 3-beside-4 — and the fill HOPS now (`MapData.HopOnto`, through the ledge rather than over it,
+because a ledge carries elevation nought), which 261's could not: flat reach 79594 -> 79886.
 
 `--unread` is which bytes of an event record nothing in this project reads (260), and it does not
 keep a list of offsets — `Rom.WatchReads` records what the readers actually touched, so it cannot
@@ -1132,10 +1177,11 @@ the four event lists lose NOTHING to the off-map filter: warps 0/1294, triggers 
 every event record carries the ELEVATION of its own square and nothing reads it (260): object +8,
   warp +4, trigger +4, sign +4 — 97.6/93.2/86.0/87.3% against ~44%, 3 of 3863 genuinely disagree
 423 of 425 maps carry more than one elevation among their own squares; the walk is two-dimensional
-  and it costs 751 squares on ONE map (3.35 ROUTE 17) and NOUGHT maps — all 751 are water (261)
-elevation 1 is the SEA: 22250 squares, 21185 already solid from behaviours, 1065 left over
-0x1B/0x52/0x53/0x50 are at elevation 1 on 100% of their squares in the image and are in no water
-  list — 980 squares, 1-2 maps each, NOT ADOPTED (below 237's bar); 0x13 is 80% and is open
+  and the modelled layer rule is REFUTED (262), so what it costs is NOUGHT
+elevation 1 is NOT the sea: 0x15 is at elevation 1 on 59.6% of its squares, 0x10 on 99.2% (262)
+0x1B/0x52/0x53/0x50 are at elevation 1 on 100% of their squares AND ARE NOT WATER — 0x1B touches
+  known water 0 times in 3004 and 0x52/0x53 carry people at 3.5%/4.4% against NORMAL's 1.39% (262)
+0x1B is 751 squares on ROUTE 17 bordered only by itself and 0xD0 (336 pairs); neither is named
 675 walkable pairs join two different non-nought layers, 269 of them 3-beside-4 — the bridges
 object +3/+11/+22/+23 and trigger +5/+10/+11 are nought in EVERY record in the game — spare (260)
 object +14 is unread on the 1199 non-trainers and is nought on 1197 of them; two are not (260)
