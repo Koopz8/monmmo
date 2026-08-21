@@ -241,7 +241,52 @@ public sealed record MapSign(int X, int Y, int Kind, uint ScriptAddress)
     /// </summary>
     public const int HiddenItem = 7;
 
+    /// <summary>The kinds that name the side you have to be standing on (279).</summary>
+    /// <remarks>
+    /// <para>
+    /// <b>READ, and every one of them is unanimous.</b> This project treated the kind byte as two
+    /// values — the buried kind and everything else — and it takes five. Of the four that hold a
+    /// script pointer, three have one walkable neighbour on EVERY record of that kind:
+    /// <c>0x01</c>'s south on 73 of 73, <c>0x03</c>'s west on 14 of 14, <c>0x04</c>'s east on 10
+    /// of 10. The floor is the commonest kind's own rates — <c>0x00</c> names no side and its
+    /// neighbours are open 57.6%, 87.2%, 54.7% and 46.9% of the time — which puts those three at
+    /// 0.0046%, 0.0217% and 0.0517%.
+    /// </para>
+    /// <para>
+    /// And the other half, which is what makes it a side rather than an open neighbour: on
+    /// <c>0x03</c> the EAST square is walkable on nought of 14, and on <c>0x04</c> the WEST square
+    /// on nought of 10. These are not squares that merely have a lot of room around them.
+    /// </para>
+    /// <para>
+    /// <c>0x02</c> does not occur on this cartridge. It would be north by elimination and that is
+    /// an INFERENCE, so nothing here reads it.
+    /// </para>
+    /// </remarks>
+    public const int FromTheSouth = 1;
+
+    /// <inheritdoc cref="FromTheSouth"/>
+    public const int FromTheWest = 3;
+
+    /// <inheritdoc cref="FromTheSouth"/>
+    public const int FromTheEast = 4;
+
     public bool IsHiddenItem => Kind == HiddenItem;
+
+    /// <summary>
+    /// The one square this sign's kind says it is read from, or nought when its kind names none.
+    /// </summary>
+    /// <remarks>
+    /// 242 had this project read a sign from its own square or any of the four around it, and for
+    /// the 97 signs whose kind names a side that is three squares too many. Nought here means the
+    /// old rule, which is right for the 422 signs of kind <c>0x00</c> and for the buried ones.
+    /// </remarks>
+    public GridPosition? MustBeReadFrom => Kind switch
+    {
+        FromTheSouth => new GridPosition(X, Y + 1),
+        FromTheWest => new GridPosition(X - 1, Y),
+        FromTheEast => new GridPosition(X + 1, Y),
+        _ => null,
+    };
 
     /// <summary>True when there is something here to read.</summary>
     public bool HasScript => ScriptAddress != 0 && !IsHiddenItem;

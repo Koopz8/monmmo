@@ -1095,7 +1095,8 @@ public static class Autoplayer
         IReadOnlyDictionary<int, int>? remembered = null,
         bool inOrder = false,
         IReadOnlyDictionary<uint, uint>? doorsTo = null,
-        bool readSigns = true)
+        bool readSigns = true,
+        bool obeySignSides = true)
     {
         // WHICH SCENE A SCRIPT IS, WHICH IS NOT THE SAME AS WHICH SCRIPT IT IS.
         //
@@ -1317,7 +1318,8 @@ public static class Autoplayer
                 // folding as everything else. Handing it to a second copy of this body is how
                 // the two would drift apart, and this project has found that fault five times.
                 var toRun = new Queue<Runnable>(
-                    Reachable(map, stood, flags, gone, remembered, inOrder, readSigns));
+                    Reachable(
+                        map, stood, flags, gone, remembered, inOrder, readSigns, obeySignSides));
                 var alreadyRun = new HashSet<uint>();
 
                 while (toRun.Count > 0)
@@ -2424,7 +2426,8 @@ public static class Autoplayer
         HashSet<(string MapId, int LocalId)> gone,
         IReadOnlyDictionary<int, int>? remembered = null,
         bool inOrder = false,
-        bool readSigns = true)
+        bool readSigns = true,
+        bool obeySignSides = true)
     {
         // WHETHER A SCRIPT'S OWN CONDITION IS HONOURED, WHICH IS WHAT THE FLOOR MEANS.
         //
@@ -2539,7 +2542,19 @@ public static class Autoplayer
         {
             if (!sign.HasScript) continue;
 
-            if (Beside(map.Id, sign.Square).Any(stood.Contains))
+            // AND FROM THE SIDE THE RECORD NAMES (279). The kind byte takes five values on this
+            // cartridge and three of them name a side — 0x01 south on 73 of 73, 0x03 west on 14
+            // of 14, 0x04 east on 10 of 10, against a floor of the commonest kind's own rates.
+            // For those 97 signs the four squares 242 allows are three too many.
+            //
+            // `obeySignSides` is the control rather than a lever: the run with it off is the run
+            // as it was before this milestone, and it is measured in the same process (241).
+            IEnumerable<(string, GridPosition)> from =
+                obeySignSides && sign.MustBeReadFrom is { } only
+                    ? [(map.Id, only)]
+                    : Beside(map.Id, sign.Square);
+
+            if (from.Any(stood.Contains))
                 yield return new Runnable(sign.ScriptAddress, 0, WhatRanIt.ASign, At: sign.Square);
         }
     }

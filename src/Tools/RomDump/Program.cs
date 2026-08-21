@@ -6528,7 +6528,20 @@ public static class Program
                 world, first.Id, rules, control.Read, null, boat, money, controlBeaten, surf,
                 controlRemembered, inOrder, doorsTo, readSigns: false);
 
-            WriteSignsRead(world, played, without, gates);
+            // AND THE SAME RUN AGAIN WITH THE SIDE IGNORED (280), which is the run as it stood
+            // before 279 read the kind byte. Same process, same world, same levers — 241's rule,
+            // that a before-and-after across two builds is a measurement with no instrument.
+            var loosebeaten = new HashSet<int>();
+            var looseRemembered = new Dictionary<int, int>();
+
+            var loose = new HowAScriptRuns(
+                rom, teaches, answers, variables, sayYes, loosebeaten, looseRemembered, watch);
+
+            Attempt fromAnySide = Autoplayer.Play(
+                world, first.Id, rules, loose.Read, null, boat, money, loosebeaten, surf,
+                looseRemembered, inOrder, doorsTo, readSigns: true, obeySignSides: false);
+
+            WriteSignsRead(world, played, without, gates, fromAnySide);
         }
 
         // WHY IT COULD CROSS WATER, WHICH WAS A COMMAND-LINE FLAG UNTIL NOW.
@@ -13328,7 +13341,7 @@ public static class Program
     };
 
     private static void WriteSignsRead(
-        WorldData world, Attempt played, Attempt without, FlagGates gates)
+        WorldData world, Attempt played, Attempt without, FlagGates gates, Attempt fromAnySide)
     {
         var inTheWorld = world.Maps
             .SelectMany(m => m.Signs.Where(g => g.HasScript).Select(g => (m.Id, g.ScriptAddress)))
@@ -13430,6 +13443,33 @@ public static class Program
             $"      so signs are worth {played.Reached.Count - without.Reached.Count} map(s) and"
             + $" {played.Flags.Count - without.Flags.Count} flag(s) — {onlyWithSigns.Count} the"
             + $" run only has WITH them, {lostToSigns.Count} it only has without");
+
+        // AND THE SECOND CONTROL (280): the same run again with the SIDE ignored, which is the
+        // run as it stood before 279 read the kind byte. Three runs in one process, so what the
+        // side costs is subtracted rather than remembered.
+        int named = world.Maps.SelectMany(m => m.Signs)
+            .Count(one => one.HasScript && one.MustBeReadFrom is not null);
+
+        IReadOnlyList<int> loosened = [.. fromAnySide.Flags.Except(played.Flags).Order()];
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"      AND THE SIDE (279, 280). {named} of the {inTheWorld.Count} sign script(s) name"
+            + " ONE square to be read from; the rest are read from any of the four 242 allows."
+            + $" The same run with the side IGNORED: {fromAnySide.Reached.Count} maps,"
+            + $" {fromAnySide.Flags.Count} flags in {fromAnySide.Passes} pass(es),"
+            + $" {fromAnySide.SignsRead.Count} sign(s) read against this run's"
+            + $" {played.SignsRead.Count}");
+        Console.WriteLine(
+            $"      so obeying the side costs {fromAnySide.Reached.Count - played.Reached.Count}"
+            + $" map(s), {fromAnySide.Flags.Count - played.Flags.Count} flag(s) and"
+            + $" {fromAnySide.SignsRead.Count - played.SignsRead.Count} sign(s)"
+            + (loosened.Count == 0
+                ? " — and there is no flag the loose run has that this one does not."
+                : " — the flag(s) only the loose run has: "
+                    + string.Join(
+                        ", ",
+                        loosened.Select(f => $"0x{f:X4}{(gates.IsAboutTheWorld(f) ? " (gates)" : "")}"))));
 
         // Both directions, because the two are different findings and the second one is the
         // surprising one: running more scripts can take a flag away as easily as add one.
