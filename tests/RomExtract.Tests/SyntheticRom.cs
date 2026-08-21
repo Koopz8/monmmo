@@ -1393,11 +1393,15 @@ public sealed class SyntheticRom
             WriteU32(at + 16, Rom.BaseAddress + (uint)ScriptFor(index, i));
         }
 
-        // One object beyond the map's own edge, which extraction should drop.
+        // One object beyond the map's own edge, which extraction should drop — at EXACTLY the
+        // edge, because that is where the test's boundary is. A map is 0..width-1, so width
+        // itself is the first square off it, and a reader written with `>` instead of `>=`
+        // keeps this record and drops everything further out. 259 put the stray at width + 5,
+        // where both readings agree, and a break on that boundary came back green.
         int stray = table + objects.Count * 24;
         _data[stray] = 9;
         _data[stray + 1] = 3;
-        WriteU16(stray + 4, MapWidth + 5);
+        WriteU16(stray + 4, MapWidth);
         WriteU16(stray + 6, 1);
 
         // AND A CLONE WHOSE SQUARE IS ON THE MAP — the decoy 259 needs.
