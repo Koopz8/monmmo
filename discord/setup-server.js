@@ -280,10 +280,26 @@ function mergeReadonly(catOverwrites, mode, everyoneId, staffIds) {
   return out;
 }
 
+/**
+ * Substitute the copy's placeholders.
+ *
+ * {{PROJECT}} and {{REPO}} come from config. Everything else — test counts, how
+ * far the walk gets, how much of the script reads — comes from .facts.json,
+ * which facts.js reads out of the repo's own notes. See facts.js for why.
+ *
+ * An unknown placeholder is left ALONE rather than blanked, so verify.js's
+ * "no placeholder survives substitution" check fails loudly instead of a channel
+ * quietly posting a sentence with a hole in it.
+ */
 function fill(str) {
-  return str
+  const facts = require('./facts.js').load();
+  let out = str
     .replace(/\{\{PROJECT\}\}/g, CONFIG.projectName)
     .replace(/\{\{REPO\}\}/g, CONFIG.repoUrl);
+  for (const [k, v] of Object.entries(facts)) {
+    out = out.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), v);
+  }
+  return out;
 }
 
 function preflight() {

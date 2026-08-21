@@ -22,7 +22,7 @@ the ROM you already own, on your own machine, at runtime**. The client ships non
 of it. The server never sees any of it.
 
 This is a solo engineering project, built in public, one measured milestone at a
-time. **2,841 tests**, none of which need a cartridge. An authoritative server, a
+time. **{{TESTS}} tests**, none of which need a cartridge. An authoritative server, a
 Gen III battle engine accurate down to truncation order, and a growing list of
 things two people can do together: **see each other, chat, add friends, form a
 guild, trade, duel, climb a ladder, buy and sell on a player market, and travel
@@ -79,19 +79,19 @@ staring at the raw contents until the pattern shows up. Then it has to be
 this project has been fooled by the difference more times than is comfortable.
 
 **How do you know it works?**
-**2,841 automatic checks** run every time anything changes. If a change breaks
+**{{TESTS}} automatic checks** run every time anything changes. If a change breaks
 something that used to work, they go red and it does not ship. None of them need
 a copy of the game.
 
 **What is being worked on right now — message below.**`,
 
-`## Right now: a robot that plays the game
+`## The robot that plays the game
 
 It starts a brand new save and plays as far as it can get on its own. The point
 is not to beat the game. It is to find every place a real player would get stuck
 **automatically**, instead of waiting for somebody to walk into it and complain.
 
-It currently gets to **381 of the game's 425 places.**
+It currently gets to **{{MAPS_REACHED}} of the game's {{MAPS_TOTAL}} places.**
 
 **What it has found, roughly in order of how silly they are:**
 
@@ -109,8 +109,44 @@ It currently gets to **381 of the game's 425 places.**
 thought the robot reached 390 places and it really reaches 381. The lower one is
 the true one, and it stays.
 
-**Next:** get the walk further, then work out what is behind the last 44 doors
-that nothing in the game appears to open.`,
+**Next:** get the walk further, then work out what is behind the last 35 doors
+that nothing in the game appears to open.
+
+**What is being worked on right now — message below.**`,
+
+`## Right now: nobody had ever read a sign
+
+**The robot player has never read a single sign in the game.** Not one, ever.
+
+It was not skipping them. The record it walks the world with — the same record
+the server uses — simply never carried signs at all. **519 of them**, invisible
+for the whole life of this project.
+
+They are in now. What did they turn out to be worth? **Nothing, almost exactly.**
+Not one extra square of the map opened up. Seven switches flipped, which comes to
+about two people becoming visible somewhere. Months of content nobody could see,
+worth two villagers — and we know that because it was measured rather than
+assumed.
+
+They did break something. **Two of the switches signs touch get turned back off
+again**, so the walk no longer settles down — it goes round in a loop now. That
+is the first thing in this project a run can *undo*, and it is a better problem
+than the one it replaced.
+
+**The stretch before this was spent checking our own notes.** There is a summary
+sheet at the top of the working notes that every session reads first. It went in
+as one block **thirty-nine rounds of work ago and nobody ever re-ran it.**
+Several lines were wrong, and four quoted figures that no tool here can even
+produce — numbers nothing could contradict, because nothing computes them.
+
+**And the most confident finding of that stretch was mostly an artefact.** We had
+published "27 numbers being used two different ways at once — sixteen times what
+chance would give you." Counted properly, 26 of them were ordinary numbers that
+happened to match. The real answer is **one**, which is exactly what chance
+predicts.
+
+None of this changed what the game does. All of it changed what we believe about
+it, which is the trade this project keeps making on purpose.`,
   ],
 
   rules: [
@@ -467,17 +503,23 @@ It also prints how many scripts it opened, and of what kind. A kind with no line
 is a kind nothing looked at, which is the single thing the old output could never
 tell you.
 
-**Where that leaves the reading:** 2,915 scripts on 425 maps, 3,856 blocks read
-to a proper end and 32 that still stop on a byte nobody has identified. **322
-flags gate something in the world**; the widest walk opens 212 of them and leaves
-110 shut. Of those 110, 48 would open if the walk got further, and 62 would not —
-44 have no opener anywhere in the file at all.
+**Where that leaves the reading:** {{SCRIPTS}} scripts on {{MAPS_TOTAL}} maps,
+{{BLOCKS_READ}} blocks read to a proper end and {{BLOCKS_STOPPED}} that still stop
+on a byte nobody has identified. **{{GATES_TOTAL}}
+flags gate something in the world**; {{GATES_BY_SCRIPT}} are moved by a script
+somewhere and {{GATES_BOUNDARY}} are the code boundary. The widest walk opens 212
+of the 322 and leaves 110 shut. Those 110 split five ways, and only
+one of them is a wall: **35 have no opener anywhere in the file at all.** The
+rest are behind a script the walk never runs, a thing it never picks up, a tree
+or a rock, or simply past what the reading currently sees.
 
-That last group is the boundary: the cartridge opens them from its own compiled
+That first group is the boundary: the cartridge opens them from its own compiled
 code, which this project does not read and does not intend to. A boundary with an
 address on it, rather than a mystery.
 
-**The thing worth carrying:** a long run of faults closed here recently and
+**A note on measuring — two messages below.**`,
+
+`**The thing worth carrying:** a long run of faults closed here recently and
 **every one of them was in this project, not on the cartridge.** Nothing fails
 when it is wrong; it comes back confident and slightly off.
 
@@ -497,7 +539,28 @@ side of the line it fell on.
 
 The rule that came out of it: **a count with no denominator cannot come back
 empty.** "Nothing does this" and "nothing looked" read identically until both
-halves are printed. Anything quoted here now carries the floor it beat.`,
+halves are printed. Anything quoted here now carries the floor it beat.
+
+**Two more ways a count lies, both found the hard way.** One: a tool reports how
+many *times* it saw something and it gets read as how many *places* there are.
+Read one address nineteen times, print nineteen. A headline here went from 212 to
+**25** the moment it was counted by position instead of by reading.
+
+Two: a shared list of "every script in the game" — written specifically to stop
+this class of bug — was reading three of the five kinds. The same shape turned up
+again in the world record itself: **it had never carried signs**, so 519 sign
+scripts were invisible to everything that walks the world, for the whole life of
+the project.
+
+**One more, below.**`,
+
+`And once more in a rule for spotting when several doors lead into one scene,
+which had been quietly blind for forty-three milestones: it only accepted
+announcements below a numeric cliff, and a whole class of them sits above it. 68
+doors became 112 when that was fixed. Three rounds of work ran
+against four fifths of the world. **A shared wrong list is worse than five
+private ones**, because five disagree with each other and one agrees with itself
+everywhere.`,
   ],
 
   suggestions: [
@@ -747,11 +810,23 @@ posting in #bug-reports.
 
 **Known and open**
 - **The story does not finish yet.** A tool plays the game from a fresh save and
-  walks as far as it can get. It reaches **381 of 425 places** and opens **212 of
-  the 322 switches** that gate something. Of the 110 it never opens, 48 would come
-  with a longer walk — and **44 have no opener anywhere in the file at all**,
-  because the cartridge flips those from its own compiled code, which this
-  project reads none of.
+  walks as far as it can get. It reaches **{{MAPS_REACHED}} of {{MAPS_TOTAL}}
+  places** and opens **212 of
+  the 322 switches** that gate something. The 110 it never opens split six ways:
+  35 have **no opener anywhere in the file at all**, 30 sit behind a script the
+  walk never runs, 16 behind something it never picks up, 15 behind a tree or a
+  rock, 7 past what the reading can see, and 7 the run opens and then shuts again
+  itself. Only the first group is a wall — the cartridge flips those from its own
+  compiled code, which this project reads none of.
+**More below.**`,
+
+`**Known and open — the walk itself**
+- **The walk no longer settles.** Signs turn two scratch switches back off, so at
+  five of six settings it now goes round in a loop instead of stopping. The first
+  thing here a run can undo, and a better problem than not reading signs at all.
+- **54 of the game's 519 signs still go unread** — 36 on maps the walk never
+  reaches, 17 behind walls, and exactly one that nothing in the game can stand
+  beside.
 - **32 pieces of script still stop early**, on bytes whose meaning is unknown.
   Several turned out to be a wrong guess made earlier in the file rather than a
   command at all, which is the usual shape of this.
@@ -787,6 +862,13 @@ posting in #bug-reports.
 - **Unsimulated maps.** Only maps with a player on them tick. Walk away and back
   and the townsfolk have reset to their starting positions.
 - **In co-op, a parcel handed to the company still goes to one person.**
+- **28 of the 69 conditions a map checks on arrival wait on a value nothing in
+  the game ever writes.** Counted, not yet explained.
+- **Twelve numbers the cartridge writes into the save and never reads back**, and
+  fourteen more read only from code this project cannot follow. Found, not
+  explained.
+- **Seven boulders and two ferry switches with no setter anywhere.** Same shape
+  as the 35 above and probably the same answer, but not proved.
 - **One thing stated but not proved:** that a duel's result is taken exactly
   once. Breaking it leaves every test green, because reaching it needs a real
   duel driven to a finish through the world. Said out loud rather than assumed.
@@ -829,7 +911,7 @@ posting in #bug-reports.
 
 **More closed items, and the things that are not bugs, below.**`,
 
-`**Closed, continued**
+`**Closed — older items**
 - ~~The bedroom PC's behaviour byte.~~ There is no byte. The bedroom machine is
   scripted, not a tile — proved, not assumed.
 - ~~Joining takes forever under load.~~ The door was one unbounded 997 ms hash

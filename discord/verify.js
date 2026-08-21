@@ -553,6 +553,172 @@ t('the prompt forbids inventing significance and hiding a test drop', () => {
   assert(/test count fell/i.test(p), 'nothing stops the model smoothing over a regression');
 });
 
+console.log('\nFacts');
+
+const fsf = require('fs');
+
+// A tiny stand-in repo in the shapes facts.js actually reads. If the notes in
+// the real repo change shape, these stay green and the real run goes red — which
+// is the right way round: this proves the PARSER, not the cartridge.
+const FAKE = require('path').join(require('os').tmpdir(), 'discord-facts-fixture');
+// Nothing in this suite may write the real .facts.json. --write goes here instead.
+const FAKE_OUT = require('path').join(require('os').tmpdir(), 'discord-facts-out.json');
+// Snapshot the real one so the last check in this group can prove it survived.
+const REAL_FACTS = (() => { try { return fsf.readFileSync('./.facts.json', 'utf8'); } catch (_) { return null; } })();
+function fakeRepo({ promptTests = '3067', msTests = '3061 → 3067 tests, all green' } = {}) {
+  const cl = require('path').join(FAKE, 'claude');
+  fsf.rmSync(FAKE, { recursive: true, force: true });
+  fsf.mkdirSync(cl, { recursive: true });
+  fsf.writeFileSync(require('path').join(cl, 'next-session-prompt.md'), [
+    `Base is the tip of \`claude-285\`, ${promptTests} tests green.`,
+    '',
+    '## Where the reading stands',
+    '',
+    '```',
+    '2915 scripts on 425 maps, reaching 3888 blocks',
+    '3856 read to a proper end, 32 stopped at 19 codes',
+    '322 flags gate something; 264 are moved by a script somewhere; 233 are the code boundary',
+    '```',
+    '',
+    '## The floor, restated',
+    '',
+    '```',
+    '--play                                      183 / 160 in 6, party of 6 at 52',
+    '--play --say-yes --boat --in-order          381 / 296 in 7, party of FIVE at 77',
+    '```',
+    '',
+  ].join('\n'));
+  fsf.writeFileSync(require('path').join(cl, 'milestone-245-a-thing.md'), `# Milestone 245\n${msTests}\n`);
+  return FAKE;
+}
+function factsIn(root) {
+  delete require.cache[require.resolve('./facts.js')];
+  const prev = process.env.FACTS_ROOT;
+  process.env.FACTS_ROOT = root;
+  try { return require('./facts.js').collect(); }
+  finally {
+    if (prev === undefined) delete process.env.FACTS_ROOT; else process.env.FACTS_ROOT = prev;
+    delete require.cache[require.resolve('./facts.js')];
+  }
+}
+
+t('every figure the copy asks for is one facts.js can actually produce', () => {
+  const { facts } = factsIn(fakeRepo());
+  const wanted = new Set();
+  for (const msgs of Object.values(COPY)) {
+    for (const m of msgs) for (const ph of m.match(/\{\{([A-Z_]+)\}\}/g) || []) wanted.add(ph.slice(2, -2));
+  }
+  const known = new Set([...Object.keys(facts), 'PROJECT', 'REPO']);
+  for (const w of wanted) assert(known.has(w), `the copy uses {{${w}}} and nothing produces it`);
+});
+
+t('the figures come off the notes with the right values', () => {
+  const { facts } = factsIn(fakeRepo());
+  const want = {
+    TESTS: '3,067', MAPS_TOTAL: '425', MAPS_REACHED: '381', MAPS_FLOOR: '183',
+    SCRIPTS: '2,915', BLOCKS: '3,888', BLOCKS_READ: '3,856', BLOCKS_STOPPED: '32',
+    GATES_TOTAL: '322', GATES_BY_SCRIPT: '264', GATES_BOUNDARY: '233', MILESTONE: '245',
+  };
+  for (const [k, v] of Object.entries(want)) assert(facts[k] === v, `${k} came out ${facts[k]}, wanted ${v}`);
+});
+
+t('a prompt left behind by its own milestones is refused, not averaged', () => {
+  // The failure that actually happened: the milestone knows the new number and
+  // the block every session reads first still carries the old one.
+  fakeRepo({ msTests: '3061 → 3099 tests, all green' });
+  const out = require('child_process').spawnSync(process.execPath, ['facts.js', '--check'],
+    { env: { ...process.env, FACTS_ROOT: FAKE, FACTS_OUT: FAKE_OUT }, encoding: 'utf8' });
+  assert(out.status === 1, '--check should exit 1 when a milestone is ahead of the prompt');
+  assert(/behind its own milestones/i.test(out.stdout), '--check should say what is behind what');
+});
+
+t('a milestone with a smaller count is not treated as a disagreement', () => {
+  // Only one direction is wrong. An older milestone naming fewer tests is just
+  // an older milestone, and failing on that would make the job cry wolf daily.
+  fakeRepo({ msTests: '2900 → 2950 tests, all green' });
+  const out = require('child_process').spawnSync(process.execPath, ['facts.js', '--check'],
+    { env: { ...process.env, FACTS_ROOT: FAKE, FACTS_OUT: FAKE_OUT }, encoding: 'utf8' });
+  assert(out.status === 0, `a lower earlier count should be fine, got exit ${out.status}`);
+});
+
+t('a milestone that never mentions the suite is walked past, not failed on', () => {
+  // Most milestones close on a table of broken guards and no test count at all.
+  const root = fakeRepo({ msTests: '3061 → 3067 tests, all green' });
+  const cl = require('path').join(root, 'claude');
+  fsf.writeFileSync(require('path').join(cl, 'milestone-246-says-nothing-about-tests.md'),
+    '# Milestone 246\nA table of broken guards and not one number about the suite.\n');
+  const { facts } = factsIn(root);
+  assert(facts.TESTS === '3,067', `walked past the silent milestone wrongly: ${facts.TESTS}`);
+  assert(facts.MILESTONE === '246', 'MILESTONE should still be the newest document, counted or not');
+  const out = require('child_process').spawnSync(process.execPath, ['facts.js', '--check'],
+    { env: { ...process.env, FACTS_ROOT: root, FACTS_OUT: FAKE_OUT }, encoding: 'utf8' });
+  assert(out.status === 0, 'a milestone with no test count must not fail the run');
+});
+
+t('a missing note is an error, never a blank', () => {
+  const empty = require('path').join(require('os').tmpdir(), 'discord-facts-empty');
+  fsf.rmSync(empty, { recursive: true, force: true });
+  fsf.mkdirSync(empty, { recursive: true });
+  const out = require('child_process').spawnSync(process.execPath, ['facts.js', '--write'],
+    { env: { ...process.env, FACTS_ROOT: empty, FACTS_OUT: FAKE_OUT }, encoding: 'utf8' });
+  assert(out.status === 1, 'facts.js should refuse to write when it found nothing');
+  assert(!fsf.existsSync('./.facts.json') || out.stdout.includes('Nothing written'),
+    'a failed read must not overwrite a good facts file');
+});
+
+t('a figure moving is reported distinctly from a figure holding still', () => {
+  // The scheduled job branches on this: exit 10 means something moved.
+  const root = fakeRepo();
+  const run = () => require('child_process').spawnSync(process.execPath, ['facts.js', '--write'],
+    { env: { ...process.env, FACTS_ROOT: root, FACTS_OUT: FAKE_OUT }, encoding: 'utf8' });
+  assert([0, 10].includes(run().status), 'facts.js --write should exit 0 or 10');
+});
+
+t('the scheduled sync only touches channels that are wiped and reposted', () => {
+  const src = fsf.readFileSync('./sync.js', 'utf8');
+  assert(/REPLACE_ONLY/.test(src), 'sync.js has no --replace-only mode');
+  assert(/if \(REPLACE_ONLY && !REPLACE_WHOLESALE\.has\(key\)\) continue;/.test(src),
+    '--replace-only must skip every appending channel, or a number moving spams four channels');
+});
+
+t('the repo root can be set once in .env instead of typed every time', () => {
+  const src = fsf.readFileSync('./facts.js', 'utf8');
+  assert(/envFactsRoot/.test(src), 'facts.js cannot read FACTS_ROOT from .env');
+  assert(!/require\('\.\/lib\.js'\)/.test(src),
+    'facts.js must not require lib.js — it has to run where npm install has never been');
+  assert(/process\.env\.FACTS_ROOT \|\| envFactsRoot\(\)/.test(src),
+    'the environment must win over .env, or a shell override cannot be tested');
+});
+
+t('running the checks does not touch the real .facts.json', () => {
+  // This suite writes figures from stand-in repos. The first version of it wrote
+  // them over the real file, so a good `facts.js --write` was silently undone by
+  // the `verify.js` that ran straight after it, and the sync posted stale
+  // numbers. A test that mutates what it is checking is worse than no test.
+  const now = (() => { try { return fsf.readFileSync('./.facts.json', 'utf8'); } catch (_) { return null; } })();
+  assert(now === REAL_FACTS, '.facts.json changed while the checks were running');
+});
+
+t('every fixture run of facts.js sends its output somewhere else', () => {
+  const src = fsf.readFileSync('./verify.js', 'utf8');
+  const spawns = src.match(/spawnSync\([^)]*'facts\.js'[^)]*\)/gs) || [];
+  assert(spawns.length > 0, 'no fixture runs found — this check has stopped checking anything');
+  for (const sp of spawns) {
+    assert(/FACTS_OUT/.test(sp), `a fixture run of facts.js has no FACTS_OUT: ${sp.slice(0, 80)}`);
+  }
+});
+
+t('a sync says where its figures came from before it posts any', () => {
+  const src = fsf.readFileSync('./sync.js', 'utf8');
+  assert(/provenance\(\)/.test(src), 'sync.js never prints where the figures came from');
+  assert(/over a day old/.test(src), 'a stale facts file is not called out');
+  assert(/No \.facts\.json/.test(src), 'a missing facts file is not called out');
+  // The order matters: provenance must print BEFORE the dry-run listing, or it
+  // scrolls past under the thing it is meant to qualify.
+  assert(src.indexOf('provenance();') < src.indexOf('section(s) changed'),
+    'provenance must be printed before the list of what changed');
+});
+
 console.log('\nWorkflows');
 
 const fsw = require('fs');

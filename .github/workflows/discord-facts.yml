@@ -1,0 +1,82 @@
+name: Discord — refresh the figures
+
+# The numbers in the pinned copy, re-read from the repo and reposted if they moved.
+#
+# WHAT THIS DOES AND DOES NOT DO
+#
+# It updates FIGURES, not prose. content.js carries {{TESTS}}, {{MAPS_REACHED}}
+# and friends; facts.js reads them out of claude/next-session-prompt.md and the
+# newest milestone document, and sync.js fills them in. Nobody has to remember to
+# edit four channels because the test count moved.
+#
+# It only touches the channels that are WIPED AND REPOSTED — #welcome,
+# #plain-english, #rules, #open-roles. The appending channels (#known-issues,
+# #data-and-extraction, #engine-and-netcode, #battle-engine) are left alone,
+# because a figure ticking up is not worth a new pinned message under the old one
+# every few days. Those still go out on push, when the prose actually changes.
+#
+# If the two sources disagree about the test count, THIS JOB GOES RED AND POSTS
+# NOTHING. A channel confidently stating a number that the repo argues with
+# itself about is worse than a failed build.
+
+on:
+  schedule:
+    # 07:00 UTC daily. Late enough that a night's work is committed.
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Read the figures and show what would change, post nothing'
+        type: boolean
+        default: false
+
+concurrency:
+  # Shares a group with the copy sync: these two must never post at once.
+  group: discord-sync
+  cancel-in-progress: false
+
+jobs:
+  facts:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # to push the discord-state branch
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install
+        working-directory: discord
+        run: npm ci --omit=dev || npm install --omit=dev
+
+      - name: Load state
+        run: bash discord/state.sh load
+
+      - name: Read the figures out of the repo
+        working-directory: discord
+        run: node facts.js --write
+
+      - name: Refuse to post figures the repo disagrees with itself about
+        working-directory: discord
+        run: node facts.js --check
+
+      - name: Check the copy before sending it
+        working-directory: discord
+        run: node verify.js
+
+      - name: Repost the channels that carry figures
+        working-directory: discord
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          GUILD_ID: ${{ secrets.GUILD_ID }}
+          PROJECT_NAME: ${{ vars.PROJECT_NAME }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          node sync.js --replace-only \
+            ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}
+
+      - name: Save state
+        if: github.event.inputs.dry_run != 'true'
+        run: bash discord/state.sh save "state after refreshed figures"

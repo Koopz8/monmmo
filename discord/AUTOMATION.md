@@ -146,6 +146,63 @@ the workflow does.
 
 ---
 
+## The figures update themselves
+
+The prose in `content.js` is written by hand. The **numbers in it are not.**
+
+Anything that moves every few days — the test count, how far the automated walk
+gets, how much of the script reads to an end — is written in the copy as a
+placeholder:
+
+```
+**{{TESTS}} tests**, none of which need a cartridge.
+It reaches **{{MAPS_REACHED}} of {{MAPS_TOTAL}} places**
+```
+
+`facts.js` reads those out of the repo's own notes — `claude/next-session-prompt.md`
+for the *Where the reading stands* block and the floor table, and the newest
+`claude/milestone-<n>-*.md` for its closing test count — and writes `.facts.json`.
+`sync.js` fills them in.
+
+```bash
+node facts.js            # print what it found and which line each came from
+node facts.js --write    # write .facts.json  (exit 10 = a figure moved)
+node facts.js --check    # exit 1 if a figure is missing or two sources disagree
+```
+
+**`discord-facts.yml` runs this daily** and reposts only the channels that are
+wiped and reposted — `#welcome`, `#plain-english`, `#rules`, `#open-roles`. The
+appending channels are deliberately left out: a figure ticking up is not worth a
+new pinned message stacked under the old one in four technical channels every few
+days. Those still go out on push, when the prose changes.
+
+### Three rules it is built around
+
+**A missing figure is an error, never a blank.** If `facts.js` cannot find
+something it refuses to write the file at all, `verify.js` then fails on
+`no placeholder survives substitution`, and nothing posts. A channel saying
+`** tests**` would go unnoticed for weeks; a red build does not.
+
+**The test count is read from two places and they have to agree.** If the prompt
+and the newest milestone disagree, the job goes red and posts nothing. It does
+not pick a side and it does not average them.
+
+**A number nothing computes cannot come back wrong**, which is worse than a
+number that is stale. Every fact prints the file and line it was read from, so
+you can go and look.
+
+### Adding a figure
+
+Add the pattern to `facts.js`, use `{{YOUR_KEY}}` in `content.js`, run
+`node verify.js`. The check *every figure the copy asks for is one facts.js can
+actually produce* fails if you use a placeholder nothing supplies.
+
+### What this does not do
+
+It does not write prose. A number changing is not a story, and the story is the
+part worth reading — that still gets written by hand, in `content.js` for the
+pinned copy and in `posts/` for a devlog update.
+
 ## Posting writeups
 
 Write a markdown file with front matter:
