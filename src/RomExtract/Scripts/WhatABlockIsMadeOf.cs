@@ -127,7 +127,10 @@ public static class WhatABlockIsMadeOf
     public static IReadOnlyList<double> SamplingBand(
         Rom rom, IReadOnlyList<uint> population, int howMany)
     {
-        if (howMany <= 0 || population.Count < howMany) return [];
+        // Nought would make the step below no step at all. A sample LARGER than the population
+        // needs no check: the loop's own condition never admits a group, which a break aimed at
+        // the removed check proved by coming back green (219).
+        if (howMany <= 0) return [];
 
         HowOftenEachCommand whole = In(rom, population);
 

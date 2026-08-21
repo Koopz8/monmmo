@@ -117,6 +117,29 @@ public sealed class SamplingBandTests
     }
 
     /// <summary>
+    /// Every group is measured against THE WHOLE, not against the first group.
+    /// <para>
+    /// <b>The fixture a green break asked for.</b> Aiming the reference at
+    /// <c>population.Take(howMany)</c> instead of the whole passed all five tests, because in
+    /// every other fixture here the first group either is the whole or is identical to it. Ten
+    /// blocks of one kind followed by thirty of another tell them apart: against the whole the
+    /// first group scores 0.375 and against itself it scores nought.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void EveryGroupIsMeasuredAgainstTheWholeAndNotAgainstTheFirstGroup()
+    {
+        (Rom rom, List<uint> blocks) = Image(40, 10);
+
+        IReadOnlyList<double> band = WhatABlockIsMadeOf.SamplingBand(rom, blocks, 10);
+
+        Assert.Equal(4, band.Count);
+        Assert.True(band.Min() > 0, $"no group is the whole, but one scored {band.Min():F3}");
+        Assert.Equal(0.375, band.Max(), 3);
+        Assert.Equal(0.125, band.Min(), 3);
+    }
+
+    /// <summary>
     /// The reading 273 rests on, in miniature: a population that IS the other kind sits outside
     /// the first kind's band, and a distance alone could not have said so.
     /// </summary>
