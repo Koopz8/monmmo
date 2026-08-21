@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-309`, 3248 tests green.
+`claude-310`, 3257 tests green.
 
 Standing rules — do not break these:
 
@@ -698,6 +698,22 @@ Traps worth carrying:
     of the region scripts live in. The nudge gives 14.9% to 16.4% from four bytes to four
     thousand. **Run a proposed floor at several settings before believing one of them.**
 
+84. **A WINDOW MEASURES THE REGION, NOT THE BLOCK** (270). "A site something jumps into" meant,
+    since 175, a jump pointer landing within 192 bytes before the site — 7.5% of unopened flag
+    sites against the reversal's 1.3%, the one part of `--flags` called clearly above anything.
+    The same pointers aimed 256 to 4096 bytes past the window land in it 5.3% to 7.1% of the time.
+    A jump pointer nearby says the site is in script-land; it does not say a script names the
+    block. Asked strictly — the jump's own target, read from its boundary, reaches the site as a
+    command — it is 16 against a floor of 15..23, and `--who-knows`'s "7 jumped into, 0 in the
+    reversal" is NOUGHT: all seven sit just after a neighbouring block that ends before them, and
+    what names their own blocks is a literal in code, which the climb had said per site since 191.
+    **Before believing a proximity test, ask what it would find if the thing were merely nearby.**
+
+85. **THE LIST OF THINGS OWED CAN BE WRONG ABOUT THEIR SHAPE** (270). 269 owed re-runs of three
+    readings "about addresses". Rotated, two of them did not move by one unit: the coin chain and
+    the field-effect sweep are content-relative and the reversal was always their control. The
+    test for whether a reading is address-shaped exists (83) and it is cheaper than the re-run.
+
 83. **A CONTROL HAS A SCOPE AND IT IS WORTH PRINTING** (269). Rotation is a NO-OP by construction
     for content-relative sweeps — the literal-pool test and the written-and-never-read counts come
     back identical at every offset, because a PC-relative load reaches a word a fixed distance from
@@ -706,14 +722,14 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-269-a-floor-that-keeps-the-region.md` first, then `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
+Read `claude/milestone-270-jumped-into-was-a-fact-about-the-region.md` first, then `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
 `250`, `249`, `248`, `247`, `246`, `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
 `238`, `237`,
 `236`, `235`, `234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
-**Thirty-nine faults closed and every one was in this project, not on the cartridge.** A walk that
+**Forty faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
 script" list; a list ranked by a count instead of by what it costs; a party that could not gain
 a level; a roadmap line that called a fix a cost; a continuation that carried flags and not
@@ -775,7 +791,10 @@ larger half of that one is not a bug at all but a reading**: every reach number 
 forward, 24029 of the floor's 35142 squares cannot get back, and nothing had ever asked; and at
 268 **the reversed-image floor, this project's standard control, being blind to structure** —
 6621 blocks reported as scripts the maps do not reach are not scripts, and the floor that let it
-through under-counted the accidents fourteen-fold; and at
+through under-counted the accidents fourteen-fold; and at 270 **the jumped-into test itself** —
+a 192-byte window that measures whether a site sits in script-land, on its floor once the same
+pointers are aimed past the window, so `--flags`' "8 boundary flags jumped into" is 8 against
+4..6 and `--who-knows`' "7 against 0" is 7 against 3..8 and nought on the jump's own block; and at
 267 **fifteen milestones of "the whole image" being owed, answered NO with a number** — the
 operand sweep's calibration row falls from 98% to 27% on the half the maps do not lead to, so the
 population that would have settled 252 cannot; and at
@@ -843,7 +862,16 @@ dotnet run -c Release --project src/Tools/RomDump -- firered.gba --operands-ever
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --the-control
 ```
 
-`--the-control` is the floor, re-asked (269). Three controls side by side: BACKWARDS (what this
+`--the-control` is fifteen seconds and sections 4-6 are 270's.
+
+`--the-control` is the floor, re-asked (269) — **and since 270 it asks the jumped-into readings
+against it** (sections 4 and 5): three predicates side by side, WITHIN THE WINDOW as it has stood,
+ON A JUMP'S BLOCK, and ON A JUMP'S OR A LITERAL'S BLOCK, each as named, reversed, and nudged up the
+269 ladder, with a verdict line that compares the margin to the floor's own spread (82). The strict
+test finds ONE boundary site a jump names — `0x0014` at `0x081C0D45` — and 21 of the 22 the
+literal column finds are the NEW-GAME script at `0x081A6481`, cross-checked against
+`NewGameLocator` in the output. Section 6 rotates the coin-chain and field-effect sweeps and they
+do not move: content-relative, the reversal stays theirs. Three controls side by side: BACKWARDS (what this
 project has always used, and 268 showed it keeps every table), ROTATED by a multiple of four
 (keeps the tables and the alignment, breaks the pointer-to-target correspondence — and is itself a
 bad floor, 289/2301/2449 at three offsets), and THE NUDGE (the same pointers aimed a few bytes
@@ -1265,9 +1293,14 @@ in the same commit; the alternative is what 230 and 231 spent a session undoing.
 doors announce themselves in 0x4001 x63, 0x8008 x25, 0x8004 x23, 0x4002 x6 — TWO bands (237)
 3856 read to a proper end, 32 stopped at 19 codes — [0x89]=2 would make it 3857/31 and is DECLINED
 729 trainerbattle sites on 104 maps; 27 carry a second exit, 10 of those skipped a guard
-7 places in the file ask who knows a move and are jumped into; 0 in the reversal; 5 OFFER
+7 places in the file ask who knows a move and are "jumped into"; 0 in the reversal; 5 OFFER
+  — WITHIN 192 BYTES, which is on a floor of 3..8 (270); on the jump's own block it is 0, and
+  5 are on a block a LITERAL in code names. The five offering blocks stand on their text
 7 blocks in the WHOLE IMAGE offer — the other 2 are CUT's and WATERFALL's, jumped into by nothing
 322 flags gate something; 264 are moved by a script somewhere; 233 are the code boundary
+  of the 233, 60 are moved by script the maps never open, 8 "jumped into" WITHIN 192 BYTES
+  against a nudged floor of 4..6 (270) — one, 0x0014, is on a block a jump names; 21 are
+  commands of the NEW-GAME script at 0x081A6481, which sets 49 flags before the first frame
   259 of the 264 are on an arm a run could take; the other 5 are behind a switch the script decides
 9 people on or beside a door behind 5 flags — the wall list
 21 people never arrive at all
@@ -1569,10 +1602,18 @@ still work.**
   as a look. What is left: `0x4001`'s other two flag sites, and whether
   `EverywhereInTheImage.Reads` should stop counting `0x1A arg2` at all (244 marked the output
   rather than moving quoted numbers, and that decision is owed a re-run).
+* **What 270 left.** The jumped-into test is on its floor by the window and a name by the block:
+  * **Slack itself.** 192 is a number nothing derived (175). A window of nought asks the strict
+    question directly and makes the ladder a control at every width. Not tried.
+  * **`0x0014` at `0x081C0D45`**, the one boundary site on a jump's block, reached by a `call`
+    at `0x1E2BF7`. What reaches that is one climb.
+  * **The 60 minus 21.** `--flags` lists 60 boundary flags moved by script the maps never open;
+    21 are the new-game script. It could say which, and the unexplained count is then 39.
 * **What 269 left.** The control exists now; applying it does not:
-  * **Re-run every reading whose floor was the reversal AND which is about ADDRESSES.**
-    `--in-the-image`'s jumped-into sites, the coin-chain floor and the field-effect floor are all
-    of that shape and none has been asked. This is the biggest thing on this list.
+  * ~~Re-run every reading whose floor was the reversal AND which is about ADDRESSES.~~ **DONE AT
+    270, and two of the three were not address-shaped**: the coin chain and the field-effect sweep
+    do not move under rotation, so the reversal was always their control. The jumped-into test is
+    the one that was, and it was on its floor.
   * **A nudge for the three-byte sweeps.** `Moves`, `Writes` and `AsksWhoKnows` scan for a pattern
     rather than follow a pointer, so "aim it a few bytes off" does not translate; asking for a
     flag id the cartridge does not use does, and was not tried.
