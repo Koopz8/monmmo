@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-311`, 3260 tests green.
+`claude-312`, 3266 tests green.
 
 Standing rules — do not break these:
 
@@ -709,6 +709,15 @@ Traps worth carrying:
     what names their own blocks is a literal in code, which the climb had said per site since 191.
     **Before believing a proximity test, ask what it would find if the thing were merely nearby.**
 
+87. **A UNIFORM ERROR BAR ON A NON-UNIFORM FILE IS WRONG BY THE BYTE FREQUENCIES** (272).
+    `--in-the-image` has said since 175 that a three-byte pattern turns up about once by accident.
+    Asked of sixteen unused ids with the same high byte, a `0x00xx` flag's floor is a MEDIAN of
+    ten to thirteen sites, most 36 — because `29 LL 00` is two of the file's commonest bytes.
+    Every whole-image site count printed for the wall flags was at or below that floor, which
+    makes "compiled code moves it" stronger, and the nine-against-one that opened 175 was never
+    a nine-against-one. **A floor for a pattern has to be drawn from patterns with the same
+    bytes** — the nudge for a three-byte sweep is the same sweep asked for a number nothing uses.
+
 86. **ONE AGAINST A FLOOR OF NOUGHT IS NOT A NAME** (271). 270's strict test found one boundary
     site on a block a jump names, against nought at every nudge, and called it a name. The "jump"
     is `04 40 0d 1c 08` at `0x1E2BF7` — `and r4, r0 ; add r5, r1, #0 ; add r5, #8`, THUMB, in a
@@ -730,14 +739,14 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-271-the-one-was-code.md` first, then `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
+Read `claude/milestone-272-the-error-bar-was-an-order-of-magnitude-low.md` first, then `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
 `250`, `249`, `248`, `247`, `246`, `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
 `238`, `237`,
 `236`, `235`, `234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
-**Forty-one faults closed and every one was in this project, not on the cartridge.** A walk that
+**Forty-two faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
 script" list; a list ranked by a count instead of by what it costs; a party that could not gain
 a level; a roadmap line that called a fix a cost; a continuation that carried flags and not
@@ -805,7 +814,9 @@ pointers are aimed past the window, so `--flags`' "8 boundary flags jumped into"
 4..6 and `--who-knows`' "7 against 0" is 7 against 3..8 and nought on the jump's own block; and at 271
 **270's one surviving "name"**, a `call` that is two THUMB instructions in a routine nothing names
 — one against a floor of nought at n=1 is not evidence, and the sixty-flag bucket `--flags` has
-offered as entry points since 175 is the opening plus thirty-eight unnamed accidents; and at
+offered as entry points since 175 is the opening plus thirty-eight unnamed accidents; and at 272
+**the whole-image error bar** — "about 1.0 by accident" since 175, against a measured ten to
+thirteen for any `0x00xx` flag, so every wall flag's site count was on its floor all along; and at
 267 **fifteen milestones of "the whole image" being owed, answered NO with a number** — the
 operand sweep's calibration row falls from 98% to 27% on the half the maps do not lead to, so the
 population that would have settled 252 cannot; and at
@@ -1317,6 +1328,9 @@ doors announce themselves in 0x4001 x63, 0x8008 x25, 0x8004 x23, 0x4002 x6 — T
   the other 173 are moved by no script anywhere. The "entry point to find" was never there
   259 of the 264 are on an arm a run could take; the other 5 are behind a switch the script decides
 9 people on or beside a door behind 5 flags — the wall list
+  whole-image sites for the five: 0x0013 8, 0x0012 5, 0x0089 9, 0x0053 1, 0x0017 2 — against a
+  same-high-byte unused-id floor of median 10-13 (most 36) for 0x00xx, median 1 (most 11) for
+  0x0089's neighbours. AT OR BELOW THE FLOOR, every one (272)
 21 people never arrive at all
 11 of 425 maps have no way in at all
 5 places guard a coin hand-over; every bound plus its own gift is 10000; 0 chains in the reversal
@@ -1629,9 +1643,10 @@ still work.**
     270, and two of the three were not address-shaped**: the coin chain and the field-effect sweep
     do not move under rotation, so the reversal was always their control. The jumped-into test is
     the one that was, and it was on its floor.
-  * **A nudge for the three-byte sweeps.** `Moves`, `Writes` and `AsksWhoKnows` scan for a pattern
-    rather than follow a pointer, so "aim it a few bytes off" does not translate; asking for a
-    flag id the cartridge does not use does, and was not tried.
+  * ~~A nudge for the three-byte sweeps.~~ **DONE AT 272 for `Moves` and `Writes`**
+    (`AnUnusedNumber`, printed under every count in `--in-the-image` and `--who-writes`): the
+    sixteen nearest unused ids with the same high byte. `AsksWhoKnows` takes a bound rather than
+    an id and has no nudge yet.
   * **The seam.** A rotation joins the end of the file to the beginning; four bytes of the control
     were never adjacent. Unmeasured.
 * **What 268 left:**

@@ -10016,7 +10016,8 @@ public static class Program
         Console.WriteLine();
         Console.WriteLine(
             $"  a three-byte pattern turns up by accident about {EverywhereInTheImage.ByChance(rom, 3):0.0} "
-            + "time(s) in an image this size — which is the error bar on every count below");
+            + "time(s) in an image this size — IN A UNIFORM FILE, which this is not: for a 0x00xx flag"
+            + " the measured floor is ten to thirteen (272), and it is printed under every count below");
 
         IReadOnlyDictionary<uint, IReadOnlyList<int>> index = EverywhereInTheImage.PointerIndex(rom);
 
