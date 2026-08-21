@@ -709,6 +709,27 @@ Traps worth carrying:
     what names their own blocks is a literal in code, which the climb had said per site since 191.
     **Before believing a proximity test, ask what it would find if the thing were merely nearby.**
 
+101. **EVERY BLOCK OF SCRIPT THIS PROJECT KNOWS LIES IN 2.5% OF THE FILE** (278). 3888 blocks and
+    435 flag sites, all of them, between `0x08160487` and `0x081C5528` — 404 KiB, three of
+    sixty-four slices. The populations read against them span 91% (outside ALONE), 92% (outside IN A
+    TABLE) and 100% (the reversal). That is not a defect in the null — a sample of real script is
+    region-confined because the script is — but it is why the next one bites.
+
+100. **A CHOICE THAT CANNOT BE MEASURED IS MODELLED, AND SAYING SO IS THE ANSWER** (278). The cut
+    (277) is a question about how a sample of the REFERENCE should be shaped, so it can only be read
+    off members of the population being read that lie inside the reference's span. **Three of the 38
+    do**, and at that size a consecutive group of three and an interleaved group of three both touch
+    1..2 slices — the two answers are not even different. So the cut is MODELLED and marked as such
+    wherever it decides anything. **273 -> 276 -> 277 was three milestones arguing about an
+    assumption**, and the reading is printed both ways now because of it.
+
+99. **A FLOOR FOR "HOW OFTEN DOES THIS LAND THERE" IS THE SHARE OF THE THINGS THAT LAND, NOT THE
+    SHARE OF THE FILE** (278). Asked whether the 38 sit inside script-land: 3 of 38 is 7.9%, and
+    script-land is 2.5% of the cartridge — which reads as a threefold enrichment and is not one.
+    **3.9% of the 3674 sites that read as a script and that the map scan does not open are in it**,
+    which is the base rate, and 7.9% against 3.9% on a count of three is nothing. The area is
+    arithmetic; the share is a fact about the cartridge, and the bytes are not spread evenly.
+
 98. **A NULL'S GROUPING HAS TO MATCH THE SHAPE OF THE THING BEING READ** (277). 273 cut its band
     into CONSECUTIVE groups because neighbours in the cartridge are alike, so a group of them sits
     farther from the whole and the band comes out wider than the truth — every word true, and only
@@ -844,15 +865,15 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-277-the-null-was-the-wrong-shape.md` first, then `276`, then
-`275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
+Read `claude/milestone-278-script-land-is-two-and-a-half-per-cent.md` first, then `277`, then
+`276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
 `250`, `249`, `248`, `247`, `246`, `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
 `238`, `237`,
 `236`, `235`, `234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
-**Forty-nine faults closed and every one was in this project, not on the cartridge.** A walk that
+**Fifty faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
 script" list; a list ranked by a count instead of by what it costs; a party that could not gain
 a level; a roadmap line that called a fix a cost; a continuation that carried flags and not
@@ -951,7 +972,11 @@ kind; and at 277 **the shape of every null this project cuts** — consecutive g
 only when the population being READ is a run, and every population these readings handle is spread
 over the whole image, so a run-shaped null was being compared against a scattered reading. Cut to
 match, real script reaches the 38's distance in NONE of 102 where in runs it reached it in 6, and
-**273's verdict stands after all** — 276's withdrawal of it was the null's shape and not the data.
+**273's verdict stands after all** — 276's withdrawal of it was the null's shape and not the data;
+and at 278 **that whole argument, which turns on a choice nothing can measure** — the cut is about
+the shape of a sample of the REFERENCE, only 3 of the 38 lie inside the reference's span, and at
+that size the two cuts are not even different. It is MODELLED and marked so, and 273 -> 276 -> 277
+was three milestones arguing about an assumption.
 
 `246` is the read that is not a command, and the literal-pool test for whether compiled code holds
 a number — both live inside `--namespaces`, which is now the fullest single instrument in the
@@ -1016,8 +1041,9 @@ dotnet run -c Release --project src/Tools/RomDump -- firered.gba --the-ruler
 
 `--the-control` is fifteen seconds; sections 4-6 are 270's and the window-at-nought ladder is
 271's. `--flags` sorts the boundary's sixty by what names them since 271 and reads the 38 off a
-scale whose ends are measured at 38 since 276, cut to match them since 277. `--the-ruler` is five
-seconds.
+scale whose ends are measured at 38 since 276, cut to match them since 277, with that cut marked
+MODELLED since 278. `--the-ruler` is five seconds and opens with a footprint table (278) saying
+where each of its populations lives in the file.
 
 `--the-ruler` is 268's mixture bound asked of populations whose answer is known BEFORE the
 arithmetic (275), which nothing had ever done. A **held-out half** of the maps' own scripts must
@@ -1581,6 +1607,11 @@ elevation 1 is NOT the sea: 0x15 is at elevation 1 on 59.6% of its squares, 0x10
   known water 0 times in 3004 and 0x52/0x53 carry people at 3.5%/4.4% against NORMAL's 1.39% (262)
 0x1B is 751 squares on ROUTE 17 bordered only by itself and 0xD0 (336 pairs); neither is named
 675 walkable pairs join two different non-nought layers, 269 of them 3-beside-4 — the bridges
+EVERY BLOCK OF SCRIPT THIS PROJECT KNOWS lies between 0x08160487 and 0x081C5528 — 404 KiB, 3 of 64
+  slices, 2.5% of the cartridge (278). Outside-ALONE spans 91.4%, outside-IN-A-TABLE 91.7%, the
+  reversal 100%. 3 of the 38 boundary sites are in it (7.9%) against a MEASURED 3.9% of the 3674
+  unopened sites that read as a script — the area, 2.5%, is the wrong floor and would have read as
+  an enrichment
 the file holds 10240 blocks reachable from an ALIGNED pointer against the map scan's 3888 — and
   **the 6621 outside ones ARE NOT SCRIPTS** (268). Command-mix distance from the maps' own
   scripts: outside-alone 0.690, outside-in-a-table 0.698, THE REVERSED IMAGE 0.711; the outside
@@ -1716,8 +1747,9 @@ ONE number is named both as a flag and as a variable in the map scan — 0x4001,
   the bands, READ not asserted: flags 0x0000+ 237n/347p and 0x4000+ 1n/4p; variables
     0x4000+ 77n/856p and 0x8000+ 16n/3428p, with 0x1A arg2's 145n/501p outside both (264)
   the whole-IMAGE version of the same question says 2117 / 14308 / 1333 — throw it away (264)
-the 38 unnamed boundary sites ARE THE REVERSAL'S KIND (273, withdrawn at 276, RESTORED AT 277 when
-  the null was cut to match them). Their mix is 0.601 from the maps' own, and a 38-block group of
+the 38 unnamed boundary sites ARE THE REVERSAL'S KIND ON A MODELLED CUT (273, withdrawn at 276,
+  restored at 277, and 278 says the cut nothing can measure is what all three turned on — only 3 of
+  the 38 lie inside the reference's span and at that size the two cuts are not even different). Their mix is 0.601 from the maps' own, and a 38-block group of
   real script reaches that far in **0 of 102** scattered samples against the reversal's sites'
   **19 of 109 (17.4%)** — rate bands 0.0%..0.0% against 8.0%..12.0%, which do not meet. In RUNS it
   is 6 of 102 against 36 of 109, and that is the file's regional structure, not the reading
@@ -1834,10 +1866,17 @@ still work.**
   as a look. What is left: `0x4001`'s other two flag sites, and whether
   `EverywhereInTheImage.Reads` should stop counting `0x1A arg2` at all (244 marked the output
   rather than moving quoted numbers, and that decision is owed a re-run).
+* **What 278 left.** The cut is measured where it can be and marked MODELLED where it cannot. Owed:
+  * **There is no route to measuring it for the 38** — it would need known real script OUTSIDE
+    script-land, and there is none. The fifth wall of that kind (248's base, 257's starting nought,
+    258's 99, 262's compiled code, this).
+  * **2.5% is a fact about the MAP SCAN, not necessarily about the cartridge.** It says where the
+    script this project finds lives. If any of 268's outside blocks were real script they would be
+    script outside that stretch, which is the question itself — sharpened, not settled.
+  * **`--the-ruler`'s cut is MODELLED too** and its footprint table says so on every run.
 * **What 277 left.** Every band is cut both ways now and the reading takes the matching one. Owed:
-  * **Which cut is right is a judgement per reading and NOTHING ENFORCES IT.** The rule is the shape
-    of the population being read; it lives in `Cuts`' documentation and is applied by hand at each
-    call site. A reading that takes the wrong one fails no test.
+  * ~~Which cut is right is a judgement per reading and NOTHING ENFORCES IT.~~ **MEASURED AT 278**
+    where it can be, and reported as MODELLED where it cannot — which is the state the 38 are in.
   * ~~The rate has no error bar.~~ **DONE AT 277** — `RateBand`, and the two bands do not meet.
   * ~~Two REAL populations disagree.~~ **THEY NEVER DID** — 9 of 9 blocks of eleven real-script
     groups hold none at or beyond 0.601. 276 saw it in runs.
