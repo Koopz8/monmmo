@@ -13117,6 +13117,24 @@ public static class Program
             "    if those two are the same number the list below is noise and the only honest"
             + " thing to do with it is throw it away");
 
+        // AND THE FLOOR THAT KEEPS THE REGION (270): see --the-control. The reversal's nought is
+        // about a file with no jump pointers in it; the same pointers aimed past the window are
+        // the honest floor, and the jump's OWN block is the honest test.
+        int[] nudged =
+        [
+            .. JumpedIntoUnderANudge.Nudges
+                .Where(by => !JumpedIntoUnderANudge.InsideTheWindow(by))
+                .Select(by => JumpedIntoUnderANudge.Count(rom, index, real.Select(s => s.Address), by)),
+        ];
+
+        Console.WriteLine(
+            $"  THE REVERSAL IS THE WRONG FLOOR FOR THIS (270): the same pointers aimed past the window"
+            + $" land in it {nudged.Min()} to {nudged.Max()} times, and the count ON THE JUMP'S OWN"
+            + $" BLOCK is {JumpedIntoUnderANudge.CountOnABlock(rom, index, real.Select(s => s.Address), 0)}"
+            + $" — or {JumpedIntoUnderANudge.CountOnABlock(rom, index, real.Select(s => s.Address), 0, orALiteral: true)}"
+            + " on a block a LITERAL names, which is what the climb below finds by hand. \"jumped"
+            + " into\" here means within 192 bytes and is a fact about the region, not the block");
+
         // AND HOW MUCH OF EITHER NUMBER IS ONE PLACE.
         //
         // 205 found this instrument's floor is a whole-image average computed as though every
@@ -13976,6 +13994,27 @@ public static class Program
             "    — and if those two are the same number, the jumped-into list below is noise and");
         Console.WriteLine(
             "    the only honest thing to do with it is throw it away.");
+
+        // AND THE FLOOR THAT KEEPS THE REGION (269, 270). The reversal destroys the density of
+        // jump pointers in script-land along with everything else, so it under-counts what the
+        // window finds by accident. The same pointers aimed past the window are the null for an
+        // address reading, and on this cartridge they land in the window nearly as often as the
+        // real ones do.
+        List<uint> boundarySites = [.. outside.SelectMany(f => f.Unopened).Select(s => s.Address)];
+
+        int[] nudged =
+        [
+            .. JumpedIntoUnderANudge.Nudges
+                .Where(by => !JumpedIntoUnderANudge.InsideTheWindow(by))
+                .Select(by => JumpedIntoUnderANudge.Count(rom, index, boundarySites, by)),
+        ];
+
+        Console.WriteLine(
+            $"    THE REVERSAL IS THE WRONG FLOOR FOR THIS (270): the same pointers aimed past the"
+            + $" window land in it {Rate(nudged.Min(), unopenedSites)} to {Rate(nudged.Max(), unopenedSites)}"
+            + $" of the time, and ON THE JUMP'S OWN BLOCK the count is"
+            + $" {JumpedIntoUnderANudge.CountOnABlock(rom, index, boundarySites, 0)} of {unopenedSites}."
+            + " `--the-control` prints the whole ladder; \"jumped into\" below means within 192 bytes.");
         Console.WriteLine();
         Console.WriteLine(
             $"    of the {boundary.Count} gating flags nothing in the world moves:");
