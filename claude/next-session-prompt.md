@@ -709,6 +709,15 @@ Traps worth carrying:
     what names their own blocks is a literal in code, which the climb had said per site since 191.
     **Before believing a proximity test, ask what it would find if the thing were merely nearby.**
 
+105. **A COUNT OF HOW WRONG SOMETHING COULD BE IS NOT A COUNT OF HOW WRONG IT WAS** (280). 279
+    found 97 signs readable from one side that this project read from four, and printed the blast
+    radius from the records alone: **68 of the 97 have a walkable neighbour the kind forbids**. Made
+    to obey, the walk turns out to have actually stood on the forbidden side of **two** — 0 maps, 0
+    flags, 2 signs, at the floor and at the widest, with every one of the six floor rows unchanged.
+    Thirty-four-fold between what could have been wrong and what was. This is trap 9 from the other
+    end: 196 printed a denominator on the CONSUMER and found the blast radius was nought; here the
+    denominator was printed first and the run still used almost none of it.
+
 104. **COUNT THE FIELD INSTEAD OF ASSERTING WHAT IT HOLDS** (279). 248 filtered signs on
     `kind == 7` and this project has said "there are two kinds of sign" ever since. Tallied, the
     byte takes **FIVE** values — 0x00 x422, 0x01 x73, 0x03 x14, 0x04 x10, 0x07 x183 — and **519
@@ -891,15 +900,15 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-279-the-kind-byte-was-read-as-two-values.md` first, then `278`, then
-`277`, then `276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
+Read `claude/milestone-280-ninety-seven-signs-and-two-of-them-mattered.md` first, then `279`,
+then `278`, then `277`, then `276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
 `250`, `249`, `248`, `247`, `246`, `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
 `238`, `237`,
 `236`, `235`, `234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
-**Fifty-one faults closed and every one was in this project, not on the cartridge.** A walk that
+**Fifty-two faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
 script" list; a list ranked by a count instead of by what it costs; a party that could not gain
 a level; a roadmap line that called a fix a cost; a continuation that carried flags and not
@@ -1006,7 +1015,9 @@ was three milestones arguing about an assumption; and at 279 **the sign record's
 two values since 248 and taking FIVE** — 519 script signs are four kinds read as one, and three of
 those kinds name the SIDE you have to stand on to read the sign (0x01 south 73/73, 0x03 west 14/14,
 0x04 east 10/10, against the commonest kind's 87%, 55% and 47%, with the opposite side open 0 of 14
-and 0 of 10). **242's four-square rule is three squares too many for 97 signs.**
+and 0 of 10). **242's four-square rule is three squares too many for 97 signs** — and at 280 the walk was made to
+obey the record, which costs **0 maps, 0 flags and 2 signs** at every lever setting, against the 68
+of 97 the records said could be over-read.
 
 `246` is the read that is not a command, and the literal-pool test for whether compiled code holds
 a number — both live inside `--namespaces`, which is now the fullest single instrument in the
@@ -1581,10 +1592,11 @@ BUT THE RUN ALSO TAKES FLAGS BACK: 164 ever on at the floor against the 160 it s
     **242's four-square rule is three squares too many for 97 signs** and 68 of them have another
     walkable neighbour. NOT ADOPTED — the exported map record carries no kind, and what it costs in
     flags is not measured
-  317 of the 519 RUN at the floor (214 addresses, 79 maps); 465 at the widest (327, 134) — 242
+  315 of the 519 RUN at the floor (214 addresses, 79 maps); 463 at the widest (327, 134) — 242,
+    and 280, which took two off each end by making the walk obey the side the record names
     241 said 215 and 328: it keyed the read set on (map, ADDRESS) and a sign is a SQUARE. The
     address and map columns were right throughout. 224 for the THIRD time, this one self-inflicted
-  the 54 unread at the widest: 36 on maps it never reached, 17 walls on maps it walks, and
+  the 56 unread at the widest: 36 on maps it never reached, 19 walls on maps it walks, and
     EXACTLY ONE nothing could ever stand beside — 10.6 (4,1), 0x0816C153, same at every lever
   the floor's seven: 0x0031, 0x0032, 0x0233, 0x0234, 0x0235, 0x026D, 0x0834; TWO gate and each
     holds one person — 3.43 p1 and 30.0 p2. Only 2 of the 7 were moved by a sign ITSELF
@@ -1910,11 +1922,17 @@ still work.**
   as a look. What is left: `0x4001`'s other two flag sites, and whether
   `EverywhereInTheImage.Reads` should stop counting `0x1A arg2` at all (244 marked the output
   rather than moving quoted numbers, and that decision is owed a re-run).
+* **What 280 left.**
+  * **The client does not know about the side.** `MapSign.MustBeReadFrom` is on the shared record so
+    both halves have it, and nothing on the client asks. A rule enforced on one side of the split
+    needs its counterpart on the other — unmeasured and unasked.
+  * **Whether a BURIED sign has a side.** Kind `0x07`'s neighbours are open 120/147/142/127 of 183,
+    which is no side on the face of it, and nobody has asked it properly.
 * **What 279 left.**
-  * **Whether the walk should obey the side.** 97 signs, 68 with somewhere else to stand. A change
-    to the RUN and a DECISION. The exported map record carries no sign kind, so it needs plumbing
-    first — 239's shape again, when `MapData` carried no sign list at all.
-  * **`0x02` is absent and would be north.** Inferred, and no cartridge evidence can settle it.
+  * ~~Whether the walk should obey the side.~~ **DONE AT 280** — the exported record carried the
+    kind already (239), so it was the rule and not the plumbing. 0 maps, 0 flags, 2 signs.
+  * **`0x02` is absent and would be north.** Inferred, and no cartridge evidence can settle it; it
+    is deliberately NOT in `MapSign`'s table.
   * **What the spare bit DOES** is engine behaviour — the sixth wall of that kind.
 * **What 278 left.** The cut is measured where it can be and marked MODELLED where it cannot. Owed:
   * **There is no route to measuring it for the 38** — it would need known real script OUTSIDE
