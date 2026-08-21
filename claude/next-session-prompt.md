@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-307`, 3232 tests green.
+`claude-308`, 3241 tests green.
 
 Standing rules — do not break these:
 
@@ -678,16 +678,30 @@ Traps worth carrying:
     settings stay in the output. A tightening whose only evidence is that the result got tidier is
     a tightening the result chose.
 
+80. **THE REVERSED-IMAGE FLOOR IS BLIND TO STRUCTURE, AND THIS PROJECT PUTS IT NEXT TO
+    EVERYTHING** (268). Reversing keeps every byte and every byte's frequency and destroys every
+    command boundary — and **keeps every table**. A reversed table of text pointers is still a
+    table of pointers into the image. So the floor measures the accident rate of a file with these
+    frequencies and NO structure, and this file's accidents come from its structure: 456 predicted
+    against about 6300 actual, a fourteen-fold gap. `HowClustered`'s own comment has said "a table
+    reversed is still a table" since 205 and nobody applied it to the floor itself.
+
+81. **WHEN A CONTROL FAILS, ASK WHAT ELSE HAS THE SAME SHAPE** (268). 267's population was
+    condemned by its calibration row and the two explanations — real scripts on the far side of
+    the code boundary, or not scripts at all — needed a second axis to separate. The command MIX
+    is that axis, and total variation being linear in a mixture makes "how much of this could be
+    real" arithmetic on two distances rather than a judgement.
+
 ## Where things are
 
-Read `claude/milestone-267-the-two-thirds-nothing-points-a-map-at.md` first, then `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
+Read `claude/milestone-268-the-floor-was-the-wrong-control.md` first, then `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
 `250`, `249`, `248`, `247`, `246`, `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
 `238`, `237`,
 `236`, `235`, `234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
-**Thirty-eight faults closed and every one was in this project, not on the cartridge.** A walk that
+**Thirty-nine faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
 script" list; a list ranked by a count instead of by what it costs; a party that could not gain
 a level; a roadmap line that called a fix a cost; a continuation that carried flags and not
@@ -747,6 +761,9 @@ nineteen ordinary exits holes, and it stops there: the sentinel is understood on
 not on the way out, so three maps are counted as reached and are rooms with no exit. **And the
 larger half of that one is not a bug at all but a reading**: every reach number in this file is
 forward, 24029 of the floor's 35142 squares cannot get back, and nothing had ever asked; and at
+268 **the reversed-image floor, this project's standard control, being blind to structure** —
+6621 blocks reported as scripts the maps do not reach are not scripts, and the floor that let it
+through under-counted the accidents fourteen-fold; and at
 267 **fifteen milestones of "the whole image" being owed, answered NO with a number** — the
 operand sweep's calibration row falls from 98% to 27% on the half the maps do not lead to, so the
 population that would have settled 252 cannot; and at
@@ -1311,13 +1328,19 @@ elevation 1 is NOT the sea: 0x15 is at elevation 1 on 59.6% of its squares, 0x10
   known water 0 times in 3004 and 0x52/0x53 carry people at 3.5%/4.4% against NORMAL's 1.39% (262)
 0x1B is 751 squares on ROUTE 17 bordered only by itself and 0xD0 (336 pairs); neither is named
 675 walkable pairs join two different non-nought layers, 269 of them 3-beside-4 — the bridges
-the file holds 10240 script blocks reachable from an ALIGNED pointer, against a reversed-image
-  floor of 456 (22:1) and the map scan's 3888 — so 6621 blocks NO MAP LEADS TO, and 269 the maps
-  lead to that no aligned word names (267). What they are has not been read
-the whole-image operand sweep CANNOT be run: compare's variable operand is 98% over the map scan,
-  92% over the whole-image entries the maps DO lead to and 27% over the ones they do not; at a
-  length threshold tight enough to put the floor at 79 blocks it is 38% and stops (267). The
-  scripts outside the maps compare variables no script in the image writes. Nothing was adopted
+the file holds 10240 blocks reachable from an ALIGNED pointer against the map scan's 3888 — and
+  **the 6621 outside ones ARE NOT SCRIPTS** (268). Command-mix distance from the maps' own
+  scripts: outside-alone 0.690, outside-in-a-table 0.698, THE REVERSED IMAGE 0.711; the outside
+  populations sit 0.24-0.32 from the reversal. The mixture bound (total variation is linear, so
+  this is arithmetic) puts at most 3.1% and 1.8% of them on the real side — about 121 of 4825
+so the reversed-image floor said 456 where the truth is about 6300, a FOURTEEN-FOLD gap, because
+  reversing keeps every table (268). 267's "6621 blocks no map leads to" is WITHDRAWN as a count
+  of scripts: the maps lead to very nearly all the script this cartridge has
+the whole-image operand sweep CANNOT be run and now has no reason to be: compare's variable
+  operand is 98% over the map scan and 27% over the outside half (267) because the outside half is
+  noise (268). There is no body of scripts outside the maps for a third operand to hide in
+2296 of the 2337 entries the maps lead to are named ALONE — a run of one aligned ROM-address word.
+  2138 of the outside entries sit in runs of five or more, which is a pointer table (268)
 1042 ledge squares — 0x38 on 39, 0x39 on 41, 0x3B on 962, 0x3A a name on nought. `--ledges` says
   954 for 0x3B and that is its INTERIOR: 8 sit on a map's outer ring, where a hop lands off the
   map and HopOnto refuses it, so all 8 are walls here (266)
@@ -1518,16 +1541,16 @@ still work.**
   as a look. What is left: `0x4001`'s other two flag sites, and whether
   `EverywhereInTheImage.Reads` should stop counting `0x1A arg2` at all (244 marked the output
   rather than moving quoted numbers, and that decision is owed a re-run).
-* **What 267 left.** `--operands-everywhere` built the population and could not use it:
-  * **What the 6621 blocks ARE.** Counted, not read. What POINTS at them — a table, a literal
-    pool, another script — is `EverywhereInTheImage.NamesIt`'s question and nobody has asked it of
-    this population.
-  * **Whether the outside half's variables are one band or many.** 27% written is an average over
-    6523 entries. `--namespaces` asked of this population is one command.
-  * **A population that could carry the operand test.** Alignment and block length were swept;
-    requiring two pointers at one address, or excluding overlapping blocks, was not tried.
+* **What 268 left**, and it is the biggest thing on this list:
+  * **A FLOOR THAT KEEPS THE FILE'S STRUCTURE.** Every "against a reversed floor of N" in this
+    prompt is waiting on it. Rotating the image by one byte keeps every table and every alignment
+    and destroys every command boundary, which is what these controls claim to be. Untried.
+  * **The 121.** The bound says at most that many outside blocks are real script; WHICH ones is a
+    per-block question the mix cannot answer.
+  * **`0x09`, `0x0F` and `0x21` are 30% of the maps' scripts and under 4% of everything else.** A
+    per-block score against that profile is how the 121 would be found.
   * **`0xAD arg0`** is above half on both populations, named by neither table, and unsettled since
-    253.
+    253. 267's population cannot help.
 * **What 266 left.** `--which-way` settled the ledge table; what is owed:
   * **Whether a ledge on a map's outer ring hops across the join.** Eight squares, all `0x3B`,
     all walls here. `WorldWalker` crosses borders; `MapData.HopOnto` does not know borders exist.
