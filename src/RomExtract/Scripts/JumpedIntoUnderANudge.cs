@@ -95,13 +95,30 @@ public static class JumpedIntoUnderANudge
         uint site,
         int by,
         int slack = Slack,
+        bool orALiteral = false) =>
+        WhatNamesTheBlock(rom, index, site, by, slack, orALiteral) is not null;
+
+    /// <summary>
+    /// The first thing naming a block that reaches this site as a command, or nothing.
+    /// <para>
+    /// <b>One copy of the loop</b>, asked by the count and by the listing both. 258's lesson: a
+    /// second copy of a loop is a guard that cannot be broken, because the suite protects one
+    /// copy and the break lands on the other — and the first draft of this file had two.
+    /// </para>
+    /// </summary>
+    public static NamesIt? WhatNamesTheBlock(
+        Rom rom,
+        IReadOnlyDictionary<uint, IReadOnlyList<int>> index,
+        uint site,
+        int by,
+        int slack = Slack,
         bool orALiteral = false)
     {
-        if (rom.ToOffsetOrNull(site) is not { } wanted) return false;
+        if (rom.ToOffsetOrNull(site) is not { } wanted) return null;
 
         foreach (NamesIt names in EverywhereInTheImage.WhoNames(rom, index, (uint)(site - by), slack))
         {
-            if (!names.AJump && !(orALiteral && names.ALiteral)) continue;
+            if (!Counts(names, orALiteral)) continue;
 
             // The pointer says Points; nudged, it is aimed `by` further on — which is where the
             // window lookup already put it, so read from there.
@@ -109,13 +126,17 @@ public static class JumpedIntoUnderANudge
 
             foreach (ScriptCommand command in ScriptReader.Read(rom, target))
             {
-                if (command.Offset == wanted) return true;
+                if (command.Offset == wanted) return names;
                 if (command.Offset > wanted) break;
             }
         }
 
-        return false;
+        return null;
     }
+
+    /// <summary>A jump always; an aligned literal when asked; four loose bytes never.</summary>
+    private static bool Counts(NamesIt names, bool orALiteral) =>
+        names.AJump || (orALiteral && names.ALiteral);
 
     /// <summary>
     /// How many of these sites are a command of a block some jump names — or, with
@@ -147,18 +168,7 @@ public static class JumpedIntoUnderANudge
 
         foreach (uint site in sites)
         {
-            if (rom.ToOffsetOrNull(site) is not { } wanted) continue;
-
-            foreach (NamesIt names in EverywhereInTheImage.WhoNames(rom, index, site, slack))
-            {
-                if (!names.AJump && !(orALiteral && names.ALiteral)) continue;
-
-                if (ScriptReader.Read(rom, names.Points).Any(c => c.Offset == wanted))
-                {
-                    found.Add((site, names));
-                    break;
-                }
-            }
+            if (WhatNamesTheBlock(rom, index, site, 0, slack, orALiteral) is { } names) found.Add((site, names));
         }
 
         return found;
