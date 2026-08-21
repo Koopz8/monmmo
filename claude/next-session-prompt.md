@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-306`, 3226 tests green.
+`claude-307`, 3232 tests green.
 
 Standing rules — do not break these:
 
@@ -667,9 +667,20 @@ Traps worth carrying:
     mean either "the world does not care" or "the sweep never got there", and only a denominator
     tells them apart. With the other two bytes at their measured values it is decided in one run.
 
+78. **A WIDER POPULATION NEEDS THE KNOWN ROW BEFORE IT NEEDS AN ANSWER** (267). The whole-image
+    operand sweep puts four operands above half and none is worth anything, because `compare`'s
+    own variable operand — 98% over the map scan — scores **42%** on the same population. The
+    ruler is printed beside the reading and the reading is withdrawn. **Before believing a sweep
+    on new ground, score something you already know on it.**
+
+79. **A FILTER IS CHOSEN BY THE FLOOR, NEVER BY THE ANSWER** (267). Requiring a pointer to be
+    four-byte aligned cuts the reversed-image floor 5.7-fold and the real count 1.3-fold, and both
+    settings stay in the output. A tightening whose only evidence is that the result got tidier is
+    a tightening the result chose.
+
 ## Where things are
 
-Read `claude/milestone-266-which-way-a-ledge-is-hopped.md` first, then `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
+Read `claude/milestone-267-the-two-thirds-nothing-points-a-map-at.md` first, then `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
 `250`, `249`, `248`, `247`, `246`, `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
@@ -736,6 +747,9 @@ nineteen ordinary exits holes, and it stops there: the sentinel is understood on
 not on the way out, so three maps are counted as reached and are rooms with no exit. **And the
 larger half of that one is not a bug at all but a reading**: every reach number in this file is
 forward, 24029 of the floor's 35142 squares cannot get back, and nothing had ever asked; and at
+267 **fifteen milestones of "the whole image" being owed, answered NO with a number** — the
+operand sweep's calibration row falls from 98% to 27% on the half the maps do not lead to, so the
+population that would have settled 252 cannot; and at
 266 **`--ledges` reporting interior counts as totals** — 954 for `0x3B` where the world has 962,
 because its loops start at 1 so every square it examines has four neighbours, and eight ledge
 squares sit on a map's outer ring where a hop lands off the map and `HopOnto` refuses it.
@@ -796,7 +810,14 @@ dotnet run -c Release --project src/Tools/RomDump -- firered.gba --layers
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --sea
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --the-way-back
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --which-way
+dotnet run -c Release --project src/Tools/RomDump -- firered.gba --operands-everywhere
 ```
+
+`--operands-everywhere` is the operand sweep over the whole file rather than over the 0.6% the
+maps point at (267), which 252 left owed. Population: every four bytes anywhere holding a ROM
+address whose target decodes to a proper end, plus everything reachable from it — 8860 entries and
+**10240 blocks against a reversed-image floor of 456**, where the map scan opens 3888. It prints
+its own calibration row on every population it builds, and that row is why the answer is no.
 
 `--which-way` is the ledge assignment, printed instead of quoted (266). Every ledge byte tried
 every way and left a wall, twice: **each on its own**, which is the original derivation and
@@ -1290,6 +1311,13 @@ elevation 1 is NOT the sea: 0x15 is at elevation 1 on 59.6% of its squares, 0x10
   known water 0 times in 3004 and 0x52/0x53 carry people at 3.5%/4.4% against NORMAL's 1.39% (262)
 0x1B is 751 squares on ROUTE 17 bordered only by itself and 0xD0 (336 pairs); neither is named
 675 walkable pairs join two different non-nought layers, 269 of them 3-beside-4 — the bridges
+the file holds 10240 script blocks reachable from an ALIGNED pointer, against a reversed-image
+  floor of 456 (22:1) and the map scan's 3888 — so 6621 blocks NO MAP LEADS TO, and 269 the maps
+  lead to that no aligned word names (267). What they are has not been read
+the whole-image operand sweep CANNOT be run: compare's variable operand is 98% over the map scan,
+  92% over the whole-image entries the maps DO lead to and 27% over the ones they do not; at a
+  length threshold tight enough to put the floor at 79 blocks it is 38% and stops (267). The
+  scripts outside the maps compare variables no script in the image writes. Nothing was adopted
 1042 ledge squares — 0x38 on 39, 0x39 on 41, 0x3B on 962, 0x3A a name on nought. `--ledges` says
   954 for 0x3B and that is its INTERIOR: 8 sit on a map's outer ring, where a hop lands off the
   map and HopOnto refuses it, so all 8 are walls here (266)
@@ -1490,6 +1518,16 @@ still work.**
   as a look. What is left: `0x4001`'s other two flag sites, and whether
   `EverywhereInTheImage.Reads` should stop counting `0x1A arg2` at all (244 marked the output
   rather than moving quoted numbers, and that decision is owed a re-run).
+* **What 267 left.** `--operands-everywhere` built the population and could not use it:
+  * **What the 6621 blocks ARE.** Counted, not read. What POINTS at them — a table, a literal
+    pool, another script — is `EverywhereInTheImage.NamesIt`'s question and nobody has asked it of
+    this population.
+  * **Whether the outside half's variables are one band or many.** 27% written is an average over
+    6523 entries. `--namespaces` asked of this population is one command.
+  * **A population that could carry the operand test.** Alignment and block length were swept;
+    requiring two pointers at one address, or excluding overlapping blocks, was not tried.
+  * **`0xAD arg0`** is above half on both populations, named by neither table, and unsettled since
+    253.
 * **What 266 left.** `--which-way` settled the ledge table; what is owed:
   * **Whether a ledge on a map's outer ring hops across the join.** Eight squares, all `0x3B`,
     all walls here. `WorldWalker` crosses borders; `MapData.HopOnto` does not know borders exist.
