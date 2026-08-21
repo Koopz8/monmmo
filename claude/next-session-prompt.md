@@ -709,6 +709,19 @@ Traps worth carrying:
     what names their own blocks is a literal in code, which the climb had said per site since 191.
     **Before believing a proximity test, ask what it would find if the thing were merely nearby.**
 
+110. **A FLOOR FOR A THREE-BYTE PATTERN MUST SHARE THE HIGH BYTE** (284). `7C LL HH` turns up by
+    accident at a rate that depends on HH at least as much as on LL, and this file is 10.5%
+    nought. The move sweep's real range scores **ten-fold on sites and twenty on reading on**
+    against windows elsewhere on the number line, and **3.0 and 1.9** against the unused half of
+    its own high byte. The window that beat it outright spans `0x08`, which is the top byte of
+    every pointer in the file. **A floor is for a PATTERN, not for a question** — move the window
+    and you have changed the pattern.
+
+    And the second half, which is 205's rule arriving somewhere new: **three floors gave three
+    answers about the rotation's seam** — the independence expectation said 28-fold, the empirical
+    band said top 0.3%, and reading each block said 0 of 5203 cross. Only the last one is about
+    the question. Before quoting a floor, ask what it is a floor FOR.
+
 109. **AN UNREAD LIST IS A FACT ABOUT ONE LEVER** (283). Everything this project prints about what
     a run did NOT do is printed from ONE run, and the six lever settings walk six distances. The
     floor leaves 204 sign scripts unread; the union of all six leaves **55**. The prompt's own
@@ -934,7 +947,7 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-283-the-unread-list-was-a-fact-about-one-lever.md` first, then `282`,
+Read `claude/milestone-284-the-offer-against-a-floor-of-nought.md` first, then `283`, then `282`,
 then `281`, then `280`, then `279`, then `278`, then `277`, then `276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
 `250`, `249`, `248`, `247`, `246`, `245`, `244`, `243`,
@@ -942,7 +955,7 @@ then `281`, then `280`, then `279`, then `278`, then `277`, then `276`, then `27
 `238`, `237`,
 `236`, `235`, `234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
-**Fifty-five faults closed and every one was in this project, not on the cartridge.** A walk that
+**Fifty-six faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
 script" list; a list ranked by a count instead of by what it costs; a party that could not gain
 a level; a roadmap line that called a fix a cost; a continuation that carried flags and not
@@ -1060,7 +1073,12 @@ verdict in this project being a fact about ONE lever setting** — the floor lea
 the union of the six leaves 55, so "the 191 that run at no setting" was a number no instrument here
 could have produced, and the sorting that produced it was still asking 242's five-square question of
 signs 280 reads from one (worth 0 signs, and it can never be worth any: 279 read the side OFF the
-named square being open, so this cartridge cannot hold a counterexample).
+named square being open, so this cartridge cannot hold a counterexample); and at 284 **the move
+sweep's floor being a floor for a different pattern** — `7C LL HH`'s accident rate depends on the
+high byte, this file is 10.5% nought, and the ten-fold and twenty-fold the whole-image windows give
+are **3.0 and 1.9** against the unused half of the bound's own page, so `--who-knows`'s 600 and 101
+are close to noise and the "about 1.0 by accident" it has printed since 191 is 272's fault one
+sweep over.
 
 `246` is the read that is not a command, and the literal-pool test for whether compiled code holds
 a number — both live inside `--namespaces`, which is now the fullest single instrument in the
@@ -1181,7 +1199,11 @@ project has always used, and 268 showed it keeps every table), ROTATED by a mult
 bad floor, 289/2301/2449 at three offsets), and THE NUDGE (the same pointers aimed a few bytes
 off, stable from 4 bytes to 4096). **Use the nudge for anything that follows a pointer and the
 reversal for anything content-relative** — rotation is provably a no-op for the second kind and
-the command prints both to show it.
+the command prints both to show it. **And since 284 it measures its own SEAM** — 269's last owed
+item — three ways, because the first two disagreed: the independence expectation says one join's
+band is 28-fold, every other band of the same width says top 0.3%, and reading each block in the
+band says **0 of 5203 cross a join**. All five near a join sit just PAST it and are the cartridge's
+own opening kilobyte, which decodes into short blocks wherever it is put.
 
 `--operands-everywhere` is the operand sweep over the whole file rather than over the 0.6% the
 maps point at (267), which 252 left owed. Population: every four bytes anywhere holding a ROM
@@ -1608,6 +1630,14 @@ doors announce themselves in 0x4001 x63, 0x8008 x25, 0x8004 x23, 0x4002 x6 — T
   — WITHIN 192 BYTES, which is on a floor of 3..8 (270); on the jump's own block it is 0, and
   5 are on a block a LITERAL in code names. The five offering blocks stand on their text
 7 blocks in the WHOLE IMAGE offer — the other 2 are CUT's and WATERFALL's, jumped into by nothing
+  AND THE OFFER NOW HAS A FLOOR, which is nought (284): every id this cartridge has no move for,
+  all 65180 in one sweep, gives 14153 site(s), 1157 reading on and **0 OFFERS**. The real 355 give
+  7. Sixteen windows of 355 unused ids each: 0 offers apiece
+  BUT 600 AND 101 ARE CLOSE TO NOISE (284): matched on the high byte — 0x0100..0x0163 USED against
+  0x0164..0x01FF UNUSED, the only matched floor this cartridge affords — a used id is named 3.0x as
+  often and reads on 1.9x as often. The whole-image windows say ten and twenty and are a floor for a
+  DIFFERENT pattern; the one that beat the real range outright (0x06F0..0x0852, 253 reading on)
+  spans high byte 0x08, the top byte of every pointer in the file
 322 flags gate something; 264 are moved by a script somewhere; 233 are the code boundary
   of the 233, 60 are moved by script the maps never open, 8 "jumped into" WITHIN 192 BYTES
   against a nudged floor of 4..6 (270). SORTED AT 271 by what names the script: 21 are the
@@ -2074,10 +2104,12 @@ still work.**
     the one that was, and it was on its floor.
   * ~~A nudge for the three-byte sweeps.~~ **DONE AT 272 for `Moves` and `Writes`**
     (`AnUnusedNumber`, printed under every count in `--in-the-image` and `--who-writes`): the
-    sixteen nearest unused ids with the same high byte. `AsksWhoKnows` takes a bound rather than
-    an id and has no nudge yet.
-  * **The seam.** A rotation joins the end of the file to the beginning; four bytes of the control
-    were never adjacent. Unmeasured.
+    sixteen nearest unused ids with the same high byte. ~~`AsksWhoKnows` takes a bound rather than
+    an id and has no nudge yet.~~ **DONE AT 284** — a bound's nudge is a WINDOW
+    (`AnUnusedNumber.WindowsAbove`, `SameHighByteAbove`), and the high byte is the whole game.
+  * ~~**The seam.**~~ **DONE AT 284, and it is nought** — 0 of 5203 blocks across the three
+    rotations cross a join, read one at a time. Two floors said otherwise on the way (see trap
+    110).
 * **What 268 left:**
   * **The 121.** The bound says at most that many outside blocks are real script; WHICH ones is a
     per-block question the mix cannot answer.

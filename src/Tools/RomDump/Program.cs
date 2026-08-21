@@ -14685,8 +14685,8 @@ public static class Program
         (int aSites, int aReads, _, int aOffers) = Sweep(mostMoves + 1, 0xFFFF);
 
         Console.WriteLine(
-            $"      and the real range's own offers: {offers}, of {opened} site(s) the map scan"
-            + " opens");
+            $"      the real range: {offers} site(s) that read on AND offer — the seven this"
+            + $" command has always ended on — and {opened} that the map scan opens");
         Console.WriteLine(
             $"      EVERY id this cartridge has no move for, all {0xFFFF - mostMoves} of them in"
             + $" one sweep: {aSites} site(s), {aReads} reading on, and {aOffers} OFFER(S)."
