@@ -709,6 +709,34 @@ Traps worth carrying:
     what names their own blocks is a literal in code, which the climb had said per site since 191.
     **Before believing a proximity test, ask what it would find if the thing were merely nearby.**
 
+96. **A BAND'S TOP IS A MAXIMUM, AND A MAXIMUM IS A PROPERTY OF HOW MANY TIMES YOU LOOKED**
+    (276). 273's verdict on the 38 is "0.601 is OUTSIDE the band a 38-block sample of the maps' own
+    lands in", and that band is ELEVEN groups because 435 flag sites is what there is. Asked of the
+    maps' own SCRIPTS — same kind of thing, another derivation — a 38-block sample's top climbs
+    **0.222, 0.236, 0.278, 0.345, 0.826** as the group count goes 4, 11, 25, 50, 102, and 0.601 is
+    inside it. **"Outside the band" is a verdict against a threshold that moves with the sample
+    count.** What replaces it is a RATE: real script reaches that far in 5.9% of samples (6/102)
+    and the reversal's sites in 33.0% (36/109), so the honest sentence is *5.6 times likelier junk
+    than real* and not *these are the reversal's kind*. Trap 8 in the shape of a threshold.
+
+95. **A GROUP SCORED AGAINST A WHOLE THAT CONTAINS IT IS TOO CLOSE TO IT, BY EXACTLY ITS SHARE**
+    (276). `SamplingBand` cuts a population and compares each group against the population — which
+    holds it. 38 of 435 is 8.7%, and taking the group out moves the maps' own band from
+    0.257..0.417 to **0.278..0.451**. Harmless while a band is only being asked whether some other
+    population falls inside it; not harmless when the band is the END of a scale. `AgainstTheRest`
+    is the version with the group removed, and the rest is BOTH SIDES of the cut — a tail-only rest
+    scores the last group against nothing, and **an empty comparand is not an obviously wrong
+    answer, it is a plausible one** (it scored exactly what the correct answer scored in one of
+    276's own fixtures).
+
+94. **A JUNK MODEL MADE BY MISREADING THE REAL THING IS NOT JUNK** (276). The nudged SITE — a block
+    read four bytes past a real `setflag`, in this image, which is the only junk a mixture group can
+    be built from here — sits at 0.301..0.496 where pure real script sits at 0.278..0.451. **The
+    distance column does not move with the share at all**: 0%, 25%, 50%, 75% and 100% real all read
+    0.24..0.56. At thirty-eight blocks, real script read from a boundary that is not one is
+    indistinguishable from real script. The reversal, which is not made out of this file's script at
+    all, does separate (0.423..0.896). **Ask what your junk is made of before believing it is junk.**
+
 93. **A BOUND THAT PUTS THE REAL THING AT NOUGHT IS READING OFF A SCALE WITH ONE MARK** (275).
     268's mixture bound is `1 - d(mixed, real) / d(junk, real)`, which divides by the distance to
     junk and so places real script at distance NOUGHT from the reference. It is not there: the
@@ -758,10 +786,10 @@ Traps worth carrying:
     reversed image sits 0.504 — which reads as "farther from real script than junk is" and made
     268's mixture bound clamp to nought. It is the sample size: **a sample of 38 drawn from the
     maps' OWN scripts scores 0.220 to 0.360 against its own whole** (0.257..0.417 once 275 cuts the
-    groups in FILE order rather than in hash order — the verdict is unmoved and the numbers are
-    not). With that band printed the
-    answer is clean — 0.601 is outside the maps' band, 0.373 is inside the reversal's, the 38 are
-    the reversal's kind. **A population small enough to name individually is small enough to need
+    groups in FILE order rather than in hash order). With that band printed the
+    answer LOOKS clean — 0.601 is outside the maps' band, 0.373 is inside the reversal's — **and
+    276 shows the band's top is a maximum over eleven groups: a hundred and two groups of the maps'
+    own SCRIPTS reach 0.826, and 6 of them reach 0.601.** **A population small enough to name individually is small enough to need
     a sampling band**, and `WhatABlockIsMadeOf.SamplingBand` is it: consecutive groups, so it is
     reproducible from the file, and consecutive is the conservative direction because neighbours
     are alike. **The clamp was the sample size, not a finding, and the command says so.**
@@ -796,14 +824,15 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-275-a-scale-with-both-ends-measured.md` first, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
+Read `claude/milestone-276-a-maximum-is-a-property-of-how-many-times-you-looked.md` first, then
+`275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
 `250`, `249`, `248`, `247`, `246`, `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
 `238`, `237`,
 `236`, `235`, `234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
-**Forty-six faults closed and every one was in this project, not on the cartridge.** A walk that
+**Forty-eight faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
 script" list; a list ranked by a count instead of by what it costs; a party that could not gain
 a level; a roadmap line that called a fix a cost; a continuation that carried flags and not
@@ -893,7 +922,12 @@ of the maps' own scripts sit 0.178 apart, and handed a group that is HALF REAL S
 CONSTRUCTION it reads nought; and `SamplingBand`'s consecutive groups, conservative because
 neighbours in the CARTRIDGE are alike, were reaching it out of a `HashSet`, so the band was
 narrower than its own documentation claimed — 273's verdict survives the fix and 274's numbers do
-not.
+not; and at 276 **273's verdict itself, and the band it was read off** — a band's top is a MAXIMUM
+and grows with how many groups were taken (the maps' own scripts reach 0.236 over eleven groups and
+0.826 over a hundred and two, and 0.601 is inside that), and a group scored against a whole that
+CONTAINS it is too close to it by exactly its share. What survives is a rate: 5.9% of real-script
+samples and 33.0% of the reversal's reach where the 38 are, which is 5.6-fold evidence and not a
+kind.
 
 `246` is the read that is not a command, and the literal-pool test for whether compiled code holds
 a number — both live inside `--namespaces`, which is now the fullest single instrument in the
@@ -1651,10 +1685,18 @@ ONE number is named both as a flag and as a variable in the map scan — 0x4001,
   the bands, READ not asserted: flags 0x0000+ 237n/347p and 0x4000+ 1n/4p; variables
     0x4000+ 77n/856p and 0x8000+ 16n/3428p, with 0x1A arg2's 145n/501p outside both (264)
   the whole-IMAGE version of the same question says 2117 / 14308 / 1333 — throw it away (264)
-the 38 unnamed boundary sites are the REVERSAL'S KIND (273, re-run at 275): command mix 0.601 from
-  the maps' own against a 38-block band of 0.257..0.417, and 0.373 from the reversal's against its
-  0.362..0.754 — both bands cut in FILE order now; the verdict is unmoved and the numbers are not
-  (they were 0.220..0.360 and 0.333..0.822 in hash order, and `--flags` prints both);
+the 38 unnamed boundary sites are 5.6 TIMES LIKELIER THE REVERSAL'S KIND THAN THE MAPS' (276, and
+  273's "they ARE the reversal's kind" is withdrawn as too strong). Their mix is 0.601 from the
+  maps' own; a 38-block group of real script reaches that far in 6 of 102 (5.9%) and one of the
+  reversal's sites in 36 of 109 (33.0%). **No share can be read**: the ends CROSS under all four
+  junk models and mixtures of known share read 0%..100% including their pure rows
+  the ends at 38, each measured on 38: the maps' own SITES 0.278..0.451 against the REST (11 groups,
+  0/11 as far) and 0.257..0.417 against a whole that contains the group; the maps' own SCRIPTS
+  0.213..0.826 (102 groups, 6/102); the reversal's sites 0.423..0.896 (109, 36/109); the sites
+  NUDGED +4/+16/+64 0.301..0.496 / 0.345..0.442 / 0.367..0.443 (7 groups each, 0/7 — a nudged site
+  is NOT junk here, it is real script read from a boundary that is not one)
+  273's band was 0.220..0.360 in hash order and 0.257..0.417 in file order (275) and its TOP is a
+  maximum over eleven groups either way — that is the fault 276 found, not the order;
   22 of the 38 are two or three commands long and three are runs of nop — 269's zero slide
 0x9C is dofieldeffect, named in ONE place since 233 and privately in EverywhereInTheImage since 191
 6 moves pair with 6 numbers: CUT 2, SURF 9, ROCK SMASH 37, STRENGTH 40, WATERFALL 43, DIVE 44
@@ -1757,6 +1799,19 @@ still work.**
   as a look. What is left: `0x4001`'s other two flag sites, and whether
   `EverywhereInTheImage.Reads` should stop counting `0x1A arg2` at all (244 marked the output
   rather than moving quoted numbers, and that decision is owed a re-run).
+* **What 276 left.** `--flags` measures the 38 against ends taken at 38 and reports a rate. Owed:
+  * **The rate has no error bar.** 6/102 against 36/109 is a difference of two counts and nothing
+    here says how often two populations of that size would differ this much by luck.
+  * **Two REAL populations disagree** — the maps' own SITES give 0/11 and the maps' own SCRIPTS
+    6/102. Sample count or a real difference between the two shapes? Subsampling the scripts to
+    eleven groups repeatedly would say, and this project has no source of groups it will reproduce
+    except consecutive ones.
+  * **The same critique lands on `--the-ruler`'s own verdict** (275, one milestone old — trap 49
+    exactly). Its OVERLAPS/BELOW sentences are band-extreme comparisons on two and three groups.
+    The rate is printed beside them now and the verdict still reads off the extremes.
+  * **A junk model for the boundary reading that is actually junk.** The nudged site is not; the
+    reversal is, and lives in another image, so no mixture can be built with it. Without one the
+    38's reading has no calibration at all.
 * **What 275 left.** `--the-ruler` exists and 268's bound is withdrawn as a number. Owed:
   * ~~A band at the size actually being bounded (274).~~ **ANSWERED SIDEWAYS AT 275** — the size was
     never the problem. The bound puts real script at NOUGHT from the reference and reads nought on
@@ -1776,10 +1831,14 @@ still work.**
 * **What 271 left.** The boundary's sixty are sorted (`--flags`, `WhatTheBoundaryIs`): 21 the
   opening, 1 code read as a `call`, 0 a literal's block, **38 that read as script and that
   NOTHING names**. Owed:
-  * ~~The 38.~~ **READ AT 273: they are the reversal's kind.** Their command mix is 0.601 from
+  * **The 38 are 5.6-fold EVIDENCE of being the reversal's kind, not a settled one** (273, read
+    again at 276). Their command mix is 0.601 from
     the maps' own against a 38-block sampling band of 0.257..0.417, and 0.373 from the
-    reversal's against its band of 0.362..0.754 (275, in file order). **The sixty are fully
-    accounted for: 21 + 1 + 38 + nothing left over.**
+    reversal's against its band of 0.362..0.754 (275, in file order). **276 withdraws the
+    verdict as too strong** — that band's top is a maximum over eleven groups — and replaces it
+    with a rate: 5.9% of real-script samples reach 0.601 against the reversal's 33.0%. **The sixty
+    are still fully accounted for: 21 + 1 + 38 + nothing left over**, and the 38's KIND is now
+    evidence rather than a finding.
   * ~~Slack itself~~ **DONE AT 271**: window at nought, 4 of 3674 sites and 0 on the boundary.
   * ~~`0x0014` at `0x081C0D45`~~ **DONE AT 271, and it is THUMB code** — see trap 86.
   * ~~The 60 minus 21~~ **DONE AT 271** — 21 / 1 / 0 / 38, printed by `--flags`.
