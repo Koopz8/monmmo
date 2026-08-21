@@ -709,6 +709,15 @@ Traps worth carrying:
     what names their own blocks is a literal in code, which the climb had said per site since 191.
     **Before believing a proximity test, ask what it would find if the thing were merely nearby.**
 
+109. **AN UNREAD LIST IS A FACT ABOUT ONE LEVER** (283). Everything this project prints about what
+    a run did NOT do is printed from ONE run, and the six lever settings walk six distances. The
+    floor leaves 204 sign scripts unread; the union of all six leaves **55**. The prompt's own
+    *"191 that run at no setting"* was a number no instrument here could have produced. Whenever a
+    line says *nothing ever* or *at no setting*, ask which run it came out of — and if the answer
+    is one run, the line is about that lever. The check that the buckets are named right is that
+    the FILE's bucket does not move across the six (it is 1 in every row) while the reach buckets
+    do (211).
+
 108. **REACHING A MAP IS NOT STANDING ON A SQUARE** (282). 249 asked how much of the buried list
     the walk goes over and answered it with `Reached`, which is a list of MAPS — so *the widest walk
     stands on 182 of 183* was the count of buried items whose map it got to. Asked of the squares:
@@ -925,15 +934,15 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-282-reaching-a-map-is-not-standing-on-a-square.md` first, then `281`,
-then `280`, then `279`, then `278`, then `277`, then `276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
+Read `claude/milestone-283-the-unread-list-was-a-fact-about-one-lever.md` first, then `282`,
+then `281`, then `280`, then `279`, then `278`, then `277`, then `276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
 `250`, `249`, `248`, `247`, `246`, `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
 `238`, `237`,
 `236`, `235`, `234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
-**Fifty-four faults closed and every one was in this project, not on the cartridge.** A walk that
+**Fifty-five faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
 script" list; a list ranked by a count instead of by what it costs; a party that could not gain
 a level; a roadmap line that called a fix a cost; a continuation that carried flags and not
@@ -1046,7 +1055,12 @@ of 97 the records said could be over-read; and at 281 **242's own rule that a si
 SOLID**, which is true of all 97 that name a side and false of 85 of the 422 that name none — and
 the buried kind is walkable on 142 of 183, because a thing you dig up is in the ground; and at 282
 **249's own "the widest walk stands on 182 of 183", which is a count of MAPS reached** — asked of
-the squares it is 137, out of the 142 that can be stood on at all.
+the squares it is 137, out of the 142 that can be stood on at all; and at 283 **every unread-sign
+verdict in this project being a fact about ONE lever setting** — the floor leaves 204 unread and
+the union of the six leaves 55, so "the 191 that run at no setting" was a number no instrument here
+could have produced, and the sorting that produced it was still asking 242's five-square question of
+signs 280 reads from one (worth 0 signs, and it can never be worth any: 279 read the side OFF the
+named square being open, so this cartridge cannot hold a counterexample).
 
 `246` is the read that is not a command, and the literal-pool test for whether compiled code holds
 a number — both live inside `--namespaces`, which is now the fullest single instrument in the
@@ -1291,7 +1305,9 @@ NEGATIVE: 9 items are asked for by a script, 3 of those are buried, and **NOUGHT
 has no other source**, so the run's total inability to dig costs it no reach at all. It also runs
 the six settings and prints how much the walk stands on: **UNDERFOOT on 137 of the 142 it could be at the widest — the 182 of 183 quoted since 249 is a
 count of MAPS reached (282) — on 78 of 79 maps, and it collects none of them** — the one it never even stands on is `1.62 (35,5)`, an ELIXIR
-at index 33.
+at index 33. **And "solid" hides no third meaning** (283): the collision field is two bits and
+only TWO of the four values occur in the whole world — 0 x110028, 1 x123713 — and all 41 buried
+items on a wall carry the same one, so `IsWalkable` being `== 0` throws nothing away.
 
 `--play --signs` is the fourth list with **its own control in the same process**: which sign
 scripts ran, at how many addresses, on how many maps, **why each of the rest did not** (three
@@ -1374,7 +1390,12 @@ sentence quoted from it stayed true. **It earned itself at 239**: running the si
 `--surf` from costing two flags to costing one, and the command printed the new difference off
 the same six runs that printed the new rows, so the sentence moved in the output rather than in
 somebody's memory. It also prints `--boat`'s flag cost as +61 or +60 depending on `--in-order`,
-which is the kind of thing a hand-kept table rounds off.
+which is the kind of thing a hand-kept table rounds off. **283 gave it the fourth list**: it keeps
+its six `Attempt`s now and sweeps the signs over all six settings, so "read at NO setting" is a
+number this project can produce — 55, sorted 36 reach / 18 walls / 1 fact about the file, with the
+file bucket standing at 1 in every row while the other two move (211's rule, passing in the open).
+It also prints a **wide-sign-or-wide-walk** table: how many records share each block, how many
+squares a run stood at, and the largest count any one square got in any one run.
 
 `--the-scan` is the error bar on every map-scan number: reads against byte positions for **every**
 command code, and a per-kind table with the ALONE columns — what each of the five kinds of script
@@ -1619,8 +1640,8 @@ BUT THE RUN ALSO TAKES FLAGS BACK: 164 ever on at the floor against the 160 it s
     WEST (14/14, 0.0217%), 0x04 from the EAST (10/10, 0.0517%), floors off kind 0x00's own 87.2% /
     54.7% / 46.9%; the OPPOSITE side is open 0 of 14 and 0 of 10. 0x02 never occurs (north, INFERRED)
     **242's four-square rule is three squares too many for 97 signs** and 68 of them have another
-    walkable neighbour. NOT ADOPTED — the exported map record carries no kind, and what it costs in
-    flags is not measured
+    walkable neighbour. ADOPTED AT 280 — MapSign carries the kind, MustBeReadFrom names the square,
+    and it costs 0 maps, 0 flags and 2 signs, measured against the loose run in the same process
   315 of the 519 RUN at the floor (214 addresses, 79 maps); 463 at the widest (327, 134) — 242,
     and 280, which took two off each end by making the walk obey the side the record names
     241 said 215 and 328: it keyed the read set on (map, ADDRESS) and a sign is a SQUARE. The
@@ -1636,6 +1657,15 @@ BUT THE RUN ALSO TAKES FLAGS BACK: 164 ever on at the floor against the 160 it s
     all four neighbours 0x00 and shut — not a sign board and not a collision reading of that kind
   the 56 unread at the widest: 36 on maps it never reached, 19 walls on maps it walks, and
     EXACTLY ONE nothing could ever stand beside — 10.6 (4,1), 0x0816C153, same at every lever
+  AT NO SETTING (283, `--the-floor`): the floor leaves 204 and the union of the six leaves **55**
+    — 36 reach / 18 walls / 1 the file. The prompt's "191 that run at no setting" was never a
+    number this project could produce. The 36 are 26 on 1.96 MT. EMBER, 5 one apiece in the
+    DOTTED HOLE (1.116-1.120), 3 on 1.62, 1 on 1.102, 1 on 3.61. The 18 are TEN on 12.0 CINNABAR
+    ISLAND in five adjacent PAIRS, 3 on 10.9, 2 on 14.2, and one each on 1.60 and 35.1 — and
+    **0 of the 18 needs a swimmer** (asked again with the water shut; one of the six runs surfs)
+  A WIDE SIGN OR A WIDE WALK (283): 1.114 0x08163F5A's 154 reads in one run are **22 records on
+    one map x 7 passes** — both, and neither alone. 59 of the 327 blocks any run reads are shared
+    by more than one record, and no run reads a block more than once per square per pass
   the floor's seven: 0x0031, 0x0032, 0x0233, 0x0234, 0x0235, 0x026D, 0x0834; TWO gate and each
     holds one person — 3.43 p1 and 30.0 p2. Only 2 of the 7 were moved by a sign ITSELF
   every control stops with "nothing more opened", so signs ARE what makes the run cycle (241)
@@ -1874,13 +1904,16 @@ the raw 0x9C sweep is 11446 sites in BOTH images and the REVERSAL READS ON MORE 
 **START HERE — what 239 and 240 opened, and the numbering below is unchanged so item references
 still work.**
 
-* ~~Which signs actually ran, and what the seven flags at the floor are.~~ **CLOSED AT 241** —
-  `--play --signs`. What is left of it: **why** the seven are what they are (which sign opens
-  which of the two people), and the **191 sign scripts that run at no setting** — reach, or a
-  square nothing can stand beside, not separated. And `1.114 0x08163F5A`, read 154 times in one
-  run, which nobody has asked is a wide sign or a wide walk. And **`10.6 (4,1)`** (242), the one
-  sign nothing in the cartridge can stand beside — a mistake, furniture, or a square this
-  project's collision reading gets wrong. One `--read-from` and one `--script-map 10.6`.
+* ~~Which signs actually ran, and what the seven flags at the floor are.~~ **CLOSED AT 241**, and
+  its three leftovers **CLOSED AT 283** — `--the-floor` now sweeps the fourth list over all six
+  settings. "191 that run at no setting" was **55**, and it was never one number: the floor leaves
+  204 unread and the union of the six leaves 55, sorted **36 reach / 18 walls / 1 fact about the
+  file**. `1.114 0x08163F5A`'s 154 reads are **22 records on one map x 7 passes** — a wide sign AND
+  a wide walk. `10.6 (4,1)` is as settled as bytes can make it (281). What is genuinely left:
+  **why** the seven flags are what they are (which sign opens which of the two people); the **five
+  adjacent pairs on `12.0` CINNABAR ISLAND**, ten of the eighteen walls in twos on a map every run
+  walks; and the **26 on `1.96` MT. EMBER and 5 in the DOTTED HOLE**, which are puzzles rather than
+  distance.
 * ~~What the twelve are for.~~ **CLOSED AT 247, and the answer is that there are none.** Twenty-one
   of the twenty-six the commands could not account for are read by a map header or a trigger; the
   five left are all loaded by compiled code. Every variable this cartridge writes is consulted by
