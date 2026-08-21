@@ -709,6 +709,25 @@ Traps worth carrying:
     what names their own blocks is a literal in code, which the climb had said per site since 191.
     **Before believing a proximity test, ask what it would find if the thing were merely nearby.**
 
+98. **A NULL'S GROUPING HAS TO MATCH THE SHAPE OF THE THING BEING READ** (277). 273 cut its band
+    into CONSECUTIVE groups because neighbours in the cartridge are alike, so a group of them sits
+    farther from the whole and the band comes out wider than the truth — every word true, and only
+    *conservative* when the population being READ is itself a run. **The 38 boundary sites are
+    scattered from `0x028514` to `0xEA7A8F`**, so against a run-shaped null the null carries the
+    file's regional structure and the reading carries none of it. Cut to match — every n-th item,
+    `Cut.Interleaved`, as reproducible from the file as consecutive is — **real script reaches the
+    38's distance in 0 of 102 where in runs it reached it in 6**, the reversal's sites in 19 of 109,
+    and the two rate bands do not meet. **273's verdict STANDS and 276's withdrawal of it was the
+    null's shape.** Both cuts are printed everywhere now; the difference between them is how much of
+    a population's spread is regional structure rather than sampling noise.
+
+97. **THREE WAYS A SCALE FAILS AND THEY ARE DIFFERENT FACTS** (277). The ends can CROSS (no length);
+    the thing being read can sit BEYOND the junk end — which is not a strong answer but a broken
+    junk model, because nothing can be more junk than junk; or the scale can work and have no
+    CALIBRATION. On the 38: 0 of 4 models cross, 3 put the 38 beyond the junk end (all of them the
+    nudged site, which is real script read from a wrong boundary), and the one that answers has no
+    mixture to calibrate against. **The rate is the reading and the share is not.**
+
 96. **A BAND'S TOP IS A MAXIMUM, AND A MAXIMUM IS A PROPERTY OF HOW MANY TIMES YOU LOOKED**
     (276). 273's verdict on the 38 is "0.601 is OUTSIDE the band a 38-block sample of the maps' own
     lands in", and that band is ELEVEN groups because 435 flag sites is what there is. Asked of the
@@ -789,7 +808,8 @@ Traps worth carrying:
     groups in FILE order rather than in hash order). With that band printed the
     answer LOOKS clean — 0.601 is outside the maps' band, 0.373 is inside the reversal's — **and
     276 shows the band's top is a maximum over eleven groups: a hundred and two groups of the maps'
-    own SCRIPTS reach 0.826, and 6 of them reach 0.601.** **A population small enough to name individually is small enough to need
+    own SCRIPTS reach 0.826, and 6 of them reach 0.601.** **277: those six are the CUT** — in runs a
+    group is a region of the file; scattered, none of the 102 reaches it. **A population small enough to name individually is small enough to need
     a sampling band**, and `WhatABlockIsMadeOf.SamplingBand` is it: consecutive groups, so it is
     reproducible from the file, and consecutive is the conservative direction because neighbours
     are alike. **The clamp was the sample size, not a finding, and the command says so.**
@@ -824,7 +844,7 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-276-a-maximum-is-a-property-of-how-many-times-you-looked.md` first, then
+Read `claude/milestone-277-the-null-was-the-wrong-shape.md` first, then `276`, then
 `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
 `250`, `249`, `248`, `247`, `246`, `245`, `244`, `243`,
@@ -832,7 +852,7 @@ Read `claude/milestone-276-a-maximum-is-a-property-of-how-many-times-you-looked.
 `238`, `237`,
 `236`, `235`, `234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
-**Forty-eight faults closed and every one was in this project, not on the cartridge.** A walk that
+**Forty-nine faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
 script" list; a list ranked by a count instead of by what it costs; a party that could not gain
 a level; a roadmap line that called a fix a cost; a continuation that carried flags and not
@@ -927,7 +947,11 @@ and grows with how many groups were taken (the maps' own scripts reach 0.236 ove
 0.826 over a hundred and two, and 0.601 is inside that), and a group scored against a whole that
 CONTAINS it is too close to it by exactly its share. What survives is a rate: 5.9% of real-script
 samples and 33.0% of the reversal's reach where the 38 are, which is 5.6-fold evidence and not a
-kind.
+kind; and at 277 **the shape of every null this project cuts** — consecutive groups are conservative
+only when the population being READ is a run, and every population these readings handle is spread
+over the whole image, so a run-shaped null was being compared against a scattered reading. Cut to
+match, real script reaches the 38's distance in NONE of 102 where in runs it reached it in 6, and
+**273's verdict stands after all** — 276's withdrawal of it was the null's shape and not the data.
 
 `246` is the read that is not a command, and the literal-pool test for whether compiled code holds
 a number — both live inside `--namespaces`, which is now the fullest single instrument in the
@@ -991,7 +1015,8 @@ dotnet run -c Release --project src/Tools/RomDump -- firered.gba --the-ruler
 ```
 
 `--the-control` is fifteen seconds; sections 4-6 are 270's and the window-at-nought ladder is
-271's. `--flags` sorts the boundary's sixty by what names them since 271. `--the-ruler` is five
+271's. `--flags` sorts the boundary's sixty by what names them since 271 and reads the 38 off a
+scale whose ends are measured at 38 since 276, cut to match them since 277. `--the-ruler` is five
 seconds.
 
 `--the-ruler` is 268's mixture bound asked of populations whose answer is known BEFORE the
@@ -1013,8 +1038,13 @@ holds none of any row.
 
 **268's bound reads NOUGHT on a group that is half real script**, and nought at a quarter. The scale
 runs 0.178 to 0.735 and not 0 to 0.735, because 0.178 is how far real script is from ANOTHER SAMPLE
-OF ITSELF. Read between the measured ends the outside populations are 9.9% and 9.3% with a
-22-point error bar off the mixture rows — so "under about a third", not "3.1%".
+OF ITSELF. **Since 277 every band here is cut as a SCATTER**, which is the shape these populations
+actually have: the KNOWN REAL row at 972 goes 14.9%..60.5% in runs to **44.9%..52.6%** scattered and
+the worst mixture miss goes 22.0% to **10.5%**. Under the best-calibrated junk model (+64, worst
+miss **4.5%**) the outside populations read **16.1% and 15.5%, so under about 20%** — against 268's
+3.1%, 274's "121 to 1266" and 275's "under about a third". And **the best-calibrated model is NOT
+the one with the smallest answer** (+4 at 9.9%), which the command checks and prints, because a
+criterion that always picks the number you liked is not one (79).
 
 It also gives the junk model a second candidate. `EveryScriptInTheImage.Nudged` is the nudge as a
 POPULATION rather than a count (269 only ever produced a count), which `NudgedFloor` now counts:
@@ -1023,9 +1053,10 @@ reversal sits **0.711**. Four offsets are run and the model is chosen by its cal
 its answer (79) — **and the calibration cannot choose**: the worst-miss column spans 3.5% where the
 answers span 19.3%, so what the reading supports is the whole span.
 
-And it prints the sampling band in BOTH orders. A band is cut into CONSECUTIVE groups because
-neighbours in the cartridge are alike; every caller reached it out of a `HashSet`, so it was not.
-The maps' own at groups of 114 goes 0.163..0.425 to **0.156..0.703** in file order.
+And it prints the sampling band THREE ways, because three separate choices move it and none is
+visible from the number: hash order, FILE order (275), and SCATTERED rather than in runs (277). The
+maps' own at groups of 114 goes 0.163..0.425 (hash) to 0.156..0.703 (file order, runs) to
+**0.068..0.185** (file order, scattered).
 
 `--the-control` is the floor, re-asked (269) — **and since 270 it asks the jumped-into readings
 against it** (sections 4 and 5): three predicates side by side, WITHIN THE WINDOW as it has stood,
@@ -1685,18 +1716,22 @@ ONE number is named both as a flag and as a variable in the map scan — 0x4001,
   the bands, READ not asserted: flags 0x0000+ 237n/347p and 0x4000+ 1n/4p; variables
     0x4000+ 77n/856p and 0x8000+ 16n/3428p, with 0x1A arg2's 145n/501p outside both (264)
   the whole-IMAGE version of the same question says 2117 / 14308 / 1333 — throw it away (264)
-the 38 unnamed boundary sites are 5.6 TIMES LIKELIER THE REVERSAL'S KIND THAN THE MAPS' (276, and
-  273's "they ARE the reversal's kind" is withdrawn as too strong). Their mix is 0.601 from the
-  maps' own; a 38-block group of real script reaches that far in 6 of 102 (5.9%) and one of the
-  reversal's sites in 36 of 109 (33.0%). **No share can be read**: the ends CROSS under all four
-  junk models and mixtures of known share read 0%..100% including their pure rows
-  the ends at 38, each measured on 38: the maps' own SITES 0.278..0.451 against the REST (11 groups,
-  0/11 as far) and 0.257..0.417 against a whole that contains the group; the maps' own SCRIPTS
-  0.213..0.826 (102 groups, 6/102); the reversal's sites 0.423..0.896 (109, 36/109); the sites
-  NUDGED +4/+16/+64 0.301..0.496 / 0.345..0.442 / 0.367..0.443 (7 groups each, 0/7 — a nudged site
-  is NOT junk here, it is real script read from a boundary that is not one)
-  273's band was 0.220..0.360 in hash order and 0.257..0.417 in file order (275) and its TOP is a
-  maximum over eleven groups either way — that is the fault 276 found, not the order;
+the 38 unnamed boundary sites ARE THE REVERSAL'S KIND (273, withdrawn at 276, RESTORED AT 277 when
+  the null was cut to match them). Their mix is 0.601 from the maps' own, and a 38-block group of
+  real script reaches that far in **0 of 102** scattered samples against the reversal's sites'
+  **19 of 109 (17.4%)** — rate bands 0.0%..0.0% against 8.0%..12.0%, which do not meet. In RUNS it
+  is 6 of 102 against 36 of 109, and that is the file's regional structure, not the reading
+  the ends at 38, SCATTERED: the maps' own SITES 0.132..0.225 against the REST (11 groups, 0/11) and
+  0.119..0.208 against a whole that contains the group; the maps' own SCRIPTS 0.111..0.285 (102,
+  0/102); the reversal's sites 0.441..0.743 (109, 19/109); the sites NUDGED +4/+16/+64
+  0.308..0.380 / 0.283..0.392 / 0.338..0.435 (7 each, 0/7). In runs those are 0.278..0.451,
+  0.257..0.417, 0.213..0.826, 0.423..0.896 and 0.301..0.496 — the command prints both
+  0 of the 4 junk models have ends that CROSS; 3 put the 38 BEYOND the junk end, which is a broken
+  model and not a strong answer — all three are the nudged site, which is real script read from a
+  boundary that is not one. Only the reversal answers, at 0%..27.5%, AND THAT SHARE HAS NO
+  CALIBRATION because the mixtures it would be calibrated against are built out of the nudged site
+  a block of 11 real-SCRIPT groups holds none at or beyond 0.601 in 9 of 9, so the SITES' 0/11 and
+  the SCRIPTS' rate never disagreed (276 thought they did, in runs)
   22 of the 38 are two or three commands long and three are runs of nop — 269's zero slide
 0x9C is dofieldeffect, named in ONE place since 233 and privately in EverywhereInTheImage since 191
 6 moves pair with 6 numbers: CUT 2, SURF 9, ROCK SMASH 37, STRENGTH 40, WATERFALL 43, DIVE 44
@@ -1799,19 +1834,20 @@ still work.**
   as a look. What is left: `0x4001`'s other two flag sites, and whether
   `EverywhereInTheImage.Reads` should stop counting `0x1A arg2` at all (244 marked the output
   rather than moving quoted numbers, and that decision is owed a re-run).
-* **What 276 left.** `--flags` measures the 38 against ends taken at 38 and reports a rate. Owed:
-  * **The rate has no error bar.** 6/102 against 36/109 is a difference of two counts and nothing
-    here says how often two populations of that size would differ this much by luck.
-  * **Two REAL populations disagree** — the maps' own SITES give 0/11 and the maps' own SCRIPTS
-    6/102. Sample count or a real difference between the two shapes? Subsampling the scripts to
-    eleven groups repeatedly would say, and this project has no source of groups it will reproduce
-    except consecutive ones.
-  * **The same critique lands on `--the-ruler`'s own verdict** (275, one milestone old — trap 49
-    exactly). Its OVERLAPS/BELOW sentences are band-extreme comparisons on two and three groups.
-    The rate is printed beside them now and the verdict still reads off the extremes.
-  * **A junk model for the boundary reading that is actually junk.** The nudged site is not; the
-    reversal is, and lives in another image, so no mixture can be built with it. Without one the
-    38's reading has no calibration at all.
+* **What 277 left.** Every band is cut both ways now and the reading takes the matching one. Owed:
+  * **Which cut is right is a judgement per reading and NOTHING ENFORCES IT.** The rule is the shape
+    of the population being read; it lives in `Cuts`' documentation and is applied by hand at each
+    call site. A reading that takes the wrong one fails no test.
+  * ~~The rate has no error bar.~~ **DONE AT 277** — `RateBand`, and the two bands do not meet.
+  * ~~Two REAL populations disagree.~~ **THEY NEVER DID** — 9 of 9 blocks of eleven real-script
+    groups hold none at or beyond 0.601. 276 saw it in runs.
+  * ~~The same critique lands on `--the-ruler`'s verdict.~~ **APPLIED AT 277** — its ladder is
+    scattered and its mixture calibration went 22.0% to 10.5%. Its OVERLAPS/BELOW sentences still
+    read off band extremes with the rate printed beside them.
+  * **A junk model for the boundary reading that is actually junk.** The nudged site is not — it
+    puts the 38 BEYOND its own junk end, which is a broken model. The reversal is, and lives in
+    another image, so no mixture can be built with it, so the 0%..27.5% share has no calibration.
+* **What 276 left.** `--flags` measures the 38 against ends taken at 38 and reports a rate.
 * **What 275 left.** `--the-ruler` exists and 268's bound is withdrawn as a number. Owed:
   * ~~A band at the size actually being bounded (274).~~ **ANSWERED SIDEWAYS AT 275** — the size was
     never the problem. The bound puts real script at NOUGHT from the reference and reads nought on
@@ -1834,11 +1870,11 @@ still work.**
   * **The 38 are 5.6-fold EVIDENCE of being the reversal's kind, not a settled one** (273, read
     again at 276). Their command mix is 0.601 from
     the maps' own against a 38-block sampling band of 0.257..0.417, and 0.373 from the
-    reversal's against its band of 0.362..0.754 (275, in file order). **276 withdraws the
-    verdict as too strong** — that band's top is a maximum over eleven groups — and replaces it
-    with a rate: 5.9% of real-script samples reach 0.601 against the reversal's 33.0%. **The sixty
-    are still fully accounted for: 21 + 1 + 38 + nothing left over**, and the 38's KIND is now
-    evidence rather than a finding.
+    reversal's against its band of 0.362..0.754 (275, in file order). 276 withdrew the verdict as
+    too strong — that band's top is a maximum over eleven groups — and **277 restored it**: cut to
+    match the 38's own scatter, real script reaches 0.601 in 0 of 102 against the reversal's 19 of
+    109, with rate bands that do not meet. **The sixty are fully accounted for: 21 + 1 + 38 +
+    nothing left over.**
   * ~~Slack itself~~ **DONE AT 271**: window at nought, 4 of 3674 sites and 0 on the boundary.
   * ~~`0x0014` at `0x081C0D45`~~ **DONE AT 271, and it is THUMB code** — see trap 86.
   * ~~The 60 minus 21~~ **DONE AT 271** — 21 / 1 / 0 / 38, printed by `--flags`.
