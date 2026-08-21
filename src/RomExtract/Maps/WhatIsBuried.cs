@@ -11,6 +11,19 @@ public sealed record Buried(string MapId, int At, int X, int Y, uint Word)
     /// <summary>The first halfword of the four — an item id if this reading is right.</summary>
     public int Item => (int)(Word & 0xFFFF);
 
+    /// <summary>
+    /// Whether the first halfword resolves to a NAMED item, which entry nought does not.
+    /// </summary>
+    /// <remarks>
+    /// <b>A placeholder is not a name.</b> 248 reported "183 of 183 resolve to a name in the item
+    /// table's 308 entries" and made that the evidence the field is an item id — and twelve of
+    /// the 183 resolve to entry nought, which this cartridge's table calls <c>????????</c>. The
+    /// reading is stronger stated honestly: every id that is not the blank resolves, 171 of 171.
+    /// Counting a placeholder as a hit is how a test that could have failed stops being able to.
+    /// </remarks>
+    public bool NamesAnItem(IReadOnlyDictionary<int, string> names) =>
+        Item != 0 && names.ContainsKey(Item);
+
     /// <summary>The third byte.</summary>
     public int Third => (int)((Word >> 16) & 0xFF);
 

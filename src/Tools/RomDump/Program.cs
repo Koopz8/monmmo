@@ -10723,10 +10723,24 @@ public static class Program
                 ", ",
                 Enumerable.Range(0, buried.Max(b => b.Third) + 1).Where(n => !used.Contains(n))));
 
+        // AND THE BLANK IS NOT A HIT. 248 reported "183 of 183 resolve to a name in the item
+        // table's 308 entries" and made that the evidence the field is an item id. Twelve of the
+        // 183 resolve to entry NOUGHT, which the table calls "????????" — the same command says
+        // so nine lines further down — so counting them as hits is counting a placeholder as a
+        // name. The reading is stronger stated honestly: every id that is not the blank resolves.
+        int resolved = buried.Count(b => b.NamesAnItem(names));
+        int placeholders = buried.Count(b => b.Item == 0);
+
         Console.WriteLine(
-            $"    and {buried.Count(b => names.ContainsKey(b.Item))} of the {buried.Count} first"
-            + $" halfwords resolve to a name in the item table's {names.Count} entries, which is"
-            + " what makes \"the first halfword is an item\" a reading rather than a guess");
+            $"    and {resolved} of the {buried.Count - placeholders} first halfwords that are not NOUGHT"
+            + $" resolve to a name in the item table's {names.Count - 1} named entries — the"
+            + $" other {placeholders} resolve to entry 0, which the table calls \"????????\" and which is"
+            + " a placeholder rather than a name");
+        Console.WriteLine(
+            $"    counted the way 248 counted it that is {buried.Count(b => names.ContainsKey(b.Item))}"
+            + $" of {buried.Count} against {names.Count} entries, and the difference is the blank."
+            + " What makes \"the first halfword is an item\" a reading rather than a guess is the"
+            + " first line, not the second");
 
         // AND WHERE A COMPUTED FLAG RANGE COULD LIVE. If the third byte is an index the flag is
         // a base plus it, and the base is in compiled code where this project cannot read it.

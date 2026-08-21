@@ -243,4 +243,31 @@ public sealed class WhatIsBuriedTests
 
         Assert.Equal(["1.62"], [.. missed.Select(b => b.MapId)]);
     }
+
+    /// <summary>
+    /// A PLACEHOLDER IS NOT A NAME. 248's evidence that the first halfword is an item id was
+    /// "183 of 183 resolve to a name in the item table's 308 entries", and twelve of the 183
+    /// resolve to entry NOUGHT — which this cartridge's table calls <c>????????</c>. Counting a
+    /// blank as a hit is how a test that could have failed stops being able to; the honest count
+    /// is 171 of 171 and it is a stronger result.
+    /// </summary>
+    [Fact]
+    public void EntryNoughtIsNotAName()
+    {
+        var names = new Dictionary<int, string> { [0] = "????????", [7] = "POTION" };
+
+        Assert.True(new Buried("1.0", 0, 0, 0, 7).NamesAnItem(names));
+        Assert.False(new Buried("1.0", 0, 0, 0, 0).NamesAnItem(names));
+    }
+
+    /// <summary>
+    /// AND AN ID THE TABLE DOES NOT HOLD IS NOT ONE EITHER, which is the answer that has to be
+    /// possible or the test is a machine for saying yes.
+    /// </summary>
+    [Fact]
+    public void AnIdTheTableDoesNotHoldDoesNotResolve()
+    {
+        Assert.False(
+            new Buried("1.0", 0, 0, 0, 999).NamesAnItem(new Dictionary<int, string> { [7] = "POTION" }));
+    }
 }
