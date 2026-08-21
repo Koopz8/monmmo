@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-313`, 3272 tests green.
+`claude-314`, 3274 tests green.
 
 Standing rules — do not break these:
 
@@ -709,6 +709,15 @@ Traps worth carrying:
     what names their own blocks is a literal in code, which the climb had said per site since 191.
     **Before believing a proximity test, ask what it would find if the thing were merely nearby.**
 
+89. **A COMPARISON AT EACH POPULATION'S OWN NATURAL SPLIT IS CONFOUNDED BY THE SPLIT** (274).
+    Each population's own quarters against its own whole looked like a clean homogeneity test:
+    the maps' own scripts 0.086..0.167, the reversed image 0.226..0.506. **At ONE common group
+    size they overlap** — 0.163..0.425 against 0.226..0.506 — because a quarter of 3888 is 972
+    blocks and a quarter of 456 is 114, and a bigger group is tighter for no reason but the count.
+    The natural split is the seductive one because every row is doing the same thing to itself.
+    **Put every population on the same group size before comparing their spreads**, and print the
+    verdict rather than the two columns.
+
 88. **A DISTANCE MEASURED ON TENS AND ONE MEASURED ON THOUSANDS ARE NOT COMPARABLE** (273). The
     38 unnamed boundary sites' command mix sits **0.601** from the maps' own scripts where the
     reversed image sits 0.504 — which reads as "farther from real script than junk is" and made
@@ -750,14 +759,14 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-273-thirty-eight-blocks-is-a-small-sample.md` first, then `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
+Read `claude/milestone-274-the-bound-was-tighter-than-its-evidence.md` first, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
 `250`, `249`, `248`, `247`, `246`, `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
 `238`, `237`,
 `236`, `235`, `234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
-**Forty-three faults closed and every one was in this project, not on the cartridge.** A walk that
+**Forty-four faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
 script" list; a list ranked by a count instead of by what it costs; a party that could not gain
 a level; a roadmap line that called a fix a cost; a continuation that carried flags and not
@@ -831,7 +840,10 @@ thirteen for any `0x00xx` flag, so every wall flag's site count was on its floor
 273 **a command-mix distance read without a sampling band** — 38 blocks sit 0.601 from the maps'
 own scripts where the reversal sits 0.504, which is not "farther than junk" but the cost of
 thirty-eight blocks: the maps' own score 0.220-0.360 at that sample size, and 268's bound clamping
-to nought was arithmetic on two numbers measured on different amounts of evidence; and at
+to nought was arithmetic on two numbers measured on different amounts of evidence; and at 274
+**268's own bound, which had no error bar either** — "at most 3.1%, about 121 blocks" becomes
+"between 121 and about 1266" once a 972-block sample's own 0.086-0.167 is handed back, so the
+maps leading to VERY NEARLY ALL the script was a number nobody had put a band under; and at
 267 **fifteen milestones of "the whole image" being owed, answered NO with a number** — the
 operand sweep's calibration row falls from 98% to 27% on the half the maps do not lead to, so the
 population that would have settled 252 cannot; and at
@@ -1429,17 +1441,25 @@ the file holds 10240 blocks reachable from an ALIGNED pointer against the map sc
   **the 6621 outside ones ARE NOT SCRIPTS** (268). Command-mix distance from the maps' own
   scripts: outside-alone 0.690, outside-in-a-table 0.698, THE REVERSED IMAGE 0.711; the outside
   populations sit 0.24-0.32 from the reversal. The mixture bound (total variation is linear, so
-  this is arithmetic) puts at most 3.1% and 1.8% of them on the real side — about 121 of 4825
+  this is arithmetic) puts at most 3.1% and 1.8% of them on the real side — about 121 of 4825.
+  **274: THAT BOUND HAS NO ERROR BAR AND IS NOT SUPPORTED.** A 972-block sample of the maps' own
+  scripts sits 0.086..0.167 from its own whole; hand that back and it is 26.6% and 25.3%, about
+  1266 blocks. The honest sentence is "between 121 and about 1266" — 268's direction survives,
+  its sharpness does not.
+  homogeneity does NOT tell them apart either (274): at a common group size of 114 the maps' own
+  score 0.163..0.425 and the reversal 0.226..0.506, overlapping. The own-quarters column that
+  separates them cleanly is the GROUP SIZE, not the populations
 so the reversed-image floor said 456 where the truth is about 6300, a FOURTEEN-FOLD gap, because
   reversing keeps every table (268). The region-preserving floor (269) puts it at 15%: of 46143
   aligned targets, 19.2% decode AS NAMED and 14.9-16.4% decode NUDGED by 4 to 4096 bytes — and
   split, the maps' own go 99.6% -> 51-70% and everything else 14.9% -> 12.0-13.8%. Two routes
-  sharing no code agree that the maps lead to very nearly all the script this cartridge has
+  sharing no code agree that the maps lead to MOST of the script this cartridge has — "very nearly
+  all" was the bound quoted with no band under it, corrected at 274
 a pointer aimed FOUR BYTES into the middle of a real script still decodes to a proper end two
   thirds of the time — the reader resynchronises (269). That is why "reads as a script" was never
   the filter its name suggests, and 0x00 being a no-op with no arguments is why a run of zeros
-  reaches whatever end follows it 267's "6621 blocks no map leads to" is WITHDRAWN as a count
-  of scripts: the maps lead to very nearly all the script this cartridge has
+  reaches whatever end follows it. 267's "6621 blocks no map leads to" is WITHDRAWN as a count
+  of scripts: the maps lead to most of the script this cartridge has
 the whole-image operand sweep CANNOT be run and now has no reason to be: compare's variable
   operand is 98% over the map scan and 27% over the outside half (267) because the outside half is
   noise (268). There is no body of scripts outside the maps for a third operand to hide in
