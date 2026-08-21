@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-302`, 3189 tests green.
+`claude-303`, 3195 tests green.
 
 Standing rules — do not break these:
 
@@ -601,16 +601,30 @@ Traps worth carrying:
     the things you already know into the table rather than into a comment** — it is not a fixture
     and it runs every time.
 
+69. **A NUMBER NOTHING COMPUTES IS EITHER RIGHT OR WITHDRAWN — NEVER CORRECTED** (263). 231
+    marked four numbers no instrument printed. Computed at last: **146 and 158 are exact** after
+    seventy-three milestones of being uncheckable, and **`62 gates hold 240 people` and `the
+    ceiling is 45 of 437 byte positions` reproduce nothing**. The two that fail are WITHDRAWN
+    rather than corrected — there is no version of them to fix, because nothing ever produced
+    them. **When an audit ends with "it was right all along", that is the honest ending** (231
+    said the same of 936), and when it ends with "nothing reproduces this", delete the line.
+
+70. **THE CROSS-CHECK YOU DID NOT ASK FOR IS THE ONE WORTH HAVING** (263). Counting what the gates
+    hold gives **605 objects**, and the prompt already says — off the object records, through a
+    different structure — that 605 of the cartridge's 1600 objects carry a non-zero hide flag.
+    Two directions, one number. **Nothing else in the gate reading has one**, and a reading with
+    no independent agreement is a reading nobody has tested.
+
 ## Where things are
 
-Read `claude/milestone-262-the-four-are-not-the-sea.md` first, then `261`, `260`, `259`, `258`, `257`,
+Read `claude/milestone-263-what-the-gates-hold.md` first, then `262`, `261`, `260`, `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
 `250`, `249`, `248`, `247`, `246`, `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
 `238`, `237`,
 `236`, `235`, `234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
-**Thirty-four faults closed and every one was in this project, not on the cartridge.** A walk that
+**Thirty-five faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
 script" list; a list ranked by a count instead of by what it costs; a party that could not gain
 a level; a roadmap line that called a fix a cost; a continuation that carried flags and not
@@ -660,7 +674,9 @@ of their squares and are in no water list** — `0x1B`, `0x52`, `0x53`, `0x50`, 
 because the layered fill lost exactly `0x1B`'s 751 on ROUTE 17 — **and at 262 that reading was
 refuted by two tests that cannot see an elevation**, along with its premise (`0x15` is at
 elevation 1 on 59.6% of its squares) and the layer rule itself; the water list was never changed,
-so the fault closed at 262 is 261's own inference and it cost nothing.
+so the fault closed at 262 is 261's own inference and it cost nothing; and at 263 **two numbers
+quoted in this file since 190 that nothing had ever computed** — withdrawn rather than corrected,
+because no split of this cartridge reproduces either, while the other two came back exact.
 
 `246` is the read that is not a command, and the literal-pool test for whether compiled code holds
 a number — both live inside `--namespaces`, which is now the fullest single instrument in the
@@ -1141,7 +1157,12 @@ those 110 are 35 no opener, 30 never run, 16 never picked up, 15 obstacles, 7 bo
   BACK (240) — the sixth bucket, first in the order, and it took from THREE of the other five
 35 and 15 are the same at every lever setting, which is how a property of the FILE has to behave
 3 scripts hold 27 gating flags: CUT and ROCK SMASH (15, 2 scripts), STRENGTH (12, 1) — CHECKED
-  [62 gates / 240 people / 146 trees and rocks / 158 objects: NOTHING PRINTS THESE ANY MORE]
+322 gating flags hold 605 objects; 2 hold none (the boat's). 15 tree-and-rock gates hold 146,
+  12 boulder gates hold 12, all 27 obstacle gates hold 158, the other 295 hold 447 — PRINTED
+  by --play since 263, and 146 and 158 were exact after 73 milestones of being uncheckable
+  605 also agrees with "605 of 1600 objects carry a hide flag", counted from the other side
+of the 295: 272 hold one, 10 hold 5-16, 8 hold 2-4, 3 hold more than 16, 2 hold nothing;
+  21 hold MORE THAN ONE, 175 objects between them — "62 gates hold 240 people" is WITHDRAWN
 the 12 STRENGTH boulders are SEAFOAM and VICTORY ROAD, and their flags split THREE ways
 766 places call 63 routines the widest run cannot answer; 186 have an answer nothing branches on
 --routines: 1118 branching sites at 437 byte positions in the file; 48 routines are branched on
@@ -1363,9 +1384,11 @@ still work.**
   milestones as something the run could not reach. It can now.
 
 1. **`0x0AB` IS READ (232) and the block audit is DONE (231).** What is left of the audit: What is left of it: the three
-   numbers nothing prints (`62 gates hold 240 people`, `146 trees and rocks`, `158 objects`) and
-   `the ceiling is 45 of 437 byte positions`. Each needs an instrument or deleting; they are
-   marked in the block. The next cheap reads are **`0x194`'s nineteen doors** on TRAINER TOWER
+   ~~numbers nothing prints~~ **PAID AT 263**: `146 trees and rocks` and `158 objects` are EXACT
+   and printed by `--play` now; `62 gates hold 240 people` and `the ceiling is 45 of 437 byte
+   positions` reproduce nothing and are WITHDRAWN. The ceiling in byte positions IS printed, per
+   bucket — 17 of 359 at the widest, 10 of 344 at the floor — and 437 is `--routines`' count of
+   every branching byte position in the file, a different denominator. The next cheap reads are **`0x194`'s nineteen doors** on TRAINER TOWER
    (236), some of which `--entries` may now see since 237 admitted the argument band, and
    **`0x82`'s seven words** — 58, 231, 85, 247, 53 in one run of five, and 15 and 249 in the CUT
    and ROCK SMASH blocks (238). `--read-from` and `--slots` make both one command each. The
