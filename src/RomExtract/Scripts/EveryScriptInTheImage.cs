@@ -173,6 +173,35 @@ public static class EveryScriptInTheImage
         return longest;
     }
 
+    /// <summary>
+    /// The same entries asked of an address a little further on — the region-preserving floor.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The control the reversal cannot be.</b> What "an aligned pointer whose target decodes to
+    /// a proper end" claims is that the pointer NAMES that block. The null for that is not a file
+    /// with different statistics; it is these same pointers, in this same file, aimed a few bytes
+    /// off. If a target that is four bytes wrong decodes just as often, then decoding says nothing
+    /// about naming.
+    /// </para>
+    /// <para>
+    /// Small offsets on purpose. A rotation of four megabytes moves a pointer out of the region
+    /// scripts live in and measures whether THAT region decodes; a nudge keeps it exactly where it
+    /// was and asks the only question in dispute.
+    /// </para>
+    /// </remarks>
+    public static int NudgedFloor(Rom rom, IEnumerable<uint> pointed, int by) =>
+        pointed.Count(at => ScriptReader.ReadsAsAScript(rom, (uint)(at + by)));
+
+    /// <summary>Every aligned address something points at, decoding or not — the nudge's list.</summary>
+    public static IReadOnlyList<uint> Aligned(Rom rom)
+    {
+        IReadOnlyDictionary<uint, IReadOnlyList<int>> index =
+            EverywhereInTheImage.PointerIndex(rom);
+
+        return [.. index.Where(p => p.Value.Any(o => o % 4 == 0)).Select(p => p.Key).Order()];
+    }
+
     /// <summary>The identical hunt on the image backwards.</summary>
     /// <remarks>
     /// Not a formality. A pointer is four bytes with <c>0x08</c> on top and a decode that reaches

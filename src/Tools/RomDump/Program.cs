@@ -219,6 +219,7 @@ public static class Program
         if (options.Water) WriteWater(rom);
         if (options.Operands) WriteOperands(rom);
         if (options.OperandsEverywhere) WriteOperandsEverywhere(rom);
+        if (options.TheControl) WriteTheControl(rom);
         if (options.Slots.Count > 0) WriteSlots(rom, options.Slots);
         if (options.ReadFrom.Count > 0) WriteBlocks(rom, options.ReadFrom);
         if (options.Closure) WriteClosure(rom, options.RoutineAnswers, options.StartAt);
@@ -10681,6 +10682,139 @@ public static class Program
     /// The numbers this cartridge uses in both namespaces at once.
     /// </summary>
     /// <summary>
+    /// What every floor in this project says when the control keeps the file's structure.
+    /// </summary>
+    private static void WriteTheControl(Rom rom)
+    {
+        Console.WriteLine();
+        Console.WriteLine("THE CONTROL, RE-ASKED");
+        Console.WriteLine();
+        Console.WriteLine(
+            "  every floor here has been the image BACKWARDS, which keeps every byte and every"
+            + " byte's frequency and destroys every command boundary — and keeps every TABLE.");
+        Console.WriteLine(
+            "  ROTATED by a multiple of four keeps the tables, the alignment and the direction,"
+            + " and destroys only the correspondence between a pointer and what it points at.");
+
+        IReadOnlyList<int> offsets = AControlImage.Offsets(rom);
+
+        Console.WriteLine(
+            $"  rotations: {string.Join(", ", offsets.Select(o => $"0x{o:X6}"))}");
+
+        var controls = new List<(string Name, Rom Image)>
+        {
+            ("the file itself", rom),
+            ("BACKWARDS", AControlImage.Backwards(rom)),
+        };
+
+        foreach (int by in offsets) controls.Add(($"ROTATED 0x{by:X6}", AControlImage.Rotated(rom, by)));
+
+        // 1. THE POPULATION 268 CONDEMNED. The reversed floor said 456 blocks where the file has
+        // about 6300 accidents, which is the finding that made this command necessary.
+        Console.WriteLine();
+        Console.WriteLine("  1. SCRIPT BLOCKS REACHABLE FROM AN ALIGNED POINTER (267, 268)");
+        Console.WriteLine("      control              named   entries   blocks");
+
+        foreach ((string name, Rom image) in controls)
+        {
+            TheImagesScripts found = EveryScriptInTheImage.In(image);
+
+            Console.WriteLine(
+                $"      {name,-18} {found.Pointed,7}  {found.Entries.Count,8}  {found.Blocks.Count,7}");
+        }
+
+        // AND THE ONE THAT KEEPS THE REGION. A rotation of four megabytes moves a pointer out of
+        // the part of the file scripts live in, so it measures whether THAT part decodes. The
+        // question in dispute is narrower: does decoding say anything about NAMING? So take the
+        // real pointers, aim each a few bytes off, and ask again.
+        IReadOnlyList<uint> pointed = EveryScriptInTheImage.Aligned(rom);
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"      and the same {pointed.Count} aligned target(s), NUDGED — same pointers, same"
+            + " file, aimed a little off:");
+
+        // SPLIT BY WHETHER THE MAP SCAN OPENS THE TARGET, because that is the only half anybody
+        // has independent evidence about. If the maps' own targets stand out and the rest sit on
+        // the floor at every nudge, then the whole of the signal is the scripts this project
+        // already had.
+        MapLibrary theMaps = MapLibrary.Open(rom);
+
+        var mapsOpen = new HashSet<uint>();
+
+        foreach (SetsAFlag script in theMaps.All().SelectMany(EveryScriptOn))
+        {
+            foreach (uint block in ScriptReader.Reachable(rom, script.Address)) mapsOpen.Add(block);
+        }
+
+        List<uint> theirs = [.. pointed.Where(mapsOpen.Contains)];
+        List<uint> rest = [.. pointed.Where(p => !mapsOpen.Contains(p))];
+
+        Console.WriteLine(
+            $"      of those, {theirs.Count} are a block the maps open and {rest.Count} are not");
+        Console.WriteLine("      nudge               all           the maps'          the rest");
+
+        foreach (int by in new[] { 0, 4, 8, 16, 64, 256, 1024, 4096 })
+        {
+            string Share(IReadOnlyList<uint> of)
+            {
+                int decodes = EveryScriptInTheImage.NudgedFloor(rom, of, by);
+
+                return of.Count == 0
+                    ? "         -"
+                    : $"{decodes,6} {(double)decodes / of.Count,7:P1}";
+            }
+
+            Console.WriteLine(
+                $"      {(by == 0 ? "as named" : $"+{by} bytes"),-18} {Share(pointed)}"
+                + $"  {Share(theirs)}  {Share(rest)}");
+        }
+
+        // 2. THE LITERAL-POOL TEST. 246 and 248 rest on it: a word equal to a variable's id, on a
+        // four-byte boundary, with a PC-relative load reaching it, is the game's own code holding
+        // that number. The reversed floor for it is 84 against 889.
+        MapLibrary library = MapLibrary.Open(rom);
+        List<SetsAFlag> scripts = [.. library.All().SelectMany(EveryScriptOn)];
+
+        IReadOnlyCollection<int> written =
+            [.. EverywhereInTheImage.EveryVariableWritten(rom).Keys];
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  2. THE LITERAL-POOL TEST over the {written.Count} variable(s) something writes"
+            + " (246, 248)");
+        Console.WriteLine("      control              held by code   of them, in how many words");
+
+        foreach ((string name, Rom image) in controls)
+        {
+            IReadOnlyDictionary<int, IReadOnlyList<WordSite>> held =
+                EverywhereInTheImage.HeldAsAWord(image, written);
+
+            Console.WriteLine(
+                $"      {name,-18} {held.Count(h => h.Value.Any(w => w.HeldByCode)),14}"
+                + $"  {held.Sum(h => h.Value.Count(w => w.HeldByCode)),25}");
+        }
+
+        // 3. THE WRITTEN-AND-NEVER-READ AGGREGATE, over the story's own band.
+        Console.WriteLine();
+        Console.WriteLine("  3. WRITTEN AND NEVER READ, over 0x4000-0x40FF (245, 247)");
+        Console.WriteLine("      control              written   read   never read");
+
+        foreach ((string name, Rom image) in controls)
+        {
+            (int wrote, int read, int never) =
+                EverywhereInTheImage.WrittenAndNeverRead(image, v => v is >= 0x4000 and <= 0x40FF);
+
+            Console.WriteLine($"      {name,-18} {wrote,9}  {read,5}  {never,11}");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine(
+            "  a reading whose reversed floor and rotated floor disagree is a reading whose"
+            + " control was measuring the wrong thing.");
+    }
+
+    /// <summary>
     /// The operand sweep asked of the whole file rather than of the 0.6% the maps point at.
     /// </summary>
     private static void WriteOperandsEverywhere(Rom rom)
@@ -17053,6 +17187,9 @@ public static class Program
         /// <summary>The operand sweep over the whole file rather than over the map scan.</summary>
         public bool OperandsEverywhere { get; private init; }
 
+        /// <summary>Every floor in this project, asked of a control that keeps the structure.</summary>
+        public bool TheControl { get; private init; }
+
         /// <summary>
         /// With <c>--play</c>: every time the run turned these FLAGS on or off, with the script
         /// and the pass. The flag half of <c>--trace</c>, which watches a variable.
@@ -17283,6 +17420,7 @@ public static class Program
             var layers = false;
             var theWayBack = false;
             var operandsEverywhere = false;
+            var theControl = false;
             var whichWay = false;
             var sea = false;
             var operands = false;
@@ -17590,6 +17728,9 @@ public static class Program
                         break;
                     case "--operands-everywhere":
                         operandsEverywhere = true;
+                        break;
+                    case "--the-control":
+                        theControl = true;
                         break;
                     case "--moved":
                     {
@@ -17955,6 +18096,7 @@ public static class Program
                 Sea = sea,
                 Operands = operands,
                 OperandsEverywhere = operandsEverywhere,
+                TheControl = theControl,
                 Moved = moved,
                 Slots = slots,
                 ReadFrom = readFrom,
