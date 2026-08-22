@@ -6544,7 +6544,7 @@ public static class Program
             Console.WriteLine("    " + difference.Said);
 
         WriteTheWayBackAtEverySetting(world, everyRun);
-        WriteWhyTheRestAreUnreached(world, everyRun);
+        WriteWhyTheRestAreUnreached(rom, world, everyRun);
         WriteTheSignsAtNoSetting(world, everyRun);
 
         Console.WriteLine();
@@ -6680,7 +6680,9 @@ public static class Program
     /// something the run stands on names, and that it still cannot get to.
     /// </remarks>
     private static void WriteWhyTheRestAreUnreached(
-        WorldData world, IReadOnlyList<(TheFloorTable.Setting At, Attempt Played)> everyRun)
+        Rom rom,
+        WorldData world,
+        IReadOnlyList<(TheFloorTable.Setting At, Attempt Played)> everyRun)
     {
         HashSet<string> union = [.. everyRun.SelectMany(r => r.Played.Reached)];
 
@@ -6757,7 +6759,7 @@ public static class Program
             + " those: 50 of 2646 crossings land somewhere other than the square they left, and"
             + " NOUGHT of the 50 is walkable.");
 
-        WriteWhyTheDoorIsNotTaken(world, everyRun, roots);
+        WriteWhyTheDoorIsNotTaken(rom, world, everyRun, roots);
     }
 
     /// <summary>
@@ -6770,6 +6772,7 @@ public static class Program
     /// that from a broken instrument into a reading.
     /// </remarks>
     private static void WriteWhyTheDoorIsNotTaken(
+        Rom rom,
         WorldData world,
         IReadOnlyList<(TheFloorTable.Setting At, Attempt Played)> everyRun,
         IReadOnlyList<Unreached> roots)
@@ -6848,7 +6851,7 @@ public static class Program
                 + $"{(door.IsDoor ? "a door" : "walk-on"),-9}   {door.WalkableNeighbours,18}"
                 + $"   {door.NeighboursFromTheWater,14}");
 
-        WriteWhatFencesTheDoor(world, everyRun, reached, stood, known, into);
+        WriteWhatFencesTheDoor(rom, world, everyRun, reached, stood, known, into);
     }
 
     /// <summary>
@@ -6859,6 +6862,7 @@ public static class Program
     /// sorted fences into three kinds a milestone earlier and had never been asked about a door.
     /// </remarks>
     private static void WriteWhatFencesTheDoor(
+        Rom rom,
         WorldData world,
         IReadOnlyList<(TheFloorTable.Setting At, Attempt Played)> everyRun,
         IReadOnlyCollection<string> reached,
@@ -6973,6 +6977,8 @@ public static class Program
             + $" {fenced.Count(d => d.LandedInFromReached.Count > 0 && d.Fenced != WhatFences.Nothing)}"
             + " door(s) whose pocket the run could be put down in and never is.");
 
+        WriteWhatEachFlagCosts(rom, world, known, refused, stood, reached, fenced);
+
         Console.WriteLine();
         Console.WriteLine(
             "      from     to        square      pocket   ways in   landed in from");
@@ -6988,6 +6994,72 @@ public static class Program
                     ? "NOTHING"
                     : string.Join(", ", door.LandedInFrom.Take(3).Select(m => $"{m} {NameOf(world, m)}"))
                       + (door.LandedInFrom.Count > 3 ? $", and {door.LandedInFrom.Count - 3} more" : "")));
+    }
+
+    /// <summary>
+    /// What each flag costs in maps (306).
+    /// </summary>
+    /// <remarks>
+    /// The wall list is ranked by who stands in a DOORWAY, and 305 showed a fence need not be
+    /// near a door. Ranked by what the run loses instead, it is a different list — and the reason
+    /// to print both is that they disagree.
+    /// </remarks>
+    private static void WriteWhatEachFlagCosts(
+        Rom rom,
+        WorldData world,
+        IReadOnlyList<ADoorNotTaken> known,
+        IReadOnlyList<(string, GridPosition, int)> refused,
+        IReadOnlyCollection<(string MapId, GridPosition Square)> stood,
+        IReadOnlyCollection<string> reached,
+        IReadOnlyList<ADoorFenced> theFortyThree)
+    {
+        // EVERY DOOR OUT OF REACHED GROUND THE RUN NEVER WENT THROUGH, which is the 43 into
+        // unreached maps plus the ones into maps it reaches another way. A door it stood on is
+        // fenced by nothing and is not worth flooding for.
+        IReadOnlyList<ADoorFenced> alsoKnown = WhatFencesTheDoor.For(
+            world.Maps,
+            [.. known.Where(d => d.Why != WhyNotTaken.StoodOnIt).Select(d => (d.From, d.Square))],
+            stood,
+            surfing: true,
+            refused,
+            reached);
+
+        List<ADoorFenced> all = [.. theFortyThree, .. alsoKnown];
+
+        IReadOnlyList<WhatAFlagFences> costs = WhatEachFlagCosts.In(world.Maps, all, reached);
+
+        // AND WHETHER ANYTHING CAN EVER MOVE IT, which is the question a shipped game has to
+        // answer. A flag nothing sets is not a door that opens later: it is content nobody can
+        // reach, and saying so is a reading rather than a decision (the decision comes after).
+        MapLibrary library = MapLibrary.Open(rom);
+
+        (IReadOnlyCollection<int> turnedOn, IReadOnlyCollection<int> turnedOff) =
+            WhatItIsWaitingFor.ReallyTouches(rom, library.All().SelectMany(EveryScriptOn), out _);
+
+        HashSet<int> moved = [.. turnedOn, .. turnedOff];
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    AND WHAT EACH FLAG COSTS (306) — asked of all {all.Count} doors out of reached"
+            + " ground the run never went through, not just the 43:");
+        Console.WriteLine();
+        Console.WriteLine(
+            "      flag     doors   maps   anything moves it   in a doorway   what is behind it");
+
+        foreach (WhatAFlagFences flag in costs)
+            Console.WriteLine(
+                $"      0x{flag.Flag:X4}   {flag.Doors.Count,5}   {flag.Cost,4}   "
+                + $"{(moved.Contains(flag.Flag) ? "yes" : "NOTHING IN THE FILE"),-17}   "
+                + $"{(flag.InADoorway ? "yes" : "NO — unseen"),-12}   "
+                + string.Join(
+                    ", ",
+                    flag.Behind.Take(3).Select(m => $"{m} {NameOf(world, m)}"))
+                + (flag.Behind.Count > 3 ? $", and {flag.Behind.Count - 3} more" : ""));
+
+        Console.WriteLine(
+            $"    {costs.Count(f => !f.InADoorway)} of the {costs.Count} would be missed by a 3x3"
+            + " question about the door's own square, and between them they cost"
+            + $" {costs.Where(f => !f.InADoorway).Sum(f => f.Cost)} map(s).");
     }
 
     /// <summary>One person the walk refused to walk through, in the terms the file has.</summary>
