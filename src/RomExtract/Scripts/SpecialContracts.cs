@@ -470,7 +470,7 @@ public static class SpecialContracts
     }
 
     private static (List<int> Direct, List<int> Beyond) ComparedAfter(
-        List<ScriptCommand> commands, int at, int answer, int forward = NoLimit)
+        List<ScriptCommand> commands, int at, int answer, int forward)
     {
         var values = new List<int>();
         var beyond = new List<int>();
