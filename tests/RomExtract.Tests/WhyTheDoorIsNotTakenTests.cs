@@ -165,6 +165,10 @@ public sealed class WhyTheDoorIsNotTakenTests
         // Each of the two counts the other, on a map where every square is solid.
         Assert.All(read, d => Assert.Equal(1, d.WalkableNeighbours));
         Assert.All(read, d => Assert.Equal(WhyNotTaken.NeverGotNear, d.Why));
+
+        // And a door with a neighbour on foot is not one reachable only by sea, whatever the
+        // water count says — the two readings are of the same square in two grids.
+        Assert.All(read, d => Assert.False(d.OnlyFromTheWater));
     }
 
     /// <summary>
