@@ -659,6 +659,15 @@ public static class SpecialCalls
     {
         var arguments = new List<(int, int)>();
 
+        // SLOTS SOMETHING ELSE ALREADY TOOK (296).
+        //
+        // A `setvar` puts a value in a slot and the next thing that READS that slot is what it
+        // was for. The previous call is one such reader and 295 stops at it; an ordinary command
+        // naming the slot is another, and 295 walked straight past those. Walking backwards, a
+        // slot named by any command between here and the call has been consumed, and a `setvar`
+        // to it before that point is not this call's argument.
+        var taken = new HashSet<int>();
+
         // `at - window` would overflow at NoLimit, so the distance is counted forwards.
         for (int i = at - 1; i >= 0 && at - i <= window; i--)
         {
@@ -673,13 +682,42 @@ public static class SpecialCalls
             // here, which is what 294 said the window needed and could not supply.
             if (commands[i].Code is Special or SpecialVar) break;
 
-            if (commands[i].Code != SetVar) continue;
+            // A SETVAR READS NOTHING. Its first word is where the value goes and its second is
+            // the value — a literal, even when the literal happens to equal a slot number. Every
+            // other command naming a slot is reading it, which includes `copyvar`, whose source
+            // half is a genuine reference and which is not a setvar.
+            if (commands[i].Code != SetVar)
+            {
+                foreach (int slot in SlotsNamedBy(commands[i])) taken.Add(slot);
+
+                continue;
+            }
+
             if (commands[i].Word() is < FirstArgument or > LastArgument) continue;
+            if (taken.Contains(commands[i].Word())) continue;
 
             arguments.Insert(0, (commands[i].Word(), commands[i].Word(2)));
         }
 
         return arguments;
+    }
+
+    /// <summary>
+    /// Every argument slot this command names (296).
+    /// </summary>
+    /// <remarks>
+    /// Halfword positions at every byte offset, not every second one — 290's stride: a command
+    /// that is a byte then a word keeps its word at offset one, and a sweep stepping in halfwords
+    /// reads a number that is in the file nowhere.
+    /// </remarks>
+    private static IEnumerable<int> SlotsNamedBy(ScriptCommand command)
+    {
+        for (var at = 0; at + 1 < command.Arguments.Length; at++)
+        {
+            int value = command.Arguments[at] | (command.Arguments[at + 1] << 8);
+
+            if (value is >= FirstArgument and <= LastArgument) yield return value;
+        }
     }
 
     /// <summary>What the script then compares the answer against, and how it branches.</summary>

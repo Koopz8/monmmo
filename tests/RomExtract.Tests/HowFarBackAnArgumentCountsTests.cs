@@ -251,6 +251,70 @@ public sealed class HowFarBackAnArgumentCountsTests
                 .Arguments);
     }
 
+    // -------------------------------------------- the slot something else already took (296)
+
+    private const byte CopyVar = 0x1A;
+
+    /// <summary>A command that READS a slot: <c>copyvar</c> takes its source from one.</summary>
+    private static byte[] Reads(int slot) => [CopyVar, .. Word(0x4001), .. Word(slot)];
+
+    private static SpecialCall TheCall(params byte[][] script)
+    {
+        var image = new byte[0x1000];
+
+        script.SelectMany(b => b).ToList().CopyTo(image, 0x200);
+
+        return Assert.Single(
+            SpecialCalls.In(new Rom(image), "1.0", "person", Rom.BaseAddress + 0x200)
+                .Where(c => c.Routine == Routine));
+    }
+
+    /// <summary>
+    /// <b>THE THING (296).</b> A value in a slot is for the next thing that READS the slot. 295
+    /// stopped at the previous CALL and walked straight past an ordinary command taking the value
+    /// — so the call further on collected an argument that had already been spent.
+    /// </summary>
+    [Fact]
+    public void ASlotSomethingElseAlreadyReadIsNotThisCallsArgument()
+    {
+        Assert.Empty(TheCall(Puts(9), Reads(Slot), Calls(), [End]).Arguments);
+    }
+
+    /// <summary>
+    /// And a command reading a DIFFERENT slot takes nothing from this one — otherwise any command
+    /// between a value and its call would bar it, which is a distance rule wearing a better name.
+    /// </summary>
+    [Fact]
+    public void ACommandReadingAnotherSlotBarsNothing()
+    {
+        Assert.Equal([(Slot, 9)], TheCall(Puts(9), Reads(0x8009), Calls(), [End]).Arguments);
+    }
+
+    /// <summary>
+    /// <b>A SETVAR READS NOTHING, even when its value happens to equal a slot number.</b> Its
+    /// second word is a literal, and treating it as a reference would bar a slot because of a
+    /// number that means nothing. This cartridge never does it — the reading is identical either
+    /// way — so only a fixture can hold the rule.
+    /// </summary>
+    [Fact]
+    public void ASetVarWhoseValueLooksLikeASlotReadsNothing()
+    {
+        // setvar 0x8004, 9 ; setvar 0x4001, 0x8004 ; special
+        byte[] literal = [SetVar, .. Word(0x4001), .. Word(Slot)];
+
+        Assert.Equal([(Slot, 9)], TheCall(Puts(9), literal, Calls(), [End]).Arguments);
+    }
+
+    /// <summary>
+    /// And a read BEFORE the value bars nothing — the value is put in after it, so the reader
+    /// took whatever was there first and this call gets the new one.
+    /// </summary>
+    [Fact]
+    public void AReadBeforeTheValueBarsNothing()
+    {
+        Assert.Equal([(Slot, 9)], TheCall(Reads(Slot), Puts(9), Calls(), [End]).Arguments);
+    }
+
     private const byte Goto = 0x05;
 
     private static byte[] Pointer(int to) =>
