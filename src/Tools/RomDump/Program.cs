@@ -6756,9 +6756,87 @@ public static class Program
             "    A ROOT NAMED ONLY BY BORDERS is a crossing the walk refuses, and 286 measured"
             + " those: 50 of 2646 crossings land somewhere other than the square they left, and"
             + " NOUGHT of the 50 is walkable.");
-        Console.WriteLine(
-            "    A root named by WARPS is a door the walk reaches and does not take.");
+
+        WriteWhyTheDoorIsNotTaken(world, everyRun, roots);
     }
+
+    /// <summary>
+    /// Why the doors into those maps are not taken (304).
+    /// </summary>
+    /// <remarks>
+    /// 303 left seven warp-named roots as "seven doors the run reaches and does not take", with a
+    /// shut flag, a solid landing square or an unrun script as the obvious guesses. <b>It is none
+    /// of those</b> — the run never gets to the door at all, and the calibration row is what turns
+    /// that from a broken instrument into a reading.
+    /// </remarks>
+    private static void WriteWhyTheDoorIsNotTaken(
+        WorldData world,
+        IReadOnlyList<(TheFloorTable.Setting At, Attempt Played)> everyRun,
+        IReadOnlyList<Unreached> roots)
+    {
+        HashSet<string> reached = [.. everyRun.SelectMany(r => r.Played.Reached)];
+
+        List<(string MapId, GridPosition Square)> stood =
+            [.. everyRun.SelectMany(r => r.Played.StoodOn).Distinct()];
+
+        IReadOnlyList<ADoorNotTaken> known =
+            WhyTheDoorIsNotTaken.TheKnownRow(world.Maps, reached, stood);
+
+        IReadOnlyList<ADoorNotTaken> into = WhyTheDoorIsNotTaken.Into(
+            world.Maps, reached, stood, [.. roots.Select(r => r.MapId)]);
+
+        Console.WriteLine();
+        Console.WriteLine(
+            "    AND WHY THOSE DOORS ARE NOT TAKEN (304) — a shut flag, a solid landing square and"
+            + " a script the walk never runs are the obvious guesses, and it is none of them:");
+        Console.WriteLine();
+        Console.WriteLine("      what the run did at the door             into an UNREACHED map   into a REACHED one");
+
+        foreach (WhyNotTaken why in Enum.GetValues<WhyNotTaken>())
+            Console.WriteLine(
+                $"      {Describe(why),-39}   {into.Count(d => d.Why == why),21}   {known.Count(d => d.Why == why),18}"
+                + (why == WhyNotTaken.StoodOnIt ? "   <- the row whose answer is known" : ""));
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    The run stood on {100.0 * known.Count(d => d.Why == WhyNotTaken.StoodOnIt) / Math.Max(known.Count, 1):F1}%"
+            + " of the doors it demonstrably went through, so the instrument can say yes — and it"
+            + $" says NEVER GOT NEAR for {into.Count(d => d.Why == WhyNotTaken.NeverGotNear)} of the"
+            + $" {into.Count}.");
+        Console.WriteLine(
+            $"    None is walled in: every one has {into.Min(d => d.WalkableNeighbours)} to"
+            + $" {into.Max(d => d.WalkableNeighbours)} walkable neighbour(s), so something could"
+            + " reach it. THE DOORS ARE INSIDE 287's POCKETS —");
+        Console.WriteLine(
+            "    walkable ground on a map the run DOES reach, that it never stands on. And STOOD"
+            + $" BESIDE is {known.Count(d => d.Why == WhyNotTaken.StoodBeside)} of {known.Count} on the"
+            + " known row: the walker steps ONTO a door's own square, so beside is never how one is taken.");
+        List<ADoorNotTaken> walled = [.. known.Where(d => d.Why == WhyNotTaken.WalledIn)];
+
+        if (walled.Count > 0)
+            Console.WriteLine(
+                $"    And {walled.Count} door(s) into maps the run DOES reach are walled in — reached"
+                + " from the far side and unreachable from this one: "
+                + string.Join(
+                    ", ",
+                    walled.Select(d => $"{d.From} ({d.Square.X},{d.Square.Y}) -> {d.To}")));
+
+        Console.WriteLine();
+        Console.WriteLine("      from     to        square      it is       walkable neighbours");
+
+        foreach (ADoorNotTaken door in into.OrderBy(d => d.To).ThenBy(d => d.From).DistinctBy(d => (d.To, d.Square)))
+            Console.WriteLine(
+                $"      {door.From,-8} {door.To,-8}  ({door.Square.X,3},{door.Square.Y,3})   "
+                + $"{(door.IsDoor ? "a door" : "walk-on"),-9}   {door.WalkableNeighbours,19}");
+    }
+
+    private static string Describe(WhyNotTaken why) => why switch
+    {
+        WhyNotTaken.StoodOnIt => "stood ON the square",
+        WhyNotTaken.StoodBeside => "stood BESIDE it and not on it",
+        WhyNotTaken.NeverGotNear => "never got near it",
+        _ => "WALLED IN — nothing could ever reach it",
+    };
 
     private static string NameOf(WorldData world, string mapId) =>
         world.Find(mapId)?.Name ?? "?";
