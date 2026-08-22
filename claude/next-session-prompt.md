@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-303`, **3496 tests green** — re-read at 297, where the old line still said `claude-314` and
+`claude-304`, **3503 tests green** — re-read at 297, where the old line still said `claude-314` and
 3274 (trap 14, in the sentence that tells you where you are standing).
 
 Standing rules — do not break these:
@@ -710,6 +710,20 @@ Traps worth carrying:
     what names their own blocks is a literal in code, which the climb had said per site since 191.
     **Before believing a proximity test, ask what it would find if the thing were merely nearby.**
 
+132. **A GREEN BREAK CAN MEAN THE RULE WAS A SPELLING — AND THE HUNT FOR ITS FIXTURE IS WHERE THE
+    REAL FAULT IS** (304). Swapping WALLED IN and STOOD BESIDE came back green. The shape that
+    would tell them apart — two doors side by side in a wall — **cannot exist**: `ToGrid` opens
+    every warp square, so a door beside a door always has a walkable neighbour, and the fixture
+    written to prove the order failed on its first run. Chasing why found the actual fault:
+    walkability was asked of the **walking** grid, which calls water solid, and **one door on this
+    cartridge has nought neighbours on foot and one from the water** — `1.4 S.S. ANNE (33,15) ->
+    1.5`, whose harbour is 1446 squares of open sea. Asked of the surfing grid it is not walled in,
+    and `--surf` floats up to it. That also settles the order: the walker only stands where some
+    grid calls it walkable and the surfing grid is the union of both, so the two conditions cannot
+    both hold and **the swap is green because it is a spelling.** Write the reason down; do not
+    invent a fixture for a rule that is not one (64), and do not stop at "the fixture is weak"
+    before asking whether the guarded line is right.
+
 131. **A COUNT OF UNREACHED THINGS IS NOT A COUNT OF REASONS** (303). The floor table has said
     **388 of 425** since 285 and nothing had asked what the other thirty-seven are. Sorted:
     **11 have NO WAY IN AT ALL** — no warp and no border in the file names them — **18 are behind
@@ -1216,8 +1230,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-303-thirty-seven-maps-are-eight-reasons.md` first, then `302`, then
-`301`, then `300`, then `299`, then `298`, then `297`, then `296`, then `295`, then `294`,
+Read `claude/milestone-304-forty-three-doors-nobody-walks-to.md` first, then `303`, then
+`302`, then `301`, then `300`, then `299`, then `298`, then `297`, then `296`, then `295`, then `294`,
 then `293`, then `292`, then `291`, then `290`, then `289`, then `288`, then `287`, then `286`,
 then `285`, then `284`, then `283`, then `282`, then `281`, then `280`, then `279`, then `278`, then `277`, then `276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
@@ -2008,6 +2022,11 @@ doors announce themselves in 0x4001 x63, 0x8008 x25, 0x8004 x23, 0x4002 x6 — T
 11 of 425 maps have no way in at all — 0.0/0.2/0.3 CELADON DEPT., 18.1 ROUTE 6, 27.0 ROUTE 19,
   29.0 ROUTE 23, 3.50-3.53 SEVII ISLE 6-9, 31.5 SEVEN ISLAND (303; FOUR isles, not five, and the
   count is a fact about the FILE — it reads 11 at all six lever settings)
+AND 43 OF 43 DOORS INTO THEM ARE ONES THE RUN NEVER GOT NEAR (304) — not stood on, not stood
+  beside, none walled in. The row whose answer is known: 1165 of 1182 doors into REACHED maps were
+  stood on, 98.6%. STOOD BESIDE is 0 of 1182 — the walker steps ONTO a door's own square. Walled-in
+  is asked of the SURFING grid, because 1.4 S.S. ANNE (33,15) has nought neighbours on foot and one
+  from the water
 THE 37 UNREACHED ARE 8 REASONS (303): 11 no way in, 18 behind one another, 8 named from ground the
   run stands on. Ranked by what is behind each: 2.2 TRAINER TOWER 9, 1.103 MT. EMBER 8, 1.76
   SECTION 49 5, and 0.1/0.4/1.62/2.11/3.11 one apiece. 0.1 and 0.4 have NINETEEN warps in each and
@@ -2785,9 +2804,12 @@ no test.**
 
 ## Known flaky
 
-`ServerIntegrationTests.OnePlayerWalkingIsVisibleToAnother` failed once on a loaded machine
-(55s suite instead of 28s) and has passed every run since. Timing-dependent, so it is a guard
-that can lie in both directions. If it is red, re-run before believing it.
+`ServerIntegrationTests.OnePlayerWalkingIsVisibleToAnother` fired twice under `break-guard.sh`,
+both times while the suite was taking 147-157s against ~30s idle. Its budget was **120 seconds,
+chosen**; at 304 it became **100x the slowest connect the suite has actually seen, floored at 30s**
+— a number read off the run rather than picked, which is the rule this project applies to the
+cartridge. It has not fired since. Timing-dependent still, so if it is red, re-run before
+believing it.
 
 ## A note on guards
 
@@ -2972,8 +2994,17 @@ the other, and nothing about a single green run says which. 207 writes the 2x2 d
   a LEMONADE and takes it away and can now actually be reached.
 * ~~Eleven maps have no way in at all, five of them Sevii isles~~ **LISTED AT 303** — and it is
   FOUR isles plus SEVEN ISLAND. The count was right; what it was missing was the other twenty-six.
-* **The seven warp-named roots** (303) are seven doors the run reaches and does not take, one
-  `--play` question each. `2.2` TRAINER TOWER is worth nine maps and is where to start.
+* ~~The seven warp-named roots are seven doors the run reaches and does not take~~ **READ AT 304
+  — and it is ONE question, not seven.** All **43 of 43** doors into an unreached map were NEVER
+  GOT NEAR: never stood on, never stood beside, and none walled in (one or two walkable neighbours
+  each). They are inside 287's pockets. The calibration row is **1165 of 1182 — 98.6%**. What is
+  left of it: **why does the walk not enter a pocket it can see?** 287 counted the pockets and
+  nothing has asked what fences one.
+* **Two doors into maps the run DOES reach are walled in** (304) — `1.5 S.S. ANNE (3,20) -> 1.10`
+  and `2.34 THREE ISLE PATH (25,5) -> 3.49 THREE ISLE PORT`. Reached from the far side and
+  unreachable from this one: a one-way door read off the file, and nothing models it.
+* **15 doors into reached maps were never got near** and the run reaches those maps anyway — a
+  second way in each time, and a floor on how much of the world is doubly connected (304).
 * A way in reports only the shortest chain, so an upper-bound edge can hide a real one.
 * `Bag.PocketCapacity` was counted across the whole bag — fixed at 190 tests ago, but it shipped.
 * The purse is modelled and the payout table has never been located. The PRICES are read (208).
