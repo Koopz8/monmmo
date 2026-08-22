@@ -79,7 +79,13 @@ public class ServerIntegrationTests : IAsyncLifetime
         // still fails, just later. A test that fails when the machine is busy is worse
         // than a slow one, because it teaches everybody to re-run the suite instead of
         // reading it.
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        // RAISED FROM 30 AT 289, with the evidence. A break-guard run — which builds, then runs
+        // the whole suite on a container already busy — timed this out once and the failure was
+        // counted against a break in `WhatAMapIsMadeOf`, which the server does not call. The
+        // suite is ~28 seconds idle and was 55 in that run, so a 30-second budget for one message
+        // is inside the noise. A break's kill count only means something if every failure in it
+        // was caused by the break.
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(120));
 
         for (int i = 0; i < maxMessages; i++)
         {
