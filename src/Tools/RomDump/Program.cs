@@ -6544,6 +6544,7 @@ public static class Program
             Console.WriteLine("    " + difference.Said);
 
         WriteTheWayBackAtEverySetting(world, everyRun);
+        WriteWhyTheRestAreUnreached(world, everyRun);
         WriteTheSignsAtNoSetting(world, everyRun);
 
         Console.WriteLine();
@@ -6669,6 +6670,108 @@ public static class Program
     /// it lives in this command rather than in <c>--play</c>: <c>--play</c> is one setting.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Why the maps no run reaches are never reached (303).
+    /// </summary>
+    /// <remarks>
+    /// The floor table has said "388 of 425" for milestones and nothing had asked what the other
+    /// thirty-seven are. <b>A count of unreached maps is not a count of reasons</b>: most of them
+    /// are behind one another, and the number worth having is the count of ROOTS — the maps that
+    /// something the run stands on names, and that it still cannot get to.
+    /// </remarks>
+    private static void WriteWhyTheRestAreUnreached(
+        WorldData world, IReadOnlyList<(TheFloorTable.Setting At, Attempt Played)> everyRun)
+    {
+        HashSet<string> union = [.. everyRun.SelectMany(r => r.Played.Reached)];
+
+        IReadOnlyList<Unreached> sorted = WhyTheRestAreUnreached.In(world.Maps, union);
+
+        Console.WriteLine();
+        Console.WriteLine("  WHY THE REST ARE UNREACHED (303)");
+        Console.WriteLine(
+            $"    The union of all six runs reaches {union.Count} of {world.Maps.Count} map(s). A count"
+            + " of the rest is not a count of REASONS — most of them are behind one another:");
+        Console.WriteLine();
+
+        foreach (WhyUnreached why in new[]
+                 {
+                     WhyUnreached.NoWayInAtAll,
+                     WhyUnreached.OnlyFromSomewhereUnreached,
+                     WhyUnreached.NamedFromReachedGround,
+                 })
+            Console.WriteLine($"      {sorted.Count(u => u.Why == why),4}   {Describe(why)}");
+
+        Console.WriteLine();
+        Console.WriteLine(
+            "    NO WAY IN AT ALL is about the FILE and not about the run, so it must not move with"
+            + " a lever (211). Asked of each setting on its own:");
+        Console.WriteLine();
+        Console.WriteLine("      setting                                    no way in   only from unreached   from reached ground");
+
+        foreach ((TheFloorTable.Setting at, Attempt played) in everyRun)
+        {
+            IReadOnlyList<Unreached> here = WhyTheRestAreUnreached.In(world.Maps, played.Reached);
+
+            Console.WriteLine(
+                $"      {at.Command,-42} {here.Count(u => u.Why == WhyUnreached.NoWayInAtAll),9}"
+                + $"   {here.Count(u => u.Why == WhyUnreached.OnlyFromSomewhereUnreached),19}"
+                + $"   {here.Count(u => u.Why == WhyUnreached.NamedFromReachedGround),19}");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine(
+            "    THE ELEVEN WITH NO WAY IN — no warp and no border in the whole file names them,"
+            + " and the runtime sentinel is not a way in (265):");
+        Console.WriteLine();
+
+        foreach (Unreached one in sorted.Where(u => u.Why == WhyUnreached.NoWayInAtAll)
+                     .OrderBy(u => u.MapId))
+            Console.WriteLine($"      {one.MapId,-8} {one.Name}");
+
+        List<Unreached> roots =
+            [.. sorted.Where(u => u.Why == WhyUnreached.NamedFromReachedGround).OrderBy(u => u.MapId)];
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    AND THE {roots.Count} ROOTS — something the run STANDS ON names these, and it still"
+            + " does not get there. Everything else unreached is behind one of them:");
+        Console.WriteLine();
+        IReadOnlyDictionary<string, int> costs =
+            WhyTheRestAreUnreached.WhatEachRootCosts(world.Maps, sorted);
+
+        Console.WriteLine(
+            "      map      name                 by warp   by border   behind it   named from ground the run reaches");
+
+        foreach (Unreached one in roots.OrderByDescending(r => costs[r.MapId]).ThenBy(r => r.MapId))
+            Console.WriteLine(
+                $"      {one.MapId,-8} {one.Name,-20} {one.NamedByWarp.Count,7}   {one.NamedByBorder.Count,9}"
+                + $"   {costs[one.MapId],9}   "
+                + string.Join(
+                    ", ",
+                    one.FromReached.Take(5).Select(f => $"{f} {NameOf(world, f)}"))
+                + (one.FromReached.Count > 5 ? $", and {one.FromReached.Count - 5} more" : ""));
+
+        Console.WriteLine();
+        Console.WriteLine(
+            "    A ROOT NAMED ONLY BY BORDERS is a crossing the walk refuses, and 286 measured"
+            + " those: 50 of 2646 crossings land somewhere other than the square they left, and"
+            + " NOUGHT of the 50 is walkable.");
+        Console.WriteLine(
+            "    A root named by WARPS is a door the walk reaches and does not take.");
+    }
+
+    private static string NameOf(WorldData world, string mapId) =>
+        world.Find(mapId)?.Name ?? "?";
+
+    private static string Describe(WhyUnreached why) => why switch
+    {
+        WhyUnreached.NoWayInAtAll =>
+            "NO WAY IN AT ALL — no warp and no border in the file names it (a fact about the FILE)",
+        WhyUnreached.OnlyFromSomewhereUnreached =>
+            "only named from maps that are themselves unreached — behind one of the roots below",
+        _ => "NAMED FROM GROUND THE RUN STANDS ON — these are the reasons",
+    };
+
     private static void WriteTheSignsAtNoSetting(
         WorldData world, IReadOnlyList<(TheFloorTable.Setting At, Attempt Played)> everyRun)
     {
