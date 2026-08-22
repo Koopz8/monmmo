@@ -160,6 +160,38 @@ public sealed class HowFarBackAnArgumentCountsTests
     }
 
     /// <summary>
+    /// <b>And a <c>specialvar</c> is a call too.</b> The barrier is both forms — a routine asked
+    /// for its answer takes the argument in front of it exactly as one asked for its effect does.
+    /// The first version of this fixture used only <c>special</c>, so a barrier that named one of
+    /// the two passed it (119, fifth time in this session).
+    /// </summary>
+    [Fact]
+    public void ASpecialVarIsACallToo()
+    {
+        var image = new byte[0x1000];
+
+        // setvar 0x8004, 9 ; specialvar 0x800D <- 0x194 ; special 0x194 ; end
+        List<byte> script =
+        [
+            .. Puts(9),
+            SpecialCalls.SpecialVar, .. Word(0x800D), .. Word(Routine),
+            .. Calls(),
+            End,
+        ];
+
+        script.CopyTo(image, 0x200);
+
+        IReadOnlyList<SpecialCall> calls =
+        [
+            .. SpecialCalls.In(new Rom(image), "1.0", "person", Rom.BaseAddress + 0x200),
+        ];
+
+        Assert.Equal(2, calls.Count);
+        Assert.Equal([(Slot, 9)], calls[0].Arguments);
+        Assert.Empty(calls[1].Arguments);
+    }
+
+    /// <summary>
     /// And the backward search is not bounded by a distance any more: the same value nine commands
     /// back is found at the default, because the default is <c>NoLimit</c> and the two READ rules
     /// do the bounding.
