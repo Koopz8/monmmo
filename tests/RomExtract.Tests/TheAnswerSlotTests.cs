@@ -225,6 +225,38 @@ public sealed class TheAnswerSlotTests
         Assert.Equal(Unanswerable, left.Routine);
     }
 
+    /// <summary>
+    /// A comparison that NOTHING BRANCHES ON closes when the next command is not a conditional.
+    /// </summary>
+    /// <remarks>
+    /// <b>A decoy, and it says so.</b> The cartridge has none of these — 0 of the widest run's 527
+    /// read places — so no break aimed at that line can go red against the real image, and 57's
+    /// rule is that a rule the cartridge never exercises needs a fixture that does. Without it,
+    /// a comparison left open would be closed by the next conditional to come along, which
+    /// belongs to a different comparison entirely.
+    /// </remarks>
+    [Fact]
+    public void ACompareNothingBranchesOnIsClosedByWhateverRunsNext()
+    {
+        ScriptRun run = ScriptRunner.Run(
+            rom: Image(
+            [
+                0x16, .. Word(0x800D), .. Word(5),
+                0x26, .. Word(0x800D), .. Word(Unanswerable),
+                0x21, .. Word(0x800D), .. Word(5),                 // compare, and then no conditional
+                0x29, .. Word(0x200),                              // setflag — an ordinary command
+                0x06, 1, .. At(Elsewhere),                         // a conditional, but for nothing
+                0x02,
+            ]), address: Start);
+
+        WhatTheRoutineLeft left = Assert.Single(run.LeftInTheSlot);
+
+        Assert.True(left.Read, "the compare did read the leftover");
+        Assert.True(left.Differs, "5 against 5 is Equal where nought against 5 is Less");
+        Assert.False(left.Branched, "nothing branched on it — the next command is a setflag");
+        Assert.False(left.TookADifferentArm, "and a comparison nobody branches on changes no arm");
+    }
+
     // ----------------------------------------- why there was anything in the slot at all
 
     /// <summary>
