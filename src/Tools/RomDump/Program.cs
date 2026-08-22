@@ -10170,7 +10170,13 @@ public static class Program
 
         Console.WriteLine("      setting                                    maps  flags  passes  party  on-load scripts run");
 
-        foreach (TheFloorTable.Setting at in TheFloorTable.Settings)
+        var gainedEverywhere = new HashSet<string>();
+
+        // The rows with the lever ALREADY ON are not asked. This table is one setting run both
+        // ways, so a row whose own command line says --on-load would print its control against
+        // itself and label the control with a command that includes the lever — a row that says
+        // two different things in the same line is how a table starts being quoted wrongly.
+        foreach (TheFloorTable.Setting at in TheFloorTable.Settings.Where(s => !s.OnLoad))
         {
             Attempt without = Run(at, false);
             Attempt with = Run(at, true);
@@ -10199,12 +10205,29 @@ public static class Program
                 + (gained.Count > 0 ? $"  gained {string.Join(", ", gained.Take(10))}" : string.Empty)
                 + (lost.Count > 0 ? $"  LOST {string.Join(", ", lost.Take(10))}" : string.Empty));
             Console.WriteLine();
+
+            foreach (string map in gained) gainedEverywhere.Add(map);
         }
 
         Console.WriteLine(
             "    A number moving DOWN is not a regression until it has been read (7): setting a flag HIDES");
         Console.WriteLine(
             "    somebody, so a fifth-list script that sets one takes a person — and their script — off the map.");
+
+        // AND THE NEGATIVE, which is the half of this worth as much as the list (30).
+        //
+        // The blind spot is large and what was behind it is one place. 54 flags no other kind
+        // moves, 47 of them hiding 74 objects, and running every one of them opens exactly the
+        // maps below — so the size of what the walk could not see is not the size of what it
+        // was missing, and only running it says which.
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    AND THE NEGATIVE: {reading.FifthList.Only.Count} flag(s) no other kind moves,"
+            + $" {reading.Gating} of them hiding {reading.PeopleHeld} object(s) — and running every"
+            + $" one of them opens {gainedEverywhere.Count} map(s) at any setting, all of them"
+            + " TRAINER TOWER, behind ONE person on 2.1 that 2.1's own script takes away.");
+        Console.WriteLine(
+            "    The size of the blind spot is not the size of what was behind it, and only the run says which.");
     }
 
     private static void WriteDropped(Rom rom)

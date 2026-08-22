@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-306`, **3516 tests green** — re-read at 297, where the old line still said `claude-314` and
+`claude-307`, **3529 tests green** — re-read at 297, where the old line still said `claude-314` and
 3274 (trap 14, in the sentence that tells you where you are standing).
 
 Standing rules — do not break these:
@@ -718,6 +718,39 @@ Traps worth carrying:
     what names their own blocks is a literal in code, which the climb had said per site since 191.
     **Before believing a proximity test, ask what it would find if the thing were merely nearby.**
 
+137. **"THE RUN ANSWERS NOUGHT" WAS A SENTENCE ABOUT A VARIABLE NOTHING HAD WRITTEN** (307).
+    That line has been in this prompt since 214, measured on `special 0x0187`, and it is right
+    there. **An unanswerable `special` or `specialvar` writes NOTHING into the answer slot** —
+    `ScriptRunner` says so in as many words — so the compare after it reads whatever the last
+    script left. For 0x0187's slot that was nought. Asked of `0x800D`, the busiest number in the
+    game, `--trace` says **968 of 3646 reads found a value ALREADY IN THE SLOT, against NINE
+    writes in the whole run** — a quarter of the time the run is branching on leftovers, and the
+    two cases have printed identically for ninety-three milestones. It surfaced because one block
+    reached from nineteen maps does `specialvar 0x800D, 0x0180 ; compare 0x800D, 0` and sets or
+    clears `0x0070` on the answer: not a toggle, a straight function of a routine, alternating
+    pass to pass because the input alternates. **Not fixed** — clearing the slot moves every row
+    of the floor table. Trap 8 wearing a percent sign, and the share is printed with a truncation
+    warning because a percentage over a capped trace is a fact about the cap.
+
+136. **THE SIZE OF A BLIND SPOT IS NOT THE SIZE OF WHAT IS BEHIND IT** (307). The fifth list
+    moves **54 flags no other kind of script moves either way**, second only to `person`'s 152,
+    and **47 of the 54 hide somebody — 74 objects**. Running every one of them opens **NINE
+    maps**, all of them TRAINER TOWER, behind **ONE** person on `2.1` that `2.1`'s own script
+    takes away. `0x0040`-`0x004C` is thirteen flags on `3.38 ROUTE 20` alone and is worth nought;
+    `0x0006` is nine people the same list HIDES. 30's rule: the negative is the finding, and only
+    the run could produce it — the reading can only say how much was not being looked at.
+
+135. **A LIST READ BY EVERY INSTRUMENT AND CARRIED BY NO RECORD** (307). 239's shape exactly, one
+    list further on. `MapScripts.OnEntry` takes the two CONDITIONAL kinds of a map's own script
+    list and the walk has run them since 176; the other 234 entries point straight at a script,
+    and `MapScripts` says in as many words why they are left alone — *running one means knowing
+    WHEN the cartridge runs it, which is not in the data*. **That reservation is about running
+    them and it is right, and nobody had printed what they MOVE.** The export carried the
+    conditions and not the scripts, so the run walked a world whose maps have no unconditional
+    scripts at all — and 306's `0x0005`, worth nine maps, is set at `0x081C4F62` by `2.1`'s own.
+    **When a reader declines to USE a list, check whether the record even carries it**, and print
+    what the list holds beside the reason for declining it.
+
 134. **A COUNT OF PEOPLE IN DOORWAYS IS NOT A COUNT OF MAPS** (306). The wall list is ranked by
     who stands in a doorway and its top four entries — `0x0013`, `0x0012`, `0x0053`, `0x0017` —
     cost **nought maps between them**. Ranked by what the run loses, the list is **two flags long**:
@@ -1262,7 +1295,7 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-306-what-a-flag-costs.md` first, then `305`, then `304`, then
+Read `claude/milestone-307-the-list-nothing-runs.md` first, then `306`, then `305`, then `304`, then
 `303`, then `302`, then `301`, then `300`, then `299`, then `298`, then `297`, then `296`, then `295`, then `294`,
 then `293`, then `292`, then `291`, then `290`, then `289`, then `288`, then `287`, then `286`,
 then `285`, then `284`, then `283`, then `282`, then `281`, then `280`, then `279`, then `278`, then `277`, then `276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
@@ -1272,7 +1305,7 @@ then `285`, then `284`, then `283`, then `282`, then `281`, then `280`, then `27
 `238`, `237`,
 `236`, `235`, `234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
-**Fifty-seven faults closed and every one was in this project, not on the cartridge.** A walk that
+**Fifty-eight faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
 script" list; a list ranked by a count instead of by what it costs; a party that could not gain
 a level; a roadmap line that called a fix a cost; a continuation that carried flags and not
@@ -1399,7 +1432,15 @@ sweep over; and at 285 **`ConnectionOn` taking the FIRST connection on a side** 
 world carries three neighbours, `3.60` WATER PATH's left edge, so every square stepping west off it
 went to the wrong map, arrived off that map's grid and had its crossing dropped without a word:
 **+7 maps, +1305 squares, +5848 that could not get back**, the floor table's boat rows 381 -> 388,
-and 283's "five signs in the DOTTED HOLE that nothing solves" turning out to be this.
+and 283's "five signs in the DOTTED HOLE that nothing solves" turning out to be this; and at 307
+**the fifth list, read by every instrument here since 224 and carried by no exported record** —
+`MapScripts.OnEntry` takes the two CONDITIONAL kinds of a map's own script list and the walk has
+run those since 176, while the other 234 entries point straight at a script and never reached the
+world file at all, so every run this project has printed walked a world whose maps have no
+unconditional scripts. They move 61 flags, **54 of which no other kind of script moves either
+way** — second only to `person`'s 152 — and 47 of those hide somebody, 74 objects between them.
+One of them is 306's `0x0005`: `2.1 TRAINER TOWER`'s own script sets it, the run could not see it,
+and it is worth nine maps. 239's fault exactly, one list further on.
 
 `246` is the read that is not a command, and the literal-pool test for whether compiled code holds
 a number — both live inside `--namespaces`, which is now the fullest single instrument in the
@@ -1461,7 +1502,19 @@ dotnet run -c Release --project src/Tools/RomDump -- firered.gba --operands-ever
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --the-control
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --the-ruler
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --the-species
+dotnet run -c Release --project src/Tools/RomDump -- firered.gba --the-fifth-list
+dotnet run -c Release --project src/Tools/RomDump -- firered.gba --play --say-yes --boat --surf --in-order --on-load
 ```
+
+`--the-fifth-list` is 307. Two halves: what a map's own script list holds by KIND BYTE (234
+unconditional entries at 163 addresses on 159 maps, against 91 conditional the walk already runs),
+then what each of the five kinds of script moves that **no other kind moves either way** — all
+five rows, so the fifth's 54 can be read against `person`'s 152 rather than admired (68). Then what
+each of those 54 HIDES, counted off the object records, which is the half that can come back nought
+(134): 47 of them, 74 objects. Then **the same setting run twice in one process** with the lever off
+and on, which is 19's rule — 239 priced signs across two builds and nobody without that build could
+have checked it. **And the negative underneath**, which is the finding: 54 flags and 74 objects are
+worth **nine maps**, all TRAINER TOWER, behind ONE person.
 
 `--the-species` ends with 302: **`0xA2` is a species, a species, an INDEX and a nought-or-one** —
 533 byte positions on 30 maps, 239 distinct pairs, 24 of them the same species twice. That the two
@@ -1943,9 +1996,9 @@ hands over. **Two levers are MODELLED — `--say-yes` and `--boat`.** `--surf` i
 override: the walk crosses water on its own when the party knows the move, which is READ.
 `--in-order` is the one lever that makes it stricter. Say which every time.
 
-**RUN `--the-floor` AND PASTE. It runs all six settings in one process (twelve seconds, one
+**RUN `--the-floor` AND PASTE. It runs all SEVEN settings in one process (twenty-five seconds, one
 export between them) and prints the rows AND the differences between them, subtracted from those
-same six rows.** Do not apply a delta to this block by hand — that is what put it thirteen
+same seven rows.** The seventh is `--on-load` and it is new at 307. Do not apply a delta to this block by hand — that is what put it thirteen
 milestones out of date, and 230 built the command so that the absolutes and the sentences about
 them cannot come apart. Re-measured at 207, at 230, and **rewritten wholesale at 239**, which is
 the first milestone in ten to move a single number in it.
@@ -1966,26 +2019,36 @@ delta to it.
 --play --say-yes --boat                     388 / 300 in 7, party of 4 at 78, 11 of 207 handed twice
 --play --say-yes --boat --in-order          388 / 301 in 7, party of FIVE at 78, 0 of 203 handed twice
 --play --say-yes --boat --surf --in-order   388 / 300 in 5, party of five at 75, 0 of 203 handed twice
+--play --say-yes --boat --surf --in-order --on-load
+                                           397 / 314 in 7, party of SIX at 75, 1 of 204 handed twice
                                             <- --surf now costs ONE flag, not two (239)
                                             <- THE BOAT ROWS MOVED AT 285: 381 -> 388 maps. One
                                                side of one map carries three neighbours and the
                                                walk took the first (trap 111)
+                                            <- THE SEVENTH ROW IS NEW AT 307. The fifth list —
+                                               a map's own UNCONDITIONAL scripts, 234 of them,
+                                               which nothing exported and nothing ran
 
-the differences, printed by subtracting two of those same six rows:
+the differences, printed by subtracting two of those same seven rows:
   --say-yes  (MODELLED)  +60 maps, +74 flags, +0 passes, -2 party
   --boat     (MODELLED)  +145 maps, +66 flags (+65 with --in-order on), +1 pass, +0 party
                          <- +138 and +61 until 285
   --in-order (stricter)  +0 maps, +2 flags (+1 with --boat on), +0 passes, +1 party
   --surf     (override)  +0 maps, -1 flag, -2 passes, +0 party
+  --on-load  (MODELLED)  +9 maps, +14 flags, +2 passes, +1 party
+                         <- ALL NINE ARE TRAINER TOWER, and --on-load is worth +0 maps at every
+                            setting without the boat, because 2.1 is only reached by boat
 
-AND THE SECOND COLUMN (265, asked of all six at 285) — reaching and returning are two facts and
-every number above is the first one:
+AND THE SECOND COLUMN (265, asked of all six at 285, seven at 307) — reaching and returning are
+two facts and every number above is the first one:
   --play                    37179 stood,  46 cannot get back on 3 map(s), 3 whole
   --play --say-yes          69260 stood,  48 cannot get back on 4 map(s), 3 whole
   --play --say-yes --boat  105105 stood, 284 cannot get back on 7 map(s), 4 whole
+  ... --on-load            106021 stood, 345 cannot get back on 9 map(s), 5 whole
   the --in-order and --surf rows are the same to within two squares. What is left stranded is
   ICEFALL CAVE (177, entered by eight ledge hops), the three lift cabins, and FUCHSIA's 2 —
-  ledges and sentinel rooms, which are one-way by construction
+  ledges and sentinel rooms, which are one-way by construction — and at 307, 2.11 TRAINER TOWER
+  and 2.22 LOST CAVE join them: REACHING TRAINER TOWER IS NOT LEAVING IT
 
 --play stops because a pass opened nothing new. THE OTHER FIVE STOP BECAUSE THE STATE CAME BACK
 TO ONE IT HAD ALREADY BEEN IN — a CYCLE, not a fixed point (239). That is a third answer and not
@@ -2053,12 +2116,17 @@ doors announce themselves in 0x4001 x63, 0x8008 x25, 0x8004 x23, 0x4002 x6 — T
 21 people never arrive at all
 11 of 425 maps have no way in at all — 0.0/0.2/0.3 CELADON DEPT., 18.1 ROUTE 6, 27.0 ROUTE 19,
   29.0 ROUTE 23, 3.50-3.53 SEVII ISLE 6-9, 31.5 SEVEN ISLAND (303; FOUR isles, not five, and the
-  count is a fact about the FILE — it reads 11 at all six lever settings)
+  count is a fact about the FILE — it reads 11 at all SEVEN lever settings, --on-load included)
 AND WHAT EACH FLAG COSTS (306): of 322 gating flags, TWO fence a door — 0x0005 nine maps (a script
   can move it; live content the walk never opens) and 0x0089 eight (NOTHING in the file moves it;
   dead in any build). 200 things are shifted by a field move instead, needing moves 249, 70 and 15,
   and the run learns all three
-AND WHAT FENCES THOSE 43 (305): 41 SEALED, 2 with SOMEBODY STANDING IN THE WAY, 0 same-ground
+  **AND 0x0005 IS SET BY THE FIFTH LIST** (307): `2.1 TRAINER TOWER`'s own unconditional script at
+  0x081C4F62, three of its four arms, and by nothing else the run can reach. With --on-load the
+  fence list is ONE flag long — 0x0089 — and TRAINER TOWER's nine maps open. `--moved 0x0005` says
+  `pass 4  2.1  0x081C4F62  set 0x0005  (OnLoad)`, and 0 sets without the lever
+AND WHAT FENCES THOSE 43 (305; **41 at 307**, and 40 SEALED / 1 in the way once --on-load takes
+  0x0005's person off 2.1): 41 SEALED, 2 with SOMEBODY STANDING IN THE WAY, 0 same-ground
   (288's must-be-nought, and it fired first time at 2 before the fourth fence was named), 0 behind
   a ledge. 39 of the 43 sit in a pocket NOTHING IN THE WORLD lands anybody in — the 19 POKeMON
   CENTER doors are EXITS, not entrances. Asked per setting as well as of the union, because a union
@@ -2068,8 +2136,11 @@ AND 43 OF 43 DOORS INTO THEM ARE ONES THE RUN NEVER GOT NEAR (304) — not stood
   stood on, 98.6%. STOOD BESIDE is 0 of 1182 — the walker steps ONTO a door's own square. Walled-in
   is asked of the SURFING grid, because 1.4 S.S. ANNE (33,15) has nought neighbours on foot and one
   from the water
-THE 37 UNREACHED ARE 8 REASONS (303): 11 no way in, 18 behind one another, 8 named from ground the
-  run stands on. Ranked by what is behind each: 2.2 TRAINER TOWER 9, 1.103 MT. EMBER 8, 1.76
+THE 37 UNREACHED ARE 8 REASONS (303) — **28 and 6 at 307**, because --on-load opens TRAINER TOWER:
+  11 no way in, 11 behind one another, 6 named from ground the run stands on, and the roots are
+  1.103 MT. EMBER 8, 1.76 SECTION 49 5, 0.1, 0.4, 1.62, 3.11 one apiece. The 11-with-no-way-in does
+  not move, which is 211's rule passing again with a seventh lever on the table. The 306 reading:
+  11 no way in, 18 behind one another, 8 named from ground the run stands on. Ranked by what is behind each: 2.2 TRAINER TOWER 9, 1.103 MT. EMBER 8, 1.76
   SECTION 49 5, and 0.1/0.4/1.62/2.11/3.11 one apiece. 0.1 and 0.4 have NINETEEN warps in each and
   are 287's pocket behind a POKéMON CENTER counter; 3.11 SAFFRON CITY is the only root named by NO
   WARP — four borders, which is 286's fifty broken crossings priced in maps
@@ -2110,7 +2181,8 @@ BUT THE RUN ALSO TAKES FLAGS BACK: 164 ever on at the floor against the 160 it s
   the 50 unread at the widest: 30 on maps it never reached, 19 walls on maps it walks, and
     EXACTLY ONE nothing could ever stand beside — 10.6 (4,1), 0x0816C153, same at every lever
     (it was 56/36 until 285; the six it lost are the DOTTED HOLE's five and RUIN VALLEY's one)
-  AT NO SETTING (283, `--the-floor`): the floor leaves 204 and the union of the six leaves **49**
+  AT NO SETTING (283, `--the-floor`; the union is of SEVEN runs since 307 and the answer did not
+    move): the floor leaves 204 and the union leaves **49**
     — 30 reach / 18 walls / 1 the file. The prompt's "191 that run at no setting" was never a
     number this project could produce. The 30 are 26 on 1.96 MT. EMBER, 3 on 1.62 and 1 on 1.102
     — **285 took the DOTTED HOLE's five and RUIN VALLEY's one out of this bucket** (it was 55 and
@@ -2277,7 +2349,10 @@ neither is NAMED: what they take is read, what they do is still a guess
 0x0A7 is one place in the whole game, unbranched, the line before the eight fan questions
 0x5C trainerbattle is 794 reads at 729 places and --fights says 729 — two readings agreeing
 65 flags are moved ONLY by a map's own scripts: 54 on load, 11 on arrival — the world setting up
-0x0070's only two movers in the image are the two arms of one branch on 0x0180, unanswerable
+0x0070's only two movers in the image are the two arms of one branch on 0x0180 — READ AT 307, and
+  it is `specialvar 0x800D, 0x0180 ; compare 0x800D, 0` at 0x081BB1BA, one block reached from
+  NINETEEN maps' on-load entries, hiding 19 objects. Not a toggle: a straight function of a routine
+  the run cannot answer, which is why it alternates pass to pass (trap 137)
 350 arrival conditions at 69 distinct (variable, value, script) on 58 scripts across 61 maps
 28 of the 69 want a value NO setvar in the scan writes; 0 name a variable nothing writes at all
 0x406F: 20 maps want 1/2/3/5/6/7/8; the writers write 0, 3 AND 6 — 3 and 6 through
@@ -2731,7 +2806,13 @@ still work.**
    are that entries be distinct and longer than two bytes). **`callstd 0x05`'s 251 "not said"
    sites**, where 219's walk back gives up. **`0x0188`'s last three**, behind a block that jumps
    away. **`0x081A77B0`**, where 218's jumping arm goes. **`0x0153`**, half of every one of the
-   fifty-seven decisions. **Seven boulder flags with no setter**, **`0x0805`**, and **`0x0053`**
+   fifty-seven decisions. ~~**Seven boulder flags with no setter**~~ **CLOSED AT 307 — the setter is the fifth list.**
+   Every one of the twelve STRENGTH boulder flags is moved by exactly one script the map scan
+   opens and it is a map's own unconditional one: `0x0040`-`0x0045` and `0x0048`-`0x004B` by
+   `3.38 ROUTE 20`, `0x0058`/`0x0059` by `3.42 ROUTE 23`, and nothing else anywhere in sixteen
+   megabytes. *Two set by arrival scripts, two out of sight, seven set by nothing* was three
+   buckets that are one bucket, and it is a list nothing ran. It is worth **nought maps**.
+   Still open: **`0x0805`**, and **`0x0053`**
    holding 31 people across the SILPH CO. floors.
 
 4. **Money, for real this time — and the prices are READ now.** Three drinks at 200/300/350 and
@@ -2973,9 +3054,11 @@ the other, and nothing about a single green run says which. 207 writes the 2x2 d
   Their flags are set by the routine that removes the object. Do not file them as the boundary.
 * **The twelve STRENGTH boulders** (`0x0040`-`0x0045`, `0x0048`-`0x004B`, `0x0058`, `0x0059`).
   SEAFOAM ISLANDS `1.83`-`1.86` and VICTORY ROAD `1.40`/`1.41`, one script (`0x081BE11D`), which
-  removes nothing and sets the shared `0x0805`. **Their flags split three ways** — two set by
-  arrival scripts on ROUTE 20 and ROUTE 23, two set out of sight, seven set by nothing. Do not
-  treat them as one kind.
+  removes nothing and sets the shared `0x0805`. ~~**Their flags split three ways** — two set by
+  arrival scripts on ROUTE 20 and ROUTE 23, two set out of sight, seven set by nothing.~~
+  **THEY DO NOT SPLIT AT ALL (307): all twelve are moved by a map's own ON-LOAD script and by
+  nothing else** — ten by `3.38 ROUTE 20`, two by `3.42 ROUTE 23`. The three-way split was a
+  fact about which lists had been opened. Worth nought maps either way.
 * **What sets a flag with no setflag anywhere in the file.** Picking the thing up. The routine
   that hands something over sets the object's own hide flag in compiled code, and only 7 of the
   575 objects carrying a hide flag have a script that sets it — it is written in `Autoplayer`
@@ -3025,6 +3108,24 @@ the other, and nothing about a single green run says which. 207 writes the 2x2 d
 
 ## Open, and honestly owed
 
+* **THE ANSWER SLOT IS NEVER CLEARED, AND A QUARTER OF THE READS FIND SOMEBODY ELSE'S NUMBER**
+  (307, trap 137). `--trace 0x800D` at the widest: **968 of 3646 reads found a value already in
+  the slot, against NINE writes.** Whether the run should write nought into the answer variable
+  before an unanswerable `special` is a MODELLING DECISION and it moves every row of the floor
+  table, so it is measured and not made. The cheapest next step is the DENOMINATOR THIS DOES NOT
+  HAVE: how many of those reads are the first command after an unanswerable call — which is the
+  only place the leftover can be mistaken for an answer — against how many are ordinary reads of
+  a slot somebody legitimately wrote.
+* **THE KIND BYTE OF THE FIFTH LIST IS KEPT AND NOT USED** (307). 55 entries are kind 1, 130 are
+  kind 3, 47 kind 5 and 2 kind 7, and `--on-load` runs all four the same way. It is the only thing
+  in the data that says anything about WHEN, and asking the lever per kind is one parameter — it
+  would say which kind carries the nine maps and whether any kind is worth nothing at all.
+* **`--in-order` NO LONGER MEANS NOTHING IS HANDED OVER TWICE** (307): with `--on-load` it is 1 of
+  204, `12.4 person 2` on passes 2 and 4, because `0x0070` flickers nineteen people back into the
+  world between passes. The mechanism is read (trap 137); what SHOULD happen is not.
+* **`--the-fifth-list`'s 47 gating flags have no cost column.** 306 built `WhatEachFlagCosts` for
+  exactly that question and it is asked only of doors. What the other 46 hold, and whether any of
+  them fences anything at all, is one join away and was not made.
 * Held items are a sixth way a thing changes hands and `Everywhere` does not know.
 * ~~Whether the union differs from the final pass.~~ **MEASURED AT 240**: it does, at every one
   of the six settings — by 4 to 10 flags — and 190's "equal everywhere" was a fact about a run
@@ -3041,14 +3142,30 @@ the other, and nothing about a single green run says which. 207 writes the 2x2 d
   each). They are inside 287's pockets. The calibration row is **1165 of 1182 — 98.6%**. What is
   left of it: **why does the walk not enter a pocket it can see?** 287 counted the pockets and
   nothing has asked what fences one.
+* **THE FIFTH LIST IS THE ONLY LIST WHOSE TIMING IS UNREAD** (307), and everything below rests
+  on the lever being off by default. Four of the five kinds of script have a WHEN that is in the
+  data — a person is talked to, a sign is read, a trigger is stood on, an arrival condition names
+  a variable and a value. The fifth has a kind byte and nothing else, so `--on-load` is MODELLED
+  and every number it moves says so. If a way is ever found to read what kinds 1, 3, 5 and 7 mean,
+  that is the milestone that makes this a correction instead of a lever.
 * **`0x0089` IS A DECISION FROM HERE** (306). Eight maps behind a person nothing in the file
   removes. Three options and the third is the project's own idiom: leave it shut; MODEL an opener
   (the first person this project would move on its own authority); or **mark the door shut-for-ever
   in the world file** so a client treats it as scenery — the rule being *a fence held by a flag
   nothing moves*, which is derived rather than a hand-written list. Mason raised blocking it off;
   this is the version that does not hardcode anything.
-* **`0x0005` is a `--play` question worth nine maps** (306): what sets it, and why does no run
-  reach that? A script does move it, so this is live content the walk never opens.
+* ~~**`0x0005` is a `--play` question worth nine maps**~~ **ANSWERED AT 307.** `2.1 TRAINER
+  TOWER`'s own unconditional script sets it at `0x081C4F62`, and no run reached it because **no
+  run has ever opened that list** — the export carried the map script list's CONDITIONS and not
+  its scripts. `--on-load` is the lever, MODELLED, and it is worth +9 maps, +14 flags, +2 passes
+  and +1 in the party. All nine are TRAINER TOWER. What is left of it:
+  * **Which arm.** `special 0x194` picks between four, and three of the four set `0x0005`. What
+    the routine answers on a real cartridge is compiled code — the seventh wall of that kind.
+  * **`0x0006`**, set by the on-load scripts of `2.1`-`2.8`, hides NINE objects on those same
+    nine maps. The list that opens TRAINER TOWER empties its floors, and nothing has asked what
+    is lost.
+  * **2.11 and 2.22 are stranded once it opens** — the way back goes 284 -> 345 squares, 7 -> 9
+    maps. Reaching TRAINER TOWER is not leaving it (265's column, doing its job).
 * **THE CABLE CLUB (`0.1`, `0.4`) IS THE CARTRIDGE'S OWN TWO-PLAYER ROOM** — two chairs facing a
   link machine, rendered at 306. **Nothing needs blocking**: 305 measured that nothing in the file
   lands anybody in its pocket, so no player can wander in. What it needs is an ATTENDANT, modelled,
