@@ -77,6 +77,16 @@ public sealed record ScriptRun
     public IReadOnlyList<int> SpecialsCalled { get; init; } = [];
 
     /// <summary>
+    /// Every routine this run could not answer, and what the compare after it read (308).
+    /// <para>
+    /// The denominator under <c>--trace</c>'s "found a value already in the slot": most reads of
+    /// a slot are ordinary reads of something a script wrote, and a leftover only masquerades as
+    /// an answer at a comparison that follows an unanswered call with nothing in between.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<WhatTheRoutineLeft> LeftInTheSlot { get; init; } = [];
+
+    /// <summary>
     /// True when this run put the rival's name into something it said.
     /// <para>
     /// The battle screen called him TERRY while his own script called him GREEN: the
@@ -430,7 +440,8 @@ public static class ScriptRunner
         ScriptState? state = null,
         int maxPages = 32,
         IReadOnlyDictionary<int, int>? answers = null,
-        int? watch = null)
+        int? watch = null,
+        bool answerNought = false)
     {
         ScriptState save = (state ?? new ScriptState()).Copy();
 
@@ -453,6 +464,76 @@ public static class ScriptRunner
         void Touch(int variable, bool wrote, int held, int value)
         {
             if (watch == variable) touched.Add(new VariableTouch(variable, wrote, held, value));
+        }
+
+        // WHAT A ROUTINE THIS CANNOT ANSWER LEAVES BEHIND (308).
+        //
+        // Stepping over a special writes NOTHING into the slot it would have answered into, so
+        // the next thing to read that slot reads whatever is still in there. "The run answers
+        // nought" is true whenever that is nought and has been quoted since 214 as though it
+        // were always. This records the places where it might not be, and what happened at each.
+        //
+        // Keyed on the SLOT, and a later call replaces an earlier one — 299's rule, that a
+        // compare belongs to the LAST answerer before it. The displaced one is not thrown away;
+        // it is recorded as one nobody read, because the slot is unchanged either way and what
+        // is being counted is how often a leftover reaches a comparison.
+        var awaiting = new Dictionary<int, (int Routine, uint At, int Held)>();
+        var leftInTheSlot = new List<WhatTheRoutineLeft>();
+
+        void Unanswered(int routine, int slot, uint at)
+        {
+            Displaced(slot);
+            awaiting[slot] = (routine, at, save.Read(slot));
+        }
+
+        // Something wrote the slot, or another call took it over, or the run ended. Either way
+        // no comparison read this call's leftover.
+        void Displaced(int slot)
+        {
+            if (!awaiting.Remove(slot, out (int Routine, uint At, int Held) call)) return;
+
+            leftInTheSlot.Add(new WhatTheRoutineLeft(call.Routine, slot, call.At, call.Held, false, 0, false));
+        }
+
+        // And a comparison read it. Held over rather than emitted, because whether the leftover
+        // CHANGES ANYTHING depends on the conditional that consumes the comparison and not on
+        // the comparison — 0x0187 is compared against 2 at every one of its sites and every
+        // conditional there tests EQUAL, so a slot holding 129 gives Greater where nought gives
+        // Less and the branch is the same both times. Both columns are kept: the loose one is
+        // the argument for the tight one (25).
+        (int Routine, int Slot, uint At, int Held, int Against)? justCompared = null;
+
+        void Looked(int slot, int against)
+        {
+            if (!awaiting.Remove(slot, out (int Routine, uint At, int Held) call)) return;
+
+            justCompared = (call.Routine, slot, call.At, call.Held, against);
+        }
+
+        // Whatever came after the comparison. A conditional consumes it and decides; anything
+        // else means nothing ever branched on it, and a comparison nobody branches on cannot
+        // differ however far apart the two results are.
+        void Consumed(byte? condition)
+        {
+            if (justCompared is not { } c) return;
+
+            justCompared = null;
+
+            (bool differs, bool tookAnother) = WhatTheRoutineLeft.Reading(c.Held, c.Against, condition);
+
+            leftInTheSlot.Add(new WhatTheRoutineLeft(c.Routine, c.Slot, c.At, c.Held, true, c.Against, differs)
+            {
+                Branched = condition is not null,
+                TookADifferentArm = tookAnother,
+            });
+        }
+
+        // Every write goes through here so that "the slot was written" is decided in ONE place.
+        // A second list of write sites is how 251 lost copyvar and 253 lost half a walk.
+        void Put(int variable, int value)
+        {
+            Displaced(variable);
+            save.Write(variable, value);
         }
 
         // What a script has put where its dialogue leaves a gap. Sized for the codes the
@@ -488,6 +569,15 @@ public static class ScriptRunner
         for (int executed = 0; executed < MaxCommands; executed++)
         {
             if (offset >= rom.Length) break;
+
+            // A comparison held over from last time is decided by whatever runs next. The two
+            // conditionals below call this themselves with their own condition byte; reaching
+            // here with one still open means the next command is not a conditional at all.
+            if (justCompared is not null
+                && rom.ReadU8(offset) is not (ScriptCommands.GotoIf or ScriptCommands.CallIf))
+            {
+                Consumed(null);
+            }
 
             byte code = rom.ReadU8(offset);
             byte first = offset + 1 < rom.Length ? rom.ReadU8(offset + 1) : (byte)0;
@@ -559,10 +649,12 @@ public static class ScriptRunner
                     break;
 
                 case ScriptCommands.GotoIf:
+                    Consumed(command.Arguments[0]);
                     if (ScriptState.Accepts(command.Arguments[0], result)) jump = command.Pointer(1);
                     break;
 
                 case ScriptCommands.CallIf:
+                    Consumed(command.Arguments[0]);
                     if (ScriptState.Accepts(command.Arguments[0], result))
                     {
                         jump = command.Pointer(1);
@@ -589,6 +681,7 @@ public static class ScriptRunner
 
                 case 0x21:                              // compare
                     Touch(command.Word(), false, save.Read(command.Word()), command.Word(2));
+                    Looked(command.Word(), command.Word(2));
                     result = ScriptState.Compare(save.Read(command.Word()), command.Word(2));
                     break;
 
@@ -597,12 +690,14 @@ public static class ScriptRunner
                     // comparison is a look at each of them.
                     Touch(command.Word(), false, save.Read(command.Word()), save.Read(command.Word(2)));
                     Touch(command.Word(2), false, save.Read(command.Word(2)), save.Read(command.Word()));
+                    Looked(command.Word(), save.Read(command.Word(2)));
+                    Looked(command.Word(2), save.Read(command.Word()));
                     result = ScriptState.Compare(save.Read(command.Word()), save.Read(command.Word(2)));
                     break;
 
                 case 0x16:                              // setvar
                     Touch(command.Word(), true, save.Read(command.Word()), command.Word(2));
-                    save.Write(command.Word(), command.Word(2));
+                    Put(command.Word(), command.Word(2));
                     written[command.Word()] = command.Word(2);
                     break;
 
@@ -624,7 +719,7 @@ public static class ScriptRunner
                     // and the routine compares 0x8000, so the first word is where it
                     // goes and the second is where it comes from.
                     Touch(command.Word(), true, save.Read(command.Word()), save.Read(command.Word(2)));
-                    save.Write(command.Word(), save.Read(command.Word(2)));
+                    Put(command.Word(), save.Read(command.Word(2)));
                     written[command.Word()] = save.Read(command.Word());
                     break;
 
@@ -634,14 +729,14 @@ public static class ScriptRunner
                     // they are: 0x8000 and 0x8001 are how a script passes two numbers
                     // to a routine, and an item on the ground is exactly two numbers.
                     Touch(command.Word(), true, save.Read(command.Word()), command.Word(2));
-                    save.Write(command.Word(), command.Word(2));
+                    Put(command.Word(), command.Word(2));
                     break;
 
                 case 0x17:                              // addvar
                     Touch(
                         command.Word(), true, save.Read(command.Word()),
                         save.Read(command.Word()) + command.Word(2));
-                    save.Write(command.Word(), save.Read(command.Word()) + command.Word(2));
+                    Put(command.Word(), save.Read(command.Word()) + command.Word(2));
                     written[command.Word()] = save.Read(command.Word());
                     break;
 
@@ -649,7 +744,7 @@ public static class ScriptRunner
                     Touch(
                         command.Word(), true, save.Read(command.Word()),
                         save.Read(command.Word()) - command.Word(2));
-                    save.Write(command.Word(), save.Read(command.Word()) - command.Word(2));
+                    Put(command.Word(), save.Read(command.Word()) - command.Word(2));
                     written[command.Word()] = save.Read(command.Word());
                     break;
 
@@ -668,7 +763,7 @@ public static class ScriptRunner
                     // "Waiter"/"Waitress", "little brother"/"little sister", "All boys
                     // leave home someday"/"All girls dream of traveling" — seven scripts
                     // on six maps, and the zero arm says "boy" at every one of them.
-                    save.Write(0x800D, save.IsGirl ? 1 : 0);
+                    Put(0x800D, save.IsGirl ? 1 : 0);
                     break;
 
                 case SpecialCalls.Special:
@@ -678,15 +773,28 @@ public static class ScriptRunner
                     // one that takes an answer names the variable first.
                     int asked = code == SpecialCalls.Special ? command.Word() : command.Word(2);
 
+                    int into = code == SpecialCalls.Special ? SpecialContracts.AnswerVariable : command.Word();
+
                     // A stand-in, when one was handed in. Written into the variable this call
                     // answers into, so everything downstream — the compare, the branch — works
                     // exactly as it would have if the routine had run.
                     if (answers is not null && answers.TryGetValue(asked, out int stood))
                     {
-                        int into = code == SpecialCalls.Special ? SpecialContracts.AnswerVariable : command.Word();
-
-                        save.Write(into, stood);
+                        Put(into, stood);
                         written[into] = stood;
+                    }
+                    else if (answerNought)
+                    {
+                        // THE LEVER (308). Write the nought this project has been saying the run
+                        // answers since 214, rather than leaving whatever the last script left.
+                        // MODELLED — the cartridge's routine answers something and this is not
+                        // it; what it buys is that the answer stops depending on the walk order.
+                        Put(into, 0);
+                        written[into] = 0;
+                    }
+                    else
+                    {
+                        Unanswered(asked, into, Rom.BaseAddress + (uint)command.Offset);
                     }
                 }
 
@@ -728,13 +836,13 @@ public static class ScriptRunner
                     gives ??= save.Read(0x8000);
                     givesCount = Math.Max(1, save.Read(0x8001));
 
-                    save.Write(0x8000, 0);
-                    save.Write(0x8001, 0);
+                    Put(0x8000, 0);
+                    Put(0x8001, 0);
 
                     // Same reason giveitem does it. A routine that hands something over
                     // answers into the result variable, and a script that then asks and
                     // is told nothing reads its own failure line.
-                    save.Write(0x800D, 1);
+                    Put(0x800D, 1);
 
                     break;
 
@@ -790,7 +898,7 @@ public static class ScriptRunner
                         givesCount = Math.Max(1, command.Word(2));
                     }
 
-                    save.Write(0x800D, 1);
+                    Put(0x800D, 1);
                     break;
 
                 case 0x47:                              // checkitem
@@ -824,7 +932,7 @@ public static class ScriptRunner
 
                         if (item > 0) itemsAsked.Add(new ItemAsked(item, wanted, carried));
 
-                        save.Write(SpecialContracts.AnswerVariable, carried ? 1 : 0);
+                        Put(SpecialContracts.AnswerVariable, carried ? 1 : 0);
                     }
 
                     break;
@@ -971,7 +1079,7 @@ public static class ScriptRunner
                     // obstacle in the game would offer to move itself.
                     shifts ??= command.Word();
 
-                    save.Write(0x800D, save.SlotKnowing(command.Word()));
+                    Put(0x800D, save.SlotKnowing(command.Word()));
                     break;
 
                 case ScriptCommands.PokeMart:
@@ -1042,6 +1150,14 @@ public static class ScriptRunner
             }
         }
 
+        Consumed(null);
+
+        // AND WHAT NOBODY READ. A call whose slot nothing looked at before the run ended is
+        // the bucket where a leftover costs nothing at all, and it is not a small one — so it
+        // is flushed rather than dropped, because a denominator missing its harmless half is
+        // the whole of 8.
+        foreach (int slot in awaiting.Keys.ToList()) Displaced(slot);
+
         return new ScriptRun
         {
             Pages = pages,
@@ -1069,6 +1185,7 @@ public static class ScriptRunner
             FlagsCleared = cleared,
             VariablesWritten = written,
             Touched = touched,
+            LeftInTheSlot = leftInTheSlot,
             StoppedAt = stoppedAt,
             StoppedAtOffset = stoppedAtOffset,
         };

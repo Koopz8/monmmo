@@ -219,6 +219,7 @@ public static class Program
         if (options.WhichWay) WriteWhichWay(rom, options.StartAt);
         if (options.Water) WriteWater(rom);
         if (options.TheFifthList) WriteTheFifthList(rom, options.StartAt);
+        if (options.TheAnswerSlot) WriteTheAnswerSlot(rom, options.StartAt);
         if (options.Operands) WriteOperands(rom);
         if (options.OperandsEverywhere) WriteOperandsEverywhere(rom);
         if (options.TheControl) WriteTheControl(rom);
@@ -230,7 +231,7 @@ public static class Program
             WritePlaythrough(
                 rom, options.RoutineAnswers, options.StartAt, options.Boat, options.Money, options.SayYes,
                 options.Variables, options.Surf, options.InOrder, options.Watch, options.Signs,
-                options.Moved, options.OnLoad);
+                options.Moved, options.OnLoad, options.AnswerNought, options.RememberSlots);
         if (options.WhereFrom.Count > 0) WriteWhereFrom(rom, options.WhereFrom);
         if (options.InTheImage.Count > 0) WriteInTheImage(rom, options.InTheImage);
         if (options.ClimbFrom.Count > 0) WriteClimb(rom, options.ClimbFrom);
@@ -7420,7 +7421,8 @@ public static class Program
         Rom rom, IReadOnlyDictionary<int, int> answers, string startAt, bool boat = false, int money = 0,
         bool sayYes = false, IReadOnlyDictionary<int, int>? variables = null, bool surf = false,
         bool inOrder = false, int? watch = null, bool signs = false,
-        IReadOnlyList<int>? moved = null, bool onLoad = false)
+        IReadOnlyList<int>? moved = null, bool onLoad = false,
+        bool answerNought = false, bool rememberSlots = false)
     {
         Console.WriteLine();
         Console.WriteLine("A PLAYTHROUGH");
@@ -7470,7 +7472,8 @@ public static class Program
         // printing, and it does not belong in a file nothing can test. Two live faults were
         // sitting in it when it moved.
         var reader = new HowAScriptRuns(
-            rom, teaches, answers, variables, sayYes, beatenTrainers, remembered, watch);
+            rom, teaches, answers, variables, sayYes, beatenTrainers, remembered, watch,
+            answerNought: answerNought, rememberSlots: rememberSlots);
 
         // Which scripts are doors into a scene rather than scenes. Read here because this is
         // where the cartridge is; the walk is handed the answer.
@@ -10036,6 +10039,271 @@ public static class Program
     /// lever without being a before-and-after across two builds (19).
     /// </para>
     /// </remarks>
+
+    /// <summary>
+    /// What a routine this run cannot answer leaves in the slot, and who reads it (308).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// 307 printed a share with the wrong denominator: <c>--trace 0x800D</c> says 968 of 3646
+    /// reads found a value already in the slot, and almost all reads of a slot are ordinary reads
+    /// of something a script wrote. A leftover can only be mistaken for an answer at a comparison
+    /// that follows an unanswered call <em>with nothing in between</em>. This counts those places,
+    /// sorts them four ways, and then prices the lever in the same process (19).
+    /// </para>
+    /// </remarks>
+    private static void WriteTheAnswerSlot(Rom rom, string startAt)
+    {
+        Console.WriteLine();
+        Console.WriteLine("WHAT A ROUTINE IT CANNOT ANSWER LEAVES BEHIND");
+        Console.WriteLine();
+
+        WorldData world = WorldExporter.Export(rom);
+        GameRules rules = RulesExporter.Export(rom);
+        MapData first = world.Find(startAt) ?? world.Maps.First();
+        Dictionary<int, int> teaches = TeachingMachines(rom);
+
+        Dictionary<uint, uint> doorsTo = EntriesToAScene
+            .In(rom, MapLibrary.Open(rom).All().SelectMany(EveryScriptOn), HowAScriptRuns.FirstRemembered)
+            .GroupBy(d => d.Where.Address)
+            .ToDictionary(g => g.Key, g => g.First().Leads);
+
+        Attempt Run(TheFloorTable.Setting at, bool answerNought = false, bool rememberSlots = false)
+        {
+            var beaten = new HashSet<int>();
+            var remembered = new Dictionary<int, int>();
+
+            var reader = new HowAScriptRuns(
+                rom, teaches, null, null, at.SayYes, beaten, remembered,
+                answerNought: answerNought, rememberSlots: rememberSlots);
+
+            return Autoplayer.Play(
+                world, first.Id, rules, reader.Read, null, at.Boat, 0, beaten, at.Surf,
+                remembered, at.InOrder, doorsTo, runOnLoad: at.OnLoad);
+        }
+
+        Console.WriteLine("  THE PLACES, AT EVERY SETTING");
+        Console.WriteLine();
+        Console.WriteLine("    One row per lever setting. A PLACE is (map, script, the call's own byte position), so a");
+        Console.WriteLine("    block reached from nineteen maps is nineteen places and seven passes of one is one — 224,");
+        Console.WriteLine("    in the run rather than in the scan. Worst pass per place, because a place where a leftover");
+        Console.WriteLine("    reached a comparison once is a place where it can.");
+        Console.WriteLine();
+        Console.WriteLine(
+            "      setting                                    places  nobody read it  answered NOUGHT  read a LEFTOVER"
+            + "  the compare DIFFERS  A BRANCH WENT THE OTHER WAY");
+
+        var everyRun = new List<(TheFloorTable.Setting At, Attempt Played)>();
+
+        foreach (TheFloorTable.Setting at in TheFloorTable.Settings)
+        {
+            Attempt played = Run(at);
+            everyRun.Add((at, played));
+
+            IReadOnlyList<WhatTheRoutineLeft> calls = played.LeftInTheSlot;
+
+            Console.WriteLine(
+                $"      {at.Command.PadRight(TheFloorTable.CommandColumn)}  {calls.Count,6}"
+                + $"  {calls.Count(c => !c.Read),14}"
+                + $"  {calls.Count(c => c.Read && c.AnsweredNought),15}"
+                + $"  {calls.Count(c => c.Read && !c.AnsweredNought),15}"
+                + $"  {calls.Count(c => c.ReadAndDiffers),19}"
+                + $"  {calls.Count(c => c.ReadAndTookADifferentArm),26}");
+        }
+
+        Attempt widest = everyRun[^1].Played;
+        List<WhatTheRoutineLeft> the = [.. widest.LeftInTheSlot];
+
+        int read = the.Count(c => c.Read);
+        int leftover = the.Count(c => c.ReadAndHarmless || c.ReadAndDiffers);
+        int differs = the.Count(c => c.ReadAndDiffers);
+        int tookAnother = the.Count(c => c.ReadAndTookADifferentArm);
+        int neverBranched = the.Count(c => c.Read && !c.Branched);
+
+        Console.WriteLine();
+        Console.WriteLine($"  THE WIDEST RUN — {everyRun[^1].At.Command}");
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    {the.Count} place(s) step over a routine. {read} of them have a comparison on the slot"
+            + $" with nothing in between; the other {the.Count - read} nobody reads at all, and a leftover"
+            + " there costs nothing whatever is in it.");
+        Console.WriteLine(
+            $"    Of the {read} that ARE read, {read - leftover} found NOUGHT — the sentence this project has"
+            + $" quoted since 214 — and {leftover} found a value an earlier script left.");
+        Console.WriteLine(
+            $"    Of those {leftover}, the COMPARISON came out differently than it would have at nought"
+            + $" {differs} time(s) — and that is the loose reading, kept because it is the argument for the"
+            + " tight one (25).");
+        Console.WriteLine(
+            $"    AND A BRANCH ACTUALLY WENT THE OTHER WAY at {tookAnother} of them. That is the blast radius,"
+            + " and it is the column that could have come back empty (9).");
+        Console.WriteLine();
+        Console.WriteLine(
+            "    The gap between those two is one routine's habit. A comparison's RESULT differing does not mean");
+        Console.WriteLine(
+            "    the conditional after it cares: 0x0187 is compared against 2 at every site and every conditional");
+        Console.WriteLine(
+            "    there tests EQUAL, so a slot holding 129 gives Greater where nought gives Less and neither is");
+        Console.WriteLine(
+            $"    equal. {neverBranched} of the {read} read place(s) have no conditional after the compare at all.");
+
+        if (differs > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine("    by routine — both columns, so the correction is visible rather than trusted:");
+            Console.WriteLine();
+            Console.WriteLine("      routine  slot    compare differs   A BRANCH DID   what was in the slot");
+
+            foreach (IGrouping<int, WhatTheRoutineLeft> group in the
+                         .Where(c => c.ReadAndDiffers)
+                         .GroupBy(c => c.Routine)
+                         .OrderByDescending(g => g.Count())
+                         .ThenBy(g => g.Key))
+            {
+                Console.WriteLine(
+                    $"      0x{group.Key:X3}    0x{group.First().Slot:X4}  {group.Count(),15}"
+                    + $"  {group.Count(c => c.TookADifferentArm),13}   "
+                    + string.Join(", ", group.Select(c => c.Held).Distinct().Order().Take(8)));
+            }
+        }
+
+        // AND WHAT WRITING THE NOUGHT WOULD COST, both runs in one process (19).
+        Console.WriteLine();
+        Console.WriteLine("  AND WHAT WRITING THE NOUGHT IS WORTH — the same setting twice, in one process");
+        Console.WriteLine();
+        Console.WriteLine(
+            "    --answer-nought is MODELLED and it is not a correction: the cartridge's routine answers");
+        Console.WriteLine(
+            "    SOMETHING and nought is not it. What it buys is that the answer stops depending on which");
+        Console.WriteLine(
+            "    map the walk happened to be on last, which is the only thing wrong with leaving it alone.");
+        Console.WriteLine();
+        Console.WriteLine("      setting                                    maps  flags  passes  party  places that read a leftover");
+
+        foreach ((TheFloorTable.Setting at, Attempt without) in everyRun)
+        {
+            Attempt with = Run(at, answerNought: true);
+
+            Console.WriteLine(
+                $"      {at.Command.PadRight(TheFloorTable.CommandColumn)}  {without.Reached.Count,4}"
+                + $"  {without.Flags.Count,5}  {without.Passes,6}  {without.Party.Count,5}"
+                + $"  {without.LeftInTheSlot.Count(c => c.ReadAndHarmless || c.ReadAndDiffers),26}");
+            Console.WriteLine(
+                $"      {"  the same run with --answer-nought".PadRight(TheFloorTable.CommandColumn)}  {with.Reached.Count,4}"
+                + $"  {with.Flags.Count,5}  {with.Passes,6}  {with.Party.Count,5}"
+                + $"  {with.LeftInTheSlot.Count(c => c.ReadAndHarmless || c.ReadAndDiffers),26}   <- MUST BE NOUGHT");
+
+            List<string> gained = [.. with.Reached.Except(without.Reached).Order()];
+            List<string> lost = [.. without.Reached.Except(with.Reached).Order()];
+
+            Console.WriteLine(
+                $"      {"  the difference".PadRight(TheFloorTable.CommandColumn)}  {with.Reached.Count - without.Reached.Count,+4}"
+                + $"  {with.Flags.Count - without.Flags.Count,+5}"
+                + $"  {with.Passes - without.Passes,+6}  {with.Party.Count - without.Party.Count,+5}"
+                + (gained.Count > 0 ? $"  gained {string.Join(", ", gained.Take(8))}" : string.Empty)
+                + (lost.Count > 0 ? $"  LOST {string.Join(", ", lost.Take(8))}" : string.Empty));
+            Console.WriteLine();
+        }
+
+        Console.WriteLine(
+            "    The MUST BE NOUGHT column is this instrument's own control: with the lever on there is no");
+        Console.WriteLine(
+            "    leftover to read, by construction, so anything but nought there is a fault in the reading");
+        Console.WriteLine(
+            "    rather than a finding about the cartridge (211's shape — a column that cannot move).");
+
+        // AND WHERE THE LEFTOVER COMES FROM, which is the half --answer-nought treats and does
+        // not explain. A value only survives into the next script because the memory rule kept
+        // it, and the memory rule's own paragraph is about a band it is not the only band of.
+        Console.WriteLine();
+        Console.WriteLine("  AND WHY THERE IS ANYTHING IN THE SLOT AT ALL");
+        Console.WriteLine();
+
+        BothNamespaces namespaces = TwoNamespacesOneNumber.Of(
+            rom, MapLibrary.Open(rom).All().SelectMany(EveryScriptOn).Select(c => c.Address));
+
+        Console.WriteLine(
+            $"    HowAScriptRuns.FirstRemembered is 0x{HowAScriptRuns.FirstRemembered:X4} and the test is"
+            + " ONE-SIDED — variable >= that. Its own paragraph is about the twelve pads below it in the");
+        Console.WriteLine(
+            "    0x400x band, and the engine's argument slots are numerically ABOVE it, so they are on the");
+        Console.WriteLine("    remembered side of a cut written to exclude scratch. The bands, off --namespaces:");
+        Console.WriteLine();
+        Console.WriteLine("      band      numbers   places   places per number   remembered as it stands");
+
+        // Off --namespaces' own band split, at its own width, rather than a second copy of the
+        // question — 224 is the milestone about what a private copy of a list costs.
+        foreach ((int From, int Numbers, int Places) band in
+                 BothNamespaces.Bands(namespaces.Variables, 0x4000))
+        {
+            Console.WriteLine(
+                $"      0x{band.From:X4}+  {band.Numbers,7}  {band.Places,7}"
+                + $"  {(band.Numbers == 0 ? 0 : (double)band.Places / band.Numbers),17:F1}"
+                + $"   {(band.From >= HowAScriptRuns.FirstRemembered ? "YES" : "partly")}");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine(
+            "    ADOPTED at 308: the argument slots do not survive a script any more. --remember-slots is the");
+        Console.WriteLine(
+            "    behaviour every number this project printed before 308 was measured under, kept because a");
+        Console.WriteLine(
+            "    control the reader cannot re-run is not a control (241). The same seven settings, both ways:");
+        Console.WriteLine();
+        Console.WriteLine("      setting                                    maps  flags  passes  party  read a leftover");
+
+        foreach ((TheFloorTable.Setting at, Attempt without) in everyRun)
+        {
+            Attempt with = Run(at, rememberSlots: true);
+
+            Console.WriteLine(
+                $"      {at.Command.PadRight(TheFloorTable.CommandColumn)}  {without.Reached.Count,4}"
+                + $"  {without.Flags.Count,5}  {without.Passes,6}  {without.Party.Count,5}"
+                + $"  {without.LeftInTheSlot.Count(c => c.ReadAndHarmless || c.ReadAndDiffers),15}");
+            Console.WriteLine(
+                $"      {"  the same run with --remember-slots".PadRight(TheFloorTable.CommandColumn)}  {with.Reached.Count,4}"
+                + $"  {with.Flags.Count,5}  {with.Passes,6}  {with.Party.Count,5}"
+                + $"  {with.LeftInTheSlot.Count(c => c.ReadAndHarmless || c.ReadAndDiffers),15}");
+
+            List<string> gained = [.. with.Reached.Except(without.Reached).Order()];
+            List<string> lost = [.. without.Reached.Except(with.Reached).Order()];
+
+            Console.WriteLine(
+                $"      {"  the difference".PadRight(TheFloorTable.CommandColumn)}  {with.Reached.Count - without.Reached.Count,+4}"
+                + $"  {with.Flags.Count - without.Flags.Count,+5}"
+                + $"  {with.Passes - without.Passes,+6}  {with.Party.Count - without.Party.Count,+5}"
+                + $"  {with.LeftInTheSlot.Count(c => c.ReadAndHarmless || c.ReadAndDiffers) - without.LeftInTheSlot.Count(c => c.ReadAndHarmless || c.ReadAndDiffers),+15}"
+                + (gained.Count > 0 ? $"  gained {string.Join(", ", gained.Take(8))}" : string.Empty)
+                + (lost.Count > 0 ? $"  LOST {string.Join(", ", lost.Take(8))}" : string.Empty));
+
+            // AND WHICH FLAGS, BY NUMBER. A number moving down is not a regression until it has
+            // been read (7), and "-2 flags" cannot be read. These can.
+            List<int> flagsLost = [.. without.Flags.Except(with.Flags).Order()];
+            List<int> flagsGained = [.. with.Flags.Except(without.Flags).Order()];
+
+            if (flagsLost.Count > 0 || flagsGained.Count > 0)
+            {
+                Console.WriteLine(
+                    $"      {"  which flags".PadRight(TheFloorTable.CommandColumn)}  "
+                    + (flagsLost.Count > 0
+                        ? "no longer set: " + string.Join(", ", flagsLost.Select(f => $"0x{f:X4}"))
+                        : string.Empty)
+                    + (flagsGained.Count > 0
+                        ? "   newly set: " + string.Join(", ", flagsGained.Select(f => $"0x{f:X4}"))
+                        : string.Empty));
+            }
+
+            Console.WriteLine();
+        }
+
+        Console.WriteLine(
+            "    This one does NOT drive the leftover count to nought and must not: a slot written EARLIER IN");
+        Console.WriteLine(
+            "    THE SAME SCRIPT is a leftover the memory rule has nothing to do with. What it removes is the");
+        Console.WriteLine(
+            "    part that crosses a script boundary, which is the part that depends on the walk's order.");
+    }
+
     private static void WriteTheFifthList(Rom rom, string startAt)
     {
         Console.WriteLine();
@@ -21986,6 +22254,18 @@ public static class Program
         /// <summary>What the fifth list moves that nothing else does, and what the run never runs.</summary>
         public bool TheFifthList { get; private init; }
 
+        /// <summary>What a routine the run cannot answer leaves in the slot, and who reads it.</summary>
+        public bool TheAnswerSlot { get; private init; }
+
+        /// <summary>With <c>--play</c>: write nought into the slot of a routine it cannot answer. MODELLED.</summary>
+        public bool AnswerNought { get; private init; }
+
+        /// <summary>
+        /// With <c>--play</c>: carry the engine's argument slots between scripts, which is what
+        /// every number printed before 308 was measured under. The control, not a lever.
+        /// </summary>
+        public bool RememberSlots { get; private init; }
+
         /// <summary>
         /// With <c>--play</c>: run the fifth list — a map's own unconditional scripts. MODELLED.
         /// </summary>
@@ -22237,6 +22517,9 @@ public static class Program
             var whichWay = false;
             var sea = false;
             var theFifthList = false;
+            var theAnswerSlot = false;
+            var answerNought = false;
+            var rememberSlots = false;
             var onLoadLever = false;
             var operands = false;
             var moved = new List<int>();
@@ -22543,6 +22826,15 @@ public static class Program
                         break;
                     case "--the-fifth-list":
                         theFifthList = true;
+                        break;
+                    case "--the-answer-slot":
+                        theAnswerSlot = true;
+                        break;
+                    case "--answer-nought":
+                        answerNought = true;
+                        break;
+                    case "--remember-slots":
+                        rememberSlots = true;
                         break;
                     case "--on-load":
                         onLoadLever = true;
@@ -22923,6 +23215,9 @@ public static class Program
                 WhichWay = whichWay,
                 Sea = sea,
                 TheFifthList = theFifthList,
+                TheAnswerSlot = theAnswerSlot,
+                AnswerNought = answerNought,
+                RememberSlots = rememberSlots,
                 OnLoad = onLoadLever,
                 Operands = operands,
                 OperandsEverywhere = operandsEverywhere,

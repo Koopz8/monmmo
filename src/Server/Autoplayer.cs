@@ -911,6 +911,18 @@ public sealed record Attempt(
     /// </summary>
     public int TraceDropped { get; init; }
 
+    /// <summary>
+    /// Every PLACE where a routine this run could not answer left the slot alone, and what the
+    /// comparison after it read (308).
+    /// <para>
+    /// <b>The denominator under 307's "968 of 3646 reads found a value already in the slot".</b>
+    /// That share is over every read of the variable; almost all of those are ordinary reads of
+    /// something a script wrote. A leftover can only be mistaken for an answer at a comparison
+    /// that follows an unanswered call with nothing in between, and this is that list.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<WhatTheRoutineLeft> LeftInTheSlot { get; init; } = [];
+
     /// <summary>People a script took off a map, which is how a doorway stops being blocked.</summary>
     public IReadOnlyCollection<(string MapId, int LocalId)> Removed { get; init; } = [];
 
@@ -1112,6 +1124,22 @@ public static class Autoplayer
     /// </summary>
     public const int MostTraced = 4096;
 
+    /// <summary>
+    /// Which of two readings of one place is the one worth keeping (308).
+    /// <para>
+    /// A place runs on every pass with a different state behind it, so the same call can answer
+    /// nought on one pass and read a leftover on the next. Worst first: a comparison that came
+    /// out differently for the leftover beats one that did not, which beats one where nobody
+    /// read the slot. <b>A place where it can happen is a place where it happens</b>, and
+    /// keeping the last pass would report whichever pass happened to be last.
+    /// </para>
+    /// </summary>
+    private static bool Worse(WhatTheRoutineLeft one, WhatTheRoutineLeft than) =>
+        Rank(one) > Rank(than);
+
+    private static int Rank(WhatTheRoutineLeft call) =>
+        call.ReadAndDiffers ? 3 : call.ReadAndHarmless ? 2 : call.Read ? 1 : 0;
+
     /// <param name="runScript">
     /// Runs one script with the flags and the bag it should see, and says what it did.
     /// <para>
@@ -1309,6 +1337,9 @@ public static class Autoplayer
         // walls it is written on — and 224's whole lesson was that those are different numbers.
         var signsRead = new Dictionary<(string MapId, GridPosition Square), (uint At, int Times)>();
 
+        // Where a routine this run cannot answer leaves something a comparison then reads (308).
+        var leftInTheSlot = new Dictionary<(string MapId, uint Script, uint At), WhatTheRoutineLeft>();
+
         var won = 0;
         var lost = 0;
         var skipped = 0;
@@ -1405,6 +1436,26 @@ public static class Autoplayer
                         if (!signsRead.TryGetValue((map.Id, onTheWall), out (uint At, int Times) already))
                             signsRead[(map.Id, onTheWall)] = (what.Address, 1);
                         else signsRead[(map.Id, onTheWall)] = (already.At, already.Times + 1);
+                    }
+
+                    // AND WHAT EVERY ROUTINE IT COULD NOT ANSWER LEFT BEHIND (308).
+                    //
+                    // Keyed on (map, address, the call's own byte position), because a script
+                    // shared by two maps is two places and a block reached from nineteen is
+                    // nineteen — 224, in the run rather than in the scan. Merged rather than
+                    // appended so a place that runs on seven passes is one place: what is being
+                    // counted is where a leftover can reach a comparison, not how often the walk
+                    // went past it. Worst case per place, because a place that read a leftover
+                    // ONCE is a place where it can happen.
+                    foreach (WhatTheRoutineLeft call in did.LeftInTheSlot)
+                    {
+                        (string MapId, uint Script, uint At) where = (map.Id, what.Address, call.At);
+
+                        if (!leftInTheSlot.TryGetValue(where, out WhatTheRoutineLeft? already)
+                            || Worse(call, already))
+                        {
+                            leftInTheSlot[where] = call;
+                        }
                     }
 
                     // In the order it happened, which is the entire point of the thing.
@@ -2082,6 +2133,7 @@ public static class Autoplayer
             ],
             Trace = trace,
             TraceDropped = dropped,
+            LeftInTheSlot = [.. leftInTheSlot.Values],
             Ran = ran,
             Removed = gone,
             Moved = [.. moved.Keys],

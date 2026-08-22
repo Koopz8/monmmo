@@ -57,6 +57,12 @@ public sealed record PlayedScript(
     public (int ItemId, int Count)? Gets { get; init; }
 
     /// <summary>
+    /// Every routine this script asked that could not be answered, and what the comparison after
+    /// it read out of the slot the routine never wrote (308).
+    /// </summary>
+    public IReadOnlyList<WhatTheRoutineLeft> LeftInTheSlot { get; init; } = [];
+
+    /// <summary>
     /// Money this script asked about or charged, which the run could answer neither way.
     /// <para>
     /// A ceiling, and the third one — <c>--say-yes</c> and <c>--boat</c> are the other two and

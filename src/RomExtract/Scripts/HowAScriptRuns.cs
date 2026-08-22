@@ -55,7 +55,9 @@ public sealed class HowAScriptRuns(
     bool sayYes = false,
     IReadOnlyCollection<int>? beaten = null,
     IDictionary<int, int>? remembered = null,
-    int? watch = null)
+    int? watch = null,
+    bool answerNought = false,
+    bool rememberSlots = false)
 {
     /// <summary>
     /// Where the scratch pads stop and the story's own memory begins.
@@ -72,6 +74,57 @@ public sealed class HowAScriptRuns(
     /// </para>
     /// </summary>
     public const int FirstRemembered = 0x4010;
+
+    /// <summary>
+    /// Where the ENGINE'S ARGUMENT SLOTS begin — the other end of the cut, missing until 308.
+    /// <para>
+    /// <b><see cref="FirstRemembered"/> is one-sided, and its own paragraph is about one band.</b>
+    /// The cliff it names was measured on <c>0x400x</c>: twelve pads written up to a hundred and
+    /// sixty-eight times each, everything above twenty-one and mostly under ten. Applied as
+    /// <c>variable &gt;= 0x4010</c> it also keeps everything from <c>0x8000</c> up — and this
+    /// project's own namespace reading says that band is <b>sixteen numbers written at 3428
+    /// places</b>, against the <c>0x4000</c> band's 77 numbers at 856. The scratchiest thing in
+    /// the game, by a factor of four over the pads the rule was written to exclude, was on the
+    /// remembered side of it.
+    /// </para>
+    /// <para>
+    /// What that costs is a value surviving into a script that had nothing to do with it:
+    /// <c>41.0 person 1</c> ends <c>setvar 0x8004, 214 ; copyvar 0x800D, 0x8004</c>, and 214 is
+    /// still in the slot when <c>12.4 person 2</c> runs on the next pass — two maps away. It is
+    /// what an unanswerable routine's compare then reads.
+    /// </para>
+    /// <para>
+    /// <b>ADOPTED at 308</b>, on the rule's own criterion and well clear of 237's bar: places per
+    /// number is <b>214.2</b> in this band against <b>11.1</b> in the one the cut was drawn for,
+    /// and the calibration row is in the same table. It costs <b>0 maps at every setting</b>; the
+    /// two flags it stops setting — <c>0x0248</c> and <c>0x0251</c> — hold nothing and gate
+    /// nothing, and the one it starts setting, <c>0x0070</c>, gates nineteen objects and stops
+    /// flickering pass to pass.
+    /// </para>
+    /// <para>
+    /// The pre-308 behaviour is <c>--remember-slots</c> and it stays, because a control the reader
+    /// cannot re-run is not a control (19, 241, 285). On this cartridge <c>&gt;= 0x8000</c> and
+    /// <c>0x8000..0x800F</c> are the same sixteen numbers, so there is no boundary to argue about.
+    /// </para>
+    /// </summary>
+    public const int FirstArgumentSlot = 0x8000;
+
+    /// <summary>
+    /// Whether a variable a scene wrote survives into the next one.
+    /// <para>
+    /// <b>Here rather than inside the loop that applies it</b>, because a rule inside a method
+    /// that needs a whole cartridge is a rule no fixture can reach — 219, 221, 222 and 223 were
+    /// four green breaks running with that one cause.
+    /// </para>
+    /// <para>
+    /// Two-sided since 308. Below <see cref="FirstRemembered"/> are the pads the cliff named;
+    /// at <see cref="FirstArgumentSlot"/> and above are the engine's argument slots, which are
+    /// scratch by the same criterion and by a wider margin, and which a one-sided test kept.
+    /// </para>
+    /// </summary>
+    /// <param name="rememberSlots">The pre-308 behaviour, kept as the control.</param>
+    public static bool IsRemembered(int variable, bool rememberSlots = false) =>
+        variable >= FirstRemembered && (rememberSlots || variable < FirstArgumentSlot);
 
     /// <summary>
     /// What the story is holding, across scripts.
@@ -125,13 +178,15 @@ public sealed class HowAScriptRuns(
         foreach ((int variable, int put) in variables ?? new Dictionary<int, int>())
             state.Write(variable, put);
 
-        ScriptRun run = ScriptRunner.Run(rom, address, state, answers: answers, watch: watch);
+        ScriptRun run = ScriptRunner.Run(
+            rom, address, state, answers: answers, watch: watch, answerNought: answerNought);
 
         var wrote = new Dictionary<int, int>(run.VariablesWritten);
         var touched = new List<VariableTouch>(run.Touched);
         var flagsSet = new List<int>(run.FlagsSet);
         var flagsCleared = new List<int>(run.FlagsCleared);
         var specials = new List<int>(run.SpecialsCalled);
+        var leftInTheSlot = new List<WhatTheRoutineLeft>(run.LeftInTheSlot);
         var money = new List<int>(run.MoneyWalkedPast);
         var hides = new List<int>(run.Hides);
         var walked = new List<(int PersonId, IReadOnlyList<Direction> Steps, uint At)>();
@@ -205,7 +260,8 @@ public sealed class HowAScriptRuns(
             // Yes. The variable the box answers into is the one everything reads.
             state.Write(SpecialContracts.AnswerVariable, 1);
 
-            run = ScriptRunner.Run(rom, carryOn, state, answers: answers, watch: watch);
+            run = ScriptRunner.Run(
+                rom, carryOn, state, answers: answers, watch: watch, answerNought: answerNought);
 
             foreach ((int variable, int value) in run.VariablesWritten) wrote[variable] = value;
 
@@ -217,6 +273,7 @@ public sealed class HowAScriptRuns(
             flagsSet.AddRange(run.FlagsSet);
             flagsCleared.AddRange(run.FlagsCleared);
             specials.AddRange(run.SpecialsCalled);
+            leftInTheSlot.AddRange(run.LeftInTheSlot);
             money.AddRange(run.MoneyWalkedPast);
             hides.AddRange(run.Hides);
             asked.AddRange(run.ItemsAsked.Select(a => (a.ItemId, a.Count, a.Carried)));
@@ -237,10 +294,11 @@ public sealed class HowAScriptRuns(
             fights ??= run.TrainerId;
         }
 
-        // And what this scene left behind for the next one, minus the scratch pads.
+        // And what this scene left behind for the next one, minus the scratch pads — at BOTH
+        // ends of the range since 308, when the top end turned out never to have had one.
         foreach ((int variable, int value) in wrote)
         {
-            if (variable >= FirstRemembered) _remembered[variable] = value;
+            if (IsRemembered(variable, rememberSlots)) _remembered[variable] = value;
         }
 
         return new PlayedScript(
@@ -261,6 +319,7 @@ public sealed class HowAScriptRuns(
             StoppedAtAQuestion = run.Question is not null,
             StoppedAt = stoppedAt,
             Touched = touched,
+            LeftInTheSlot = leftInTheSlot,
         };
     }
 
