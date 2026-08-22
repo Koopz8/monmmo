@@ -87,6 +87,22 @@ public sealed class HowFarBackAnArgumentCountsTests
     }
 
     /// <summary>
+    /// <b>And the boundary is exact.</b> A value <c>n</c> commands in front of a call is found at
+    /// a window of <c>n</c> and not at <c>n - 1</c>. The sweep in 294's table has the window as
+    /// its axis, so an off-by-one there shifts every row — and an off-by-one passed every other
+    /// fixture here.
+    /// </summary>
+    [Fact]
+    public void TheBoundaryIsExact()
+    {
+        // Three fillers puts the value four commands in front of the call.
+        Rom rom = Image(between: 3);
+
+        Assert.Equal([(Slot, 9)], Arguments(rom, 4));
+        Assert.Empty(Arguments(rom, 3));
+    }
+
+    /// <summary>
     /// A window of nought finds nothing at all, which is the floor of this whole sweep: every
     /// argument this project has ever read is read because somebody chose a number here.
     /// </summary>
