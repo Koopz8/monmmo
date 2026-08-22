@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-302`, **3491 tests green** — re-read at 297, where the old line still said `claude-314` and
+`claude-303`, **3496 tests green** — re-read at 297, where the old line still said `claude-314` and
 3274 (trap 14, in the sentence that tells you where you are standing).
 
 Standing rules — do not break these:
@@ -710,6 +710,17 @@ Traps worth carrying:
     what names their own blocks is a literal in code, which the climb had said per site since 191.
     **Before believing a proximity test, ask what it would find if the thing were merely nearby.**
 
+131. **A COUNT OF UNREACHED THINGS IS NOT A COUNT OF REASONS** (303). The floor table has said
+    **388 of 425** since 285 and nothing had asked what the other thirty-seven are. Sorted:
+    **11 have NO WAY IN AT ALL** — no warp and no border in the file names them — **18 are behind
+    one another**, and **8 are named by ground the run STANDS ON**. Those eight are the reasons,
+    and ranked by what sits behind each, **three carry 22 of the 26** (trap 3). Four of the eight
+    were already known under other names: `0.1`/`0.4` are 287's twelve-square pocket behind a
+    POKéMON CENTER counter with **nineteen doors in each**, `1.103` is the `0x0089` wall, and
+    **`3.11` SAFFRON CITY is the only root named by no warp at all** — four borders and nothing
+    else, which is **286's fifty broken crossings priced in maps for the first time**. The 11 is a
+    fact about the FILE and reads 11 at all six settings, which is 211's rule passing in the open.
+
 130. **TWO OPERANDS OF ONE COMMAND ARE THE SAME KIND WHEN THEY DRAW FROM THE SAME SET** (302).
     301 showed the range test says nothing — fifteen operand positions have every value inside the
     species table's named set. The version that does say something is the PAIR: of the **134 pairs
@@ -1205,8 +1216,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-302-two-columns-of-one-kind.md` first, then `301`, then `300`,
-then `299`, then `298`, then `297`, then `296`, then `295`, then `294`,
+Read `claude/milestone-303-thirty-seven-maps-are-eight-reasons.md` first, then `302`, then
+`301`, then `300`, then `299`, then `298`, then `297`, then `296`, then `295`, then `294`,
 then `293`, then `292`, then `291`, then `290`, then `289`, then `288`, then `287`, then `286`,
 then `285`, then `284`, then `283`, then `282`, then `281`, then `280`, then `279`, then `278`, then `277`, then `276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
@@ -1994,7 +2005,14 @@ doors announce themselves in 0x4001 x63, 0x8008 x25, 0x8004 x23, 0x4002 x6 — T
   same-high-byte unused-id floor of median 10-13 (most 36) for 0x00xx, median 1 (most 11) for
   0x0089's neighbours. AT OR BELOW THE FLOOR, every one (272)
 21 people never arrive at all
-11 of 425 maps have no way in at all
+11 of 425 maps have no way in at all — 0.0/0.2/0.3 CELADON DEPT., 18.1 ROUTE 6, 27.0 ROUTE 19,
+  29.0 ROUTE 23, 3.50-3.53 SEVII ISLE 6-9, 31.5 SEVEN ISLAND (303; FOUR isles, not five, and the
+  count is a fact about the FILE — it reads 11 at all six lever settings)
+THE 37 UNREACHED ARE 8 REASONS (303): 11 no way in, 18 behind one another, 8 named from ground the
+  run stands on. Ranked by what is behind each: 2.2 TRAINER TOWER 9, 1.103 MT. EMBER 8, 1.76
+  SECTION 49 5, and 0.1/0.4/1.62/2.11/3.11 one apiece. 0.1 and 0.4 have NINETEEN warps in each and
+  are 287's pocket behind a POKéMON CENTER counter; 3.11 SAFFRON CITY is the only root named by NO
+  WARP — four borders, which is 286's fifty broken crossings priced in maps
 5 places guard a coin hand-over; every bound plus its own gift is 10000; 0 chains in the reversal
 2 places sell coins for money at 20 each — READ; 3 price lists, 15 rows, all READ
 the floor is asked for money in ONE place and it is the coin counter; 8 at --say-yes and above
@@ -2952,7 +2970,10 @@ the other, and nothing about a single green run says which. 207 writes the 2x2 d
   carried no sign list at all, so there was nothing for the walk to skip. Still owed off it:
   which signs ran, what the floor's seven new flags are, and `3.57 sign (9,43)`, which asks for
   a LEMONADE and takes it away and can now actually be reached.
-* Eleven maps have no way in at all, five of them Sevii isles with no dock in the export.
+* ~~Eleven maps have no way in at all, five of them Sevii isles~~ **LISTED AT 303** — and it is
+  FOUR isles plus SEVEN ISLAND. The count was right; what it was missing was the other twenty-six.
+* **The seven warp-named roots** (303) are seven doors the run reaches and does not take, one
+  `--play` question each. `2.2` TRAINER TOWER is worth nine maps and is where to start.
 * A way in reports only the shortest chain, so an upper-bound edge can hide a real one.
 * `Bag.PocketCapacity` was counted across the whole bag — fixed at 190 tests ago, but it shipped.
 * The purse is modelled and the payout table has never been located. The PRICES are read (208).
