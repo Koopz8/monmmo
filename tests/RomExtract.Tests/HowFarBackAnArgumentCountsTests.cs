@@ -87,6 +87,28 @@ public sealed class HowFarBackAnArgumentCountsTests
     }
 
     /// <summary>
+    /// <b>Two values in one slot: the LAST one wins, end to end.</b> There is a fixture for this
+    /// on <c>ArgumentOf</c>, and it builds the call by hand — so the order <c>Before</c> hands
+    /// them back in was reachable only through a path no test took, and reversing it passed
+    /// everything.
+    /// </summary>
+    [Fact]
+    public void TheLastValueInASlotWinsThroughTheWholeRead()
+    {
+        var image = new byte[0x1000];
+
+        List<byte> script = [.. Puts(3), .. Puts(9), .. Calls(), End];
+
+        script.CopyTo(image, 0x200);
+
+        SpecialCall call = Assert.Single(
+            SpecialCalls.In(new Rom(image), "1.0", "person", Rom.BaseAddress + 0x200));
+
+        Assert.Equal([(Slot, 3), (Slot, 9)], call.Arguments);
+        Assert.Equal(9, WhatTheArgumentPicks.ArgumentOf(call));
+    }
+
+    /// <summary>
     /// <b>And the boundary is exact.</b> A value <c>n</c> commands in front of a call is found at
     /// a window of <c>n</c> and not at <c>n - 1</c>. The sweep in 294's table has the window as
     /// its axis, so an off-by-one there shifts every row — and an off-by-one passed every other
