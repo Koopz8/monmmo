@@ -6575,6 +6575,37 @@ public static class Program
             Console.WriteLine(
                 $"        of those {these.Count}, {wet.Count} can only be read from WATER"
                 + (wet.Count == 0 ? "" : ": " + string.Join(", ", wet)));
+
+            // AND WHETHER THE GROUND IN FRONT OF THEM IS FENCED OFF (287). 283 left the ten on
+            // CINNABAR ISLAND as a shape it did not read. 287 measured that 352 of that map's
+            // 438 walkable squares are ground the widest run never stands on, and this is the
+            // join: a wall the run never got to, in front of ground the run never got to.
+            HashSet<(string, GridPosition)> everStood =
+            [
+                .. everyRun.SelectMany(r => r.Played.StoodOn.Select(t => (t.MapId, t.Square))),
+            ];
+
+            int fenced = these.Count(u =>
+                world.Find(u.MapId) is { } m
+                && m.Signs.FirstOrDefault(sign => sign.Square == u.Square) is { } sign
+                && Readable(sign).Any(sq => m.ToGrid(surfing: true).IsWalkable(sq))
+                && !Readable(sign).Any(sq => everStood.Contains((u.MapId, sq))));
+
+            Console.WriteLine(
+                $"        and {fenced} of the {these.Count} stand in front of ground that is"
+                + " WALKABLE and that no run ever stands on — a pocket (287), not a wall");
+
+            static IEnumerable<GridPosition> Readable(MapSign sign) =>
+                sign.MustBeReadFrom is { } only
+                    ? [only]
+                    :
+                    [
+                        sign.Square,
+                        sign.Square with { Y = sign.Square.Y - 1 },
+                        sign.Square with { Y = sign.Square.Y + 1 },
+                        sign.Square with { X = sign.Square.X - 1 },
+                        sign.Square with { X = sign.Square.X + 1 },
+                    ];
         }
 
         Console.WriteLine(
@@ -8154,22 +8185,36 @@ public static class Program
         Console.WriteLine();
 
         var rows = new List<(string Name, int Stood, int Maps, int Stuck)>();
+        var reachedBy = new Dictionary<string, IReadOnlyCollection<string>>();
+        var stoodBy = new Dictionary<string, HashSet<(string, GridPosition)>>();
 
-        foreach ((string name, int[]? moves, bool people, bool surf, bool lifts, bool boat, bool old) in new[]
+        // The nine rooms whose every exit is the runtime sentinel, read off the warp lists with
+        // nothing walked. 265 got into three of them and said the other six are "entered by a
+        // script", so `--through-scripted-doors` would walk into them. 287 ran it.
+        IReadOnlyList<string> sentinelRooms =
+        [
+            .. world.Maps.Where(m => m.Warps.Count > 0 && m.Warps.All(w => w.IsDynamic))
+                .Select(m => m.Id)
+                .Order(StringComparer.Ordinal),
+        ];
+
+        foreach ((string name, int[]? moves, bool people, bool surf, bool lifts, bool boat, bool old, bool scripted) in new[]
         {
-            ("no move, nobody stepping aside", (int[]?)null, false, false, false, false, false),
-            ("with moves, through people", field, true, false, false, false, false),
-            ("with moves, through people, surfing", field, true, true, false, false, false),
-            ("with moves, through people, surfing, RIDING THE LIFTS (MODELLED)", field, true, true, true, false, false),
-            ("+ the boat (MODELLED) — the only setting that reaches WATER PATH", field, true, true, true, true, false),
-            ("CONTROL: the same run, ONE NEIGHBOUR PER SIDE (the rule before 285)", field, true, true, true, true, true),
+            ("no move, nobody stepping aside", (int[]?)null, false, false, false, false, false, false),
+            ("with moves, through people", field, true, false, false, false, false, false),
+            ("with moves, through people, surfing", field, true, true, false, false, false, false),
+            ("with moves, through people, surfing, RIDING THE LIFTS (MODELLED)", field, true, true, true, false, false, false),
+            ("+ the boat (MODELLED) — the only setting that reaches WATER PATH", field, true, true, true, true, false, false),
+            ("CONTROL: the same run, ONE NEIGHBOUR PER SIDE (the rule before 285)", field, true, true, true, true, true, false),
+            ("+ THE SCRIPTED DOORS (287) — the doors that are on no square", field, true, true, true, true, false, true),
         })
         {
             var steps = new List<AStepTaken>();
 
             Reach reach = WorldWalker.Walk(
                 world, first.Id, moves, throughPeople: people, surfing: surf, steps: steps,
-                ridingTheBoat: boat, ridingTheLifts: lifts, firstOnEachSide: old);
+                ridingTheBoat: boat, ridingTheLifts: lifts, firstOnEachSide: old,
+                throughScriptedDoors: scripted);
 
             var stood = reach.Stood.Select(s => new Somewhere(s.MapId, s.Square)).ToList();
 
@@ -8177,6 +8222,8 @@ public static class Program
                 stood, steps.Select(s => (s.From, s.To)), reach.Start);
 
             rows.Add((name, stood.Count, reach.Maps.Count, stranded.Count));
+            reachedBy[name] = reach.Maps;
+            stoodBy[name] = [.. reach.Stood.Select(t => (t.MapId, t.Square))];
 
             Console.WriteLine($"    {name}");
             Console.WriteLine(
@@ -8275,6 +8322,114 @@ public static class Program
             "285's FIX — every neighbour on a side, not the first",
             "CONTROL: the same run, ONE NEIGHBOUR PER SIDE (the rule before 285)",
             "+ the boat (MODELLED) — the only setting that reaches WATER PATH");
+
+        Difference(
+            "THE SCRIPTED DOORS (265's last owed item, measured at 287)",
+            "+ the boat (MODELLED) — the only setting that reaches WATER PATH",
+            "+ THE SCRIPTED DOORS (287) — the doors that are on no square");
+
+        // AND HOW MUCH OF WHAT IT REACHED IT NEVER STOOD ON (287). The cable club below is one
+        // instance of this and the population is the finding: a map can be reached and still
+        // hold ground nothing walks to, which is 282's rule one level further down again.
+        {
+            (string name, _, _, _) = rows[^1];
+
+            IReadOnlyList<APocket> pockets = WhatTheWalkFencedOff.In(
+                world, stoodBy[name], [.. reachedBy[name]], surfing: true);
+
+            Console.WriteLine();
+            Console.WriteLine(
+                $"    WHAT THE WIDEST RUN REACHED AND NEVER STOOD ON — {pockets.Count} of the"
+                + $" {reachedBy[name].Count} map(s) it reaches hold walkable ground it never got"
+                + $" to, {pockets.Sum(p => p.Fenced)} square(s) in all");
+
+            foreach (APocket pocket in pockets.Take(10))
+            {
+                Console.WriteLine(
+                    $"      {pocket.MapId,-8} {world.Find(pocket.MapId)?.Name ?? "?",-20}"
+                    + $" {pocket.Fenced,5} of {pocket.Walkable,5} walkable");
+            }
+
+            // AND THE ONE THAT REPEATS. Nineteen maps with the same pocket is a building rather
+            // than nineteen accidents, and a count of maps cannot say that — the shape can.
+            foreach (var same in pockets.GroupBy(p => (p.Walkable, p.Fenced))
+                         .Where(g => g.Count() > 2)
+                         .OrderByDescending(g => g.Count()))
+            {
+                Console.WriteLine(
+                    $"      {same.Count()} map(s) have the SAME pocket — {same.Key.Fenced} of"
+                    + $" {same.Key.Walkable} walkable: "
+                    + string.Join(", ", same.Take(6).Select(p => p.MapId))
+                    + (same.Count() > 6 ? ", ..." : ""));
+            }
+        }
+
+        // AND THE NINE ROOMS WITH NO WAY OUT, asked of every setting. 265 named six of them as
+        // "entered by a script"; the scripted-door lever is now a row above, so this either
+        // shows them or shows that the claim was never true.
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    THE {sentinelRooms.Count} ROOM(S) WHOSE EVERY EXIT IS THE RUNTIME SENTINEL, and"
+            + " which settings get into them (265, asked at 287):");
+
+        foreach (string room in sentinelRooms)
+        {
+            IReadOnlyList<string> gotIn =
+                [.. rows.Where(r => reachedBy[r.Name].Contains(room)).Select(r => r.Name)];
+
+            Console.WriteLine(
+                $"      {room,-8} {world.Find(room)?.Name ?? "?",-16} "
+                + (gotIn.Count == 0
+                    ? "NO SETTING gets in, the scripted doors included"
+                    : $"{gotIn.Count} of {rows.Count} setting(s), from \"{gotIn[0]}\" on"));
+
+            if (gotIn.Count > 0) continue;
+
+            // AND WHY NOT, which is where 265's claim was. Every warp in the world that names
+            // this room, and whether the widest run got to the map it is on and STOOD ON THE
+            // SQUARE. A door declared in the warp lists that no walk ever steps on is a door
+            // in the file and not a door in the world.
+            HashSet<(string, GridPosition)> stood = stoodBy[rows[^1].Name];
+            IReadOnlyCollection<string> got = reachedBy[rows[^1].Name];
+
+            List<(string From, GridPosition At)> doorsIn =
+            [
+                .. world.Maps.SelectMany(m => m.Warps
+                    .Where(w => w.TargetMapId == room)
+                    .Select(w => (From: m.Id, At: w.Square))),
+            ];
+
+            // AND WHETHER THE SQUARE CAN BE STOOD ON AT ALL, which separates "the walk did not
+            // go there" from "nobody can". Asked with the water open, like every other fact
+            // about the file in this command.
+            int walkable = doorsIn.Count(d =>
+                world.Find(d.From) is { } m && m.ToGrid(surfing: true).IsWalkable(d.At));
+
+            Console.WriteLine(
+                $"          {doorsIn.Count} warp(s) in the world name it, on"
+                + $" {doorsIn.Select(d => d.From).Distinct().Count()} map(s);"
+                + $" {doorsIn.Count(d => got.Contains(d.From))} of those are on a map the widest"
+                + $" run reaches, {walkable} of the square(s) can be stood on at all, and it stood"
+                + $" on {doorsIn.Count(d => stood.Contains((d.From, d.At)))}");
+
+            // AND THE POCKET. A square that is walkable, on a map the run walked, and never
+            // stood on — with people walked THROUGH — is fenced off inside its own map. The
+            // counter in a POKeMON CENTER is solid, and the cable club's door is behind it.
+            foreach ((string from, GridPosition at) in doorsIn.Take(3))
+            {
+                if (world.Find(from) is not { } m) continue;
+
+                CollisionGrid grid = m.ToGrid(surfing: true);
+
+                int open = Enumerable.Range(0, m.Width * m.Height)
+                    .Count(i => grid.IsWalkable(new GridPosition(i % m.Width, i / m.Width)));
+
+                Console.WriteLine(
+                    $"            {from} {m.Name} {at}: the map holds {open} walkable square(s)"
+                    + $" and the run stood on {stood.Count(t => t.Item1 == from)} of them, walking"
+                    + " THROUGH people — so the door is fenced off inside its own map");
+            }
+        }
 
         Console.WriteLine(
             "      one side in the whole world carries more than one neighbour and it is the"
