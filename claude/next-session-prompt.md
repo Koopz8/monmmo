@@ -709,6 +709,18 @@ Traps worth carrying:
     what names their own blocks is a literal in code, which the climb had said per site since 191.
     **Before believing a proximity test, ask what it would find if the thing were merely nearby.**
 
+113. **REACHING A MAP IS NOT STANDING ON THE MAP** (287). 282 said reaching a map is not
+    standing on a square; the level below that is a map the walk reaches and only part of which
+    it can stand on. **163 of the 405 maps the widest run reaches hold walkable ground it never
+    got to — 4019 squares** — and NINETEEN of them are the identical 12-of-86 pocket behind a
+    POKéMON CENTER counter, with seventeen more at 3-of-89 behind a shop counter. An identical
+    pocket on nineteen maps is a building; a count of maps cannot say that and the shape can.
+    **Whenever a walk "reaches" something, ask how much of it it stood on** — and count only
+    REACHED maps, or the biggest pocket in the game is every map nothing gets to (249).
+
+    It closed 283 on the way: **18 of the 18** signs filed as "reached the map, never got to that
+    wall" stand in front of walkable ground no run stands on. The whole bucket was pockets.
+
 112. **DECLARED BACK IS NOT WALKED BACK** (286). 265 asked the borders whether the far map
     declares a join back — 116, 114 do — and that is the LOOSE half of the pair 265 itself set up
     for the doors, where *names THIS door back* scored 920 and *comes back to this map at all*
@@ -970,8 +982,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-286-a-border-asked-at-the-square.md` first, then `285`, then `284`, then
-`283`, then `282`, then `281`, then `280`, then `279`, then `278`, then `277`, then `276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
+Read `claude/milestone-287-reached-and-never-stood-on.md` first, then `286`, then `285`, then
+`284`, then `283`, then `282`, then `281`, then `280`, then `279`, then `278`, then `277`, then `276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
 `250`, `249`, `248`, `247`, `246`, `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
@@ -1212,6 +1224,12 @@ And it prints the sampling band THREE ways, because three separate choices move 
 visible from the number: hash order, FILE order (275), and SCATTERED rather than in runs (277). The
 maps' own at groups of 114 goes 0.163..0.425 (hash) to 0.156..0.703 (file order, runs) to
 **0.068..0.185** (file order, scattered).
+
+`--the-way-back` has SEVEN rows since 287 — the scripted-door lever is the last, worth 0/0/0 —
+and prints **what the widest run reached and never stood on**: 163 of 405 maps, 4019 squares, with
+the repeated pockets grouped (19 x 12-of-86 is the POKéMON CENTER counter, 17 x 3-of-89 the shops).
+It also names which of the nine sentinel rooms each setting gets into, and for the ones nothing
+enters, how many warps name them and how many of those squares the run stood on.
 
 `--the-way-back` also asks the BORDERS AT THE SQUARE since 286 — 2646 crossings, 2596 round-trip,
 50 do not and 0 of those 50 are walkable (976 of the 2646 are) — and prints the two sides' declared
@@ -1746,6 +1764,9 @@ BUT THE RUN ALSO TAKES FLAGS BACK: 164 ever on at the floor against the 160 it s
     36 for two milestones, and the "puzzle nothing solves" was a walker fault). The 18 are TEN on 12.0 CINNABAR
     ISLAND in five adjacent PAIRS, 3 on 10.9, 2 on 14.2, and one each on 1.60 and 35.1 — and
     **0 of the 18 needs a swimmer** (asked again with the water shut; one of the six runs surfs)
+    — and **18 of the 18 stand in front of walkable ground no run ever stands on** (287). The
+    whole bucket is POCKETS, not walls: CINNABAR ISLAND is 352 of its 438 walkable squares fenced
+    off, and the "five adjacent pairs" are shopfronts on the wrong side of a fence. CLOSED
   A WIDE SIGN OR A WIDE WALK (283): 1.114 0x08163F5A's 154 reads in one run are **22 records on
     one map x 7 passes** — both, and neither alone. 59 of the 327 blocks any run reads are shared
     by more than one record, and no run reads a block more than once per square per pass
@@ -2182,8 +2203,12 @@ still work.**
     that names a sentinel room is a door out of it. Worth **0 maps, +180 squares and 46 squares
     that could not get back and now can**, which is 46 of the 48 265 reported. The two left are
     FUCHSIA's ledge pocket.
-  * **The other six sentinel rooms** — `0.0`-`0.4` and `2.11` TRAINER TOWER — are entered by a
-    script, so `--through-scripted-doors` is the setting that would walk into them. Not run.
+  * ~~**The other six sentinel rooms**~~ **DONE AT 287, and the premise was wrong.** The
+    scripted-door lever is worth **0 maps, 0 squares, 0 un-stranded**, and not one of the fifteen
+    scripted doors names a sentinel room. `2.11` TRAINER TOWER is reached at 3 of 7 settings by
+    the BOAT. `0.0`, `0.2` and `0.3` are named by no warp in the world; `0.1` and `0.4` are named
+    by nineteen each, every square walkable and on a reached map, and the walk stands on **none**
+    — they are in the twelve-square pocket behind every POKéMON CENTER counter (trap 113).
   * ~~**The two one-way borders.**~~ **DONE AT 286** — a walker crossing north from `3.50` or
     `3.51` comes back onto `3.49` THREE ISLE PORT, and **no walker can**: the square is not
     walkable at any setting with the water open. Both are 1x1 maps. The square-level test found a
