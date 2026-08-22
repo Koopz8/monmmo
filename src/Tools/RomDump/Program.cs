@@ -10658,6 +10658,94 @@ public static class Program
             + (selectors.Count == 0 ? "none" : string.Join(", ", selectors.Select(r => $"0x{r:X4}"))));
 
         WriteWhatACopyIntoASlotIsWorth(rom, library, all);
+
+        WriteHowFarPastACallToLook(rom, library, all);
+
+        WriteOneQuestionThreeReadings(rom, library);
+    }
+
+    /// <summary>
+    /// The FORWARD window, swept (298) — 294's question asked of the other half.
+    /// </summary>
+    /// <remarks>
+    /// 294 swept the backward half and it never plateaued, which made 292's headline a property of
+    /// a constant. This one plateaus at THREE, and the selector count — the thing 291-297 rest on
+    /// — is flat from a window of ONE to a window of four thousand. So the forward distance
+    /// decided nothing, and the reading takes <c>NoLimit</c>: what bounds it is the barrier list,
+    /// contiguity, and the answer being overwritten, all of them read off the script.
+    /// </remarks>
+    private static void WriteHowFarPastACallToLook(
+        Rom rom, MapLibrary library, IReadOnlyList<SpecialCall> atNoLimit)
+    {
+        Console.WriteLine();
+        Console.WriteLine(
+            "  HOW FAR PAST A CALL TO LOOK (298) — the forward half of the same window, which 294"
+            + " swept the backward half of and 295 replaced with two READ rules. Everything this");
+        Console.WriteLine(
+            "  project says about what an answer is COMPARED AGAINST is bounded by it, and nothing"
+            + " had asked. Unlike the backward half, IT PLATEAUS:");
+        Console.WriteLine();
+        Console.WriteLine(
+            "      forward   places compared   compares   routines   selectors   branch places");
+
+        foreach (int forward in new[] { 1, 2, 3, 4, 6, 8, 12, 16, 24, 96, 4096 })
+        {
+            IReadOnlyList<SpecialCall> calls = SpecialCalls.All(rom, library, SpecialCalls.NoLimit, forward);
+
+            List<SpecialCall> compared = [.. calls.Where(c => c.Compared.Count > 0)];
+
+            Console.WriteLine(
+                $"      {forward,7}   {compared.Select(c => c.At).Distinct().Count(),15}"
+                + $"   {calls.Sum(c => c.Compared.Count),8}"
+                + $"   {compared.Select(c => c.Routine).Distinct().Count(),8}"
+                + $"   {WhatTheArgumentPicks.Selectors(calls).Count,9}"
+                + $"   {calls.Where(c => c.Branches.Count > 0).Select(c => c.At).Distinct().Count(),13}"
+                + (forward == SpecialCalls.Window ? "   <- what 291-297 were measured at" : ""));
+        }
+
+        Console.WriteLine(
+            $"      {"none",7}   {atNoLimit.Where(c => c.Compared.Count > 0).Select(c => c.At).Distinct().Count(),15}"
+            + $"   {atNoLimit.Sum(c => c.Compared.Count),8}"
+            + $"   {atNoLimit.Where(c => c.Compared.Count > 0).Select(c => c.Routine).Distinct().Count(),8}"
+            + $"   {WhatTheArgumentPicks.Selectors(atNoLimit).Count,9}"
+            + $"   {atNoLimit.Where(c => c.Branches.Count > 0).Select(c => c.At).Distinct().Count(),13}"
+            + "   <- what it takes now, and the distance is gone");
+    }
+
+    /// <summary>
+    /// One question, three readings of it (298).
+    /// </summary>
+    private static void WriteOneQuestionThreeReadings(Rom rom, MapLibrary library)
+    {
+        Console.WriteLine();
+        Console.WriteLine(
+            "  ONE QUESTION, THREE READINGS OF IT (298) — \"the run of commands before a call\" was"
+            + " asked in three places in this repository, each with its own Window = 4 and its own");
+        Console.WriteLine(
+            "  barriers. 295 and 296 replaced the distance in SpecialCalls with rules read off the"
+            + " script and the other two were never touched, so this command printed 37 routines");
+        Console.WriteLine(
+            "  handed a value in one section and named 44 in the column below it. They are the"
+            + " shared reading now; the readings they replaced are kept so the size of it is here:");
+        Console.WriteLine();
+        Console.WriteLine(
+            "      the reading that was there                           places   agree   it said more   the rules did");
+
+        foreach (HowTwoReadingsDiffer row in OneQuestionThreeReadings.Backwards(rom, library))
+            Console.WriteLine(
+                $"      {row.What,-51}   {row.Places,6}   {row.Agree,5}   {row.CrudeSaysMore,12}"
+                + $"   {row.ReadSaysMore,13}");
+
+        (int credited, int across) = OneQuestionThreeReadings.TheErrorBar(rom, library);
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    AND THE COLUMN THIS CANNOT READ: {across} of the {credited} places credited with a value have"
+            + " a call or a branch standing between the value and the call. 214 made a plain");
+        Console.WriteLine(
+            "    `call` a barrier in the ANSWER scan because the block it jumps into can answer;"
+            + " the ARGUMENT scan has no such barrier and a called block can write a slot the same");
+        Console.WriteLine("    way. Printed beside the count it is sure of rather than left out (47).");
     }
 
     /// <summary>

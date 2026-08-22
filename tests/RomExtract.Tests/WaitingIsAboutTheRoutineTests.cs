@@ -134,12 +134,21 @@ public sealed class WaitingIsAboutTheRoutineTests
     private static ScriptCommand Message(int at) => new(at, 0x67, [0, 0, 0, 0]);
 
     /// <summary>
-    /// THE DISCRIMINATION: only the unbroken run of setvars touching the call. A
-    /// <c>setvar 0x8004</c> with a message between it and the call is a variable that happens to
-    /// be nearby, and crediting it hands the routine an argument it was never given.
+    /// <b>NOTHING BETWEEN A VALUE AND A CALL CLEARS THE SLOT (298).</b> This asserted the opposite
+    /// until 298 — <em>only the unbroken run of setvars touching the call</em>, on the stated
+    /// grounds that a <c>setvar 0x8004</c> with something in between is a variable that happens to
+    /// be nearby. It is not: nothing here empties a variable, and 295 and 296 replaced that rule
+    /// with two read off the script — the value belongs to the first call after it, and a slot
+    /// something else READ is spent.
+    /// <para>
+    /// The cartridge settles it. <c>2.1</c> at <c>0x1C510D</c> is
+    /// <c>setvar 0x8004, 1 ; setvar 0x8005, 2 ; copyvar 0x8006, 0x4003 ; special 0x0194</c> — the
+    /// old rule stopped dead at the <c>copyvar</c> and reported a call handed nothing, three
+    /// commands after it was handed a one. Thirteen places in the game are that shape.
+    /// </para>
     /// </summary>
     [Fact]
-    public void OnlyTheRunOfSetvarsTouchingTheCallIsTheArgument()
+    public void SomethingInTheWayThatDoesNotTouchTheSlotDoesNotClearIt()
     {
         ScriptCommand[] touching =
         [
@@ -148,12 +157,37 @@ public sealed class WaitingIsAboutTheRoutineTests
 
         Assert.Equal(9, WhatIsWaitedFor.SelectorBefore(touching, 2));
 
-        ScriptCommand[] broken =
+        ScriptCommand[] across =
         [
             SetVar(0x100, 0x8004, 9), Message(0x105), SetVar(0x10A, 0x8005, 1), Special(0x10F, 0x194),
         ];
 
-        Assert.Equal(WhatIsWaitedFor.NoSelector, WhatIsWaitedFor.SelectorBefore(broken, 3));
+        Assert.Equal(9, WhatIsWaitedFor.SelectorBefore(across, 3));
+
+        // And the reading it replaced, kept so the size of the correction stays measurable:
+        // it stops at the message and reports the call as handed nothing.
+        Assert.Equal(9, WhatIsWaitedFor.TheCrudeReading(touching, 2));
+        Assert.Equal(WhatIsWaitedFor.NoSelector, WhatIsWaitedFor.TheCrudeReading(across, 3));
+    }
+
+    /// <summary>
+    /// <b>And a slot something else READ in between IS spent</b> — the rule that replaced the one
+    /// above, reachable through this caller as well as through <c>SpecialCalls</c>. Without it the
+    /// looser walk would credit values the old rule was right to refuse, which is the direction
+    /// the change had to be checked in.
+    /// </summary>
+    [Fact]
+    public void ASlotSomethingElseReadInBetweenIsStillSpent()
+    {
+        // setvar 0x8004, 9 ; copyvar 0x4001, 0x8004 ; special — the copy takes the value.
+        ScriptCommand[] spent =
+        [
+            SetVar(0x100, 0x8004, 9),
+            new(0x105, 0x19, [0x01, 0x40, 0x04, 0x80]),
+            Special(0x10A, 0x194),
+        ];
+
+        Assert.Equal(WhatIsWaitedFor.NoSelector, WhatIsWaitedFor.SelectorBefore(spent, 2));
     }
 
     /// <summary>

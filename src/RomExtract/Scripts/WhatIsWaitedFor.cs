@@ -94,9 +94,27 @@ public static class WhatIsWaitedFor
     /// with the ones that pass nought, which is a different thing said a different way.
     /// </para>
     /// </remarks>
-    public static int SelectorBefore(IReadOnlyList<ScriptCommand> block, int index)
+    public static int SelectorBefore(IReadOnlyList<ScriptCommand> block, int index) =>
+        SpecialCalls.ArgumentsBefore(block, index)
+            .Where(a => a.Slot == FirstArgument)
+            .Select(a => (int?)a.Value)
+            .LastOrDefault() ?? NoSelector;
+
+    /// <summary>
+    /// The reading this had until 298 — the unbroken run of <c>setvar</c>s touching the call, four
+    /// commands at most — kept so the correction is printed beside the corrected number.
+    /// </summary>
+    /// <remarks>
+    /// Its own doc said it was the <em>same rule <see cref="SpecialContracts"/> uses to count
+    /// arguments</em>, and it was not: that one checked contiguity and skipped over what it did
+    /// not recognise, this one checked no contiguity at all and stopped at it. <b>Two claims of
+    /// sameness over three different rules</b> — which is 224 exactly, and what made it findable
+    /// was asking all three of the same 936 places.
+    /// </remarks>
+    public static int TheCrudeReading(
+        IReadOnlyList<ScriptCommand> block, int index, int window = Window)
     {
-        for (int i = index - 1; i >= 0 && i >= index - Window; i--)
+        for (int i = index - 1; i >= 0 && i >= index - window; i--)
         {
             if (block[i].Code != SetVar || block[i].Arguments.Length < 4) break;
 

@@ -78,13 +78,17 @@ public static class SpecialCalls
     public const int LastArgument = 0x800F;
 
     /// <summary>
-    /// How many commands AFTER a call count as "around" it.
+    /// The distance the forward half used to stop at, kept as the setting every number in 291-297
+    /// was measured at and as the row the sweep marks (298).
     /// <para>
-    /// <b>Four, and it still bounds the forward half only (295).</b> 294 swept the backward half
-    /// and found it never plateaued, so 292's "44 of 178" was a property of this constant. The
-    /// backward half is bounded by two rules read off the script instead — contiguity, and the
-    /// previous call — and under those it converges at twelve and stops moving, so
-    /// <see cref="NoLimit"/> is what <see cref="Before"/> now takes by default.
+    /// <b>It is not a knob and never was.</b> 294 swept the backward half and it never plateaued;
+    /// swept, the forward half plateaus at THREE — places compared 437, routines 48 and selectors
+    /// 1 are flat from there to a window of four thousand, and the selector count is flat from a
+    /// window of ONE. The forward half was already bounded by rules read off the script (the
+    /// <see cref="Answering"/> barrier, contiguity, and the answer being overwritten), so the
+    /// distance decided nothing — and a number that has to be chosen is a number that gets quoted
+    /// as though it were measured. <see cref="After"/> takes <see cref="NoLimit"/> now, which is
+    /// what 295 did for the other half.
     /// </para>
     /// </summary>
     public const int Window = 4;
@@ -180,7 +184,7 @@ public static class SpecialCalls
                     commands[i].Offset,
                     code,
                     0x800D,
-                    Before(commands, i),
+                    ArgumentsBefore(commands, i),
                     After(commands, i, 0x800D),
                     Forks(commands, i, 0x800D)));
             }
@@ -220,7 +224,7 @@ public static class SpecialCalls
 
                 calls.Add(new SpecialCall(
                     mapId, what, commands[i].Offset, code, 0x800D,
-                    Before(commands, i), After(commands, i, 0x800D), forks));
+                    ArgumentsBefore(commands, i), After(commands, i, 0x800D), forks));
             }
         }
 
@@ -573,12 +577,13 @@ public static class SpecialCalls
     }
 
 
-    public static List<SpecialCall> All(Rom rom, MapLibrary library, int window = NoLimit)
+    public static List<SpecialCall> All(
+        Rom rom, MapLibrary library, int window = NoLimit, int forward = NoLimit)
     {
         var found = new List<SpecialCall>();
 
         foreach ((string mapId, string what, uint address) in library.EveryScript())
-            found.AddRange(In(rom, mapId, what, address, window));
+            found.AddRange(In(rom, mapId, what, address, window, forward));
 
         return found;
     }
@@ -598,7 +603,8 @@ public static class SpecialCalls
     /// </para>
     /// </summary>
     public static List<SpecialCall> In(
-        Rom rom, string mapId, string what, uint address, int window = NoLimit)
+        Rom rom, string mapId, string what, uint address, int window = NoLimit,
+        int forward = NoLimit)
     {
         var found = new List<SpecialCall>();
 
@@ -625,8 +631,8 @@ public static class SpecialCalls
                 command.Offset,
                 routine,
                 command.Code == SpecialVar ? command.Word() : null,
-                Before(commands, i, window),
-                After(commands, i, answer),
+                ArgumentsBefore(commands, i, window),
+                After(commands, i, answer, forward),
                 Forks(commands, i, answer)));
         }
 
@@ -654,8 +660,8 @@ public static class SpecialCalls
     /// hands over the S.S. TICKET a few lines later.
     /// </para>
     /// </summary>
-    private static List<(int, int)> Before(
-        List<ScriptCommand> commands, int at, int window = NoLimit)
+    public static List<(int Slot, int Value)> ArgumentsBefore(
+        IReadOnlyList<ScriptCommand> commands, int at, int window = NoLimit)
     {
         var arguments = new List<(int, int)>();
 
@@ -704,7 +710,7 @@ public static class SpecialCalls
     /// it.
     /// </returns>
     public static IEnumerable<(ScriptCommand Command, IReadOnlySet<int> Taken)> Around(
-        List<ScriptCommand> commands, int at, int step, int window = NoLimit)
+        IReadOnlyList<ScriptCommand> commands, int at, int step, int window = NoLimit)
     {
         // SLOTS SOMETHING ELSE ALREADY TOOK (296).
         //
@@ -767,14 +773,15 @@ public static class SpecialCalls
     /// </para>
     /// </summary>
     public static IReadOnlyList<(int Value, byte Condition)> WhatIsComparedAfter(
-        List<ScriptCommand> commands, int at, int answer = 0x800D) =>
-        [.. After(commands, at, answer)];
+        List<ScriptCommand> commands, int at, int answer = 0x800D, int forward = NoLimit) =>
+        [.. After(commands, at, answer, forward)];
 
-    private static List<(int, byte)> After(List<ScriptCommand> commands, int at, int answer)
+    private static List<(int, byte)> After(
+        List<ScriptCommand> commands, int at, int answer, int forward = NoLimit)
     {
         var compared = new List<(int, byte)>();
 
-        for (int i = at + 1; i < commands.Count && i <= at + Window; i++)
+        for (int i = at + 1; i < commands.Count && i - at <= forward; i++)
         {
             if (!Adjacent(commands[i - 1], commands[i])) break;
 

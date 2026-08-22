@@ -268,15 +268,32 @@ public static class SpecialContracts
     /// <summary>
     /// How many argument slots are written immediately before the call.
     /// <para>
-    /// Only the run touching the call. A setvar four commands earlier with a message in
-    /// between is a variable that happens to be nearby.
+    /// <b>This was a second copy of <see cref="SpecialCalls.ArgumentsBefore"/> and it was four
+    /// milestones behind it</b> (298). It walked four commands back with contiguity and nothing
+    /// else — no stop at the previous call (295), no slot something nearer had already spent
+    /// (296), and a distance where those two rules belong. So <c>--routines</c> printed 44
+    /// routines as handed a value in the column below and <b>37</b> in the section above it, in
+    /// one output, and nothing compared them: 220's fault — <em>a rule fixed in one arm and left
+    /// standing in the other</em> — in the arm the prompt's own warning is written about.
+    /// </para>
+    /// <para>
+    /// It is the shared reading now. <see cref="TheCrudeReading"/> keeps the old one so the size
+    /// of the correction stays in the output rather than in a commit message.
     /// </para>
     /// </summary>
-    private static int Arguments(List<ScriptCommand> commands, int at)
+    private static int Arguments(IReadOnlyList<ScriptCommand> commands, int at) =>
+        SpecialCalls.ArgumentsBefore(commands, at).Count;
+
+    /// <summary>
+    /// The reading this had until 298 — four commands back, contiguous, no barrier — kept so the
+    /// correction can be printed beside the corrected number rather than asserted (25, 253).
+    /// </summary>
+    public static int TheCrudeReading(
+        IReadOnlyList<ScriptCommand> commands, int at, int window = Window)
     {
         var handed = 0;
 
-        for (int i = at - 1; i >= 0 && i >= at - Window; i--)
+        for (int i = at - 1; i >= 0 && i >= at - window; i--)
         {
             if (!Adjacent(commands[i], commands[i + 1])) break;
             if (commands[i].Code != SetVar) continue;
