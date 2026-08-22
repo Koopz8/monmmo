@@ -709,6 +709,21 @@ Traps worth carrying:
     what names their own blocks is a literal in code, which the climb had said per site since 191.
     **Before believing a proximity test, ask what it would find if the thing were merely nearby.**
 
+116. **THE SAME STRIDE IS NOT THE SAME READING** (290). Every operand sweep in this project
+    steps in HALFWORDS (244). `0x82` is a byte then a word, so its word starts at byte ONE — and
+    the aligned reading takes bytes 0 and 1 together, gets `0x0F01` for a 15, and reports nought.
+    Nought is what 238's standing guess predicted, so the wrong reading agreed with the file and
+    nothing about the output looked wrong. **A wrong reading that confirms the standing guess is
+    the hardest kind to catch.** 238 wrote the diagnosis itself — *the same width is not the same
+    reading* — and the stride is the other half of that sentence.
+
+    The reading: **`0x82`'s word is a MOVE ID.** Seven values, seven named moves (ICE BEAM, IRON
+    TAIL, THUNDERBOLT, SHADOW BALL, FLAMETHROWER in one run of five that all hand over to one
+    block; CUT and ROCK SMASH in two of the three obstacle scripts). The floor 238 asked for: of
+    **32 operand positions** inside the three scripts that ask who knows a move, `0x82 arg1` is the
+    ONLY one that ever names that script's own move — 2 of 2, two different moves, one in 355 each.
+    STRENGTH's script has no `0x82` at all.
+
 115. **A BREAK'S KILL COUNT IS WORTH WHAT ITS FAILURES ARE** (289). A break predicted six and
     killed seven; the seventh was a socket test in the server, which does not call the class being
     broken and passes on a clean tree. Its budget for one message was 30 seconds, the suite is ~28
@@ -1010,8 +1025,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-289-what-a-map-is-made-of.md` first, then `288`, then `287`, then `286`,
-then `285`, then `284`, then `283`, then `282`, then `281`, then `280`, then `279`, then `278`, then `277`, then `276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
+Read `claude/milestone-290-a-word-that-names-a-move.md` first, then `289`, then `288`, then `287`,
+then `286`, then `285`, then `284`, then `283`, then `282`, then `281`, then `280`, then `279`, then `278`, then `277`, then `276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
 `250`, `249`, `248`, `247`, `246`, `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
@@ -1944,7 +1959,13 @@ neither is NAMED: what they take is read, what they do is still a guess
 0x9D's first byte is an INDEX: 9 byte positions in 5 runs, every run 0,1,2 from nought, one in 3^9
 0x7F is 0 at all 3 of its places and 0x82 is 1 at all 7 — both UNANSWERABLE, not yes (238)
 0x82's word is 7 distinct across 7 places, none a variable; two of them are CUT's and ROCK
-  SMASH's own move ids (15, 249) — two of two is not a column, do not build on it
+  SMASH's own move ids (15, 249) — ~~two of two is not a column, do not build on it~~
+  **IT IS A COLUMN (290): the word is a MOVE ID.** All seven are named moves — 58 ICE BEAM, 231
+  IRON TAIL, 85 THUNDERBOLT, 247 SHADOW BALL, 53 FLAMETHROWER in one run of five that all hand
+  over to 0x0816CF09, plus CUT and ROCK SMASH. The floor: of 32 operand positions inside the
+  THREE scripts that ask who knows a move (200 objects on 3 addresses — 224), 0x82 arg1 is the
+  only one that ever names that script's own move, 2 of 2. STRENGTH's script holds no 0x82.
+  What the command DOES with the move is still not read
 9 routines only the map's own script list asks, 11 only what it runs on arrival — 224's twenty
 0x0A7 is one place in the whole game, unbranched, the line before the eight fan questions
 0x5C trainerbattle is 794 reads at 729 places and --fights says 729 — two readings agreeing
@@ -2264,8 +2285,9 @@ still work.**
    bucket — 17 of 359 at the widest, 10 of 344 at the floor — and 437 is `--routines`' count of
    every branching byte position in the file, a different denominator. The next cheap reads are **`0x194`'s nineteen doors** on TRAINER TOWER
    (236), some of which `--entries` may now see since 237 admitted the argument band, and
-   **`0x82`'s seven words** — 58, 231, 85, 247, 53 in one run of five, and 15 and 249 in the CUT
-   and ROCK SMASH blocks (238). `--read-from` and `--slots` make both one command each. The
+   ~~**`0x82`'s seven words**~~ **DONE AT 290 — the word is a move id.** What is left of the
+   cheap reads is **`0x194`'s nineteen doors** on TRAINER TOWER (236): 31 of its 34 places set
+   0x8004 first, to 18 different values, all on 2.1/2.2/2.10, and the one wait is on 0x8004=2. The
    history for reference:
    230 did the floor-row bisect (answer: milestone **199**, one commit, +3 at all six settings,
    announced in its own commit message) and then found the bigger thing: that block, and two
