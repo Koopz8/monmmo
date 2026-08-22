@@ -281,7 +281,7 @@ public static class SpecialContracts
     /// of the correction stays in the output rather than in a commit message.
     /// </para>
     /// </summary>
-    private static int Arguments(IReadOnlyList<ScriptCommand> commands, int at) =>
+    public static int Arguments(IReadOnlyList<ScriptCommand> commands, int at) =>
         SpecialCalls.ArgumentsBefore(commands, at).Count;
 
     /// <summary>

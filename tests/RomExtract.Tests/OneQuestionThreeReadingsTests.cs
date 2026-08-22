@@ -60,7 +60,13 @@ public sealed class OneQuestionThreeReadingsTests
 
         // What each replaced reading said about the very same four commands.
         Assert.Equal(2, SpecialContracts.TheCrudeReading(run, 3));
+
         Assert.Equal(WhatIsWaitedFor.NoSelector, WhatIsWaitedFor.TheCrudeReading(run, 3));
+
+        // NOTE the contract reading is NOT asserted here: on this run it walks past the copyvar
+        // and counts both values, so it agrees with the rules and this fixture cannot see it.
+        // It is asserted on the run below, where the two disagree — a fixture built on the shape
+        // where two readings agree cannot tell them apart (fixture-lie 5, and 297 sprang it too).
 
         // And what they say now, which is one answer rather than three.
         Assert.Equal(1, WhatIsWaitedFor.SelectorBefore(run, 3));
@@ -95,6 +101,61 @@ public sealed class OneQuestionThreeReadingsTests
 
         Assert.Equal(1, SpecialContracts.TheCrudeReading(spent, 2));
         Assert.Empty(SpecialCalls.ArgumentsBefore(spent, 2));
+
+        // And THIS is where the contract reading is pinned to the shared one. It lives inside a
+        // sweep that needs a whole cartridge, so without an assertion here the only guard on it
+        // would be one no fixture can reach — this repository's most repeated structural fault
+        // (219, 221, 222, 223).
+        Assert.Equal(0, SpecialContracts.Arguments(spent, 2));
+        Assert.NotEqual(SpecialContracts.TheCrudeReading(spent, 2), SpecialContracts.Arguments(spent, 2));
+    }
+
+    /// <summary>
+    /// <b>THE FORWARD HALF HAS NO DISTANCE EITHER (298).</b> It stopped four commands past a call
+    /// and nothing had asked whether four was enough — every sentence this project has written
+    /// about what an answer is COMPARED AGAINST was bounded by it. Swept, it plateaus at three,
+    /// so the distance was deciding nothing and is gone; what bounds the walk is the barrier list
+    /// and contiguity, both read off the script.
+    /// <para>
+    /// The compare here is <b>six</b> commands past the call with nothing that answers in between,
+    /// which is outside the old window and inside no window at all now. Nothing in the suite
+    /// reached that axis before this: every other fixture puts its compare next to the call.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ACompareFarPastACallIsStillItsCompare()
+    {
+        var image = new byte[0x1000];
+
+        List<byte> script =
+        [
+            0x25, 0x94, 0x01,                                       // special 0x194
+            0x67, 0, 0, 0, 0,                                       // five ordinary commands
+            0x67, 0, 0, 0, 0,
+            0x67, 0, 0, 0, 0,
+            0x67, 0, 0, 0, 0,
+            0x67, 0, 0, 0, 0,
+            0x21, 0x0D, 0x80, 0x07, 0x00,                           // compare 0x800D, 7
+            0x02,
+        ];
+
+        script.CopyTo(image, 0x200);
+
+        var rom = new Rom(image);
+
+        SpecialCall call = Assert.Single(
+            SpecialCalls.In(rom, "1.0", "person", Rom.BaseAddress + 0x200));
+
+        Assert.Equal([(7, (byte)0xFF)], call.Compared);
+
+        // And at the setting 291-297 were measured at, it is not found at all — which is what
+        // makes the sweep a reading rather than a restatement.
+        Assert.Empty(
+            Assert.Single(
+                SpecialCalls.In(
+                    rom, "1.0", "person", Rom.BaseAddress + 0x200,
+                    SpecialCalls.NoLimit, SpecialCalls.Window))
+                .Compared);
     }
 
     /// <summary>
