@@ -709,6 +709,16 @@ Traps worth carrying:
     what names their own blocks is a literal in code, which the climb had said per site since 191.
     **Before believing a proximity test, ask what it would find if the thing were merely nearby.**
 
+112. **DECLARED BACK IS NOT WALKED BACK** (286). 265 asked the borders whether the far map
+    declares a join back — 116, 114 do — and that is the LOOSE half of the pair 265 itself set up
+    for the doors, where *names THIS door back* scored 920 and *comes back to this map at all*
+    scored 237 against a control of 233. Asked at the SQUARE: **2646 crossings, 2596 land back on
+    the square they left, 50 do not**, and 48 of the 50 are inside a join scored as declared back
+    (`3.11` SAFFRON declares `Down->3.24@12`, `3.24` ROUTE 6 declares `Up->3.11@0`, so walking
+    north out of ROUTE 6 puts you twelve squares west). **And nought of the 50 is walkable**,
+    against 976 of the 2646 overall — every broken join in this cartridge is behind a wall. When a
+    mirror test scores well, check that it is the tight version of the question.
+
 111. **A SIDE CAN CARRY MORE THAN ONE NEIGHBOUR** (285). `ConnectionOn` returned
     `Connections.FirstOrDefault(c => c.Side == side)`. Exactly ONE side in this cartridge carries
     more than one — `3.60` WATER PATH declares GREEN PATH at offset 0, SIX ISLAND at 40 and
@@ -747,8 +757,8 @@ Traps worth carrying:
 108. **REACHING A MAP IS NOT STANDING ON A SQUARE** (282). 249 asked how much of the buried list
     the walk goes over and answered it with `Reached`, which is a list of MAPS — so *the widest walk
     stands on 182 of 183* was the count of buried items whose map it got to. Asked of the squares:
-    **map reached 182, BESIDE 177, UNDERFOOT 137**. And the denominator is not 183 either — **142
-    sit on a square somebody could stand on**, so it is 137 of 142. The walk has always had the
+    **map reached 182, BESIDE 178, UNDERFOOT 138** (177/137 until 285). And the denominator is not
+    183 either — **142 sit on a square somebody could stand on**, so it is 138 of 142. The walk has always had the
     squares (`Reach.Stood`); they stopped at the edge of the `Attempt`. This is 265's shape one
     level down: reaching and returning were two facts and this project printed one, and here
     reaching and STANDING were two and it printed one.
@@ -960,8 +970,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-285-one-side-three-neighbours.md` first, then `284`, then `283`, then `282`,
-then `281`, then `280`, then `279`, then `278`, then `277`, then `276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
+Read `claude/milestone-286-a-border-asked-at-the-square.md` first, then `285`, then `284`, then
+`283`, then `282`, then `281`, then `280`, then `279`, then `278`, then `277`, then `276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
 `250`, `249`, `248`, `247`, `246`, `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
@@ -1081,7 +1091,7 @@ of 97 the records said could be over-read; and at 281 **242's own rule that a si
 SOLID**, which is true of all 97 that name a side and false of 85 of the 422 that name none — and
 the buried kind is walkable on 142 of 183, because a thing you dig up is in the ground; and at 282
 **249's own "the widest walk stands on 182 of 183", which is a count of MAPS reached** — asked of
-the squares it is 137, out of the 142 that can be stood on at all; and at 283 **every unread-sign
+the squares it is 138, out of the 142 that can be stood on at all; and at 283 **every unread-sign
 verdict in this project being a fact about ONE lever setting** — the floor leaves 204 unread and
 the union of the six leaves 55, so "the 191 that run at no setting" was a number no instrument here
 could have produced, and the sorting that produced it was still asking 242's five-square question of
@@ -1202,6 +1212,10 @@ And it prints the sampling band THREE ways, because three separate choices move 
 visible from the number: hash order, FILE order (275), and SCATTERED rather than in runs (277). The
 maps' own at groups of 114 goes 0.163..0.425 (hash) to 0.156..0.703 (file order, runs) to
 **0.068..0.185** (file order, scattered).
+
+`--the-way-back` also asks the BORDERS AT THE SQUARE since 286 — 2646 crossings, 2596 round-trip,
+50 do not and 0 of those 50 are walkable (976 of the 2646 are) — and prints the two sides' declared
+offsets, which is where the arithmetic is.
 
 `--the-way-back` is the second column (265, extended at 285): six settings now — the three walking
 ones, **RIDING THE LIFTS** (MODELLED: every door that names a sentinel room is a door out of it),
@@ -1349,7 +1363,7 @@ the same twelve both ways, nought either way — and all twelve are on `10.14`, 
 — which is BELOW the floor of 30.3 the base rate gives, printed beside it. The finding is the
 NEGATIVE: 9 items are asked for by a script, 3 of those are buried, and **NOUGHT is asked for AND
 has no other source**, so the run's total inability to dig costs it no reach at all. It also runs
-the six settings and prints how much the walk stands on: **UNDERFOOT on 137 of the 142 it could be at the widest — the 182 of 183 quoted since 249 is a
+the six settings and prints how much the walk stands on: **UNDERFOOT on 138 of the 142 it could be at the widest — the 182 of 183 quoted since 249 is a
 count of MAPS reached (282) — on 78 of 79 maps, and it collects none of them** — the one it never even stands on is `1.62 (35,5)`, an ELIXIR
 at index 33. **And "solid" hides no third meaning** (283): the collision field is two bits and
 only TWO of the four values occur in the whole world — 0 x110028, 1 x123713 — and all 41 buried
@@ -1691,8 +1705,8 @@ doors announce themselves in 0x4001 x63, 0x8008 x25, 0x8004 x23, 0x4002 x6 — T
 5 places guard a coin hand-over; every bound plus its own gift is 10000; 0 chains in the reversal
 2 places sell coins for money at 20 each — READ; 3 price lists, 15 rows, all READ
 the floor is asked for money in ONE place and it is the coin counter; 8 at --say-yes and above
-the widest run sets 213 of the 322 gating flags — 109 gates it never opens; 199 at the floor
-  (264: it was 212/110)
+the widest run sets 216 of the 322 gating flags — 106 gates it never opens; 199 at the floor
+  (264: it was 212/110; 213/109 until 285 opened seven more maps)
   the floor's own gating count went 121 -> 123 at 239 and the widest run's 212/110 did not move
 BUT THE RUN ALSO TAKES FLAGS BACK: 164 ever on at the floor against the 160 it stops with (240)
   4 / 6 / 4 / 10 / 9 / 6 taken back at the six settings; 3 of the floor's 4 are on at the start
@@ -1709,7 +1723,7 @@ BUT THE RUN ALSO TAKES FLAGS BACK: 164 ever on at the floor against the 160 it s
     **242's four-square rule is three squares too many for 97 signs** and 68 of them have another
     walkable neighbour. ADOPTED AT 280 — MapSign carries the kind, MustBeReadFrom names the square,
     and it costs 0 maps, 0 flags and 2 signs, measured against the loose run in the same process
-  315 of the 519 RUN at the floor (214 addresses, 79 maps); 463 at the widest (327, 134) — 242,
+  315 of the 519 RUN at the floor (214 addresses, 79 maps); 469 at the widest (333, 140) — 242,
     and 280, which took two off each end by making the walk obey the side the record names
     241 said 215 and 328: it keyed the read set on (map, ADDRESS) and a sign is a SQUARE. The
     address and map columns were right throughout. 224 for the THIRD time, this one self-inflicted
@@ -1722,8 +1736,9 @@ BUT THE RUN ALSO TAKES FLAGS BACK: 164 ever on at the floor against the 160 it s
     and nothing reads it yet. 0x9A (7 squares, 5 signs, 238x) and 0x20 (15, 4, 89x) DECLINED on 237's bar
   10.6 (4,1), the one sign nothing can stand beside (242): kind 0x00, own square 0x00 and SOLID,
     all four neighbours 0x00 and shut — not a sign board and not a collision reading of that kind
-  the 56 unread at the widest: 36 on maps it never reached, 19 walls on maps it walks, and
+  the 50 unread at the widest: 30 on maps it never reached, 19 walls on maps it walks, and
     EXACTLY ONE nothing could ever stand beside — 10.6 (4,1), 0x0816C153, same at every lever
+    (it was 56/36 until 285; the six it lost are the DOTTED HOLE's five and RUIN VALLEY's one)
   AT NO SETTING (283, `--the-floor`): the floor leaves 204 and the union of the six leaves **49**
     — 30 reach / 18 walls / 1 the file. The prompt's "191 that run at no setting" was never a
     number this project could produce. The 30 are 26 on 1.96 MT. EMBER, 3 on 1.62 and 1 on 1.102
@@ -1751,8 +1766,8 @@ those 109 are 35 no opener, 30 never run, 16 never picked up, 15 obstacles, 8 pa
 of the 295: 272 hold one, 10 hold 5-16, 8 hold 2-4, 3 hold more than 16, 2 hold nothing;
   21 hold MORE THAN ONE, 175 objects between them — "62 gates hold 240 people" is WITHDRAWN
 the 12 STRENGTH boulders are SEAFOAM and VICTORY ROAD, and their flags split THREE ways
-860 places call 75 routines the widest run cannot answer; 276 of the places, across 58 routines,
-  have an answer nothing branches on — RE-RUN AT 264, it was 766/63/186
+869 places call 76 routines the widest run cannot answer; 279 of the places, across 59 routines,
+  have an answer nothing branches on — RE-RUN AT 264, it was 766/63/186; 860/75/276/58 until 285
 --routines: 1118 branching sites at 437 byte positions in the file; 48 routines are branched on
 0x188's one place comes to nothing
 0x4059 has one writer and NO readers anywhere; 0x4055 has 21 readers against a floor of 0
@@ -2169,9 +2184,10 @@ still work.**
     FUCHSIA's ledge pocket.
   * **The other six sentinel rooms** — `0.0`-`0.4` and `2.11` TRAINER TOWER — are entered by a
     script, so `--through-scripted-doors` is the setting that would walk into them. Not run.
-  * **The two one-way borders.** `3.50` and `3.51` both name `3.14` THREE ISLAND upward and it
-    names `3.49` downward. **Reachable since 285** — the boat rows reach them now — so this is
-    measurable for the first time and was not measured there.
+  * ~~**The two one-way borders.**~~ **DONE AT 286** — a walker crossing north from `3.50` or
+    `3.51` comes back onto `3.49` THREE ISLE PORT, and **no walker can**: the square is not
+    walkable at any setting with the water open. Both are 1x1 maps. The square-level test found a
+    bigger one on the way (trap 112).
   * ~~**The floor table has six rows and one column.**~~ **DONE AT 285** — `Attempt` carries
     `CannotGetBack` and `TheLastStepIn`, and `--the-floor` prints the second column for all six.
     46 / 48 / 48 / 284 / 284 / 284, and the 284 is ICEFALL CAVE's ledges plus the lift cabins.
