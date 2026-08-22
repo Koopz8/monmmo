@@ -100,7 +100,7 @@ public static class WhoTheCompareBelongsTo
     /// maps hang off anything.
     /// </summary>
     public static List<ACompareAcross> In(
-        Rom rom, MapLibrary library, int forward = SpecialContracts.Window)
+        Rom rom, MapLibrary library, int forward = SpecialContracts.NoLimit)
     {
         var found = new List<ACompareAcross>();
 
@@ -170,7 +170,7 @@ public static class WhoTheCompareBelongsTo
     /// </summary>
     public static (InTheWay Was, uint Called)? WhatStoodInTheWay(
         Rom rom, List<ScriptCommand> commands, int at, IReadOnlySet<int>? answering = null,
-        int forward = SpecialContracts.Window)
+        int forward = SpecialContracts.NoLimit)
     {
         for (int i = at + 1; i < commands.Count && i - at <= forward; i++)
         {

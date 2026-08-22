@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-298`, **3474 tests green** — re-read at 297, where the old line still said `claude-314` and
+`claude-299`, **3476 tests green** — re-read at 297, where the old line still said `claude-314` and
 3274 (trap 14, in the sentence that tells you where you are standing).
 
 Standing rules — do not break these:
@@ -710,6 +710,23 @@ Traps worth carrying:
     what names their own blocks is a literal in code, which the climb had said per site since 191.
     **Before believing a proximity test, ask what it would find if the thing were merely nearby.**
 
+127. **SWEEPING A WINDOW MEANS SWEEPING WHAT IT DECIDES** (299). 298 swept the forward window and
+    reported it plateaus at three. Every column 298 printed does. **The one it did not print does
+    not**: `SpecialContracts`' across-a-barrier count — this project's does-not-know column for the
+    whole routine reading — runs **148 at four to 621 at ninety-six**, and `--routines`' own
+    sentence *"148 sites across 27 routines... 81 with no clean compare... 19 branched on ONLY that
+    way"* was four numbers about a constant. It is **454 / 39 / 140 / 25** now.
+
+    What replaced the distance is **a compare belongs to the LAST answerer before it** — 295's rule
+    read the other way. Past the FIRST answerer a compare is the does-not-know bucket; past the
+    SECOND it belongs to a call two removes away. Worth 621 -> 454 on its own; the rest was the
+    window. **And the cross-check is the SHAPE of what the window was cutting**: a chain
+    `compare 1 ; if ; compare 2 ; if ; compare 3 ; if` is six commands, so a window of four chops
+    it and what should fill in is truncated RUNS. Six routines gain a value, **four become a run
+    from one upwards where NONE was**, and `0x0EC`'s missing 2 fills its own gap. *"N compared
+    against a run from one upwards"* goes **0 -> 4**. A wider window finding more proves nothing;
+    finding more of the right SHAPE does.
+
 126. **A NUMBER DECLARED IN SIX PLACES IS SIX NUMBERS** (298). `grep -rn "const int Window"` finds
     **six** declarations of `4` in the script and sound readings. THREE of them are the same
     question — *the run of commands before a call* — and 295 and 296 replaced the distance in one
@@ -1151,8 +1168,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-298-one-question-three-readings-of-it.md` first, then `297`, then `296`,
-then `295`, then `294`,
+Read `claude/milestone-299-measuring-the-columns-that-plateau.md` first, then `298`, then `297`,
+then `296`, then `295`, then `294`,
 then `293`, then `292`, then `291`, then `290`, then `289`, then `288`, then `287`, then `286`,
 then `285`, then `284`, then `283`, then `282`, then `281`, then `280`, then `279`, then `278`, then `277`, then `276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
@@ -1351,7 +1368,11 @@ dotnet run -c Release --project src/Tools/RomDump -- firered.gba --the-control
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --the-ruler
 ```
 
-`--routines` ends with **HOW FAR PAST A CALL TO LOOK** (298) — the forward window swept, which
+`--routines` ends with **AND THE FORWARD WINDOW IN THE OTHER ARM** (299) — `SpecialContracts`'
+own forward window swept, where only BRANCHED ON is flat, with the `none` row and the cross-check
+underneath naming the six routines that gained a compared value and which four became runs.
+
+`--routines` also has **HOW FAR PAST A CALL TO LOOK** (298) — the forward window swept, which
 PLATEAUS at three where 294's backward one never did, with a `none` row showing the distance is
 gone — and **ONE QUESTION, THREE READINGS OF IT** (298): the two backward readings this repository
 had, asked of the same 936 places, disagreeing at 39 and 13 in opposite directions, with the
@@ -2140,8 +2161,11 @@ NEITHER list can support a count of dead conditions: 6 against 192, and 11 again
 178 routines called 4461 times at 936 byte positions — 936 was RIGHT and NOTHING PRINTED IT
   until 231; 118 of the 178 are called once per byte position and 60 are not
 the run's silence decides at 11 byte positions: 0x188 (1) and 0x0A3 (8), 0x0D5, 0x189
---routines: 148 sites have a compare past something, 81 with nothing else — 38 come back,
-   40 were somebody else's, 3 not said
+--routines: 454 sites have a compare past something, 140 with nothing else — 38 come back,
+   97 were somebody else's, 5 not said (299; it was 148 / 81 / 38 / 40 / 3 at a forward window of
+   four, and every one of those five was a number about the constant). THE 38 DID NOT MOVE —
+   widening added only sites where somebody else DID answer, which is the direction it had to move
+   in and a control the change could have failed
 callstd 0x05 and 0x00 ANSWER — 153 and 2 sites have nothing in front that could have instead
 5660 callstd/gotostd askings at 2791 places, of 9 numbers; the table is NOT found
 0x194 is 1066 calls at 34 places; 0x039 is 234 at 234; the worst is 0x0AB at 97 calls at ONE
