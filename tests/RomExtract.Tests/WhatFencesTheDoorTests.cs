@@ -250,6 +250,41 @@ public sealed class WhatFencesTheDoorTests
     }
 
     /// <summary>
+    /// <b>AND THE LIST OF WHO IS IN THE WAY IS THE WALK'S OWN.</b> The rule about who counts as a
+    /// wall — a tree nobody can shift, somebody rooted to a square, a ball on the floor that is
+    /// not a wall at all — lives in the walker, and a second copy of it here would be a second
+    /// walker to keep honest (223). So this walks a world and hands the walk's answer straight to
+    /// the reading, which is the seam that would otherwise be guarded nowhere.
+    /// </summary>
+    [Fact]
+    public void TheWalkersOwnAnswerIsWhatFencesTheDoor()
+    {
+        // A corridor with a door at the far end and somebody rooted in the middle of it.
+        MapObject rooted = new(9, 5, 3, 1, Direction.Down, MovementType: 0, IsTrainer: false);
+
+        MapData map = Corridor("1.0", new Warp(6, 1, 0, "1.0"));
+
+        var world = new WorldData([map with { Objects = [rooted] }]);
+
+        Reach walked = WorldWalker.Walk(world, "1.0");
+
+        Standing who = Assert.Single(walked.People);
+
+        Assert.Equal(new GridPosition(3, 1), who.Square);
+
+        ADoorFenced door = Assert.Single(
+            WhatFencesTheDoor.For(
+                world.Maps,
+                [("1.0", new GridPosition(6, 1))],
+                [.. walked.Stood.Select(s => (s.MapId, s.Square))],
+                surfing: false,
+                [.. walked.People.Select(p => (p.MapId, p.Square, p.LocalId))]));
+
+        Assert.Equal(WhatFences.SomebodyInTheWay, door.Fenced);
+        Assert.Equal([9], door.OpenedBy);
+    }
+
+    /// <summary>
     /// And a pocket landed in only from maps the run never reaches is 303's closure again rather
     /// than a reason of its own — the reading tells the two apart, because the door worth going to
     /// look at is the one whose pocket the run could be put down in and never is.
