@@ -211,6 +211,7 @@ public static class Program
         if (options.FieldEffects) WriteFieldEffects(rom);
         if (options.Namespaces) WriteNamespaces(rom);
         if (options.Buried) WriteBuried(rom);
+        if (options.TheSpecies) WriteWhatCarriesASpecies(rom);
         if (options.Dropped) WriteDropped(rom);
         if (options.Unread) WriteUnread(rom);
         if (options.Layers) WriteLayers(rom);
@@ -13739,6 +13740,147 @@ public static class Program
         if (all.Count > 30) Console.WriteLine($"    ... and {all.Count - 30} more");
     }
 
+    /// <summary>
+    /// The number three things carry (301).
+    /// </summary>
+    private static void WriteWhatCarriesASpecies(Rom rom)
+    {
+        MapLibrary library = MapLibrary.Open(rom);
+
+        List<SpeciesData> species = RomExtractor.Open(rom).ExtractSpecies();
+
+        // A PLACEHOLDER IS NOT A NAME, and it is not at the end either (264, 301). Indices 252 to
+        // 276 carry a single `?` in the middle of the table, so the named entries are a SET and
+        // not a span — asking `value <= 386` throws away index 410, which is named.
+        HashSet<int> named =
+        [
+            .. species.Select((s, i) => (Species: s, Index: i))
+                .Where(s => s.Species.Name.Length > 0 && !s.Species.Name.StartsWith('?'))
+                .Select(s => s.Index),
+        ];
+
+        string Name(int index) =>
+            index >= 0 && index < species.Count && species[index].Name.Length > 0
+                ? species[index].Name
+                : $"#{index}";
+
+        Console.WriteLine();
+        Console.WriteLine("THE NUMBER THREE THINGS CARRY");
+        Console.WriteLine();
+
+        (int inside, int total, int rank) = WhatCarriesASpecies.TheWeakFilter(rom, library, named);
+
+        Console.WriteLine(
+            $"  THE WEAK FILTER FIRST, because it is not the evidence: the species table names {named.Count}"
+            + $" of its {species.Count} entries — a SET, not a span — and {inside} of the {total} operand positions with"
+            + " eight or more");
+        Console.WriteLine(
+            $"  distinct values have EVERY one of them inside that span. 0x{WhatCarriesASpecies.TheCry:X2}"
+            + $" arg0 ranks {rank} of {total} on it. A number in the span is a fact about the SPAN (25).");
+
+        IReadOnlyList<(string Operand, int Agrees, int Occurs)> floor =
+            WhatCarriesASpecies.TheFloor(rom, library);
+
+        int blocks = floor.Count == 0 ? 0 : floor.Max(f => f.Occurs);
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  THE EVIDENCE IS THE AGREEMENT (290's floor, one command over). Of the {floor.Count}"
+            + $" operand position(s) that occur in the block(s) holding a 0x{WhatCarriesASpecies.TheCommand:X2},");
+        Console.WriteLine(
+            $"  {floor.Count(f => f.Agrees > 0)} ever name the number it names:");
+        Console.WriteLine();
+        Console.WriteLine("      operand      agrees in   occurs in");
+
+        foreach ((string operand, int agrees, int occurs) in floor.Where(f => f.Agrees > 0))
+            Console.WriteLine(
+                $"      {operand,-10}   {agrees,9}   {occurs,9}"
+                + (operand == EveryOperand.NameOf(WhatCarriesASpecies.TheCry, 0)
+                    ? "   <- every one"
+                    : "   <- a setvar's VALUE, which is the other half of this reading"));
+
+        List<WhereASpeciesIsNamed> found = [.. WhatCarriesASpecies.In(rom, library, named)];
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  0x{WhatCarriesASpecies.TheCommand:X2} IS `species, a byte, 00 00` — its places, and"
+            + " what else in the block names the same number:");
+        Console.WriteLine();
+        Console.WriteLine("      map       species                 the byte   also named by");
+
+        foreach (WhereASpeciesIsNamed row in found.Where(f => f.ByTheCommand is not null)
+                     .OrderBy(f => f.ByTheCommand!.At))
+            Console.WriteLine(
+                $"      {row.MapId,-8}  {row.Species,4} {Name(row.Species),-14}  {row.ByTheCommand!.Second,8}   "
+                + (row.ByTheCry is null ? "" : $"0x{WhatCarriesASpecies.TheCry:X2} ")
+                + (row.Slot == 0 ? "" : $"setvar 0x{row.Slot:X4}"));
+
+        List<WhereASpeciesIsNamed> inASlot = [.. found.Where(f => f.Slot != 0)];
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  AND THE FINDING: {inASlot.Count} block(s) put the species in an ARGUMENT SLOT, and"
+            + $" the slot is 0x{(inASlot.Count == 0 ? 0 : inASlot[0].Slot):X4} in"
+            + $" {inASlot.Count(f => f.Slot == (inASlot.Count == 0 ? 0 : inASlot[0].Slot))} of them.");
+        Console.WriteLine();
+        Console.WriteLine("      map       species                 slot     beside it   0xB6?   routines called after");
+
+        foreach (WhereASpeciesIsNamed row in inASlot.OrderBy(f => f.MapId))
+            Console.WriteLine(
+                $"      {row.MapId,-8}  {row.Species,4} {Name(row.Species),-14}  0x{row.Slot:X4}"
+                + $"   {row.InTheSlot,9}   {(row.ByTheCommand is null ? "NO " : "yes"),5}   "
+                + string.Join(",", row.Routines.Select(r => $"0x{r:X4}")));
+
+        List<WhereASpeciesIsNamed> noCommand = [.. inASlot.Where(f => f.ByTheCommand is null)];
+
+        IReadOnlyList<SpecialCall> everyCall = SpecialCalls.All(rom, library);
+
+        int[] theirs =
+        [
+            .. noCommand.SelectMany(f => f.Routines).Distinct().Order(),
+        ];
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    {noCommand.Count} of them have NO 0x{WhatCarriesASpecies.TheCommand:X2} at all, and"
+            + " between them they call "
+            + string.Join(", ", theirs.Select(
+                r => $"0x{r:X4} at {everyCall.Where(c => c.Routine == r).Select(c => c.At).Distinct().Count()} place(s) in the game"))
+            + ".");
+        Console.WriteLine(
+            "    The species goes in one slot");
+        Console.WriteLine(
+            "    and the same 30..70 byte goes in the next one up — the two fields"
+            + $" 0x{WhatCarriesASpecies.TheCommand:X2} carries, in the two slots beside each other.");
+
+        int[] levels =
+        [
+            .. EncounterExtractor.Extract(rom)
+                .SelectMany(m => new[] { m.Land, m.Water, m.RockSmash, m.Fishing })
+                .Where(t => t is not null)
+                .SelectMany(t => t!.Slots)
+                .SelectMany(s => new[] { s.MinLevel, s.MaxLevel }),
+        ];
+
+        int[] bytes =
+        [
+            .. found.Where(f => f.ByTheCommand is not null).Select(f => f.ByTheCommand!.Second)
+                .Concat(inASlot.Where(f => f.InTheSlot > 0).Select(f => f.InTheSlot))
+                .Distinct().Order(),
+        ];
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    WHAT THAT BYTE IS, IS NOT READ. It takes {bytes.Length} value(s) — "
+            + string.Join(", ", bytes) + " — one per species, which is a column and not an index.");
+        Console.WriteLine(
+            $"    The one band this cartridge already affords is the wild tables' own levels,"
+            + $" {levels.Min()}..{levels.Max()} over {levels.Length} slot value(s) read for another");
+        Console.WriteLine(
+            "    question entirely. The byte lies inside it, and lying inside a band that wide is"
+            + " not a name — 226's wall, where what a command TAKES is read and what it DOES is not.");
+    }
+
     /// <summary>Whether a buried sign's own square is one somebody could stand on.</summary>
     private static bool Standable(MapLibrary library, Buried one)
     {
@@ -21008,6 +21150,9 @@ public static class Program
 
         public bool Buried { get; private init; }
 
+        /// <summary>The number 0xB6, 0xA1 and one argument slot all carry (301).</summary>
+        public bool TheSpecies { get; private init; }
+
         /// <summary>What the four event-list readers throw away before anything sees it.</summary>
         public bool Dropped { get; private init; }
 
@@ -21261,6 +21406,7 @@ public static class Program
             bool signs = false;
             bool namespaces = false;
             var buried = false;
+            var theSpecies = false;
             var droppedEvents = false;
             var unreadBytes = false;
             var layers = false;
@@ -21551,6 +21697,9 @@ public static class Program
                         break;
                     case "--buried":
                         buried = true;
+                        break;
+                    case "--the-species":
+                        theSpecies = true;
                         break;
                     case "--dropped":
                         droppedEvents = true;
@@ -21938,6 +22087,7 @@ public static class Program
                 Signs = signs,
                 Namespaces = namespaces,
                 Buried = buried,
+                TheSpecies = theSpecies,
                 Dropped = droppedEvents,
                 Unread = unreadBytes,
                 Layers = layers,
