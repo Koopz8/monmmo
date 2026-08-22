@@ -94,6 +94,80 @@ public sealed class WhyTheDoorIsNotTakenTests
     }
 
     /// <summary>
+    /// <b>THE SEA IS A WAY TO A DOOR</b>, and asking walkability of the walking grid alone gets
+    /// this door wrong. Water is solid to somebody on foot and walkable to somebody on it, so a
+    /// door whose one open neighbour is water has NOUGHT neighbours in one grid and one in the
+    /// other — and <c>--surf</c> stands on that very square.
+    /// <para>
+    /// One door on this cartridge is shaped like that: <c>1.4 (33,15) -> 1.5</c>, nought on foot
+    /// and one from the water. Calling it walled in would file a square the run can float up to
+    /// as one nothing could ever reach.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TheSeaIsAWayToADoor()
+    {
+        // Every square solid except (1,0), which is water — solid on foot, walkable surfing.
+        var collision = new byte[16];
+
+        for (var i = 0; i < collision.Length; i++) collision[i] = 1;
+
+        var behaviours = new byte[16];
+        behaviours[1] = MetatileBehaviour.Water;
+
+        var map = new MapData("1.0", "1.0", 4, 4, collision)
+        {
+            Warps = [new Warp(1, 1, 0, "9.9")],
+            Behaviours = behaviours,
+        };
+
+        // The run floated onto the water square beside the door and never stepped through it.
+        List<(string, GridPosition)> stood = [("1.0", new GridPosition(1, 0))];
+
+        ADoorNotTaken door = Only(map, stood, "9.9");
+
+        Assert.Equal(0, door.WalkableNeighbours);
+        Assert.Equal(1, door.NeighboursFromTheWater);
+        Assert.True(door.OnlyFromTheWater);
+
+        // NOT walled in — something reached it, and it is standing there.
+        Assert.Equal(WhyNotTaken.StoodBeside, door.Why);
+    }
+
+    /// <summary>
+    /// <b>AND THAT IS WHY THE ORDER OF THE LAST TWO IS NOT A RULE.</b> A break swapping walled-in
+    /// and stood-beside came back green, and the reason is not a fixture gap: <b>the two cannot
+    /// both hold.</b> The walker only ever stands where a grid calls it walkable, and the surfing
+    /// grid is the union of the two grids — so a neighbour that was stood on is a neighbour the
+    /// walled-in count can see, and nought neighbours means nothing was stood beside.
+    /// <para>
+    /// The shape I tried first — two doors side by side in a wall — cannot exist either, and for a
+    /// second reason: <c>ToGrid</c> opens every warp square, so <b>a door beside a door always has
+    /// a walkable neighbour</b>. This fixture carries that fact rather than the guard it was meant
+    /// to be (57, 64: a green break sometimes means the rule was a spelling).
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ADoorBesideADoorIsNeverWalledIn()
+    {
+        var collision = new byte[16];
+
+        for (var i = 0; i < collision.Length; i++) collision[i] = 1;
+
+        var map = new MapData("1.0", "1.0", 4, 4, collision)
+        {
+            Warps = [new Warp(1, 1, 0, "9.9"), new Warp(2, 1, 0, "9.9")],
+        };
+
+        IReadOnlyList<ADoorNotTaken> read = WhyTheDoorIsNotTaken.Into(
+            [map], new HashSet<string> { "1.0" }, [], new HashSet<string> { "9.9" });
+
+        // Each of the two counts the other, on a map where every square is solid.
+        Assert.All(read, d => Assert.Equal(1, d.WalkableNeighbours));
+        Assert.All(read, d => Assert.Equal(WhyNotTaken.NeverGotNear, d.Why));
+    }
+
+    /// <summary>
     /// Standing BESIDE a door is its own answer and not the same as standing on it. On this
     /// cartridge it never happens — 0 of 1182 — which is why it has to be a bucket rather than
     /// being folded into either neighbour: an empty bucket is a fact about the population it was

@@ -8,7 +8,7 @@ public enum WhyNotTaken
 
     /// <summary>
     /// It stood beside the square and not on it. <b>On this cartridge this never happens</b> —
-    /// the walker steps onto a door's own square, so 0 of 1156 doors to reached maps are this.
+    /// the walker steps onto a door's own square, so 0 of 1182 doors to reached maps are this.
     /// </summary>
     StoodBeside,
 
@@ -16,20 +16,31 @@ public enum WhyNotTaken
     NeverGotNear,
 
     /// <summary>
-    /// No square beside it is walkable at all, so nothing could ever reach it — a fact about the
-    /// file rather than about the run (242's <c>10.6 (4,1)</c> is the sign version of this).
+    /// No square beside it is walkable at all — <b>on foot or from the water</b> — so nothing could
+    /// ever reach it. A fact about the file rather than about the run (242's <c>10.6 (4,1)</c> is
+    /// the sign version of this).
     /// </summary>
     WalledIn,
 }
 
 /// <summary>One door out of reached ground into a map the run never reaches.</summary>
+/// <param name="WalkableNeighbours">Squares beside it somebody on foot could stand on.</param>
+/// <param name="NeighboursFromTheWater">
+/// The same count with the sea open. Never smaller than <see cref="WalkableNeighbours"/>, because
+/// surfing opens water and leaves the land exactly as it was.
+/// </param>
 public sealed record ADoorNotTaken(
     string From,
     string To,
     GridPosition Square,
     bool IsDoor,
     int WalkableNeighbours,
-    WhyNotTaken Why);
+    int NeighboursFromTheWater,
+    WhyNotTaken Why)
+{
+    /// <summary>True when the only way beside this door is by sea.</summary>
+    public bool OnlyFromTheWater => WalkableNeighbours == 0 && NeighboursFromTheWater > 0;
+}
 
 /// <summary>
 /// Why the doors into the unreached maps are not taken (304).
@@ -47,8 +58,14 @@ public sealed record ADoorNotTaken(
 /// </para>
 /// <para>
 /// <b>The calibration row is what makes that a reading.</b> Asked of every warp from a reached map
-/// to a REACHED map, the run stood on <b>1132 of 1156</b> — 97.9% — so the instrument can say yes
+/// to a REACHED map, the run stood on <b>1165 of 1182</b> — 98.6% — so the instrument can say yes
 /// and does (68, 78).
+/// </para>
+/// <para>
+/// <b>And walled-in is asked of the surfing grid.</b> Water is solid on foot and walkable on the
+/// sea, so a door whose one open neighbour is water reads nought neighbours in the walking grid —
+/// one door here is exactly that (<c>1.4 (33,15) -> 1.5</c>) and calling it unreachable would file
+/// a square the run floats up to as one nothing could ever reach.
 /// </para>
 /// </summary>
 public static class WhyTheDoorIsNotTaken
@@ -104,32 +121,38 @@ public static class WhyTheDoorIsNotTaken
     {
         var square = new GridPosition(warp.X, warp.Y);
 
-        CollisionGrid grid = map.ToGrid();
+        GridPosition[] beside =
+        [
+            new(warp.X + 1, warp.Y), new(warp.X - 1, warp.Y),
+            new(warp.X, warp.Y + 1), new(warp.X, warp.Y - 1),
+        ];
 
-        int neighbours = new[]
-            {
-                new GridPosition(warp.X + 1, warp.Y), new GridPosition(warp.X - 1, warp.Y),
-                new GridPosition(warp.X, warp.Y + 1), new GridPosition(warp.X, warp.Y - 1),
-            }
-            .Count(grid.IsWalkable);
+        int onFoot = beside.Count(map.ToGrid().IsWalkable);
+
+        // AND THE SEA IS A WAY TO A DOOR. Water is solid to somebody on foot and walkable to
+        // somebody on it, so a door whose only open neighbour is water has nought neighbours in
+        // one grid and one in the other — and the run reaches it, because --surf stands there.
+        int fromTheWater = beside.Count(map.ToGrid(surfing: true).IsWalkable);
 
         bool here = on.Contains((map.Id, warp.X, warp.Y));
+        bool stoodBeside = beside.Any(s => on.Contains((map.Id, s.X, s.Y)));
 
-        bool beside =
-            on.Contains((map.Id, warp.X + 1, warp.Y)) || on.Contains((map.Id, warp.X - 1, warp.Y)) ||
-            on.Contains((map.Id, warp.X, warp.Y + 1)) || on.Contains((map.Id, warp.X, warp.Y - 1));
-
-        // WALLED IN IS ABOUT THE FILE and is asked first, so a door nothing could ever reach is
-        // not filed as a run that did not get there (242, 281).
+        // WALLED IN IS ABOUT THE FILE and is asked before NEVER GOT NEAR, so a door nothing could
+        // ever reach is not filed as a run that did not get there (242, 281).
+        //
+        // Its order against STOOD BESIDE is a spelling and not a rule, and a break swapping the
+        // two is green on purpose: the walker only stands where a grid calls it walkable and the
+        // surfing grid is the union of both, so a neighbour that was stood on is one this count
+        // can see. Nought neighbours means nothing was stood beside. The fixtures carry that.
         WhyNotTaken why = here
             ? WhyNotTaken.StoodOnIt
-            : neighbours == 0
+            : fromTheWater == 0
                 ? WhyNotTaken.WalledIn
-                : beside
+                : stoodBeside
                     ? WhyNotTaken.StoodBeside
                     : WhyNotTaken.NeverGotNear;
 
         return new ADoorNotTaken(
-            map.Id, warp.TargetMapId, square, map.IsDoor(square), neighbours, why);
+            map.Id, warp.TargetMapId, square, map.IsDoor(square), onFoot, fromTheWater, why);
     }
 }

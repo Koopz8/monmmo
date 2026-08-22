@@ -6821,13 +6821,27 @@ public static class Program
                     ", ",
                     walled.Select(d => $"{d.From} ({d.Square.X},{d.Square.Y}) -> {d.To}")));
 
+        List<ADoorNotTaken> bySea = [.. known.Concat(into).Where(d => d.OnlyFromTheWater)];
+
+        // AND THE SEA IS A WAY TO A DOOR (304). Asking walkability of the walking grid alone calls
+        // a door whose one open neighbour is water WALLED IN, while --surf stands on that very
+        // square — a fact about the file read off the wrong grid.
+        Console.WriteLine(
+            $"    {bySea.Count} door(s) of the {known.Count + into.Count} have NO neighbour on foot"
+            + " and one from the water, so the walled-in count is asked of the surfing grid: "
+            + (bySea.Count == 0
+                ? "none here"
+                : string.Join(
+                    ", ", bySea.Take(4).Select(d => $"{d.From} ({d.Square.X},{d.Square.Y}) -> {d.To}"))));
+
         Console.WriteLine();
-        Console.WriteLine("      from     to        square      it is       walkable neighbours");
+        Console.WriteLine("      from     to        square      it is       neighbours on foot   from the water");
 
         foreach (ADoorNotTaken door in into.OrderBy(d => d.To).ThenBy(d => d.From).DistinctBy(d => (d.To, d.Square)))
             Console.WriteLine(
                 $"      {door.From,-8} {door.To,-8}  ({door.Square.X,3},{door.Square.Y,3})   "
-                + $"{(door.IsDoor ? "a door" : "walk-on"),-9}   {door.WalkableNeighbours,19}");
+                + $"{(door.IsDoor ? "a door" : "walk-on"),-9}   {door.WalkableNeighbours,18}"
+                + $"   {door.NeighboursFromTheWater,14}");
     }
 
     private static string Describe(WhyNotTaken why) => why switch
