@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-300`, **3481 tests green** — re-read at 297, where the old line still said `claude-314` and
+`claude-301`, **3487 tests green** — re-read at 297, where the old line still said `claude-314` and
 3274 (trap 14, in the sentence that tells you where you are standing).
 
 Standing rules — do not break these:
@@ -710,6 +710,19 @@ Traps worth carrying:
     what names their own blocks is a literal in code, which the climb had said per site since 191.
     **Before believing a proximity test, ask what it would find if the thing were merely nearby.**
 
+129. **A SPAN IS NOT A TABLE** (301). Testing "could this number be a species" against the COUNT of
+    named entries assumes the unnamed ones are at the END. They are not: 386 of the species table's
+    412 entries carry a name and the twenty-six that do not are in the MIDDLE — indices 252 to 276
+    are a single `?` apiece — so `value <= 386` threw away index **410**, which is named, and the
+    reading lost **one of the two places it exists to explain**. 264's rule asked of the INDEX
+    rather than of the count.
+
+    And the range is not the evidence anyway: **15 of the 102 operand positions in the map scan have
+    EVERY distinct value inside the named set**, and the one being read ranks eighteenth. The
+    evidence is 290's floor one command over — **of the 63 operand positions occurring in the ten
+    blocks that hold a `0xB6`, exactly TWO ever name the number it names**, and `0xA1 arg0` does it
+    10 of 10. The other is a `setvar`'s VALUE, and that is the finding.
+
 128. **WIDENING A WALK IS A CHANGE TO WHAT ELSE IT NOW REACHES** (300). 299 took the distance off
     `WhatStoodInTheWay` — **which has no contiguity check at all** — so the walk could run off the
     end of one script and name a thing in the way belonging to whatever block the reader
@@ -1183,8 +1196,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-300-the-negative-was-nought-both-times.md` first, then `299`, then `298`,
-then `297`, then `296`, then `295`, then `294`,
+Read `claude/milestone-301-the-number-three-things-carry.md` first, then `300`, then `299`,
+then `298`, then `297`, then `296`, then `295`, then `294`,
 then `293`, then `292`, then `291`, then `290`, then `289`, then `288`, then `287`, then `286`,
 then `285`, then `284`, then `283`, then `282`, then `281`, then `280`, then `279`, then `278`, then `277`, then `276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
@@ -1381,7 +1394,18 @@ dotnet run -c Release --project src/Tools/RomDump -- firered.gba --which-way
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --operands-everywhere
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --the-control
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --the-ruler
+dotnet run -c Release --project src/Tools/RomDump -- firered.gba --the-species
 ```
+
+`--the-species` is 301: the number `0xB6`, `0xA1` and one argument slot all carry. It prints the
+WEAK filter first (15 of 102 operand positions have every value inside the species table's named
+set, and `0xA1 arg0` ranks 18th) so the reader can see it is not the evidence; then 290's floor one
+command over — 2 of 63 operand positions in the ten `0xB6` blocks ever name the number it names,
+`0xA1 arg0` 10 of 10; then the six blocks that put the species in `0x8004`, six of six; then the
+two with no `0xB6`, which are the only two places in the game calling `special 0x01BB` and which
+put the same 30..70 byte in the slot beside it. **What that byte is, is NOT read** — the wild
+tables' own levels (2..67 over 4352 values) are the band, and lying inside a band that wide is not
+a name.
 
 **297-300 CLOSED A SEAM: not one distance in any of these readings is chosen here any more.**
 `SpecialCalls.Before` and its two copies, `SpecialCalls.After`, `SpecialContracts.ComparedAfter`
@@ -2260,6 +2284,15 @@ the 38 unnamed boundary sites ARE THE REVERSAL'S KIND ON A MODELLED CUT (273, wi
   a block of 11 real-SCRIPT groups holds none at or beyond 0.601 in 9 of 9, so the SITES' 0/11 and
   the SCRIPTS' rate never disagreed (276 thought they did, in runs)
   22 of the 38 are two or three commands long and three are runs of nop — 269's zero slide
+0xB6 IS `species, a byte, 00 00` (301): 10 byte positions, 8 species, the byte 30/34/50/70 one per
+  species. 0xA1's first word is the SAME species — 2 of 63 operand positions in those ten blocks
+  ever name it and 0xA1 arg0 does it 10 of 10; the other is 0x16 arg2 at 4 of 6
+6 blocks put a species in an ARGUMENT SLOT and the slot is 0x8004 6 of 6; the 2 with no 0xB6 are
+  2.38 NAVEL ROCK (249 LUGIA, 70) and 2.56 BIRTH ISLAND (410 DEOXYS, 30), the only two places in
+  the game calling special 0x01BB, and the byte is in the slot BESIDE the species. What the byte
+  IS is not read — the wild tables' levels span 2..67 and it lies inside, which is not a name
+8 routines are handed a value in MORE THAN ONE SLOT (301), not one: 0x0136 takes FOUR (0x8004-7 at
+  24 places on 1.120, 2.35, 2.38), 0x01BB four, 0x0173/0x018B/0x0194 three, three more two
 0x9C is dofieldeffect, named in ONE place since 233 and privately in EverywhereInTheImage since 191
 6 moves pair with 6 numbers: CUT 2, SURF 9, ROCK SMASH 37, STRENGTH 40, WATERFALL 43, DIVE 44
 the only repeated move (DIVE, twice) repeats its number — ONE agreement, not six
@@ -2496,9 +2529,10 @@ still work.**
   of the three is handed a value in any argument slot, so the 0x8004/0x8008 is not an argument to
   them.
 * ~~**The eleven routines handed an argument only outside `0x8004`**~~ **DONE AT 293** —
-  `--routines` lists them, and **nothing branches on any of the eleven**. `0x0138` is the only
-  routine handed values in TWO slots at once (`0x8005` and `0x8006`) and what that pair means is
-  unasked.
+  `--routines` lists them (it is EIGHT under the corrected rules), and **nothing branches on any of
+  them**. ~~`0x0138` is the only routine handed values in TWO slots at once~~ — **WRONG SINCE 295
+  AND CORRECTED AT 301**: `0x0138` is handed NOTHING under the read rules, and **8 routines take
+  more than one slot**, one of them (`0x0136`) taking FOUR. 49's trap, four milestones deep.
 * **What 296 left, and 297 answered one of.**
   * ~~**A `copyvar` into a slot is a WRITE this does not see.**~~ **MEASURED AT 297 and DECLINED**:
     26 places, 12 routines, and the same walk run FORWARD refuses all three kinds (0.50 / 1.33 /
