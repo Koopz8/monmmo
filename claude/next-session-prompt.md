@@ -709,6 +709,18 @@ Traps worth carrying:
     what names their own blocks is a literal in code, which the climb had said per site since 191.
     **Before believing a proximity test, ask what it would find if the thing were merely nearby.**
 
+117. **COUNT THE VALUES, NOT THE PLACES** (291). 236 counted `0x194`'s places and this prompt has
+    called them "nineteen doors" ever since. They are an INDEX: the values run **0..20 with 13, 14
+    and 15 never used**, and a contiguous run with holes in it is a table. What the argument
+    selects is readable even though what the routine does is not — at `0x8004 = 16` a nought means
+    *"This is a two-on-two battle"* and at `= 18` a one runs a `warp`, which is two unrelated
+    questions off one routine. Floor: **22 routines take more than one value in 0x8004 and ONE**
+    has the answer compared differently depending on which (the second hit, `0x17C`, differs only
+    between having an argument and not — a different claim wearing the same test's name).
+
+    And every row carries CALLS and PLACES separately: 1066 calls at 34 places, because the routine
+    inflation runs to 97x and "236 places" for 236 calls is 224's mistake in a new list.
+
 116. **THE SAME STRIDE IS NOT THE SAME READING** (290). Every operand sweep in this project
     steps in HALFWORDS (244). `0x82` is a byte then a word, so its word starts at byte ONE — and
     the aligned reading takes bytes 0 and 1 together, gets `0x0F01` for a 15, and reports nought.
@@ -1025,8 +1037,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-290-a-word-that-names-a-move.md` first, then `289`, then `288`, then `287`,
-then `286`, then `285`, then `284`, then `283`, then `282`, then `281`, then `280`, then `279`, then `278`, then `277`, then `276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
+Read `claude/milestone-291-the-nineteen-doors-are-an-index.md` first, then `290`, then `289`, then
+`288`, then `287`, then `286`, then `285`, then `284`, then `283`, then `282`, then `281`, then `280`, then `279`, then `278`, then `277`, then `276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
 `250`, `249`, `248`, `247`, `246`, `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
@@ -2014,6 +2026,10 @@ nought of the 98 follow a specialvar; every one of the 68 follows a plain specia
   and 68 of the 82 multi-place routines at NONE — expected under per-site sprinkling: 0.21
 0x194 is the only exception BY ROUTINE — and it is not one: 31 of its 34 places set 0x8004
   first, to 18 different values, all on TRAINER TOWER (2.1/2.2/2.10); the one wait is on 0x8004=2
+  **AND THE 18 VALUES ARE AN INDEX (291)**: they run 0..20 with 13, 14 and 15 never used. The
+  answer is compared at only FIVE of the nineteen arguments and against different things —
+  0/1 at 5 and 18, 0 at 16 and 17, 1 at 20 — so the value picks the question. 22 routines take
+  more than one value in 0x8004 and ONE has that property. `--special 0x194` prints it
 asked of (routine, 0x8004): 269 pairs, 95 in more than one place, and NOUGHT of the 95 are
   waited at some places and not others — chance at 7.3% a place would give 26.6 (236)
 25 of the 178 routines take a 0x8004 in the run before a call; 0x194/0x173/0x174 take 18/16/16
@@ -2285,9 +2301,10 @@ still work.**
    bucket — 17 of 359 at the widest, 10 of 344 at the floor — and 437 is `--routines`' count of
    every branching byte position in the file, a different denominator. The next cheap reads are **`0x194`'s nineteen doors** on TRAINER TOWER
    (236), some of which `--entries` may now see since 237 admitted the argument band, and
-   ~~**`0x82`'s seven words**~~ **DONE AT 290 — the word is a move id.** What is left of the
-   cheap reads is **`0x194`'s nineteen doors** on TRAINER TOWER (236): 31 of its 34 places set
-   0x8004 first, to 18 different values, all on 2.1/2.2/2.10, and the one wait is on 0x8004=2. The
+   ~~**`0x82`'s seven words**~~ **DONE AT 290 — the word is a move id.**
+   ~~**`0x194`'s nineteen doors**~~ **DONE AT 291 — they are an INDEX**, 0..20 with 13/14/15
+   unused, and the value picks which question the script asks of the answer. Both cheap reads
+   are closed. The
    history for reference:
    230 did the floor-row bisect (answer: milestone **199**, one commit, +3 at all six settings,
    announced in its own commit message) and then found the bigger thing: that block, and two
