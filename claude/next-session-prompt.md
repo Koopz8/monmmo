@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-297`, **3469 tests green** — re-read at 297, where the old line still said `claude-314` and
+`claude-298`, **3474 tests green** — re-read at 297, where the old line still said `claude-314` and
 3274 (trap 14, in the sentence that tells you where you are standing).
 
 Standing rules — do not break these:
@@ -710,6 +710,24 @@ Traps worth carrying:
     what names their own blocks is a literal in code, which the climb had said per site since 191.
     **Before believing a proximity test, ask what it would find if the thing were merely nearby.**
 
+126. **A NUMBER DECLARED IN SIX PLACES IS SIX NUMBERS** (298). `grep -rn "const int Window"` finds
+    **six** declarations of `4` in the script and sound readings. THREE of them are the same
+    question — *the run of commands before a call* — and 295 and 296 replaced the distance in one
+    and never touched the other two, so **`--routines` printed 37 routines handed a value in one
+    section and named 44 in the column below it, in one output**. Asked of the same 936 places the
+    two replaced readings disagree at **39** and **13** — and **in OPPOSITE directions**, which is
+    why comparing them to each other would have caught it and comparing either to nothing did not.
+    220's rule and 224's together, both of them standing in this file for seventy milestones.
+    Neither had a fixture that could reach it: one lived inside a whole-cartridge sweep.
+
+125. **THE FORWARD HALF PLATEAUS WHERE THE BACKWARD HALF NEVER DID** (298). 294 swept the backward
+    window and it climbed to twenty-four; 297 left the forward one owed as the cheapest thing left.
+    Swept: places compared, routines and branch places are flat from **three**, and the SELECTOR
+    count — what 291, 292, 293, 296 and 297 all rest on — is flat from a window of **ONE**. The
+    forward half was already bounded by rules read off the script, so the distance decided nothing.
+    It is `NoLimit` now and **nought lines of `--routines` change**. **A knob that moves nothing is
+    as much a reading as one that moves everything, and neither is knowable without the sweep.**
+
 123. **THE SAME WALK RUN FORWARD IS THE FLOOR UNDER THE WALK RUN BACK** (297). 296 named its own
     caveat — a value COPIED into a slot is invisible as an argument — and put no number on it.
     Measured: **26 places, 12 routines**, split three ways by the band the source word falls in.
@@ -1133,8 +1151,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-297-the-copy-is-commoner-behind-the-call.md` first, then `296`, then
-`295`, then `294`,
+Read `claude/milestone-298-one-question-three-readings-of-it.md` first, then `297`, then `296`,
+then `295`, then `294`,
 then `293`, then `292`, then `291`, then `290`, then `289`, then `288`, then `287`, then `286`,
 then `285`, then `284`, then `283`, then `282`, then `281`, then `280`, then `279`, then `278`, then `277`, then `276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
@@ -1333,7 +1351,13 @@ dotnet run -c Release --project src/Tools/RomDump -- firered.gba --the-control
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --the-ruler
 ```
 
-`--routines` ends with **WHAT A COPY INTO A SLOT IS WORTH** (297): 296's own caveat measured
+`--routines` ends with **HOW FAR PAST A CALL TO LOOK** (298) — the forward window swept, which
+PLATEAUS at three where 294's backward one never did, with a `none` row showing the distance is
+gone — and **ONE QUESTION, THREE READINGS OF IT** (298): the two backward readings this repository
+had, asked of the same 936 places, disagreeing at 39 and 13 in opposite directions, with the
+error-bar line saying 13 of the 244 credited places have a call between the value and the call.
+
+`--routines` also has **WHAT A COPY INTO A SLOT IS WORTH** (297): 296's own caveat measured
 against the same walk run FORWARD, with the plain `setvar` as the row whose answer is known
 (2.46) and the three copy kinds at 0.50, 1.33 and 0.29; all 26 places printed by BYTE POSITION
 with their record counts; then `0x403A` and the door-count ladder with its one-door pairs
@@ -2152,7 +2176,10 @@ asked of (routine, 0x8004): 269 pairs, 95 in more than one place, and NOUGHT of 
   the default is `NoLimit`, and widening can now REMOVE a routine as well as add one;
   33 in 0x8004 and **11 ONLY in another** — 0x8004 x33, 0x8005 x16, 0x8006 x7, 0x8007/0x8008/0x800F
   x1 each. The two numbers are different populations (a run takes one arm of every branch) and
-  neither corrects the other. **297 measured what a COPY into a slot would add — 26 places, 12
+  neither corrects the other. **298: the FORWARD window plateaus at three and is gone** (NoLimit),
+  and the same question was being read THREE ways — `--routines` said 37 in one section and named
+  44 in the column below, disagreeing at 39 and 13 places in opposite directions.
+  **297 measured what a COPY into a slot would add — 26 places, 12
   routines — and the floor refuses it**: the same walk run FORWARD scores the plain setvar at 2.46
   in front of a call for every one behind, and the three copy kinds at 0.50, 1.33 and 0.29. `--special` prints the slots before it reads one, and `--routines`
   lists all eleven (293) — **nothing branches on any of them**. Asked of every routine in every
@@ -2432,10 +2459,18 @@ still work.**
     0.29 against the plain setvar's 2.46). **37 / 29 / 8 stands.** The other half of that caveat —
     a copy's destination read as spending the slot — cannot be wrong, because a write kills an
     earlier setvar exactly as a read does.
-  * **The FORWARD window is still four and still chosen** (294, 295, 296, 297). Everything
-    "compared against" in 291-297 rests on it and it has never been swept. The backward half got
-    two READ rules; the forward half has a constant. **This is the cheapest owed thing left.**
-  * **`All`'s threading is still unguarded** (294). Every fixture goes through `In`.
+  * ~~**The FORWARD window is still four and still chosen.**~~ **SWEPT AT 298 and it PLATEAUS** —
+    flat from three, and the selector count flat from ONE. `NoLimit` now, and nought lines of
+    `--routines` change.
+  * **`All`'s threading is still unguarded** (294, 296, 297, 298). Every fixture goes through `In`.
+* **What 298 left.**
+  * **Four more copies of the run AFTER a call** — `SpecialContracts.ComparedAfter`,
+    `WhoTheCompareBelongsTo`, `DaycareLocator`, `SpecialCalls.After`. `DaycareLocator`'s cruder
+    barrier list is worth **nought** (936 of 936 agree); the other two are unmeasured.
+  * **`BattleMusicLocator.Window` and `Ferries.Nearby`** are the same 4 in another domain, unswept.
+  * **A `call` between a value and the call it is credited to** — 13 of 244, and closing it means
+    following a `call` one level in the ARGUMENT direction, which `--through-a-call` already does
+    in the answer direction.
 * **What 297 left.**
   * **What `special 0x0132` DOES with `0x403A`.** Compiled code — the sixth wall of that kind.
   * **Whether the value is the DOOR or the FLOOR.** `1.58`'s eleven values are its eleven doors'
@@ -2593,6 +2628,12 @@ Guards have come back green because **the fixture was more forgiving than the ca
    one function. The mixed fixture broke both, so a break that weakened the first was caught by
    the second and the first stayed untested and green. **A fixture for rule A has to satisfy
    rule B.**
+
+14. **The same fixture-lie twice in two milestones** (298). 297's door-cut fixture had every row
+   on a shape the two readings agree on; 298's first attempt pinned the contract argument count on
+   a run where the two readings agree — a `copyvar` between two `setvar`s, which the crude reading
+   walks past and counts. **When you pin a corrected reading against the one it replaced, pick the
+   input where they DISAGREE**, and check that they do before writing the assertion.
 
 13. **A fixture whose every ROW is a shape the two readings agree on** (297 — number 5 in a new
    place). A break swapping "cut on the DOORS" for "cut on the VALUES" came back GREEN against all
