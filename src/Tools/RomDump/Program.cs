@@ -6235,6 +6235,60 @@ public static class Program
         Console.WriteLine(
             "  the same width is not the same reading — 0x9D's byte counts and 0x82's is 1 at every"
             + " one of its places, and asking them together is how that gets missed");
+
+        WriteWhatElseNamesTheMove(rom);
+    }
+
+    /// <summary>
+    /// The floor 238 asked for and did not have: which operands name the move their own script is
+    /// about (290).
+    /// </summary>
+    private static void WriteWhatElseNamesTheMove(Rom rom)
+    {
+        MapLibrary library = MapLibrary.Open(rom);
+
+        List<uint> scripts = [.. library.All().SelectMany(EveryScriptOn).Select(s => s.Address)];
+
+        IReadOnlyList<NamesItsOwnMove> found = WhatElseNamesTheMove.In(rom, scripts);
+
+        List<MoveData> moves = MoveExtractor.Extract(rom);
+
+        Console.WriteLine();
+        Console.WriteLine(
+            "  AND THE FLOOR FOR 0x82's WORD (290). Seven values inside a 355-wide table is worth"
+            + " little — most operands in this game name small numbers. What is worth something is"
+            + " that the CUT script's 0x82 says CUT and the ROCK SMASH script's says ROCK SMASH."
+            + " Here is every operand inside a script that asks who knows a move, and how often"
+            + " its value IS that script's own move:");
+        Console.WriteLine();
+        Console.WriteLine("      operand      matches   places");
+
+        foreach (NamesItsOwnMove one in found.Where(o => o.Matches > 0))
+        {
+            Console.WriteLine(
+                $"      0x{one.Code:X2} arg{one.At}   {one.Matches,7}   {one.Places,6}"
+                + (one.Code == ObstacleMoves.FindMove
+                    ? "   <- this is the command that ASKS, so it is itself by construction"
+                    : ""));
+        }
+
+        int others = found.Count(o => o.Matches > 0 && o.Code != ObstacleMoves.FindMove);
+
+        Console.WriteLine(
+            $"      {found.Count} operand(s) appear in those scripts and {others} of them name the"
+            + " script's own move at all, the asking command aside");
+
+        // AND WHAT THE SEVEN ARE, named off the cartridge's own move table rather than asserted.
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    0x82's seven words against the {moves.Count}-entry move table this cartridge"
+            + " holds:");
+
+        foreach (int word in new[] { 58, 231, 85, 247, 53, 15, 249 })
+        {
+            Console.WriteLine(
+                $"      {word,4}  {(word >= 1 && word < moves.Count ? moves[word].Name : "NOT A MOVE")}");
+        }
     }
 
     private static void WriteBlocks(Rom rom, IReadOnlyList<uint> addresses)
