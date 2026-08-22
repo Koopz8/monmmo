@@ -77,8 +77,16 @@ public static class SpecialCalls
 
     private const int LastArgument = 0x800F;
 
-    /// <summary>How many commands either side count as "around" the call.</summary>
-    private const int Window = 4;
+    /// <summary>
+    /// How many commands either side count as "around" the call.
+    /// <para>
+    /// <b>Four, and nothing had asked whether four is enough (294).</b> The loop stops at the
+    /// first non-adjacent command anyway, so this only bites where a call has five or more
+    /// commands packed contiguously in front of it. <see cref="All"/> takes it as a parameter now
+    /// so the question can be answered by sweeping it rather than argued about.
+    /// </para>
+    /// </summary>
+    public const int Window = 4;
 
     /// <summary>
     /// Commands that put their own answer in the result variable.
@@ -552,12 +560,12 @@ public static class SpecialCalls
     }
 
 
-    public static List<SpecialCall> All(Rom rom, MapLibrary library)
+    public static List<SpecialCall> All(Rom rom, MapLibrary library, int window = Window)
     {
         var found = new List<SpecialCall>();
 
         foreach ((string mapId, string what, uint address) in library.EveryScript())
-            found.AddRange(In(rom, mapId, what, address));
+            found.AddRange(In(rom, mapId, what, address, window));
 
         return found;
     }
@@ -576,7 +584,8 @@ public static class SpecialCalls
     /// this went unguarded through three milestones of being corrected elsewhere.
     /// </para>
     /// </summary>
-    public static List<SpecialCall> In(Rom rom, string mapId, string what, uint address)
+    public static List<SpecialCall> In(
+        Rom rom, string mapId, string what, uint address, int window = Window)
     {
         var found = new List<SpecialCall>();
 
@@ -603,7 +612,7 @@ public static class SpecialCalls
                 command.Offset,
                 routine,
                 command.Code == SpecialVar ? command.Word() : null,
-                Before(commands, i),
+                Before(commands, i, window),
                 After(commands, i, answer),
                 Forks(commands, i, answer)));
         }
@@ -632,11 +641,12 @@ public static class SpecialCalls
     /// hands over the S.S. TICKET a few lines later.
     /// </para>
     /// </summary>
-    private static List<(int, int)> Before(List<ScriptCommand> commands, int at)
+    private static List<(int, int)> Before(
+        List<ScriptCommand> commands, int at, int window = Window)
     {
         var arguments = new List<(int, int)>();
 
-        for (int i = at - 1; i >= 0 && i >= at - Window; i--)
+        for (int i = at - 1; i >= 0 && i >= at - window; i--)
         {
             if (!Adjacent(commands[i], commands[i + 1])) break;
             if (commands[i].Code != SetVar) continue;

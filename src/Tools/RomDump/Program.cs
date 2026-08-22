@@ -10589,7 +10589,8 @@ public static class Program
     /// nowhere near <c>0x8004</c>, which is the only slot this project has ever read. This is the
     /// list, and it asks each of them 291's question in its own slot.
     /// </remarks>
-    private static void WriteTheOtherSlots(IReadOnlyList<SpecialCall> all)
+    private static void WriteTheOtherSlots(
+        Rom rom, MapLibrary library, IReadOnlyList<SpecialCall> all)
     {
         var byRoutine = all.GroupBy(c => c.Routine)
             .Select(g => (Routine: g.Key, Slots: WhatTheArgumentPicks.SlotsOf(g)))
@@ -10643,6 +10644,8 @@ public static class Program
             }
         }
 
+        WriteHowWideTheWindowNeedsToBe(rom, library, all);
+
         // AND THE SAME QUESTION OF EVERY ROUTINE IN EVERY SLOT, which is 291 asked of the whole
         // population rather than of the one routine 236 was looking at.
         IReadOnlyList<int> selectors = WhatTheArgumentPicks.Selectors(all);
@@ -10653,6 +10656,49 @@ public static class Program
             + $" population): {selectors.Count} routine(s) have the answer compared against"
             + " different things depending on the value: "
             + (selectors.Count == 0 ? "none" : string.Join(", ", selectors.Select(r => $"0x{r:X4}"))));
+    }
+
+    /// <summary>
+    /// How far back an argument can be written and still be found — the window, swept (294).
+    /// </summary>
+    /// <remarks>
+    /// <c>SpecialCalls.Before</c> stops four commands in front of a call, and nothing had asked
+    /// whether four is enough: 292's "44 routines are handed a value" and 293's "and 0x194 is the
+    /// only selector" are both bounded by it. Sweeping it is the only way to say the number is a
+    /// reading rather than a setting, and the honest answer is wherever it stops moving.
+    /// </remarks>
+    private static void WriteHowWideTheWindowNeedsToBe(
+        Rom rom, MapLibrary library, IReadOnlyList<SpecialCall> atFour)
+    {
+        Console.WriteLine();
+        Console.WriteLine(
+            "  HOW WIDE THE WINDOW NEEDS TO BE (294) — SpecialCalls.Before stops this many"
+            + " commands in front of a call, and every number above is bounded by it. Swept:");
+        Console.WriteLine();
+        Console.WriteLine(
+            "      window   handed a value   in 0x8004   only elsewhere   selectors   arguments");
+
+        foreach (int window in new[] { 1, 2, 3, 4, 6, 8, 12, 16, 24 })
+        {
+            IReadOnlyList<SpecialCall> calls = window == SpecialCalls.Window
+                ? atFour
+                : SpecialCalls.All(rom, library, window);
+
+            var slots = calls.GroupBy(c => c.Routine)
+                .Select(g => (Routine: g.Key, Slots: WhatTheArgumentPicks.SlotsOf(g)))
+                .Where(r => r.Slots.Count > 0)
+                .ToList();
+
+            Console.WriteLine(
+                $"      {window,6}   {slots.Count,14}"
+                + $"   {slots.Count(r => r.Slots.Any(x => x.Slot == WhatTheArgumentPicks.TheArgument)),9}"
+                + $"   {slots.Count(r => r.Slots.All(x => x.Slot != WhatTheArgumentPicks.TheArgument)),14}"
+                + $"   {WhatTheArgumentPicks.Selectors(calls).Count,9}"
+                + $"   {calls.Sum(c => c.Arguments.Count),9}"
+                + "   "
+                + string.Join(",", WhatTheArgumentPicks.Selectors(calls).Select(r => $"0x{r:X4}"))
+                + (window == SpecialCalls.Window ? "   <- what everything above is measured at" : ""));
+        }
     }
 
     private static void WriteSpecialContracts(Rom rom)
@@ -10668,7 +10714,7 @@ public static class Program
         List<WhoTheCompareBelongsTo.ACompareAcross> across = WhoTheCompareBelongsTo.In(rom, library);
 
         WriteWhatIsWaitedFor(rom, library);
-        WriteTheOtherSlots(SpecialCalls.All(rom, library));
+        WriteTheOtherSlots(rom, library, SpecialCalls.All(rom, library));
 
         // Branched-on first: a routine nobody branches on cannot be shutting a door, whatever
         // else it does, so it is not what a story walk is looking for.
