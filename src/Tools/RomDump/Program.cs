@@ -6977,7 +6977,7 @@ public static class Program
             + $" {fenced.Count(d => d.LandedInFromReached.Count > 0 && d.Fenced != WhatFences.Nothing)}"
             + " door(s) whose pocket the run could be put down in and never is.");
 
-        WriteWhatEachFlagCosts(rom, world, known, refused, stood, reached, fenced);
+        WriteWhatEachFlagCosts(rom, world, everyRun, known, refused, stood, reached, fenced);
 
         Console.WriteLine();
         Console.WriteLine(
@@ -7007,6 +7007,7 @@ public static class Program
     private static void WriteWhatEachFlagCosts(
         Rom rom,
         WorldData world,
+        IReadOnlyList<(TheFloorTable.Setting At, Attempt Played)> everyRun,
         IReadOnlyList<ADoorNotTaken> known,
         IReadOnlyList<(string, GridPosition, int)> refused,
         IReadOnlyCollection<(string MapId, GridPosition Square)> stood,
@@ -7060,6 +7061,42 @@ public static class Program
             $"    {costs.Count(f => !f.InADoorway)} of the {costs.Count} would be missed by a 3x3"
             + " question about the door's own square, and between them they cost"
             + $" {costs.Where(f => !f.InADoorway).Sum(f => f.Cost)} map(s).");
+
+        // AND A PERSON A FLAG HIDES IS NOT A ROCK A MOVE SHIFTS. Both are walls to the walker and
+        // they open in completely different ways, so the count of each is worth printing beside
+        // the other — a fence nothing moves is dead content and a rock is a field move away.
+        List<IGrouping<int, MapObject>> shifted =
+        [
+            .. world.Maps
+                .SelectMany(m => m.Objects)
+                .Where(o => o.ShiftedBy != 0)
+                .GroupBy(o => o.ShiftedBy)
+                .OrderByDescending(g => g.Count()),
+        ];
+
+        Console.WriteLine(
+            $"    And {shifted.Sum(g => g.Count())} thing(s) in the world are shifted by a FIELD"
+            + $" MOVE rather than by a flag, needing {shifted.Count} different move(s): "
+            + string.Join(", ", shifted.Select(g => $"{g.Count()} x move {g.Key}"))
+            + $". None of the {costs.Count} fence(s) above is one of them — they are people a flag"
+            + " hides, and the two open in completely different ways.");
+
+        // AND WHETHER ANY RUN CAN SHIFT THEM, which is the other half of that sentence: a rock is
+        // a field move away only if somebody in the party has the move.
+        foreach (IGrouping<int, MapObject> move in shifted)
+        {
+            List<string> knownAt =
+            [
+                .. everyRun.Where(r => r.Played.Moves.Contains(move.Key)).Select(r => r.At.Command),
+            ];
+
+            Console.WriteLine(
+                $"      move {move.Key,3} shifts {move.Count(),3} thing(s) and "
+                + (knownAt.Count == 0
+                    ? "NO RUN EVER KNOWS IT — every one of them is a wall at all six settings"
+                    : $"is known at {knownAt.Count} of {everyRun.Count} setting(s), first at"
+                      + $" {knownAt[0]}"));
+        }
     }
 
     /// <summary>One person the walk refused to walk through, in the terms the file has.</summary>
