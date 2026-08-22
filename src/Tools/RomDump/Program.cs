@@ -4174,11 +4174,75 @@ public static class Program
     {
         MapLibrary library = MapLibrary.Open(rom);
 
+        List<SpecialCall> all = SpecialCalls.All(rom, library);
+
         WriteForks(
             rom,
             $"special 0x{routine:X4} — what the script says on each side of the answer",
-            [.. SpecialCalls.All(rom, library).Where(c => c.Routine == routine)],
+            [.. all.Where(c => c.Routine == routine)],
             sites);
+
+        WriteWhatTheArgumentPicks(all, routine);
+    }
+
+    /// <summary>
+    /// Whether this routine's argument picks WHICH question is asked, and how many others do
+    /// (291).
+    /// </summary>
+    private static void WriteWhatTheArgumentPicks(IReadOnlyList<SpecialCall> all, int routine)
+    {
+        IReadOnlyList<ARoutinesArguments> found = WhatTheArgumentPicks.In(all);
+
+        ARoutinesArguments? here = found.FirstOrDefault(r => r.Routine == routine);
+
+        Console.WriteLine();
+        IReadOnlyList<ARoutinesArguments> changing =
+            [.. found.Where(r => r.TheArgumentChangesTheQuestion)];
+
+        Console.WriteLine(
+            $"  WHAT THE ARGUMENT PICKS (291) — {found.Count} routine(s) in this cartridge are"
+            + " called with more than one value in 0x8004, and"
+            + $" {changing.Count} of those have the answer compared against DIFFERENT things"
+            + " depending on which value it was: "
+            + string.Join(", ", changing.Select(r => $"0x{r.Routine:X4}")));
+
+        if (here is null)
+        {
+            Console.WriteLine(
+                $"    0x{routine:X4} is not one of them — it is called with one argument value or"
+                + " none, so this question does not arise for it");
+
+            return;
+        }
+
+        Console.WriteLine(
+            $"    0x{routine:X4}: {here.Arguments.Count} distinct argument(s) over"
+            + $" {here.Arguments.Sum(a => a.Calls)} call(s) at"
+            + $" {here.Arguments.Sum(a => a.Places)} place(s) — the ROUTINE inflation, and both"
+            + $" numbers are here for that reason. {here.Asked.Count} argument(s) have the answer"
+            + " compared at all, and the argument"
+            + $" {(here.TheArgumentChangesTheQuestion ? "CHANGES" : "does not change")} the"
+            + " question");
+        Console.WriteLine();
+
+        foreach (OneArgument argument in here.Arguments)
+            Console.WriteLine($"      {argument}");
+
+        // AND WHICH VALUES ARE MISSING, because a run with holes in it is a table with holes in
+        // it and that is a fact about the cartridge rather than about the sweep.
+        IReadOnlyList<int> values = [.. here.Arguments.Where(a => a.Argument is { }).Select(a => a.Argument!.Value).Order()];
+
+        if (values.Count > 1)
+        {
+            IReadOnlyList<int> missing =
+                [.. Enumerable.Range(values[0], values[^1] - values[0] + 1).Except(values)];
+
+            Console.WriteLine();
+            Console.WriteLine(
+                $"    the values run {values[0]}..{values[^1]} and {missing.Count} of them are"
+                + " never used"
+                + (missing.Count == 0 ? "" : ": " + string.Join(", ", missing)));
+        }
     }
 
     /// <summary>
