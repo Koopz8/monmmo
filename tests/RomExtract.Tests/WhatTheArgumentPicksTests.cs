@@ -264,16 +264,33 @@ public sealed class WhatTheArgumentPicksTests
     [Fact]
     public void ARoutineHandedValuesInTwoSlotsIsAskedInBoth()
     {
+        // 0x8005 carries THREE values and 0x8006 two, so the slots are listed 0x8005 first — and
+        // it is 0x8006 that picks the question. Every 0x8005 value pairs with both 0x8006 values,
+        // so its own compare sets are identical and it finds nothing.
+        //
+        // The first version of this fixture had the discriminating slot carrying MORE values, so
+        // it sorted first and a version reading only the first slot passed. A fixture whose
+        // subject is "both slots" has to make the second one the one that matters.
         SpecialCall[] calls =
         [
-            new("9.6", "person", 0x10, 0x138, 0x800D, [(0x8005, 1), (0x8006, 9)], [(0, (byte)1)], []),
-            new("9.6", "person", 0x20, 0x138, 0x800D, [(0x8005, 1), (0x8006, 8)], [(1, (byte)1)], []),
+            Two(0x10, 1, 9, 0), Two(0x20, 1, 8, 1),
+            Two(0x30, 2, 9, 0), Two(0x40, 2, 8, 1),
+            Two(0x50, 3, 9, 0), Two(0x60, 3, 8, 1),
         ];
 
-        // 0x8005 holds the same value at both, so only the 0x8006 reading can find this.
+        Assert.Equal(
+            [0x8005, 0x8006],
+            WhatTheArgumentPicks.SlotsOf(calls).Select(x => x.Slot));
+
         Assert.Empty(WhatTheArgumentPicks.In(calls, 0x8005).Where(p => p.TheValueChangesTheQuestion));
+        Assert.NotEmpty(WhatTheArgumentPicks.In(calls, 0x8006).Where(p => p.TheValueChangesTheQuestion));
+
         Assert.Equal([0x138], WhatTheArgumentPicks.Selectors(calls));
     }
+
+    private static SpecialCall Two(int at, int five, int six, int compared) =>
+        new("9.6", "person", at, 0x138, 0x800D,
+            [(0x8005, five), (0x8006, six)], [(compared, (byte)1)], []);
 
     /// <summary>
     /// And a routine nothing branches on is not a selector however many values it is handed —
