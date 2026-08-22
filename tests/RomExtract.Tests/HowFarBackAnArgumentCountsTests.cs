@@ -104,18 +104,38 @@ public sealed class HowFarBackAnArgumentCountsTests
     [Fact]
     public void AWiderWindowStillStopsAtAGap()
     {
+        // The value and a GOTO in one block, the call in another. Both blocks are in the read, so
+        // the setvar is two commands in front of the call and well inside any window — and the
+        // goto's last byte is not the call's first, so nothing joins them.
+        //
+        // The first version of this put the value in a block the read never reached at all, which
+        // tests that an unread command is not found and says nothing about adjacency. It passed
+        // while a version that skipped gaps instead of stopping at them also passed (119).
         var image = new byte[0x1000];
 
-        // The value, then a gap, then the filler and the call: nothing contiguous joins them.
-        Puts(9).CopyTo(image, 0x200);
+        List<byte> first = [.. Puts(9), Goto, .. Pointer(0x280)];
 
-        List<byte> after = [.. Calls(), End];
+        first.CopyTo(image, 0x200);
 
-        after.CopyTo(image, 0x280);
+        List<byte> second = [.. Calls(), End];
 
-        IReadOnlyList<SpecialCall> found = SpecialCalls.In(
-            new Rom(image), "1.0", "person", Rom.BaseAddress + 0x280, 24);
+        second.CopyTo(image, 0x280);
 
-        Assert.Empty(Assert.Single(found).Arguments);
+        var rom = new Rom(image);
+
+        // The read reaches both blocks, so the setvar really is in the command list.
+        Assert.Contains(
+            ScriptReader.ReadAll(rom, Rom.BaseAddress + 0x200),
+            c => c.Code == SetVar);
+
+        Assert.Empty(Arguments(rom, 24));
     }
+
+    private const byte Goto = 0x05;
+
+    private static byte[] Pointer(int to) =>
+    [
+        (byte)to, (byte)(to >> 8), (byte)((Rom.BaseAddress + (uint)to) >> 16),
+        (byte)((Rom.BaseAddress + (uint)to) >> 24),
+    ];
 }
