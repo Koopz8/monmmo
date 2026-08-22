@@ -6956,7 +6956,7 @@ public static class Program
                     ? "everybody in the way at once — no one of them stepping aside opens it"
                     : string.Join(
                         " or ",
-                        door.OpenedBy.Select(who => Describe(world, door.MapId, who)))
+                        door.OpenedBy.Select(who => Describe(world, door.MapId, who, door.Square)))
                       + (door.OpenedBy.Count > 1 ? " — any ONE of them opens it" : " — that one person")));
 
         List<ADoorFenced> nothingLands = [.. fenced.Where(d => d.NoWayIn)];
@@ -6991,7 +6991,13 @@ public static class Program
     }
 
     /// <summary>One person the walk refused to walk through, in the terms the file has.</summary>
-    private static string Describe(WorldData world, string mapId, int localId)
+    /// <remarks>
+    /// A FENCE IS NOT A DOORWAY. The reading that names whoever is in a doorway asks a 3x3
+    /// question about the door's own square, and one of these two people stands well outside it —
+    /// which is why one of the pair has been carried in this prompt since 190 and the other has
+    /// never been named at all.
+    /// </remarks>
+    private static string Describe(WorldData world, string mapId, int localId, GridPosition door)
     {
         MapObject? who = world.Find(mapId)?.Objects.FirstOrDefault(o => o.LocalId == localId);
 
@@ -7001,7 +7007,10 @@ public static class Program
             + $" {who.MovementType}"
             + (who.IsObstacle ? $", shifted by move {who.ShiftedBy}" : "")
             + (who.HiddenBy != 0 ? $", hidden by flag 0x{who.HiddenBy:X4}" : ", behind no flag")
-            + (who.IsTrainer ? ", a trainer" : "");
+            + (who.IsTrainer ? ", a trainer" : "")
+            + (Math.Max(Math.Abs(who.X - door.X), Math.Abs(who.Y - door.Y)) is var away && away > 1
+                ? $" — {away} squares from the door, so the doorway reading cannot see them"
+                : " — beside the door, where the doorway reading can see them");
     }
 
     private static string Describe(WhatFences what) => what switch
