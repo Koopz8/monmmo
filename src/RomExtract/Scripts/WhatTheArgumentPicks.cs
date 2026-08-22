@@ -41,6 +41,23 @@ public sealed record ARoutinesArguments(int Routine, IReadOnlyList<OneArgument> 
     /// </summary>
     public bool TheArgumentChangesTheQuestion =>
         Asked.Select(a => string.Join(",", a.Compared)).Distinct().Count() > 1;
+
+    /// <summary>
+    /// The same question asked of the calls that CARRY an argument, ignoring the ones that set
+    /// nothing.
+    /// </summary>
+    /// <remarks>
+    /// <b>The two are different claims and one of this cartridge's two hits is only the first.</b>
+    /// <c>0x17C</c> is three calls: one with no argument compared against 1, and two with
+    /// arguments 129 and 214 both compared against 0. That is a difference between being given an
+    /// argument and not, which says nothing about what the argument SELECTS. <c>0x194</c> is a hit
+    /// either way.
+    /// </remarks>
+    public bool TheValueChangesTheQuestion =>
+        Asked.Where(a => a.Argument is not null)
+            .Select(a => string.Join(",", a.Compared))
+            .Distinct()
+            .Count() > 1;
 }
 
 /// <summary>

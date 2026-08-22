@@ -4205,6 +4205,13 @@ public static class Program
             + $" {changing.Count} of those have the answer compared against DIFFERENT things"
             + " depending on which value it was: "
             + string.Join(", ", changing.Select(r => $"0x{r.Routine:X4}")));
+        Console.WriteLine(
+            $"    and asking it of the calls that CARRY a value — ignoring the ones that set none,"
+            + " which is a different claim — leaves "
+            + $"{found.Count(r => r.TheValueChangesTheQuestion)}: "
+            + string.Join(
+                ", ",
+                found.Where(r => r.TheValueChangesTheQuestion).Select(r => $"0x{r.Routine:X4}")));
 
         if (here is null)
         {

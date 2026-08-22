@@ -137,6 +137,34 @@ public sealed class WhatTheArgumentPicksTests
         Assert.Equal(16, WhatTheArgumentPicks.ArgumentOf(call));
     }
 
+    /// <summary>
+    /// <b>And the two claims are not the same claim.</b> A routine whose no-argument call is
+    /// compared one way and whose argument-bearing calls are all compared another has a
+    /// difference between HAVING an argument and not — which says nothing about what the value
+    /// selects. <c>0x17C</c> is exactly that, and it is why this cartridge's "2 of 22" is really
+    /// one.
+    /// </summary>
+    [Fact]
+    public void TheValueChangingTheQuestionIsNotTheSameAsTheArgumentChangingIt()
+    {
+        ARoutinesArguments? found = Only(Call(null, 0x100, 1), Call(129, 0x200, 0), Call(214, 0x300, 0));
+
+        Assert.NotNull(found);
+        Assert.True(found.TheArgumentChangesTheQuestion);
+        Assert.False(found.TheValueChangesTheQuestion);
+    }
+
+    /// <summary>And a routine whose VALUES disagree is a hit under both.</summary>
+    [Fact]
+    public void ARoutineWhoseValuesDisagreeIsAHitUnderBoth()
+    {
+        ARoutinesArguments? found = Only(Call(16, 0x100, 0), Call(20, 0x200, 1));
+
+        Assert.NotNull(found);
+        Assert.True(found.TheArgumentChangesTheQuestion);
+        Assert.True(found.TheValueChangesTheQuestion);
+    }
+
     /// <summary>And a call that sets some other slot has no argument, rather than that slot's.</summary>
     [Fact]
     public void AValueInAnotherSlotIsNotTheArgument()
