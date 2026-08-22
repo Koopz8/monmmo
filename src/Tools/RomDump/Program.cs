@@ -13879,6 +13879,94 @@ public static class Program
         Console.WriteLine(
             "    question entirely. The byte lies inside it, and lying inside a band that wide is"
             + " not a name — 226's wall, where what a command TAKES is read and what it DOES is not.");
+
+        WriteTwoColumnsOfOneKind(rom, library, named, Name);
+    }
+
+    /// <summary>
+    /// Two columns of one kind (302).
+    /// </summary>
+    private static void WriteTwoColumnsOfOneKind(
+        Rom rom, MapLibrary library, IReadOnlySet<int> named, Func<int, string> name)
+    {
+        IReadOnlyList<TwoColumns> records = TwoColumnsOfOneKind.In(rom, library);
+
+        HashSet<int> both =
+            [.. records.Select(r => r.First).Concat(records.Select(r => r.Second))];
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  AND THE COMMAND WITH TWO OF THEM (302) — 0x{TwoColumnsOfOneKind.TheCommand:X2} is FOUR"
+            + $" halfwords, and it is {records.Count} byte position(s) on"
+            + $" {records.Select(r => r.MapId).Distinct().Count()} map(s):");
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    a species x{records.Select(r => r.First).Distinct().Count()},"
+            + $" a species x{records.Select(r => r.Second).Distinct().Count()},"
+            + $" an index x{records.Select(r => r.Index).Distinct().Count()}"
+            + $" ({records.Min(r => r.Index)}..{records.Max(r => r.Index)}),"
+            + $" and a nought-or-one x{records.Select(r => r.Kind).Distinct().Count()}.");
+        Console.WriteLine(
+            $"    {records.Select(r => (r.First, r.Second)).Distinct().Count()} distinct pair(s),"
+            + $" {records.Count(r => r.First == r.Second)} of them the same species twice,"
+            + $" {both.Count} species named in all and {both.Count(named.Contains)} of those named"
+            + " by the table.");
+
+        IReadOnlyList<HowMuchTwoOperandsShare> ranked = TwoColumnsOfOneKind.Ranked(rom, library);
+
+        string mine = EveryOperand.NameOf(TwoColumnsOfOneKind.TheCommand, 0);
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    THAT THE TWO ARE THE SAME KIND IS READ OFF THE PAIR, not off the range (301). Of"
+            + $" the {ranked.Count} pair(s) of operands of ONE command with eight or more distinct");
+        Console.WriteLine(
+            "    values each, ranked by how much of their UNION the two share:");
+        Console.WriteLine();
+        Console.WriteLine("      a            b            overlap   |a|   |b|   of the union");
+
+        foreach (HowMuchTwoOperandsShare row in ranked.Take(6))
+            Console.WriteLine(
+                $"      {row.A,-12} {row.B,-12} {row.Overlap,7}   {row.SizeA,3}   {row.SizeB,3}"
+                + $"   {row.Share * 100,10:F1}%"
+                + (row.A == mine ? "   <- the one being read, rank 1" : ""));
+
+        Console.WriteLine();
+        Console.WriteLine(
+            "    AND THE INDEX RUNS WITH THE FIRST SPECIES. One scene, one second species, and the"
+            + " index steps by one down the first column:");
+        Console.WriteLine();
+
+        foreach (var scene in records.Where(r => r.MapId == "9.6")
+                     .GroupBy(r => r.Second).OrderBy(g => g.Min(r => r.At)).Take(2))
+            Console.WriteLine(
+                $"      9.6  second {name(scene.Key),-12} "
+                + string.Join(", ", scene.OrderBy(r => r.At).Take(5).Select(r => $"{name(r.First)}={r.Index}"))
+                + $"   (and {scene.Count() - 5} more, which are other scenes on the same map)");
+
+        int[] ids = [.. records.Select(r => r.Index).Distinct().Order()];
+
+        byte[] image = rom.Span.ToArray();
+
+        IReadOnlyList<(int Base, int ReadsAsText, int Distinct)> could =
+            TwoColumnsOfOneKind.WhereTheTableCouldBe(image, ids);
+
+        IReadOnlyList<(int Base, int ReadsAsText, int Distinct)> floor =
+            TwoColumnsOfOneKind.WhereTheTableCouldBe([.. image.Reverse()], ids);
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    WHAT IT INDEXES IS NOT FOUND. {could.Count} four-aligned base(s) in the image put"
+            + $" ALL {ids.Length} of its values on a ROM address, against {floor.Count} in the"
+            + " REVERSED image —");
+        Console.WriteLine(
+            $"    so the shape is not what these bytes do by accident. And of the {ids.Length}"
+            + " targets, how many read as dialogue: "
+            + (could.Count == 0 ? "n/a" : $"{could.Max(c => c.ReadsAsText)} at the best base,"
+                + $" and {could.Count(c => c.ReadsAsText == could.Max(x => x.ReadsAsText))} base(s) reach it."));
+        Console.WriteLine(
+            "    A hunt that finds candidates and cannot choose between them has not found the"
+            + " table, and saying so is the answer (222).");
     }
 
     /// <summary>Whether a buried sign's own square is one somebody could stand on.</summary>
