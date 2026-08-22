@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net.Sockets;
 using PokeMmo.Core.Net;
 using PokeMmo.Core.World;
@@ -54,14 +55,54 @@ public class ServerIntegrationTests : IAsyncLifetime
 
     private async Task<TestClient> ConnectAsync(string name)
     {
+        long started = Stopwatch.GetTimestamp();
+
         var socket = new TcpClient { NoDelay = true };
         await socket.ConnectAsync("127.0.0.1", _port);
 
         var channel = new MessageChannel(socket.GetStream());
         await channel.SendAsync(new RegisterRequest(name, "a-good-password"));
 
+        // HOW SLOW THIS MACHINE IS, MEASURED (304). Connecting and sending is the same work a
+        // message wait is doing, so how long it took here is the honest unit for how long to wait
+        // there. Kept as the WORST seen in this class, because a budget from the fastest connect
+        // is a budget for a machine that is not the one running now.
+        TimeSpan took = Stopwatch.GetElapsedTime(started);
+
+        if (took > _slowest) _slowest = took;
+
         return new TestClient(socket, channel);
     }
+
+    /// <summary>
+    /// The longest a connect has taken in this class — the measured unit the message budget is
+    /// counted in (304).
+    /// </summary>
+    private static TimeSpan _slowest = TimeSpan.Zero;
+
+    /// <summary>
+    /// How long to wait for one message: a large multiple of what this machine actually took to
+    /// connect, and never less than the floor.
+    /// </summary>
+    /// <remarks>
+    /// <b>A budget that has to be chosen is a budget that gets quoted as though it were
+    /// measured</b> — which is what 294 through 300 spent six milestones on, in the script
+    /// readings. This one was 5 seconds, then 30 at some point, then 120 at 289 "with the
+    /// evidence", and it STILL fired twice in one session at 289's own hands: the container that
+    /// runs the suite in 30 seconds idle runs it in 157 under a break-guard, and 120 is inside
+    /// that noise.
+    /// <para>
+    /// So it is not chosen any more. A connect is the same socket work a message wait is, so the
+    /// budget is a hundred of them — on an idle machine that is well under the floor and the floor
+    /// wins; on a machine six times slower it scales with the machine. A server that never sends
+    /// the message still fails, just later, which is the direction this is allowed to be wrong in.
+    /// </para>
+    /// </remarks>
+    private static TimeSpan Budget =>
+        _slowest * 100 > TheFloor ? _slowest * 100 : TheFloor;
+
+    /// <summary>The least this will ever wait, however fast the machine looks.</summary>
+    private static readonly TimeSpan TheFloor = TimeSpan.FromSeconds(30);
 
     /// <summary>
     /// Reads until a message of the wanted kind arrives, or gives up. Bounded so a
@@ -79,13 +120,12 @@ public class ServerIntegrationTests : IAsyncLifetime
         // still fails, just later. A test that fails when the machine is busy is worse
         // than a slow one, because it teaches everybody to re-run the suite instead of
         // reading it.
-        // RAISED FROM 30 AT 289, with the evidence. A break-guard run — which builds, then runs
-        // the whole suite on a container already busy — timed this out once and the failure was
-        // counted against a break in `WhatAMapIsMadeOf`, which the server does not call. The
-        // suite is ~28 seconds idle and was 55 in that run, so a 30-second budget for one message
-        // is inside the noise. A break's kill count only means something if every failure in it
-        // was caused by the break.
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(120));
+        // RAISED FROM 30 AT 289 AND FROM 120 AT 304 — and at 304 it stopped being a number at
+        // all. See `Budget`: it is a hundred of this machine's own measured connects, floored at
+        // thirty seconds. 289 raised it "with the evidence" and it still fired twice in one
+        // session, because the evidence was a measurement of a DIFFERENT machine-load than the
+        // one that fails.
+        using var timeout = new CancellationTokenSource(Budget);
 
         for (int i = 0; i < maxMessages; i++)
         {
