@@ -8350,6 +8350,44 @@ public static class Program
                     + $" {pocket.Fenced,5} of {pocket.Walkable,5} walkable");
             }
 
+            // AND HOW EACH POCKET IS SHUT (288). 287 said in as many words that a pocket is not
+            // proof of a fence, and this is the separation: ground joined to the walk's own by
+            // ordinary steps (which must be nought), ground only a LEDGE HOP joins, and ground
+            // nothing but a door opens.
+            Dictionary<string, List<GridPosition>> whereItStood = stoodBy[name]
+                .GroupBy(t => t.Item1)
+                .ToDictionary(g => g.Key, g => g.Select(t => t.Item2).ToList());
+
+            List<HowShut> shut =
+            [
+                .. pockets.Select(p => HowAPocketIsShut.On(
+                    world.Find(p.MapId)!,
+                    whereItStood.GetValueOrDefault(p.MapId, []),
+                    surfing: true)),
+            ];
+
+            Console.WriteLine(
+                $"      HOW THEY ARE SHUT (288): {shut.Sum(h => h.SameGround)} square(s) are on"
+                + $" the SAME GROUND the walk stood on — that number must be nought —"
+                + $" {shut.Sum(h => h.BehindALedge)} are behind a LEDGE, and"
+                + $" {shut.Sum(h => h.Sealed)} are SEALED, which only a door opens");
+
+            foreach (HowShut one in shut.Where(h => h.BehindALedge > 0)
+                         .OrderByDescending(h => h.BehindALedge).Take(6))
+            {
+                Console.WriteLine(
+                    $"        behind a ledge: {one.MapId,-8}"
+                    + $" {world.Find(one.MapId)?.Name ?? "?",-20} {one.BehindALedge,5}");
+            }
+
+            foreach (HowShut one in shut.Where(h => h.SameGround > 0)
+                         .OrderByDescending(h => h.SameGround).Take(6))
+            {
+                Console.WriteLine(
+                    $"        SAME GROUND AND NOT STOOD ON — look at this: {one.MapId,-8}"
+                    + $" {world.Find(one.MapId)?.Name ?? "?",-20} {one.SameGround,5}");
+            }
+
             // AND THE ONE THAT REPEATS. Nineteen maps with the same pocket is a building rather
             // than nineteen accidents, and a count of maps cannot say that — the shape can.
             foreach (var same in pockets.GroupBy(p => (p.Walkable, p.Fenced))
