@@ -67,6 +67,25 @@ public static class TwoColumnsOfOneKind
     }
 
     /// <summary>
+    /// How much of their UNION two value sets share.
+    /// </summary>
+    /// <remarks>
+    /// <b>Split out so a fixture can reach it.</b> The first version of this test built the record
+    /// by hand with the share already worked out, which guards the arithmetic in the test and not
+    /// the arithmetic in the reading — fixture-lie 4, and a break swapping the union for the
+    /// smaller set came back green against it.
+    /// <para>
+    /// The union is the point. Scored against the SMALLER set, a pair where one operand takes two
+    /// values and the other takes two hundred wins outright by containing it, which is a fact about
+    /// the sizes rather than about the fields.
+    /// </para>
+    /// </remarks>
+    public static double Share(IReadOnlySet<int> first, IReadOnlySet<int> second) =>
+        first.Count == 0 && second.Count == 0
+            ? 0
+            : (double)first.Intersect(second).Count() / first.Union(second).Count();
+
+    /// <summary>
     /// Every pair of operands of one command, ranked by how much of their union they share.
     /// </summary>
     /// <remarks>
@@ -112,7 +131,7 @@ public static class TwoColumnsOfOneKind
                     first.Intersect(second).Count(),
                     first.Count,
                     second.Count,
-                    (double)first.Intersect(second).Count() / first.Union(second).Count()));
+                    Share(first, second)));
             }
         }
 
@@ -149,16 +168,17 @@ public static class TwoColumnsOfOneKind
                 uint pointer = (uint)(image[where] | (image[where + 1] << 8) |
                                       (image[where + 2] << 16) | (image[where + 3] << 24));
 
+                // An early exit, NOT the rule. The rule is the count below, and these two are two
+                // statements of one thing — a break aimed here came back green because the count
+                // caught it anyway (219). It stays because the walk is four million bases long.
                 if (pointer < Rom.BaseAddress || pointer >= Rom.BaseAddress + (uint)image.Length)
-                {
-                    targets.Clear();
-
                     break;
-                }
 
                 targets.Add((int)(pointer - Rom.BaseAddress));
             }
 
+            // EVERY value, not any: a base where one of them misses is not a base for a table
+            // these numbers index.
             if (targets.Count != ids.Count) continue;
 
             found.Add((

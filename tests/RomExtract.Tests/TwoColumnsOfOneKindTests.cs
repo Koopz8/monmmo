@@ -28,14 +28,20 @@ public sealed class TwoColumnsOfOneKindTests
     [Fact]
     public void TheShareIsOfTheUnionAndNotOfTheSmallerSet()
     {
-        var contained = new HowMuchTwoOperandsShare("a", "b", 2, 2, 200, 2.0 / 200);
-        var equal = new HowMuchTwoOperandsShare("c", "d", 31, 35, 33, 31.0 / 37);
+        HashSet<int> small = [1, 2];
+        HashSet<int> big = [.. Enumerable.Range(1, 200)];
 
-        Assert.True(equal.Share > contained.Share);
+        HashSet<int> left = [.. Enumerable.Range(1, 35)];
+        HashSet<int> right = [.. Enumerable.Range(5, 33)];
 
-        // And against the smaller set the contained pair would win, which is the reading this
-        // one is not.
-        Assert.True(2.0 / 2 > 31.0 / 33);
+        // The contained pair shares ALL of the smaller set and almost none of the union.
+        Assert.True(
+            TwoColumnsOfOneKind.Share(left, right) > TwoColumnsOfOneKind.Share(small, big));
+
+        // And against the smaller set the contained pair would win outright, which is the reading
+        // this one is not: 2 of 2 beats 31 of 33.
+        Assert.Equal(2, small.Intersect(big).Count());
+        Assert.Equal(31, left.Intersect(right).Count());
     }
 
     /// <summary>
