@@ -185,7 +185,7 @@ public static class SpecialCalls
                     code,
                     0x800D,
                     ArgumentsBefore(commands, i),
-                    After(commands, i, 0x800D),
+                    After(commands, i, 0x800D, NoLimit),
                     Forks(commands, i, 0x800D)));
             }
         }
@@ -224,7 +224,7 @@ public static class SpecialCalls
 
                 calls.Add(new SpecialCall(
                     mapId, what, commands[i].Offset, code, 0x800D,
-                    ArgumentsBefore(commands, i), After(commands, i, 0x800D), forks));
+                    ArgumentsBefore(commands, i), After(commands, i, 0x800D, NoLimit), forks));
             }
         }
 
@@ -777,7 +777,7 @@ public static class SpecialCalls
         [.. After(commands, at, answer, forward)];
 
     private static List<(int, byte)> After(
-        List<ScriptCommand> commands, int at, int answer, int forward = NoLimit)
+        List<ScriptCommand> commands, int at, int answer, int forward)
     {
         var compared = new List<(int, byte)>();
 

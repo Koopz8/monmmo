@@ -148,14 +148,22 @@ public sealed class OneQuestionThreeReadingsTests
 
         Assert.Equal([(7, (byte)0xFF)], call.Compared);
 
-        // And at the setting 291-297 were measured at, it is not found at all — which is what
-        // makes the sweep a reading rather than a restatement.
-        Assert.Empty(
+        static IReadOnlyList<(int Value, byte Condition)> Compared(Rom rom, int forward) =>
             Assert.Single(
                 SpecialCalls.In(
-                    rom, "1.0", "person", Rom.BaseAddress + 0x200,
-                    SpecialCalls.NoLimit, SpecialCalls.Window))
-                .Compared);
+                    rom, "1.0", "person", Rom.BaseAddress + 0x200, SpecialCalls.NoLimit, forward))
+                .Compared;
+
+        // And at the setting 291-297 were measured at, it is not found at all — which is what
+        // makes the sweep a reading rather than a restatement.
+        Assert.Empty(Compared(rom, SpecialCalls.Window));
+
+        // AND THE BOUNDARY IS EXACT. The sweep in 298's table has the forward window as its axis,
+        // so an off-by-one there shifts every row — and an off-by-one is invisible at the default,
+        // where the window is four thousand million and the comparison can never bind. Nothing in
+        // the suite reached it: a break moving `<=` to `<` came back green (219, third time).
+        Assert.Empty(Compared(rom, 5));
+        Assert.Equal([(7, (byte)0xFF)], Compared(rom, 6));
     }
 
     /// <summary>
