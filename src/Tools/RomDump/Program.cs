@@ -10581,6 +10581,80 @@ public static class Program
         }
     }
 
+    /// <summary>
+    /// Every routine handed an argument, by which SLOT it is handed it in (292, read at 293).
+    /// </summary>
+    /// <remarks>
+    /// 292 found that 11 of the 44 routines handed a value in an argument slot are handed it
+    /// nowhere near <c>0x8004</c>, which is the only slot this project has ever read. This is the
+    /// list, and it asks each of them 291's question in its own slot.
+    /// </remarks>
+    private static void WriteTheOtherSlots(IReadOnlyList<SpecialCall> all)
+    {
+        var byRoutine = all.GroupBy(c => c.Routine)
+            .Select(g => (Routine: g.Key, Slots: WhatTheArgumentPicks.SlotsOf(g)))
+            .Where(r => r.Slots.Count > 0)
+            .ToList();
+
+        List<(int Routine, IReadOnlyList<(int Slot, int Values, int Calls)> Slots)> elsewhere =
+        [
+            .. byRoutine
+                .Where(r => r.Slots.All(x => x.Slot != WhatTheArgumentPicks.TheArgument))
+                .OrderByDescending(r => r.Slots.Max(x => x.Values))
+                .ThenBy(r => r.Routine),
+        ];
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  WHICH SLOT EACH ROUTINE IS HANDED A VALUE IN (292) — {byRoutine.Count} routine(s)"
+            + " are handed one at all, and the cartridge uses "
+            + string.Join(
+                ", ",
+                byRoutine.SelectMany(r => r.Slots.Select(x => x.Slot))
+                    .GroupBy(x => x)
+                    .OrderByDescending(g => g.Count())
+                    .ThenBy(g => g.Key)
+                    .Select(g => $"0x{g.Key:X4} x{g.Count()}")));
+        Console.WriteLine(
+            $"    {elsewhere.Count} of them are handed a value ONLY outside 0x{WhatTheArgumentPicks.TheArgument:X4},"
+            + " so every sweep in this project reads them as taking none:");
+        Console.WriteLine();
+        Console.WriteLine(
+            "      routine   slot     values  calls   what the answer is compared against");
+
+        foreach ((int routine, IReadOnlyList<(int Slot, int Values, int Calls)> slots) in elsewhere)
+        {
+            foreach ((int slot, int values, int calls) in slots)
+            {
+                ARoutinesArguments? picks = WhatTheArgumentPicks
+                    .In(all.Where(c => c.Routine == routine), slot)
+                    .FirstOrDefault(r => r.Routine == routine);
+
+                IReadOnlyList<OneArgument> asked = picks?.Asked ?? [];
+
+                Console.WriteLine(
+                    $"      0x{routine:X4}    0x{slot:X4}   {values,6}  {calls,5}   "
+                    + (asked.Count == 0
+                        ? "nothing branches on it"
+                        : string.Join(
+                            ", ",
+                            asked.Select(a => $"{a.Argument} -> {string.Join("/", a.Compared)}"))
+                          + (picks!.TheValueChangesTheQuestion ? "   <- the VALUE picks the question" : "")));
+            }
+        }
+
+        // AND THE SAME QUESTION OF EVERY ROUTINE IN EVERY SLOT, which is 291 asked of the whole
+        // population rather than of the one routine 236 was looking at.
+        IReadOnlyList<int> selectors = WhatTheArgumentPicks.Selectors(all);
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    asked of EVERY routine in EVERY slot it is handed a value in (291 over the whole"
+            + $" population): {selectors.Count} routine(s) have the answer compared against"
+            + " different things depending on the value: "
+            + (selectors.Count == 0 ? "none" : string.Join(", ", selectors.Select(r => $"0x{r:X4}"))));
+    }
+
     private static void WriteSpecialContracts(Rom rom)
     {
         Console.WriteLine();
@@ -10594,6 +10668,7 @@ public static class Program
         List<WhoTheCompareBelongsTo.ACompareAcross> across = WhoTheCompareBelongsTo.In(rom, library);
 
         WriteWhatIsWaitedFor(rom, library);
+        WriteTheOtherSlots(SpecialCalls.All(rom, library));
 
         // Branched-on first: a routine nobody branches on cannot be shutting a door, whatever
         // else it does, so it is not what a story walk is looking for.

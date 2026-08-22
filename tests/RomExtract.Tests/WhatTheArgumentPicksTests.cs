@@ -228,6 +228,69 @@ public sealed class WhatTheArgumentPicksTests
         Assert.Empty(WhatTheArgumentPicks.SlotsOf([Call(null, 0x100, 0)]));
     }
 
+    // ------------------------------------------------ the whole population, every slot (293)
+
+    private static SpecialCall For(int routine, int slot, int? value, int at, params int[] compared) =>
+        new("9.6", "person", at, routine, 0x800D,
+            value is { } v ? [(slot, v)] : [],
+            [.. compared.Select(c => (c, (byte)0x01))],
+            []);
+
+    /// <summary>
+    /// <b>THE WHOLE POPULATION, IN EVERY SLOT (293).</b> 291's answer was "one routine of
+    /// twenty-two" asked in <c>0x8004</c> alone, and 292 found that eleven routines are handed a
+    /// value only in some other slot. Asked properly, the answer is still <c>0x194</c> and only
+    /// <c>0x194</c> — the blind spot was real and hid nothing.
+    /// </summary>
+    [Fact]
+    public void ARoutineIsAskedInTheSlotItIsActuallyHandedAValueIn()
+    {
+        SpecialCall[] calls =
+        [
+            For(0x100, 0x8005, 1, 0x10, 0),
+            For(0x100, 0x8005, 2, 0x20, 1),
+        ];
+
+        // The slot every other sweep reads finds nothing: both calls look argument-less.
+        Assert.Empty(WhatTheArgumentPicks.In(calls));
+
+        Assert.Equal([0x100], WhatTheArgumentPicks.Selectors(calls));
+    }
+
+    /// <summary>
+    /// A routine handed values in TWO slots is asked in both — either could be the one that picks,
+    /// and <c>0x0138</c> on this cartridge is handed values in <c>0x8005</c> and <c>0x8006</c>.
+    /// </summary>
+    [Fact]
+    public void ARoutineHandedValuesInTwoSlotsIsAskedInBoth()
+    {
+        SpecialCall[] calls =
+        [
+            new("9.6", "person", 0x10, 0x138, 0x800D, [(0x8005, 1), (0x8006, 9)], [(0, (byte)1)], []),
+            new("9.6", "person", 0x20, 0x138, 0x800D, [(0x8005, 1), (0x8006, 8)], [(1, (byte)1)], []),
+        ];
+
+        // 0x8005 holds the same value at both, so only the 0x8006 reading can find this.
+        Assert.Empty(WhatTheArgumentPicks.In(calls, 0x8005).Where(p => p.TheValueChangesTheQuestion));
+        Assert.Equal([0x138], WhatTheArgumentPicks.Selectors(calls));
+    }
+
+    /// <summary>
+    /// And a routine nothing branches on is not a selector however many values it is handed —
+    /// all eleven of the ones handed a value outside <c>0x8004</c> are exactly this.
+    /// </summary>
+    [Fact]
+    public void ARoutineNothingBranchesOnIsNotASelector()
+    {
+        SpecialCall[] calls =
+        [
+            For(0x1A7, 0x8005, 1, 0x10),
+            For(0x1A7, 0x8005, 2, 0x20),
+        ];
+
+        Assert.Empty(WhatTheArgumentPicks.Selectors(calls));
+    }
+
     /// <summary>
     /// And <c>ArgumentOf</c> reads the slot it is asked for — the whole generalisation rests on
     /// this one line, and its default is the slot the rest of the project reads.

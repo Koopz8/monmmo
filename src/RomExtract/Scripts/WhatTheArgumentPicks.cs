@@ -139,6 +139,37 @@ public static class WhatTheArgumentPicks
             .LastOrDefault();
 
     /// <summary>
+    /// Every routine whose answer is compared against different things depending on the VALUE it
+    /// was handed — asked in each slot that routine actually uses (293).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// 291 asked this of one routine in one slot. 292 found the cartridge uses six slots and that
+    /// eleven routines are handed a value only outside the one every sweep reads. This asks the
+    /// whole population in every slot each routine is handed a value in, which is the only way the
+    /// answer means "no other routine does this" rather than "no other routine does this in
+    /// <c>0x8004</c>".
+    /// </para>
+    /// <para>
+    /// A routine handed values in TWO slots is asked in both, because either could be the one that
+    /// picks — <c>0x0138</c> is handed values in <c>0x8005</c> and <c>0x8006</c>.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<int> Selectors(IEnumerable<SpecialCall> calls)
+    {
+        List<SpecialCall> all = [.. calls];
+
+        return
+        [
+            .. all.GroupBy(c => c.Routine)
+                .Where(routine => SlotsOf(routine).Any(slot =>
+                    In(routine, slot.Slot).Any(p => p.TheValueChangesTheQuestion)))
+                .Select(routine => routine.Key)
+                .Order(),
+        ];
+    }
+
+    /// <summary>
     /// Which argument slots this routine is ever handed a value in, and how many distinct values
     /// each carries — the question that has to be asked before any of the above (292).
     /// </summary>
