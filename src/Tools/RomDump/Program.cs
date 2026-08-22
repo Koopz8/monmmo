@@ -10093,22 +10093,30 @@ public static class Program
             "      setting                                    places  nobody read it  answered NOUGHT  read a LEFTOVER"
             + "  the compare DIFFERS  A BRANCH WENT THE OTHER WAY");
 
-        var everyRun = new List<(TheFloorTable.Setting At, Attempt Played)>();
+        var everyRun = new List<(TheFloorTable.Setting At, Attempt Played, Attempt Control)>();
 
-        foreach (TheFloorTable.Setting at in TheFloorTable.Settings)
+        void Row(string label, Attempt played)
         {
-            Attempt played = Run(at);
-            everyRun.Add((at, played));
-
             IReadOnlyList<WhatTheRoutineLeft> calls = played.LeftInTheSlot;
 
             Console.WriteLine(
-                $"      {at.Command.PadRight(TheFloorTable.CommandColumn)}  {calls.Count,6}"
+                $"      {label.PadRight(TheFloorTable.CommandColumn)}  {calls.Count,6}"
                 + $"  {calls.Count(c => !c.Read),14}"
                 + $"  {calls.Count(c => c.Read && c.AnsweredNought),15}"
                 + $"  {calls.Count(c => c.Read && !c.AnsweredNought),15}"
                 + $"  {calls.Count(c => c.ReadAndDiffers),19}"
                 + $"  {calls.Count(c => c.ReadAndTookADifferentArm),26}");
+        }
+
+        foreach (TheFloorTable.Setting at in TheFloorTable.Settings)
+        {
+            Attempt played = Run(at);
+            Attempt control = Run(at, rememberSlots: true);
+
+            everyRun.Add((at, played, control));
+
+            Row(at.Command, played);
+            Row("  and with --remember-slots, which is pre-308", control);
         }
 
         Attempt widest = everyRun[^1].Played;
@@ -10180,7 +10188,7 @@ public static class Program
         Console.WriteLine();
         Console.WriteLine("      setting                                    maps  flags  passes  party  places that read a leftover");
 
-        foreach ((TheFloorTable.Setting at, Attempt without) in everyRun)
+        foreach ((TheFloorTable.Setting at, Attempt without, Attempt _) in everyRun)
         {
             Attempt with = Run(at, answerNought: true);
 
@@ -10252,44 +10260,44 @@ public static class Program
         Console.WriteLine();
         Console.WriteLine("      setting                                    maps  flags  passes  party  read a leftover");
 
-        foreach ((TheFloorTable.Setting at, Attempt without) in everyRun)
+        foreach ((TheFloorTable.Setting at, Attempt played, Attempt control) in everyRun)
         {
-            Attempt with = Run(at, rememberSlots: true);
+            int Leftovers(Attempt a) => a.LeftInTheSlot.Count(c => c.ReadAndHarmless || c.ReadAndDiffers);
 
             Console.WriteLine(
-                $"      {at.Command.PadRight(TheFloorTable.CommandColumn)}  {without.Reached.Count,4}"
-                + $"  {without.Flags.Count,5}  {without.Passes,6}  {without.Party.Count,5}"
-                + $"  {without.LeftInTheSlot.Count(c => c.ReadAndHarmless || c.ReadAndDiffers),15}");
+                $"      {at.Command.PadRight(TheFloorTable.CommandColumn)}  {played.Reached.Count,4}"
+                + $"  {played.Flags.Count,5}  {played.Passes,6}  {played.Party.Count,5}"
+                + $"  {Leftovers(played),15}");
             Console.WriteLine(
-                $"      {"  the same run with --remember-slots".PadRight(TheFloorTable.CommandColumn)}  {with.Reached.Count,4}"
-                + $"  {with.Flags.Count,5}  {with.Passes,6}  {with.Party.Count,5}"
-                + $"  {with.LeftInTheSlot.Count(c => c.ReadAndHarmless || c.ReadAndDiffers),15}");
+                $"      {"  the same run with --remember-slots".PadRight(TheFloorTable.CommandColumn)}  {control.Reached.Count,4}"
+                + $"  {control.Flags.Count,5}  {control.Passes,6}  {control.Party.Count,5}"
+                + $"  {Leftovers(control),15}");
 
-            List<string> gained = [.. with.Reached.Except(without.Reached).Order()];
-            List<string> lost = [.. without.Reached.Except(with.Reached).Order()];
+            List<string> gained = [.. control.Reached.Except(played.Reached).Order()];
+            List<string> lost = [.. played.Reached.Except(control.Reached).Order()];
 
             Console.WriteLine(
-                $"      {"  the difference".PadRight(TheFloorTable.CommandColumn)}  {with.Reached.Count - without.Reached.Count,+4}"
-                + $"  {with.Flags.Count - without.Flags.Count,+5}"
-                + $"  {with.Passes - without.Passes,+6}  {with.Party.Count - without.Party.Count,+5}"
-                + $"  {with.LeftInTheSlot.Count(c => c.ReadAndHarmless || c.ReadAndDiffers) - without.LeftInTheSlot.Count(c => c.ReadAndHarmless || c.ReadAndDiffers),+15}"
-                + (gained.Count > 0 ? $"  gained {string.Join(", ", gained.Take(8))}" : string.Empty)
-                + (lost.Count > 0 ? $"  LOST {string.Join(", ", lost.Take(8))}" : string.Empty));
+                $"      {"  what the old rule was doing".PadRight(TheFloorTable.CommandColumn)}  {control.Reached.Count - played.Reached.Count,+4}"
+                + $"  {control.Flags.Count - played.Flags.Count,+5}"
+                + $"  {control.Passes - played.Passes,+6}  {control.Party.Count - played.Party.Count,+5}"
+                + $"  {Leftovers(control) - Leftovers(played),+15}"
+                + (gained.Count > 0 ? $"  reached {string.Join(", ", gained.Take(8))}" : string.Empty)
+                + (lost.Count > 0 ? $"  did NOT reach {string.Join(", ", lost.Take(8))}" : string.Empty));
 
             // AND WHICH FLAGS, BY NUMBER. A number moving down is not a regression until it has
             // been read (7), and "-2 flags" cannot be read. These can.
-            List<int> flagsLost = [.. without.Flags.Except(with.Flags).Order()];
-            List<int> flagsGained = [.. with.Flags.Except(without.Flags).Order()];
+            List<int> flagsLost = [.. control.Flags.Except(played.Flags).Order()];
+            List<int> flagsGained = [.. played.Flags.Except(control.Flags).Order()];
 
             if (flagsLost.Count > 0 || flagsGained.Count > 0)
             {
                 Console.WriteLine(
                     $"      {"  which flags".PadRight(TheFloorTable.CommandColumn)}  "
                     + (flagsLost.Count > 0
-                        ? "no longer set: " + string.Join(", ", flagsLost.Select(f => $"0x{f:X4}"))
+                        ? "the old rule set: " + string.Join(", ", flagsLost.Select(f => $"0x{f:X4}"))
                         : string.Empty)
                     + (flagsGained.Count > 0
-                        ? "   newly set: " + string.Join(", ", flagsGained.Select(f => $"0x{f:X4}"))
+                        ? "   and did not set: " + string.Join(", ", flagsGained.Select(f => $"0x{f:X4}"))
                         : string.Empty));
             }
 

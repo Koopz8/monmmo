@@ -1134,11 +1134,24 @@ public static class Autoplayer
     /// keeping the last pass would report whichever pass happened to be last.
     /// </para>
     /// </summary>
-    private static bool Worse(WhatTheRoutineLeft one, WhatTheRoutineLeft than) =>
+    public static bool Worse(WhatTheRoutineLeft one, WhatTheRoutineLeft than) =>
         Rank(one) > Rank(than);
 
-    private static int Rank(WhatTheRoutineLeft call) =>
-        call.ReadAndDiffers ? 3 : call.ReadAndHarmless ? 2 : call.Read ? 1 : 0;
+    /// <summary>How bad one pass of one place was, worst first.</summary>
+    /// <remarks>
+    /// FIVE levels and the top two are not the same thing — a comparison that came out
+    /// differently and a BRANCH that went the other way. Ranking by the loose column put the
+    /// 0x0187 shape level with a real arm change, so a place that read a harmless leftover on one
+    /// pass and took a different arm on another could keep either, depending on which pass ran
+    /// last. Its own fixture caught that, which is what a fixture with one of every shape in it
+    /// is for (35).
+    /// </remarks>
+    public static int Rank(WhatTheRoutineLeft call) =>
+        call.ReadAndTookADifferentArm ? 4
+        : call.ReadAndDiffers ? 3
+        : call.ReadAndHarmless ? 2
+        : call.Read ? 1
+        : 0;
 
     /// <param name="runScript">
     /// Runs one script with the flags and the bag it should see, and says what it did.

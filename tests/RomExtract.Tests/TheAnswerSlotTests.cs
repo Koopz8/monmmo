@@ -1,5 +1,6 @@
 using PokeMmo.Core.Scripts;
 using PokeMmo.RomExtract.Scripts;
+using PokeMmo.Server;
 using Xunit;
 
 namespace PokeMmo.RomExtract.Tests;
@@ -115,6 +116,115 @@ public sealed class TheAnswerSlotTests
         Assert.Equal(1, buckets);
     }
 
+    // ------------------------------------------- and the same thing end to end, on bytes
+
+    private const uint Start = Rom.BaseAddress + 0x100;
+
+    private const int Unanswerable = 0x999;
+
+    private static byte[] Word(int value) => [(byte)value, (byte)(value >> 8)];
+
+    private static byte[] At(uint address) =>
+        [(byte)address, (byte)(address >> 8), (byte)(address >> 16), (byte)(address >> 24)];
+
+    /// <summary>Where the conditional jumps: one <c>end</c>, well clear of the script.</summary>
+    private const uint Elsewhere = Start + 0x40;
+
+    private static Rom Image(params byte[] script)
+    {
+        var image = new byte[0x400];
+        script.CopyTo(image, (int)(Start - PokeMmo.RomExtract.Rom.BaseAddress));
+
+        // The arm the branch may take. It has to go SOMEWHERE that decodes and is not this
+        // script — a conditional pointed back at its own start is a loop, and a loop makes one
+        // call into as many records as the step cap allows.
+        image[(int)(Elsewhere - PokeMmo.RomExtract.Rom.BaseAddress)] = 0x02;
+
+        return new PokeMmo.RomExtract.Rom(image);
+    }
+
+    /// <summary>
+    /// The whole shape on bytes: something puts a number in the slot, a routine this cannot
+    /// answer is stepped over, and the compare after it reads the number instead of an answer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The sequencing — that a write between the call and the compare spends the slot, that a
+    /// conditional is what decides, that the run ends by flushing what nobody read — lives inside
+    /// <see cref="ScriptRunner"/>, which needs an image. Without one of these it is guarded by
+    /// nothing at all, and the cartridge has no example of two of the three shapes.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void ARoutineItCannotAnswerLeavesTheSlotAloneAndTheCompareReadsIt()
+    {
+        ScriptRun run = ScriptRunner.Run(
+            rom: Image(
+            [
+                0x16, .. Word(0x800D), .. Word(5),                 // setvar 0x800D, 5
+                0x26, .. Word(0x800D), .. Word(Unanswerable),      // specialvar — nothing answers it
+                0x21, .. Word(0x800D), .. Word(5),                 // compare 0x800D, 5
+                0x06, 1, .. At(Elsewhere),                             // goto if EQUAL
+                0x02,
+            ]), address: Start);
+
+        WhatTheRoutineLeft left = Assert.Single(run.LeftInTheSlot);
+
+        Assert.Equal(Unanswerable, left.Routine);
+        Assert.Equal(0x800D, left.Slot);
+        Assert.True(left.Read, "the compare is the very next command");
+        Assert.Equal(5, left.Held);
+        Assert.True(left.Differs, "5 against 5 is Equal where nought against 5 is Less");
+        Assert.True(left.TookADifferentArm, "and the conditional tests EQUAL");
+    }
+
+    /// <summary>
+    /// A write between the call and the compare SPENDS the slot, so what the compare reads is
+    /// that write and not a leftover.
+    /// </summary>
+    /// <remarks>
+    /// The cartridge does this and the distinction is the whole reading: without it every
+    /// ordinary <c>setvar ; compare</c> after any unanswered call anywhere would be counted.
+    /// </remarks>
+    [Fact]
+    public void AWriteBetweenThemSpendsTheSlot()
+    {
+        ScriptRun run = ScriptRunner.Run(
+            rom: Image(
+            [
+                0x16, .. Word(0x800D), .. Word(5),
+                0x26, .. Word(0x800D), .. Word(Unanswerable),
+                0x16, .. Word(0x800D), .. Word(9),                 // setvar 0x800D, 9 — the answer now
+                0x21, .. Word(0x800D), .. Word(9),
+                0x06, 1, .. At(Elsewhere),
+                0x02,
+            ]), address: Start);
+
+        WhatTheRoutineLeft left = Assert.Single(run.LeftInTheSlot);
+
+        Assert.False(left.Read, "the setvar spent the slot before the compare reached it");
+        Assert.False(left.TookADifferentArm);
+    }
+
+    /// <summary>
+    /// And a call nothing ever reads is still recorded, in the bucket where it costs nothing.
+    /// </summary>
+    /// <remarks>
+    /// That bucket is 545 of the widest run's 1072 places. A reading that dropped it would report
+    /// a share over a denominator missing its own harmless half, which is 8 in one line.
+    /// </remarks>
+    [Fact]
+    public void AndACallNobodyReadsIsStillCounted()
+    {
+        ScriptRun run = ScriptRunner.Run(
+            rom: Image([0x26, .. Word(0x800D), .. Word(Unanswerable), 0x02]), address: Start);
+
+        WhatTheRoutineLeft left = Assert.Single(run.LeftInTheSlot);
+
+        Assert.False(left.Read);
+        Assert.Equal(Unanswerable, left.Routine);
+    }
+
     // ----------------------------------------- why there was anything in the slot at all
 
     /// <summary>
@@ -162,6 +272,52 @@ public sealed class TheAnswerSlotTests
 
         // And it does not reach below the other edge, which is not what it is about.
         Assert.False(HowAScriptRuns.IsRemembered(0x400F, rememberSlots: true));
+    }
+
+    // -------------------------------------------------- which pass of a place is kept
+
+    /// <summary>
+    /// A place runs on every pass with a different state behind it, and the WORST pass is the one
+    /// that counts.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The same call can answer nought on one pass and read a leftover on the next, because what
+    /// is in the slot depends on where the walk has been. Keeping the last pass would report
+    /// whichever pass happened to be last, which is a fact about the walk order and not about the
+    /// cartridge — and the whole point of this reading is that the walk order should not decide
+    /// anything.
+    /// </para>
+    /// <para>
+    /// Named in order rather than counted, so a ranking that happened to sort right for two of
+    /// the four cannot pass (35).
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void TheWorstPassOfAPlaceIsTheOneKept()
+    {
+        WhatTheRoutineLeft NobodyRead() => new(1, 0x800D, 0, 214, false, 0, false);
+        WhatTheRoutineLeft AnsweredNought() => new(1, 0x800D, 0, 0, true, 2, false) { Branched = true };
+        WhatTheRoutineLeft Harmless() => new(1, 0x800D, 0, 129, true, 129, false) { Branched = true };
+
+        // The 0x0187 shape: the comparison differs and the branch does not. It is a level of its
+        // own, and a ranking that folds it into the one below or the one above cannot tell a
+        // place that only ever read a harmless leftover from one that took a different arm.
+        WhatTheRoutineLeft Differs() => new(1, 0x800D, 0, 129, true, 2, true) { Branched = true };
+
+        WhatTheRoutineLeft TookAnother() =>
+            new(1, 0x800D, 0, 1, true, 0, true) { Branched = true, TookADifferentArm = true };
+
+        Assert.True(Autoplayer.Worse(TookAnother(), Differs()));
+        Assert.True(Autoplayer.Worse(Differs(), Harmless()));
+        Assert.True(Autoplayer.Worse(Harmless(), AnsweredNought()));
+        Assert.True(Autoplayer.Worse(AnsweredNought(), NobodyRead()));
+
+        // And it is a strict order in one direction only — otherwise every pass replaces the
+        // one before it and the merge keeps the last after all.
+        Assert.False(Autoplayer.Worse(NobodyRead(), TookAnother()));
+        Assert.False(Autoplayer.Worse(Differs(), TookAnother()));
+        Assert.False(Autoplayer.Worse(Harmless(), Harmless()));
     }
 
     /// <summary>
