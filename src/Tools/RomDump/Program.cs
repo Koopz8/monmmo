@@ -8355,6 +8355,73 @@ public static class Program
             $"    AND {noWayOut.Count} MAP(S) WHOSE EVERY EXIT IS THE RUNTIME SENTINEL — read off"
             + " the warp lists, with nothing walked");
 
+        // AND THE THIRD KIND OF EDGE, ASKED AT THE SQUARE (286). The map-level test below is
+        // 265's, and it is the loose half of the same pair the doors have: "the far map declares
+        // one back" is to a border what "it comes back to this map by some door" is to a door,
+        // and that scored 237 against a control of 233. The tight half is stepping straight back
+        // and landing on the square you left.
+        IReadOnlyList<ACrossing> crossings = WhereABorderComesBackTo.Every(world);
+
+        List<ACrossing> astray = [.. crossings.Where(c => !c.RoundTrips)];
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    AND THE BORDERS, ASKED AT THE SQUARE (286) — {crossings.Count} crossing(s),"
+            + $" {crossings.Count - astray.Count} land back on the square they left,"
+            + $" {astray.Count} DO NOT");
+
+        // AND WHETHER ANYBODY CAN CROSS THERE, which is the discriminator. A join whose squares
+        // are all walls is a join no player and no walk ever takes, so its arithmetic never
+        // mattered — and that is a different finding from a crossing somebody makes and comes
+        // back from somewhere else. Asked with the water open, so a swimmer counts.
+        var grids = new Dictionary<string, CollisionGrid>();
+
+        CollisionGrid GridFor(string id) =>
+            grids.TryGetValue(id, out CollisionGrid? had)
+                ? had
+                : grids[id] = (world.Find(id) ?? world.Maps.First()).ToGrid(surfing: true);
+
+        bool Crossable(ACrossing c) =>
+            GridFor(c.MapId).IsWalkable(c.From) && GridFor(c.Other).IsWalkable(c.To);
+
+        foreach (var group in astray
+                     .GroupBy(c => (c.MapId, c.Side, c.Other, c.BackTo))
+                     .OrderByDescending(g => g.Count()))
+        {
+            Console.WriteLine(
+                $"      {group.Key.MapId,-8} {world.Find(group.Key.MapId)?.Name ?? "?",-16}"
+                + $" {group.Key.Side,-5} -> {group.Key.Other} ({world.Find(group.Key.Other)?.Name ?? "?"})"
+                + $"  x{group.Count()}, {group.Count(Crossable)} of them CROSSABLE"
+                + "  and stepping back lands on "
+                + (group.Key.BackTo is null
+                    ? "NOTHING — no join that way at that square"
+                    : $"{group.Key.BackTo} ({world.Find(group.Key.BackTo)?.Name ?? "?"})"));
+        }
+
+        Console.WriteLine(
+            $"      of all {crossings.Count} crossing(s), {crossings.Count(Crossable)} are"
+            + $" walkable at both ends; of the {astray.Count} that do not round-trip,"
+            + $" {astray.Count(Crossable)} are.");
+
+        // AND THE OFFSETS, which are the explanation. A pair of joins round-trips exactly when
+        // the two offsets are negatives of one another — `AcrossEdge` subtracts the offset going
+        // and subtracts the other one coming back — so an asymmetry here is arithmetic and can
+        // be shown rather than asserted.
+        Console.WriteLine("      what the two sides declare, which is where the arithmetic is:");
+
+        foreach (string id in astray.SelectMany(c => new[] { c.MapId, c.Other })
+                     .Distinct()
+                     .OrderBy(m => m, StringComparer.Ordinal))
+        {
+            if (world.Find(id) is not { } m) continue;
+
+            Console.WriteLine(
+                $"        {id,-8} {m.Name,-16} {m.Width,3}x{m.Height,-3} "
+                + string.Join(
+                    ", ",
+                    m.Connections.Select(c => $"{c.Side}->{c.MapId}@{c.Offset}")));
+        }
+
         // AND THE THIRD KIND OF EDGE. A world is made of steps, borders and doors; the steps are
         // symmetric unless a ledge says otherwise and the doors are above, so the borders are the
         // only edge nobody had asked this of.
