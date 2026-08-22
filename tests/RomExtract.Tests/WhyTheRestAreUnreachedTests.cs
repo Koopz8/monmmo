@@ -57,27 +57,37 @@ public sealed class WhyTheRestAreUnreachedTests
     }
 
     /// <summary>
-    /// <b>THE SENTINEL IS NOT A WAY IN.</b> A warp whose target is the runtime's own marker names
-    /// no map, and counting it would put a door into every lift cabin from everywhere (265, 287).
+    /// <b>THE SENTINEL IS NOT A WAY IN — and this is a DECOY, because the file cannot hold the
+    /// shape it guards.</b> A warp is dynamic exactly when its target is <c>127.127</c>, so
+    /// dropping those can only ever change the answer for a map whose OWN id is <c>127.127</c>,
+    /// and no bank in this cartridge has 128 maps in it.
     /// <para>
-    /// The fixture has a map named ONLY by a sentinel warp beside one named by an ordinary warp
-    /// from the same place, so a version that counts the sentinel gets the first one wrong and
-    /// keeps the second right — which a fixture with only the sentinel could not show.
+    /// The first version of this fixture pointed a sentinel warp at one map and asserted about
+    /// ANOTHER, so a break removing the filter came back green — the filter had nothing to do with
+    /// either. A rule the cartridge never exercises is a rule no break can be aimed at, so the
+    /// fixture carries the case instead (57, and 300 did the same).
     /// </para>
     /// </summary>
     [Fact]
     public void TheSentinelIsNotAWayIn()
     {
+        string sentinel = $"{Warp.Dynamic}.{Warp.Dynamic}";
+
         List<MapData> maps =
         [
-            Map("1.0", warpsTo: [$"{Warp.Dynamic}.{Warp.Dynamic}", "1.2"]),
-            Map("1.1"),
+            Map("1.0", warpsTo: [sentinel, "1.2"]),
+            Map(sentinel),
             Map("1.2"),
         ];
 
         IReadOnlyList<Unreached> sorted = WhyTheRestAreUnreached.In(maps, new HashSet<string> { "1.0" });
 
-        Assert.Equal(WhyUnreached.NoWayInAtAll, Why(sorted, "1.1"));
+        // The sentinel map is named by a warp and it is still NO WAY IN, because that warp names
+        // the runtime's marker rather than a place.
+        Assert.Equal(WhyUnreached.NoWayInAtAll, Why(sorted, sentinel));
+
+        // And the ordinary warp from the very same map is still a way in, so the fixture is about
+        // the sentinel and not about 1.0 being ignored.
         Assert.Equal(WhyUnreached.NamedFromReachedGround, Why(sorted, "1.2"));
     }
 
