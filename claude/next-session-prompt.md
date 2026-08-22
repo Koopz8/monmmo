@@ -718,6 +718,32 @@ Traps worth carrying:
     what names their own blocks is a literal in code, which the climb had said per site since 191.
     **Before believing a proximity test, ask what it would find if the thing were merely nearby.**
 
+143. **A SUPERLATIVE IS NOT A SETTING** (309). Every line in this block saying *the widest run*
+    moved at 307 and **nothing was wrong with any of them**: the widest is whichever row is last,
+    and 307 added one. `216 of the 322 gating flags, 106 never opened` is still exactly right at
+    `--play --say-yes --boat --surf --in-order` and reads 219/103 at the row that is now last.
+    The two are separated by ONE experiment — re-run the OLD superlative under the NEW build — and
+    that experiment also found the lines that really were wrong: `869 places call 76 routines` is
+    **873 / 80** at its own row and was wrong before either milestone touched it. **When a lever
+    is added, every line quoting a superlative is owed a re-run even though none of them is a
+    claim about the lever.**
+
+142. **A SPLIT THAT DOES NOT ADD UP TO ITS OWN TOTAL** (309). *106 gates it never opens* on one
+    line and *those 109 are 35 / 30 / 16 / 15 / 8 / 5* on the next — six numbers summing to 109
+    under a total of 106, each maintained by hand at a different milestone, every one of them
+    individually plausible. The true split is **35 / 30 / 15 / 13 / 8 / 5**: only *never picked
+    up* was wrong, by three, and the TOTAL was right all along. This is the cheapest check in the
+    project and nothing was doing it, so the instrument does now — the buckets are asserted to
+    partition, and a printed split cannot disagree with itself again. **Add the columns up.**
+
+141. **THE COLUMNS THAT CANNOT MOVE HELD ACROSS BOTH MILESTONES** (309). 211's rule, given the
+    hardest test it has had: a lever added at 307 and the memory rule changed at 308, and
+    BOUNDARY (*no setflag names it*) reads **35** at all seven settings while OBSTACLE reads
+    **15**. The floor's whole row held too — 123 / 199 gating, 164 ever on against the 160 it
+    stops with, 315 signs at 214 addresses on 79 maps — and so did the took-back sequence
+    4/6/4/10/9/6, exactly. **The lines that moved and the lines that could not are two
+    populations, and knowing which a line belongs to before re-running it is most of the audit.**
+
 140. **A CUT WITH ONE EDGE IS A CUT THE OTHER BAND SAILS OVER** (308). `FirstRemembered`'s own
     paragraph is about the twelve pads in the `0x400x` band — *a pad three hundred scripts
     scribble on is not something the story remembers* — and it is written `variable >= 0x4010`.
@@ -1551,6 +1577,13 @@ number this project printed before 308 was measured under (241). Then `--answer-
 with a MUST-BE-NOUGHT control column; then the band table that says why there was anything in the
 slot at all.
 
+`--the-floor` gained **THE BLOCK'S RUN-DEPENDENT LINES** at 309: one row per setting for every
+number this block used to keep by hand — gating flags set and never set, the six why-shut buckets,
+flags ever on and taken back, places and routines the run could not answer, and signs as records,
+addresses and maps. With the verdict on the two columns that are about the FILE and must not move,
+and a line saying which row *the widest* is today and which it was before 307. Nothing in it is
+maintained by hand; re-run it and paste.
+
 `--the-fifth-list` is 307. Two halves: what a map's own script list holds by KIND BYTE (234
 unconditional entries at 163 addresses on 159 maps, against 91 conditional the walk already runs),
 then what each of the five kinds of script moves that **no other kind moves either way** — all
@@ -2198,11 +2231,29 @@ THE 37 UNREACHED ARE 8 REASONS (303) — **28 and 6 at 307**, because --on-load 
 5 places guard a coin hand-over; every bound plus its own gift is 10000; 0 chains in the reversal
 2 places sell coins for money at 20 each — READ; 3 price lists, 15 rows, all READ
 the floor is asked for money in ONE place and it is the coin counter; 8 at --say-yes and above
-the widest run sets 216 of the 322 gating flags — 106 gates it never opens; 199 at the floor
+THE RUN-DEPENDENT LINES ARE PRINTED BY `--the-floor` NOW (309), one row per setting, and the
+  numbers below are that table's — do not maintain them by hand, re-run it:
+
+      setting                                 gates set  never set  boundary  reach  obstacle  picked up  past it  took back  ever on  took back  places  routines  signs   at   on
+      --play                                        123        199        35     37        15        100        8          4      164          4     472        44    315  214   79
+      --play --say-yes                              163        159        35     36        15         60        7          6      238          6     755        66    394  287  106
+      --play --say-yes --in-order                   165        157        35     36        15         60        7          4      238          4     538        53    394  287  106
+      --play --say-yes --boat                       214        108        35     29        15         13        8          8      308         10    1223        92    470  333  140
+      --play --say-yes --boat --in-order            215        107        35     30        15         13        7          7      308          9     871        79    469  333  140
+      --play --say-yes --boat --surf --in-order     216        106        35     30        15         13        8          5      306          6     873        80    469  333  140
+      ... --on-load                                 219        103        35     25        15         13        9          6      320          7     895        86    469  333  140
+
+  **BOUNDARY reads 35 and OBSTACLE reads 15 at ALL SEVEN** — both are about the FILE and 211 says
+  they must not move with a lever. They did not, across a lever added at 307 and a rule changed at
+  308, and `--the-floor` prints the verdict rather than leaving it to be checked.
+  **THE WIDEST IS A ROW AND NOT A SETTING** (309): every prompt line saying *the widest* moved at
+  307 because the last row moved, with nothing wrong. `216 / 106` is still exactly right at
+  `--play --say-yes --boat --surf --in-order`, which is what it always meant.
   (264: it was 212/110; 213/109 until 285 opened seven more maps)
-  the floor's own gating count went 121 -> 123 at 239 and the widest run's 212/110 did not move
+  the floor's own gating count went 121 -> 123 at 239
 BUT THE RUN ALSO TAKES FLAGS BACK: 164 ever on at the floor against the 160 it stops with (240)
-  4 / 6 / 4 / 10 / 9 / 6 taken back at the six settings; 3 of the floor's 4 are on at the start
+  4 / 6 / 4 / 10 / 9 / 6 / 7 taken back at the SEVEN settings — the first six reproduced EXACTLY
+  at 309, across both of 307's and 308's changes; 3 of the floor's 4 are on at the start
   and NO script in the run sets them — one script each turns them off (1.57, 10.16, 14.3)
   a set flag HIDES somebody, so clearing one is how the cartridge puts people INTO the world
   costs 0 maps at all six settings, and only that direction can be non-empty — the walk is
@@ -2216,7 +2267,8 @@ BUT THE RUN ALSO TAKES FLAGS BACK: 164 ever on at the floor against the 160 it s
     **242's four-square rule is three squares too many for 97 signs** and 68 of them have another
     walkable neighbour. ADOPTED AT 280 — MapSign carries the kind, MustBeReadFrom names the square,
     and it costs 0 maps, 0 flags and 2 signs, measured against the loose run in the same process
-  315 of the 519 RUN at the floor (214 addresses, 79 maps); 469 at the widest (333, 140) — 242,
+  315 of the 519 RUN at the floor (214 addresses, 79 maps); 469 at the widest (333, 140) — ALL SIX
+    REPRODUCED EXACTLY AT 309 and they are in the table above now — 242,
     and 280, which took two off each end by making the walk obey the side the record names
     241 said 215 and 328: it keyed the read set on (map, ADDRESS) and a sign is a SQUARE. The
     address and map columns were right throughout. 224 for the THIRD time, this one self-inflicted
@@ -2244,16 +2296,23 @@ BUT THE RUN ALSO TAKES FLAGS BACK: 164 ever on at the floor against the 160 it s
     whole bucket is POCKETS, not walls: CINNABAR ISLAND is 352 of its 438 walkable squares fenced
     off, and the "five adjacent pairs" are shopfronts on the wrong side of a fence. CLOSED
   A WIDE SIGN OR A WIDE WALK (283): 1.114 0x08163F5A's 154 reads in one run are **22 records on
-    one map x 7 passes** — both, and neither alone. 59 of the 327 blocks any run reads are shared
+    one map x 7 passes** — both, and neither alone. 59 of the **333** blocks any run reads are shared
+    (327 until 307 added a seventh run to the union — a union is not a run, and its size is a
+    property of how many rows the table has)
     by more than one record, and no run reads a block more than once per square per pass
   the floor's seven: 0x0031, 0x0032, 0x0233, 0x0234, 0x0235, 0x026D, 0x0834; TWO gate and each
     holds one person — 3.43 p1 and 30.0 p2. Only 2 of the 7 were moved by a sign ITSELF
   every control stops with "nothing more opened", so signs ARE what makes the run cycle (241)
   the RUN could not see ONE of them until 239, because MapData carried no sign list at all
   they move NO map count at any lever setting — not one square of this game is behind a sign
-those 109 are 35 no opener, 30 never run, 16 never picked up, 15 obstacles, 8 past the boundary,
-  5 TAKEN BACK (240) — the sixth bucket, first in the order, and it took from THREE of the other
-  five. RE-RUN AT 264: the last two were 7 and 7 and the total was 110
+~~those 109 are 35 no opener, 30 never run, 16 never picked up, 15 obstacles, 8 past the boundary,
+  5 TAKEN BACK~~ **THE SPLIT NEVER ADDED UP TO ITS OWN TOTAL** (309): those six sum to 109 under a
+  line that says 106, because each was maintained by hand at a different milestone. The true split
+  at that row is **35 / 30 / 15 / 13 / 8 / 5 = 106** — only *never picked up* was wrong, by three,
+  and the total was right all along. It is in the table above now, and
+  `WhyTheGatesAreShutTests.TheReasonsPartitionTheShutGates` asserts the buckets sum to the total,
+  so a printed split cannot disagree with itself again. The sixth bucket is still first in the
+  order and still takes from three of the other five (240)
 35 and 15 are the same at every lever setting, which is how a property of the FILE has to behave
 3 scripts hold 27 gating flags: CUT and ROCK SMASH (15, 2 scripts), STRENGTH (12, 1) — CHECKED
 322 gating flags hold 605 objects; 2 hold none (the boat's). 15 tree-and-rock gates hold 146,
@@ -2263,8 +2322,12 @@ those 109 are 35 no opener, 30 never run, 16 never picked up, 15 obstacles, 8 pa
 of the 295: 272 hold one, 10 hold 5-16, 8 hold 2-4, 3 hold more than 16, 2 hold nothing;
   21 hold MORE THAN ONE, 175 objects between them — "62 gates hold 240 people" is WITHDRAWN
 the 12 STRENGTH boulders are SEAFOAM and VICTORY ROAD, and their flags split THREE ways
-869 places call 76 routines the widest run cannot answer; 279 of the places, across 59 routines,
-  have an answer nothing branches on — RE-RUN AT 264, it was 766/63/186; 860/75/276/58 until 285
+~~869 places call 76 routines the widest run cannot answer~~ **873 / 80 at that same row** (309) —
+  wrong before 307 or 308 touched anything, and now 895 / 86 at the widest row. In the table above.
+  279 of the places, across 59 routines,
+  have an answer nothing branches on — RE-RUN AT 264, it was 766/63/186; 860/75/276/58 until 285.
+  THAT PAIR IS NOT IN THE TABLE and was not re-run at 309 — it needs SpecialCalls' profiles as
+  well as the run, which is a join the floor table does not make
 --routines: 1118 branching sites at 437 byte positions in the file; 48 routines are branched on
 0x188's one place comes to nothing
 0x4059 has one writer and NO readers anywhere; 0x4055 has 21 readers against a floor of 0

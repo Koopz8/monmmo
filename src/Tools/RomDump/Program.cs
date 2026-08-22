@@ -6583,6 +6583,7 @@ public static class Program
         WriteTheWayBackAtEverySetting(world, everyRun);
         WriteWhyTheRestAreUnreached(rom, world, everyRun);
         WriteTheSignsAtNoSetting(world, everyRun);
+        WriteTheBlocksRunLines(rom, world, everyRun);
 
         Console.WriteLine();
         Console.WriteLine(
@@ -10052,6 +10053,124 @@ public static class Program
     /// sorts them four ways, and then prices the lever in the same process (19).
     /// </para>
     /// </remarks>
+
+    /// <summary>
+    /// The block's run-dependent lines, each printed with the setting it is about (309).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>"The widest run" is not a setting.</b> It is whichever row happens to be last, and 307
+    /// added one — so every line in the prompt's block that says <i>the widest</i> moved without
+    /// anything being wrong, while lines that name a lever did not. Separating those two is what
+    /// this table is for, and the pre-307 widest is kept as its own column so the difference can
+    /// be read rather than argued about.
+    /// </para>
+    /// <para>
+    /// The other half is 211's rule. Some of these counts are about the FILE and cannot move with
+    /// a lever whatever else changes; those rows carry a verdict, and a verdict that fires is a
+    /// wrong label rather than a finding.
+    /// </para>
+    /// <para>
+    /// SIGNS is records, AT is distinct addresses and ON is maps, and all three are printed
+    /// because 224 is the milestone about counting one of them when you meant another — 241 said
+    /// 215 and 328 for what are 315 records at 214 addresses.
+    /// </para>
+    /// </remarks>
+    private static void WriteTheBlocksRunLines(
+        Rom rom,
+        WorldData world,
+        IReadOnlyList<(TheFloorTable.Setting At, Attempt Played)> everyRun)
+    {
+        Console.WriteLine();
+        Console.WriteLine("  THE BLOCK'S RUN-DEPENDENT LINES, EACH AT THE SETTING IT IS ABOUT (309)");
+        Console.WriteLine();
+        Console.WriteLine("    Every one of these has been quoted in the prompt as a bare number. A number off a run");
+        Console.WriteLine("    is about that run, and the two superlatives this project uses — THE FLOOR and THE WIDEST");
+        Console.WriteLine("    — are a row and not a setting: adding a lever moves the second one silently.");
+        Console.WriteLine();
+
+        var gates = new FlagGates(world);
+
+        // ROM-only and expensive, so once. Every setting is scored against the same sweep — two
+        // sweeps of one image is how two readings of one thing come to disagree (33, 58).
+        List<SetsAFlag> scripts = [.. MapLibrary.Open(rom).All().SelectMany(EveryScriptOn)];
+        int[] covered = EverywhereInTheImage.Opened(rom, scripts);
+        IReadOnlyDictionary<int, IReadOnlyList<FlagSite>> moved =
+            EverywhereInTheImage.EveryFlagMoved(rom, covered);
+
+        HashSet<int> onTheFloor =
+        [
+            .. world.Maps.SelectMany(m => m.Objects).Where(o => o.CanBeTakenAway).Select(o => o.HiddenBy),
+        ];
+
+        List<int> obstacles =
+            [.. GatesThatAreObstacles.In(rom, world).Where(g => g.Removed).Select(g => g.Flag)];
+
+        Console.WriteLine(
+            "      setting                                    gates set  never set   boundary  reach  obstacle"
+            + "  picked up  past it  took back   ever on  took back  places  routines   signs  at  on");
+
+        var rows = new List<(string Label, int Boundary, int Obstacle)>();
+
+        foreach ((TheFloorTable.Setting at, Attempt played) in everyRun)
+        {
+            IReadOnlyCollection<int> tookBack = [.. played.EverOn.Except(played.Flags)];
+
+            IReadOnlyList<ShutGate> shut = WhyTheGatesAreShut.Of(
+                gates, played.Flags, moved, onTheFloor, obstacles, tookBack);
+
+            int Why(ShutBecause why) => shut.Count(g => g.Why == why);
+
+            int boundary = Why(ShutBecause.NothingSetsIt);
+            int obstacle = Why(ShutBecause.AnObstacle);
+
+            rows.Add((at.Command, boundary, obstacle));
+
+            Console.WriteLine(
+                $"      {at.Command.PadRight(TheFloorTable.CommandColumn)}  {gates.HowManyOf(played.Flags),9}"
+                + $"  {shut.Count,9}  {boundary,9}  {Why(ShutBecause.NeverRan),5}  {obstacle,8}"
+                + $"  {Why(ShutBecause.TakenOffTheFloor),9}  {Why(ShutBecause.OnlyPastTheBoundary),7}"
+                + $"  {Why(ShutBecause.TheRunTookItBack),9}"
+                + $"  {played.EverOn.Count,8}  {tookBack.Count,9}"
+                + $"  {played.Specials.Values.Sum(),6}  {played.Specials.Count,8}"
+                + $"  {played.SignsRead.Count,6}"
+                + $"  {played.SignsRead.Select(r => r.Address).Distinct().Count(),3}"
+                + $"  {played.SignsRead.Select(r => r.MapId).Distinct().Count(),3}");
+        }
+
+        // AND THE TWO COLUMNS THAT MUST NOT MOVE (211).
+        //
+        // "No setflag names it" and "it is a tree, a rock or a boulder" are properties of the
+        // FILE. A run cannot change either, so if one of them moves across these rows the bucket
+        // is mislabelled — which is exactly how 211 found sixty-five flags nothing names.
+        Console.WriteLine();
+
+        bool boundaryHolds = rows.Select(r => r.Boundary).Distinct().Count() == 1;
+        bool obstacleHolds = rows.Select(r => r.Obstacle).Distinct().Count() == 1;
+
+        Console.WriteLine(
+            $"    BOUNDARY and OBSTACLE are about the FILE and must not move with a lever (211):"
+            + $" boundary reads {string.Join("/", rows.Select(r => r.Boundary).Distinct())}"
+            + $" and obstacle {string.Join("/", rows.Select(r => r.Obstacle).Distinct())}"
+            + $" — {(boundaryHolds && obstacleHolds ? "BOTH HOLD" : "ONE OF THEM MOVES, WHICH IS A WRONG LABEL")}.");
+
+        // AND WHICH SUPERLATIVE EACH NUMBER IS ABOUT. The pre-307 widest is still in this table
+        // as its own row, so a line quoted as "the widest" can be checked against both.
+        if (everyRun.Count >= 2)
+        {
+            (TheFloorTable.Setting at, Attempt played) newest = everyRun[^1];
+            (TheFloorTable.Setting at, Attempt played) before = everyRun[^2];
+
+            Console.WriteLine();
+            Console.WriteLine(
+                $"    THE WIDEST IS A ROW, NOT A SETTING. It is `{newest.at.Command}` today and was"
+                + $" `{before.at.Command}` before 307 — and those two rows read"
+                + $" {gates.HowManyOf(newest.played.Flags)} and {gates.HowManyOf(before.played.Flags)}"
+                + " gating flags set. A prompt line quoting one of them is right about a row and"
+                + " silent about which.");
+        }
+    }
+
     private static void WriteTheAnswerSlot(Rom rom, string startAt)
     {
         Console.WriteLine();

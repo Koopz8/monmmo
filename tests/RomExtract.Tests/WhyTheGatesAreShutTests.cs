@@ -80,6 +80,38 @@ public sealed class WhyTheGatesAreShutTests
     private static ShutBecause Why(int flag) => Assert.Single(Shut(), g => g.Flag == flag).Why;
 
     /// <summary>
+    /// <b>The buckets PARTITION the shut gates: every one lands in exactly one, and they sum to
+    /// the total.</b>
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the invariant the prompt's own block broke and nobody noticed for milestones. It
+    /// said <i>106 gates it never opens</i> on one line and <i>those 109 are 35 no opener, 30
+    /// never run, 16 never picked up, 15 obstacles, 8 past the boundary, 5 taken back</i> on the
+    /// next — six numbers summing to 109 under a total of 106, each maintained by hand at a
+    /// different milestone.
+    /// </para>
+    /// <para>
+    /// A split that does not add up to its own total is the cheapest error there is to check for
+    /// and the easiest to read past, because every individual number in it looks reasonable.
+    /// Asserted on the instrument so the printed line cannot disagree with itself again (309).
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void TheReasonsPartitionTheShutGates()
+    {
+        IReadOnlyList<ShutGate> shut = Shut();
+
+        int summed = Enum.GetValues<ShutBecause>().Sum(why => shut.Count(g => g.Why == why));
+
+        Assert.Equal(shut.Count, summed);
+
+        // And every reason the enum names is one this classification can actually produce, so a
+        // bucket added and never assigned cannot sit in the output reading nought forever (35).
+        Assert.All(shut, g => Assert.Contains(g.Why, Enum.GetValues<ShutBecause>()));
+    }
+
+    /// <summary>
     /// Each of the four reasons, on its own gate. Four of them, because a fixture with one of
     /// each kind is the smallest thing that can tell four buckets apart.
     /// </summary>
