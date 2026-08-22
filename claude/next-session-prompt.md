@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-301`, **3487 tests green** — re-read at 297, where the old line still said `claude-314` and
+`claude-302`, **3491 tests green** — re-read at 297, where the old line still said `claude-314` and
 3274 (trap 14, in the sentence that tells you where you are standing).
 
 Standing rules — do not break these:
@@ -710,6 +710,15 @@ Traps worth carrying:
     what names their own blocks is a literal in code, which the climb had said per site since 191.
     **Before believing a proximity test, ask what it would find if the thing were merely nearby.**
 
+130. **TWO OPERANDS OF ONE COMMAND ARE THE SAME KIND WHEN THEY DRAW FROM THE SAME SET** (302).
+    301 showed the range test says nothing — fifteen operand positions have every value inside the
+    species table's named set. The version that does say something is the PAIR: of the **134 pairs
+    of operands of one command** in the map scan where both take eight or more distinct values,
+    `0xA2 arg0` and `0xA2 arg2` share more of their union than any other — **rank 1 of 134, 83.8%
+    against the runner-up's 68.6%**. **Scored against the UNION and not the smaller set**, because
+    against the smaller one a pair where one operand takes two values and the other two hundred
+    wins outright by containing it, which is a fact about the sizes.
+
 129. **A SPAN IS NOT A TABLE** (301). Testing "could this number be a species" against the COUNT of
     named entries assumes the unnamed ones are at the END. They are not: 386 of the species table's
     412 entries carry a name and the twenty-six that do not are in the MIDDLE — indices 252 to 276
@@ -1196,8 +1205,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-301-the-number-three-things-carry.md` first, then `300`, then `299`,
-then `298`, then `297`, then `296`, then `295`, then `294`,
+Read `claude/milestone-302-two-columns-of-one-kind.md` first, then `301`, then `300`,
+then `299`, then `298`, then `297`, then `296`, then `295`, then `294`,
 then `293`, then `292`, then `291`, then `290`, then `289`, then `288`, then `287`, then `286`,
 then `285`, then `284`, then `283`, then `282`, then `281`, then `280`, then `279`, then `278`, then `277`, then `276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
@@ -1396,6 +1405,13 @@ dotnet run -c Release --project src/Tools/RomDump -- firered.gba --the-control
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --the-ruler
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --the-species
 ```
+
+`--the-species` ends with 302: **`0xA2` is a species, a species, an INDEX and a nought-or-one** —
+533 byte positions on 30 maps, 239 distinct pairs, 24 of them the same species twice. That the two
+are one KIND is rank 1 of 134 operand pairs by share of the UNION (83.8% against 68.6%); the index
+steps by one down the first column inside a scene; it is NOT a trainer id (1 of 98 against 474 ids
+spanning the same range); and **the table it indexes is NOT FOUND** — 462 bases put all 98 values on
+a ROM address against NOUGHT in the reversed image, and one of the 98 targets reads as dialogue.
 
 `--the-species` is 301: the number `0xB6`, `0xA1` and one argument slot all carry. It prints the
 WEAK filter first (15 of 102 operand positions have every value inside the species table's named
@@ -2553,6 +2569,20 @@ still work.**
   * ~~**A `call` between a value and the call it is credited to.**~~ **FOLLOWED AT 300 and it is
     NOUGHT** — 0 of the 13 is a value the block overwrote, 5 are unread because the block calls
     something of its own, 8 come back clean.
+* **What 301 and 302 left.**
+  * ~~`0xA2`'s two species-shaped operands~~ **READ AT 302** — species, species, an INDEX
+    (299..965, stepping by one down the first column inside a scene), a nought-or-one. **The table
+    it indexes is NOT FOUND**: 462 four-aligned bases put all 98 values on a ROM address against
+    NOUGHT in the reversal, and one of the 98 targets reads as dialogue. Untried constraints: that
+    the table be contiguous, that its span match 299..965, that the entries share a shape.
+  * **The nought-or-one** is 272 and 261 and nothing says what it picks.
+  * **`0x0136` takes FOUR arguments at 24 places** on `1.120` DOTTED HOLE, `2.35` TANOBY KEY and
+    `2.38` NAVEL ROCK — the richest argument signature in the game, unasked.
+  * **`0x5C arg6` / `arg10` is rank 2 of 134** on 302's test — 242 shared of 335 and 260. That is
+    `trainerbattle`, and two of its operands drawing from one set of hundreds is unread.
+  * **`0x018B` on `6.0` PEWTER CITY** is handed 142 AERODACTYL and 141 KABUTOPS with the same second
+    and third values, and has neither a `0xB6` nor a `0xA1` to cross-check it.
+  * **`1.59` is SECTION 47** — the region-name table has no name for it and it holds 156 of the 533.
 * **What 300 left.**
   * **The five that call something of their own.** Closing them means following a call TWO levels,
     which nothing in this project does in either direction.
