@@ -85,8 +85,28 @@ public static class WhatCarriesASpecies
         {
             if (!seen.Add(address)) continue;
 
-            List<ScriptCommand> commands = ScriptReader.ReadAll(rom, address);
+            found.AddRange(InOneBlock(ScriptReader.ReadAll(rom, address), mapId, named));
+        }
 
+        return found;
+    }
+
+    /// <summary>
+    /// The same, asked of one block's commands (301).
+    /// </summary>
+    /// <remarks>
+    /// <b>Split out because two breaks came back green.</b> Both rules — the command's second field
+    /// being a BYTE at offset two, and the pair's second half being the slot BESIDE the species —
+    /// lived inside a sweep that needs a whole cartridge, so no fixture could reach either. That is
+    /// this repository's most repeated structural fault (219, 221, 222, 223, and 298 in the other
+    /// arm), and the fix is always the same: move the rule to where a test can ask it.
+    /// </remarks>
+    public static IReadOnlyList<WhereASpeciesIsNamed> InOneBlock(
+        List<ScriptCommand> commands, string mapId, IReadOnlySet<int> named)
+    {
+        var found = new List<WhereASpeciesIsNamed>();
+
+        {
             foreach (int species in commands
                          .Where(c => c.Code is TheCommand or TheCry)
                          .Select(c => c.Word())

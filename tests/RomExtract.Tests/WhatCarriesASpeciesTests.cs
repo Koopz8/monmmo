@@ -82,25 +82,79 @@ public sealed class WhatCarriesASpeciesTests
     {
         byte[] image = Blank();
 
-        // setvar 0x8004, 249 ; setvar 0x8005, 70 ; setvar 0x8006, 3 ; special 0x1BB ; end
-        Put(image, 0x1000, SetVar, 0x04, 0x80, 0xF9, 0x00);
-        Put(image, 0x1005, SetVar, 0x05, 0x80, 0x46, 0x00);
-        Put(image, 0x100A, SetVar, 0x06, 0x80, 0x03, 0x00);
-        Put(image, 0x100F, SpecialCalls.Special, 0xBB, 0x01);
-        Put(image, 0x1012, End);
+        // NAVEL ROCK's own shape:
+        //   0xA1 F9 00 02 00 ; setvar 0x8004, 249 ; setvar 0x8005, 70 ; setvar 0x8006, 0
+        //   ; special 0x1BB ; end
+        //
+        // The 0xA1 is what SEEDS the reading — it is asked of the blocks that name a species, not
+        // of every block that fills a slot, and a fixture without one finds nothing at all.
+        Put(image, 0x1000, WhatCarriesASpecies.TheCry, 0xF9, 0x00, 0x02, 0x00);
+        Put(image, 0x1005, SetVar, 0x04, 0x80, 0xF9, 0x00);
+        Put(image, 0x100A, SetVar, 0x05, 0x80, 0x46, 0x00);
+        Put(image, 0x100F, SetVar, 0x06, 0x80, 0x03, 0x00);
+        Put(image, 0x1014, SpecialCalls.Special, 0xBB, 0x01);
+        Put(image, 0x1017, End);
 
-        List<ScriptCommand> commands = Read(image);
+        WhereASpeciesIsNamed row = Assert.Single(
+            WhatCarriesASpecies.InOneBlock(Read(image), "2.38", Named));
 
-        Assert.Equal(3, commands.Count(c => c.Code == SetVar));
+        Assert.Equal(249, row.Species);
+        Assert.Equal(0x8004, row.Slot);
 
         // 70, not 249 (the same slot) and not 3 (the last one written).
-        Assert.Equal(
-            70,
-            commands.First(c => c.Code == SetVar && c.Word() == 0x8005).Word(2));
+        Assert.Equal(70, row.InTheSlot);
 
-        Assert.NotEqual(
-            commands.First(c => c.Code == SetVar && c.Word() == 0x8006).Word(2),
-            commands.First(c => c.Code == SetVar && c.Word() == 0x8005).Word(2));
+        // And the routine after it is found, which is what makes the pair belong to a call.
+        Assert.Equal([0x01BB], row.Routines);
+    }
+
+    private static readonly HashSet<int> Named = [.. Enumerable.Range(1, 411)];
+
+    /// <summary>
+    /// <b>THE COMMAND'S SECOND FIELD IS A BYTE AT OFFSET TWO.</b> Read as a halfword it takes the
+    /// species' high half with it, and on this cartridge every species' high byte is nought — so a
+    /// halfword read gives the same answer at every one of the ten places and the fault is
+    /// invisible. The fixture puts a species ABOVE 255 there, which the cartridge does at exactly
+    /// one place (410, on BIRTH ISLAND) and which no <c>0xB6</c> in the game carries.
+    /// </summary>
+    [Fact]
+    public void TheCommandsSecondFieldIsAByte()
+    {
+        byte[] image = Blank();
+
+        // 0xB6 9A 01 46 00 00 — species 410, byte 70. The species' high byte is 1, so a halfword
+        // read at offset two gives 0x0146 rather than 70.
+        Put(image, 0x1000, WhatCarriesASpecies.TheCommand, 0x9A, 0x01, 0x46, 0x00, 0x00);
+        Put(image, 0x1006, End);
+
+        WhereASpeciesIsNamed row = Assert.Single(
+            WhatCarriesASpecies.InOneBlock(Read(image), "2.56", Named));
+
+        Assert.Equal(410, row.Species);
+        Assert.Equal(70, row.ByTheCommand!.Second);
+    }
+
+    /// <summary>
+    /// And a <c>setvar</c> into the save's own numbers is not the species going into a slot — read
+    /// through the reading rather than through a constant, so a version that took any variable
+    /// fails here.
+    /// </summary>
+    [Fact]
+    public void OnlyASetVarIntoASlotCounts()
+    {
+        byte[] image = Blank();
+
+        // setvar 0x4001, 249 ; 0xB6 F9 00 46 00 00 ; end — the species is written, but not to a slot.
+        Put(image, 0x1000, SetVar, 0x01, 0x40, 0xF9, 0x00);
+        Put(image, 0x1005, WhatCarriesASpecies.TheCommand, 0xF9, 0x00, 0x46, 0x00, 0x00);
+        Put(image, 0x100B, End);
+
+
+        WhereASpeciesIsNamed row = Assert.Single(
+            WhatCarriesASpecies.InOneBlock(Read(image), "1.74", Named));
+
+        Assert.Equal(0, row.Slot);
+        Assert.NotNull(row.ByTheCommand);
     }
 
     /// <summary>
