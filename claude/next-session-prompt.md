@@ -709,6 +709,25 @@ Traps worth carrying:
     what names their own blocks is a literal in code, which the climb had said per site since 191.
     **Before believing a proximity test, ask what it would find if the thing were merely nearby.**
 
+121. **A RULE READ OFF THE SCRIPT BEATS A DISTANCE CHOSEN HERE** (295). 294 marked the argument
+    window MODELLED and could not replace it. The replacement is two rules: the run must be
+    byte-contiguous, and **a value belongs to the FIRST call after it** — the FAN CLUB on `14.9`
+    sets `0x8004` and asks `0x0A3` eight times, and without the second rule the eighth call
+    collects all eight. Under them the sweep **converges at a window of twelve** and is identical
+    at 4096, so the default is `NoLimit` and nothing is chosen.
+
+    **39 routines are handed a value in an argument slot, 30 in `0x8004`, 9 only elsewhere** — 292
+    said 44/33/11 and 294's contiguity-only reading said 62/49/13. Three readings in four
+    milestones and this is the first that rests on no constant. And **both flickering selectors
+    vanish**: `0x194` is the only one at every window, because `0x0A3` and `0x0A4` were collecting
+    somebody else's argument.
+
+    **And a rule can be guarded and still be unguarded through the route that runs it.** Three of
+    six breaks needed a fixture written before they could kill: the barrier named one of two call
+    forms, the window boundary (294's own axis) was pinned by nothing, and the ORDER arguments come
+    back in — which decides which of two values in a slot wins — was reachable only through a path
+    no test took.
+
 120. **A FINDING THAT MOVES WITH A KNOB IS A FACT ABOUT THE KNOB** (294). `SpecialCalls.Before`
     stops four commands in front of a call. Swept 1..24, **nothing plateaus**: routines handed a
     value go 30/35/40/**44**/49/52/57/59/62 and are still climbing at 24. So 292's "44 of 178" is
@@ -1073,9 +1092,9 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-294-the-window-never-plateaus.md` first, then `293`, then `292`, then `291`,
-then `290`, then `289`, then `288`, then `287`, then `286`, then `285`, then `284`, then `283`,
-then `282`, then `281`, then `280`, then `279`, then `278`, then `277`, then `276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
+Read `claude/milestone-295-two-rules-that-replaced-a-knob.md` first, then `294`, then `293`, then
+`292`, then `291`, then `290`, then `289`, then `288`, then `287`, then `286`, then `285`, then
+`284`, then `283`, then `282`, then `281`, then `280`, then `279`, then `278`, then `277`, then `276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
 `250`, `249`, `248`, `247`, `246`, `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
@@ -2071,15 +2090,18 @@ asked of (routine, 0x8004): 269 pairs, 95 in more than one place, and NOUGHT of 
   waited at some places and not others — chance at 7.3% a place would give 26.6 (236)
 25 of the 178 routines take a 0x8004 in the run before a call; 0x194/0x173/0x174 take 18/16/16
   AND IN THE SCAN, ASKED OF EVERY SLOT (292): 44 of 178 are handed a value in an argument slot,
-  **AT A WINDOW OF FOUR, WHICH IS MODELLED (294)** — it is 30 at a window of 1, 52 at 8, 62 at 24
-  and still climbing, so the 44 is a property of `SpecialCalls.Before`'s constant;
+  **AND ALL THREE NUMBERS ARE SUPERSEDED (295): 39 / 30 / 9.** 292's 44/33/11 was measured at a
+  window of four; 294 showed the window never plateaus (62/49/13 with contiguity alone); 295
+  replaced the distance with two READ rules — contiguity, and a value belongs to the FIRST call
+  after it — under which the sweep converges at twelve and the default is `NoLimit`;
   33 in 0x8004 and **11 ONLY in another** — 0x8004 x33, 0x8005 x16, 0x8006 x7, 0x8007/0x8008/0x800F
   x1 each. The two numbers are different populations (a run takes one arm of every branch) and
   neither corrects the other. `--special` prints the slots before it reads one, and `--routines`
   lists all eleven (293) — **nothing branches on any of them**. Asked of every routine in every
-  slot, **0x194 is still the only selector**: the blind spot hid nothing — and 294 re-asked it at
-  nine window settings from 1 to 24 and 0x194 is the only one at ALL of them. Two others flicker
-  in and out with the window (0x0A3 at 2-3, 0x0A4 at 12+) and are facts about the knob
+  slot, **0x194 is still the only selector**: the blind spot hid nothing — asked at twelve window
+  settings from 1 to 4096, 0x194 is the only one at ALL of them. The two that flickered under the
+  old rule (0x0A3 at 2-3, 0x0A4 at 12+) **do not appear at all** once a value belongs to the first
+  call after it (295): they were collecting somebody else's argument
 0x9C is 7 byte positions and SEVEN distinct words — a column; 3 of them are the obstacle scripts
 exactly ONE conditional in the map scan has a 0x27 its target lacks, and it is 0x0AB's
 ONE number is named both as a flag and as a variable in the map scan — 0x4001, floor 1.73 (244,
