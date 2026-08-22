@@ -8380,6 +8380,27 @@ public static class Program
                     + $" {world.Find(one.MapId)?.Name ?? "?",-20} {one.BehindALedge,5}");
             }
 
+            // AND THE DOORS INSIDE THEM. The cable club's nineteen are in a pocket; asking how
+            // many of the world's warps are is the population that finding belongs to. A door
+            // nothing can walk to is a door in the file and not a door in the world.
+            HashSet<(string, GridPosition)> everStood = stoodBy[name];
+            HashSet<string> pocketMaps = [.. pockets.Select(p => p.MapId)];
+
+            List<(string MapId, GridPosition At)> inAPocket =
+            [
+                .. world.Maps.Where(m => pocketMaps.Contains(m.Id))
+                    .SelectMany(m => m.Warps
+                        .Where(w => m.ToGrid(surfing: true).IsWalkable(w.Square))
+                        .Where(w => !everStood.Contains((m.Id, w.Square)))
+                        .Select(w => (m.Id, w.Square))),
+            ];
+
+            Console.WriteLine(
+                $"      and {inAPocket.Count} of the world's"
+                + $" {world.Maps.Sum(m => m.Warps.Count)} warp(s) sit on walkable ground inside a"
+                + $" pocket, on {inAPocket.Select(d => d.MapId).Distinct().Count()} map(s) — doors"
+                + " nothing can walk to");
+
             foreach (HowShut one in shut.Where(h => h.SameGround > 0)
                          .OrderByDescending(h => h.SameGround).Take(6))
             {

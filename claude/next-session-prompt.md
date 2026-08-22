@@ -709,6 +709,20 @@ Traps worth carrying:
     what names their own blocks is a literal in code, which the climb had said per site since 191.
     **Before believing a proximity test, ask what it would find if the thing were merely nearby.**
 
+114. **A WRONG READING THAT GIVES THE RIGHT ANSWER** (288). The reverse half of the ledge
+    reading asked `HopOnto(over, Back(d))`, which can never equal the square it is testing — the
+    whole branch was dead code. It reports **0 behind a ledge**, and 0 is the right answer on this
+    cartridge. **"The number came out as expected" is the weakest evidence there is that the
+    number was computed**, and the only thing that separates the two readings is a fixture built
+    for a shape this game does not contain. Whenever a measurement comes back at its expected
+    value, break it on purpose and check that it can say something else.
+
+    The reading itself: the 4019 fenced squares are **0 on the same ground, 0 behind a ledge,
+    4019 SEALED**. The first nought is the check (a walk's steps are symmetric, so ground joined
+    to its own and unvisited would be a walk that stopped early); the second is a fact about the
+    cartridge — no ground in this game is closed off by a ledge alone. And **55 of the world's
+    1294 warps sit inside a pocket**, on 26 maps: doors nothing can walk to.
+
 113. **REACHING A MAP IS NOT STANDING ON THE MAP** (287). 282 said reaching a map is not
     standing on a square; the level below that is a map the walk reaches and only part of which
     it can stand on. **163 of the 405 maps the widest run reaches hold walkable ground it never
@@ -982,8 +996,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-287-reached-and-never-stood-on.md` first, then `286`, then `285`, then
-`284`, then `283`, then `282`, then `281`, then `280`, then `279`, then `278`, then `277`, then `276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
+Read `claude/milestone-288-how-a-pocket-is-shut.md` first, then `287`, then `286`, then `285`,
+then `284`, then `283`, then `282`, then `281`, then `280`, then `279`, then `278`, then `277`, then `276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
 `250`, `249`, `248`, `247`, `246`, `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
@@ -1224,6 +1238,10 @@ And it prints the sampling band THREE ways, because three separate choices move 
 visible from the number: hash order, FILE order (275), and SCATTERED rather than in runs (277). The
 maps' own at groups of 114 goes 0.163..0.425 (hash) to 0.156..0.703 (file order, runs) to
 **0.068..0.185** (file order, scattered).
+
+`--the-way-back` splits every pocket THREE ways since 288 — same ground / behind a ledge / sealed
+— and the answer is 0 / 0 / 4019, with the first nought being the check that the instrument and
+the walker agree. It also counts the warps inside pockets: **55 of 1294, on 26 maps**.
 
 `--the-way-back` has SEVEN rows since 287 — the scripted-door lever is the last, worth 0/0/0 —
 and prints **what the widest run reached and never stood on**: 163 of 405 maps, 4019 squares, with
