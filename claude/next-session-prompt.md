@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-304`, **3503 tests green** — re-read at 297, where the old line still said `claude-314` and
+`claude-305`, **3511 tests green** — re-read at 297, where the old line still said `claude-314` and
 3274 (trap 14, in the sentence that tells you where you are standing).
 
 Standing rules — do not break these:
@@ -710,6 +710,19 @@ Traps worth carrying:
     what names their own blocks is a literal in code, which the climb had said per site since 191.
     **Before believing a proximity test, ask what it would find if the thing were merely nearby.**
 
+133. **A FENCE IS NOT A DOORWAY, AND THE FOURTH FENCE IS A PERSON** (305). 288 sorted fences into
+    three kinds — same ground, behind a ledge, sealed — and all three are about GROUND. Asked of
+    304's forty-three doors it answered **41 sealed and 2 that ordinary steps reach**, and that
+    second count is one 288 says MUST BE NOUGHT. It is nought once the walker's own list of squares
+    it refused because somebody was standing there is a fence of its own, and it is **one person
+    each**: `1.97 MT. EMBER (42,39)` fenced by person 3 one square below it behind flag `0x0089`,
+    and `2.1 TRAINER TOWER (15,6)` by person 5 **five squares away** behind flag `0x0005`. Between
+    them they carry **seventeen of the twenty-six maps behind 303's roots**. The reading that names
+    whoever is in a doorway asks a 3x3 question and can see the first and not the second, which is
+    why one of the pair has been in this prompt since 190 and the other had never been named.
+    **Ask about paths, not adjacency** — and take the walk's own answer rather than writing a second
+    copy of the rule about who is a wall (223).
+
 132. **A GREEN BREAK CAN MEAN THE RULE WAS A SPELLING — AND THE HUNT FOR ITS FIXTURE IS WHERE THE
     REAL FAULT IS** (304). Swapping WALLED IN and STOOD BESIDE came back green. The shape that
     would tell them apart — two doors side by side in a wall — **cannot exist**: `ToGrid` opens
@@ -1230,8 +1243,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-304-forty-three-doors-nobody-walks-to.md` first, then `303`, then
-`302`, then `301`, then `300`, then `299`, then `298`, then `297`, then `296`, then `295`, then `294`,
+Read `claude/milestone-305-two-people-and-seventeen-maps.md` first, then `304`, then
+`303`, then `302`, then `301`, then `300`, then `299`, then `298`, then `297`, then `296`, then `295`, then `294`,
 then `293`, then `292`, then `291`, then `290`, then `289`, then `288`, then `287`, then `286`,
 then `285`, then `284`, then `283`, then `282`, then `281`, then `280`, then `279`, then `278`, then `277`, then `276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
@@ -2022,6 +2035,11 @@ doors announce themselves in 0x4001 x63, 0x8008 x25, 0x8004 x23, 0x4002 x6 — T
 11 of 425 maps have no way in at all — 0.0/0.2/0.3 CELADON DEPT., 18.1 ROUTE 6, 27.0 ROUTE 19,
   29.0 ROUTE 23, 3.50-3.53 SEVII ISLE 6-9, 31.5 SEVEN ISLAND (303; FOUR isles, not five, and the
   count is a fact about the FILE — it reads 11 at all six lever settings)
+AND WHAT FENCES THOSE 43 (305): 41 SEALED, 2 with SOMEBODY STANDING IN THE WAY, 0 same-ground
+  (288's must-be-nought, and it fired first time at 2 before the fourth fence was named), 0 behind
+  a ledge. 39 of the 43 sit in a pocket NOTHING IN THE WORLD lands anybody in — the 19 POKeMON
+  CENTER doors are EXITS, not entrances. Asked per setting as well as of the union, because a union
+  of six runs is not a run
 AND 43 OF 43 DOORS INTO THEM ARE ONES THE RUN NEVER GOT NEAR (304) — not stood on, not stood
   beside, none walled in. The row whose answer is known: 1165 of 1182 doors into REACHED maps were
   stood on, 98.6%. STOOD BESIDE is 0 of 1182 — the walker steps ONTO a door's own square. Walled-in
@@ -3000,6 +3018,16 @@ the other, and nothing about a single green run says which. 207 writes the 2x2 d
   each). They are inside 287's pockets. The calibration row is **1165 of 1182 — 98.6%**. What is
   left of it: **why does the walk not enter a pocket it can see?** 287 counted the pockets and
   nothing has asked what fences one.
+* ~~Why does the walk not enter a pocket it can see?~~ **ASKED AT 305 for the doors.** 41 of the
+  43 are sealed — nothing but another door opens them, and for 39 nothing in the world lands
+  anybody inside. The other 2 are **one person each**: flags `0x0089` (MT. EMBER, worth 8 maps) and
+  `0x0005` (TRAINER TOWER, worth 9). What is left: **what sets those two flags** — `--flags` ranks
+  who moves each one, and if nothing readable does they join the wall list; **what opens `0.1` and
+  `0.4`**, which have nineteen doors out and no door in, so it is not a warp; and the **three doors
+  whose pocket the run could be put down in and never is** (`1.62`, `1.76`, `2.2`), one `--play`
+  question apiece.
+* **The fence reading only asks about doors.** Every one of 287's pockets could be asked the same
+  question, and "which single person is the whole reason for this pocket" is a ranking nobody has.
 * **Two doors into maps the run DOES reach are walled in** (304) — `1.5 S.S. ANNE (3,20) -> 1.10`
   and `2.34 THREE ISLE PATH (25,5) -> 3.49 THREE ISLE PORT`. Reached from the far side and
   unreachable from this one: a one-way door read off the file, and nothing models it.
