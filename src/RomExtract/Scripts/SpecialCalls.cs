@@ -73,9 +73,9 @@ public static class SpecialCalls
     /// setvar to the second happens to be nearby.
     /// </para>
     /// </summary>
-    private const int FirstArgument = 0x8000;
+    public const int FirstArgument = 0x8000;
 
-    private const int LastArgument = 0x800F;
+    public const int LastArgument = 0x800F;
 
     /// <summary>
     /// How many commands AFTER a call count as "around" it.
@@ -659,6 +659,53 @@ public static class SpecialCalls
     {
         var arguments = new List<(int, int)>();
 
+        foreach ((ScriptCommand command, IReadOnlySet<int> taken) in
+                 Around(commands, at, Backwards, window))
+        {
+            // A SETVAR READS NOTHING. Its first word is where the value goes and its second is
+            // the value — a literal, even when the literal happens to equal a slot number. Every
+            // other command naming a slot is reading it, which includes `copyvar`, whose source
+            // half is a genuine reference and which is not a setvar.
+            if (command.Code != SetVar) continue;
+
+            if (command.Word() is < FirstArgument or > LastArgument) continue;
+            if (taken.Contains(command.Word())) continue;
+
+            arguments.Insert(0, (command.Word(), command.Word(2)));
+        }
+
+        return arguments;
+    }
+
+    /// <summary>Walking away from a call towards the one before it.</summary>
+    public const int Backwards = -1;
+
+    /// <summary>Walking away from a call towards the one after it.</summary>
+    public const int Forwards = 1;
+
+    /// <summary>
+    /// The run of commands between a call and its neighbouring call, with the argument slots
+    /// something has already spent (296, shared at 297).
+    /// <para>
+    /// <b>One copy of this walk.</b> 297 needed the same run in order to ask what ELSE writes a
+    /// slot in it, and writing a second loop is the fault this repository has now fixed at 220,
+    /// 224, 251 and 258 — a second copy means the suite guards one of them and every break lands
+    /// on the other (trap 53). It is exposed rather than duplicated, and it runs in either
+    /// direction because <b>nothing after a call can be an argument to it</b>, which makes the
+    /// same walk run forward the floor under the same walk run back.
+    /// </para>
+    /// </summary>
+    /// <param name="step">
+    /// <see cref="Backwards"/> or <see cref="Forwards"/>.
+    /// </param>
+    /// <returns>
+    /// Each command in turn, with the slots taken BEFORE it. The set is the walk's own and goes
+    /// on filling as the walk moves, so a caller must read it where it stands rather than keeping
+    /// it.
+    /// </returns>
+    public static IEnumerable<(ScriptCommand Command, IReadOnlySet<int> Taken)> Around(
+        List<ScriptCommand> commands, int at, int step, int window = NoLimit)
+    {
         // SLOTS SOMETHING ELSE ALREADY TOOK (296).
         //
         // A `setvar` puts a value in a slot and the next thing that READS that slot is what it
@@ -669,11 +716,12 @@ public static class SpecialCalls
         var taken = new HashSet<int>();
 
         // `at - window` would overflow at NoLimit, so the distance is counted forwards.
-        for (int i = at - 1; i >= 0 && at - i <= window; i--)
+        for (int i = at + step; i >= 0 && i < commands.Count && (i - at) * step <= window; i += step)
         {
-            if (!Adjacent(commands[i], commands[i + 1])) break;
+            // The pair is always read in file order, whichever way the walk is going.
+            if (!Adjacent(commands[Math.Min(i, i - step)], commands[Math.Max(i, i - step)])) break;
 
-            // AND STOP AT THE PREVIOUS CALL (295).
+            // AND STOP AT THE NEIGHBOURING CALL (295).
             //
             // A value put in an argument slot belongs to the FIRST call after it, not to every
             // call that follows. 236's own example is the shape: the FAN CLUB on 14.9 sets
@@ -682,24 +730,12 @@ public static class SpecialCalls
             // here, which is what 294 said the window needed and could not supply.
             if (commands[i].Code is Special or SpecialVar) break;
 
-            // A SETVAR READS NOTHING. Its first word is where the value goes and its second is
-            // the value — a literal, even when the literal happens to equal a slot number. Every
-            // other command naming a slot is reading it, which includes `copyvar`, whose source
-            // half is a genuine reference and which is not a setvar.
-            if (commands[i].Code != SetVar)
-            {
-                foreach (int slot in SlotsNamedBy(commands[i])) taken.Add(slot);
+            yield return (commands[i], taken);
 
-                continue;
-            }
+            if (commands[i].Code == SetVar) continue;
 
-            if (commands[i].Word() is < FirstArgument or > LastArgument) continue;
-            if (taken.Contains(commands[i].Word())) continue;
-
-            arguments.Insert(0, (commands[i].Word(), commands[i].Word(2)));
+            foreach (int slot in SlotsNamedBy(commands[i])) taken.Add(slot);
         }
-
-        return arguments;
     }
 
     /// <summary>

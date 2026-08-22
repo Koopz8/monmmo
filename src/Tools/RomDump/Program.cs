@@ -10656,6 +10656,192 @@ public static class Program
             + $" population): {selectors.Count} routine(s) have the answer compared against"
             + " different things depending on the value: "
             + (selectors.Count == 0 ? "none" : string.Join(", ", selectors.Select(r => $"0x{r:X4}"))));
+
+        WriteWhatACopyIntoASlotIsWorth(rom, library, all);
+    }
+
+    /// <summary>
+    /// 296's own stated limitation, measured (297).
+    /// </summary>
+    /// <remarks>
+    /// <c>SpecialCalls.Before</c> records a <c>setvar</c> and nothing else, so a value copied into
+    /// a slot is invisible as an argument — 296 wrote that down and put no number on it. A caveat
+    /// you can state you can usually measure (42), and the floor is the same walk run forward,
+    /// with the <c>setvar</c> row in the table saying what a real argument looks like (68).
+    /// </remarks>
+    private static void WriteWhatACopyIntoASlotIsWorth(
+        Rom rom, MapLibrary library, IReadOnlyList<SpecialCall> all)
+    {
+        HashSet<int> handed =
+        [
+            .. all.GroupBy(c => c.Routine)
+                .Where(g => WhatTheArgumentPicks.SlotsOf(g).Count > 0)
+                .Select(g => g.Key),
+        ];
+
+        List<AWriteIntoASlot> writes = WhatACopyIntoASlotIs.All(rom, library);
+
+        Console.WriteLine();
+        Console.WriteLine(
+            "  WHAT A COPY INTO A SLOT IS WORTH (297) — 296 records a setvar and nothing else, and"
+            + " said so in its own leftovers with no number on it. The floor is THE SAME WALK RUN");
+        Console.WriteLine(
+            "  FORWARD: nothing behind a call can be an argument to it, so a kind of write that IS"
+            + " an argument has to be commoner in front of a call than behind it. The setvar row");
+        Console.WriteLine("  is what one looks like on this cartridge.");
+
+        foreach (bool countTheAnswer in new[] { true, false })
+        {
+            Console.WriteLine();
+            Console.WriteLine(
+                countTheAnswer
+                    ? "    as it stands:"
+                    : "    and with copies of the ANSWER variable (0x800D) counted out of BOTH columns,"
+                      + " because a script moving a routine's reply about is not handing anything over:");
+            Console.WriteLine();
+            Console.WriteLine(
+                "      what is written into the slot     in front   behind   ratio   routines   NEW");
+
+            foreach (HowOftenBesideACall row in
+                     WhatACopyIntoASlotIs.Read(writes, handed, countTheAnswer))
+                Console.WriteLine(
+                    $"      {Describe(row.From),-31}   {row.Before,8}   {row.After,6}   "
+                    + $"{(double.IsInfinity(row.Ratio) ? "  inf" : row.Ratio.ToString("F2")),5}"
+                    + $"   {row.Routines,8}   {(row.From == WhereTheValueCameFrom.ASetVar ? "-" : row.New.ToString()),3}"
+                    + (row.From == WhereTheValueCameFrom.ASetVar
+                        ? "   <- the row whose answer is known"
+                        : row.Ratio < 1 ? "   <- commoner BEHIND a call" : ""));
+        }
+
+        List<AWriteIntoASlot> copies =
+            [.. writes.Where(w => w.Before && w.From != WhereTheValueCameFrom.ASetVar)];
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    all {copies.Select(w => w.At).Distinct().Count()} place(s), which is the whole of what"
+            + " adopting the caveat would move — small enough to print rather than summarise:");
+
+        foreach (WhereTheValueCameFrom kind in new[]
+                 {
+                     WhereTheValueCameFrom.ALiteral,
+                     WhereTheValueCameFrom.TheSave,
+                     WhereTheValueCameFrom.AnotherSlot,
+                 })
+        {
+            Console.WriteLine();
+            Console.WriteLine($"      {Describe(kind).ToUpperInvariant()}");
+
+            // BY BYTE POSITION, not by record. A block hanging off nineteen maps is nineteen
+            // records at one address and 224's fault has now been made three times in this
+            // repository by printing the first and reading it as the second.
+            foreach (AWriteIntoASlot write in copies.Where(w => w.From == kind)
+                         .DistinctBy(w => (w.At, w.Slot, w.Source))
+                         .OrderBy(w => w.Routine).ThenBy(w => w.At))
+                Console.WriteLine(
+                    $"        0x{write.At:X6}  x{copies.Count(w => w.At == write.At && w.Slot == write.Slot),-3}"
+                    + $" {write.MapId,-8}  0x{write.Code:X2} 0x{write.Slot:X4},"
+                    + $" 0x{write.Source:X4}   -> special 0x{write.Routine:X4}"
+                    + (handed.Contains(write.Routine) ? "" : "   <- a routine 296 reads as handed nothing"));
+        }
+
+        WriteWhatCountsTheDoors(rom, library, all);
+    }
+
+    private static string Describe(WhereTheValueCameFrom from) => from switch
+    {
+        WhereTheValueCameFrom.ASetVar => "a SETVAR",
+        WhereTheValueCameFrom.ALiteral => "a copy of a literal",
+        WhereTheValueCameFrom.TheSave => "a copy out of the save",
+        _ => "a copy out of another slot",
+    };
+
+    /// <summary>
+    /// What the one kind that scores above its floor actually found (297).
+    /// </summary>
+    private static void WriteWhatCountsTheDoors(
+        Rom rom, MapLibrary library, IReadOnlyList<SpecialCall> all)
+    {
+        IReadOnlyList<AVariableOnAMap> everyPair = WhatCountsTheDoors.All(rom, library);
+
+        List<AVariableOnAMap> mine =
+        [
+            .. everyPair.Where(v => v.Variable == WhatCountsTheDoors.TheLift).OrderBy(v => v.MapId),
+        ];
+
+        int places = all.Where(c => c.Routine == WhatCountsTheDoors.TheRoutine)
+            .Select(c => c.At).Distinct().Count();
+
+        Console.WriteLine();
+        Console.WriteLine(
+            "  AND WHAT THE ONE KIND ABOVE ITS FLOOR FOUND (297) — a copy out of the save adds NO"
+            + " routine to what 296 already reads, and the thing it points at is"
+            + $" 0x{WhatCountsTheDoors.TheLift:X4},");
+        Console.WriteLine(
+            $"  handed to special 0x{WhatCountsTheDoors.TheRoutine:X4} at {mine.Count} of the routine's"
+            + $" {places} place(s) — every one of them. The map scan names the variable on"
+            + $" {mine.Count} map(s) and on no other, and it takes");
+        Console.WriteLine(
+            "  exactly as many values on each as there are MAPS that can warp there:");
+        Console.WriteLine();
+        Console.WriteLine("      map      name              values   maps in   warps in   the values");
+
+        foreach (AVariableOnAMap row in mine)
+            Console.WriteLine(
+                $"      {row.MapId,-8} {row.Name,-17} {row.Values.Count,6}   {row.Doors,7}"
+                + $"   {row.Warps,8}   {string.Join(",", row.Values)}"
+                + (row.Counts ? "" : "   <- and this one does not"));
+
+        Console.WriteLine();
+        Console.WriteLine(
+            "    THE FLOOR is the same question asked of every (variable, map) pair a setvar in the"
+            + " map scan writes. A map with ONE way in is matched by any variable written once, so");
+        Console.WriteLine(
+            "    the ladder is printed rather than one cut of it — the raw share is mostly those,"
+            + " and choosing the cut after seeing the answer is how a filter gets chosen by it (79):");
+        Console.WriteLine();
+        Console.WriteLine("      maps in at least   pairs   match   share   0x403A at this size");
+
+        foreach (int least in new[] { 1, 2, 3, 4, 5, 6 })
+        {
+            (int pairs, int match) = WhatCountsTheDoors.Floor(everyPair, least);
+
+            Console.WriteLine(
+                $"      {least,16}   {pairs,5}   {match,5}   {100.0 * match / pairs,5:F1}%"
+                + $"   {mine.Count(v => v.Doors >= least && v.Counts)} of {mine.Count(v => v.Doors >= least)}");
+        }
+
+        // AND WHETHER IT IS ALONE. A share is a fact about the population; the next question a
+        // reader asks is whether any OTHER variable does the same thing, and a ladder cannot say.
+        // Ranked by the most doors each manages it at, because a 1-of-1 match is this table's
+        // blank entry (71) and every variable written once makes one.
+        List<(int Variable, int Maps, int Widest)> everywhere =
+        [
+            .. everyPair.GroupBy(v => v.Variable)
+                .Where(g => g.Count() > 1 && g.All(v => v.Counts))
+                .Select(g => (Variable: g.Key, Maps: g.Count(), Widest: g.Max(v => v.Doors)))
+                .OrderByDescending(g => g.Widest)
+                .ThenBy(g => g.Variable),
+        ];
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    and WHETHER IT IS ALONE — {everywhere.Count} variable(s) match on EVERY map they"
+            + " are written on and are written on more than one. Ranked by the most doors any of"
+            + " those maps has:");
+
+        foreach ((int variable, int maps, int widest) in everywhere)
+            Console.WriteLine(
+                $"      0x{variable:X4}   {maps,2} map(s), widest {widest,2} door(s)"
+                + (widest == 1 ? "   <- every match is 1 of 1, which any variable written once makes" : ""));
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    0x{WhatCountsTheDoors.TheLift:X4} IS NOT IN THAT LIST — TRAINER TOWER does not match, and"
+            + $" this reading does not get to drop it. What the list says is that of the"
+            + $" {everywhere.Count} that DO match everywhere,");
+        Console.WriteLine(
+            $"    the widest is {everywhere.Max(v => v.Widest)} door(s), where 0x{WhatCountsTheDoors.TheLift:X4}"
+            + $" matches at {string.Join(", ", mine.Where(v => v.Counts).OrderByDescending(v => v.Doors).Select(v => v.Doors))}.");
     }
 
     /// <summary>
