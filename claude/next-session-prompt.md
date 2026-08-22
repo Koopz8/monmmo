@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-305`, **3511 tests green** — re-read at 297, where the old line still said `claude-314` and
+`claude-306`, **3516 tests green** — re-read at 297, where the old line still said `claude-314` and
 3274 (trap 14, in the sentence that tells you where you are standing).
 
 Standing rules — do not break these:
@@ -16,6 +16,14 @@ Standing rules — do not break these:
   upload `firered.gba` to your container.
 * Don't ship anything to speed things up. Users keep needing their own ROM.
 * Every number is marked read (off the cartridge) or modelled (a decision), never conflated.
+* **A walkthrough is an aiming device, not a source.** I may hand you one —
+  `https://game8.co/games/Pokemon-FireRed-LeafGreen/archives/582181` is the one I use for the story
+  and for 100%. Use it to decide *what to measure next* and to sanity-check a null result; never to
+  enter a number, a flag, a map or a name that the cartridge has not been asked for. Anything that
+  arrives from it is a HYPOTHESIS until the file says it, and it is marked neither read nor
+  modelled until then. It has already earned its keep once: "you need STRENGTH and ROCK SMASH for
+  MT. EMBER" sent 306 to look, and the file said 54 things need move 70 and 97 need move 249 — and
+  that the door in question is held by a person rather than by any of them.
 * Find things by what they look like, print what was found, hardcode nothing.
 * Every new guardrail gets proven by deliberately breaking the code it guards — use
   `tools/break-guard.sh`, which refuses on a dirty tree. If breaking a rule fails no test, that
@@ -710,6 +718,17 @@ Traps worth carrying:
     what names their own blocks is a literal in code, which the climb had said per site since 191.
     **Before believing a proximity test, ask what it would find if the thing were merely nearby.**
 
+134. **A COUNT OF PEOPLE IN DOORWAYS IS NOT A COUNT OF MAPS** (306). The wall list is ranked by
+    who stands in a doorway and its top four entries — `0x0013`, `0x0012`, `0x0053`, `0x0017` —
+    cost **nought maps between them**. Ranked by what the run loses, the list is **two flags long**:
+    `0x0005` costs **9 maps** and the doorway test cannot see it (305's five-square fence), and
+    `0x0089` costs **8** and **nothing in the file moves it**. Of 322 gating flags, TWO fence a
+    door. Print whether anything can ever move a flag beside what it costs: **a flag nothing sets
+    is not a door that opens later, it is content nobody can reach**, and that is the sentence a
+    shipped game has to answer. And **a person a flag hides is not a rock a move shifts** — 200
+    things in this world are shifted by a field move (97 x 249, 54 x 70, 49 x 15) and the run
+    learns all three, so the rocks on MT. EMBER are not what holds it.
+
 133. **A FENCE IS NOT A DOORWAY, AND THE FOURTH FENCE IS A PERSON** (305). 288 sorted fences into
     three kinds — same ground, behind a ledge, sealed — and all three are about GROUND. Asked of
     304's forty-three doors it answered **41 sealed and 2 that ordinary steps reach**, and that
@@ -1243,7 +1262,7 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-305-two-people-and-seventeen-maps.md` first, then `304`, then
+Read `claude/milestone-306-what-a-flag-costs.md` first, then `305`, then `304`, then
 `303`, then `302`, then `301`, then `300`, then `299`, then `298`, then `297`, then `296`, then `295`, then `294`,
 then `293`, then `292`, then `291`, then `290`, then `289`, then `288`, then `287`, then `286`,
 then `285`, then `284`, then `283`, then `282`, then `281`, then `280`, then `279`, then `278`, then `277`, then `276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
@@ -2035,6 +2054,10 @@ doors announce themselves in 0x4001 x63, 0x8008 x25, 0x8004 x23, 0x4002 x6 — T
 11 of 425 maps have no way in at all — 0.0/0.2/0.3 CELADON DEPT., 18.1 ROUTE 6, 27.0 ROUTE 19,
   29.0 ROUTE 23, 3.50-3.53 SEVII ISLE 6-9, 31.5 SEVEN ISLAND (303; FOUR isles, not five, and the
   count is a fact about the FILE — it reads 11 at all six lever settings)
+AND WHAT EACH FLAG COSTS (306): of 322 gating flags, TWO fence a door — 0x0005 nine maps (a script
+  can move it; live content the walk never opens) and 0x0089 eight (NOTHING in the file moves it;
+  dead in any build). 200 things are shifted by a field move instead, needing moves 249, 70 and 15,
+  and the run learns all three
 AND WHAT FENCES THOSE 43 (305): 41 SEALED, 2 with SOMEBODY STANDING IN THE WAY, 0 same-ground
   (288's must-be-nought, and it fired first time at 2 before the fourth fence was named), 0 behind
   a ledge. 39 of the 43 sit in a pocket NOTHING IN THE WORLD lands anybody in — the 19 POKeMON
@@ -3018,6 +3041,20 @@ the other, and nothing about a single green run says which. 207 writes the 2x2 d
   each). They are inside 287's pockets. The calibration row is **1165 of 1182 — 98.6%**. What is
   left of it: **why does the walk not enter a pocket it can see?** 287 counted the pockets and
   nothing has asked what fences one.
+* **`0x0089` IS A DECISION FROM HERE** (306). Eight maps behind a person nothing in the file
+  removes. Three options and the third is the project's own idiom: leave it shut; MODEL an opener
+  (the first person this project would move on its own authority); or **mark the door shut-for-ever
+  in the world file** so a client treats it as scenery — the rule being *a fence held by a flag
+  nothing moves*, which is derived rather than a hand-written list. Mason raised blocking it off;
+  this is the version that does not hardcode anything.
+* **`0x0005` is a `--play` question worth nine maps** (306): what sets it, and why does no run
+  reach that? A script does move it, so this is live content the walk never opens.
+* **THE CABLE CLUB (`0.1`, `0.4`) IS THE CARTRIDGE'S OWN TWO-PLAYER ROOM** — two chairs facing a
+  link machine, rendered at 306. **Nothing needs blocking**: 305 measured that nothing in the file
+  lands anybody in its pocket, so no player can wander in. What it needs is an ATTENDANT, modelled,
+  because the cartridge enters the room through a routine past the code boundary. `PeopleAreSilent`
+  in `WorldData` has held the place open since 288 and says so in as many words: *the day they have
+  a job this is the one line to delete.*
 * ~~Why does the walk not enter a pocket it can see?~~ **ASKED AT 305 for the doors.** 41 of the
   43 are sealed — nothing but another door opens them, and for 39 nothing in the world lands
   anybody inside. The other 2 are **one person each**: flags `0x0089` (MT. EMBER, worth 8 maps) and
