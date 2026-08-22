@@ -64,8 +64,8 @@ public static class HowAPocketIsShut
 
         HashSet<GridPosition> here = [.. stood.Where(grid.IsWalkable)];
 
-        HashSet<GridPosition> byStep = Flood(here, grid, map, hops: false);
-        HashSet<GridPosition> byHop = Flood(here, grid, map, hops: true);
+        HashSet<GridPosition> byStep = Reaching(here, grid, map, hops: false);
+        HashSet<GridPosition> byHop = Reaching(here, grid, map, hops: true);
 
         var sameGround = 0;
         var behindALedge = 0;
@@ -84,7 +84,11 @@ public static class HowAPocketIsShut
     }
 
     /// <summary>Everywhere reachable from <paramref name="from"/>, optionally across ledges.</summary>
-    private static HashSet<GridPosition> Flood(
+    /// <remarks>
+    /// Public because 305 asks this same flood of ONE DOOR'S OWN SQUARE rather than of the ground
+    /// the walk stood on. A second copy of a walk is a second walk to keep honest (223).
+    /// </remarks>
+    public static HashSet<GridPosition> Reaching(
         IReadOnlyCollection<GridPosition> from, CollisionGrid grid, MapData map, bool hops)
     {
         HashSet<GridPosition> seen = [.. from];

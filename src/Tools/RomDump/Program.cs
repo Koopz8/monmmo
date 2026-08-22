@@ -6847,7 +6847,171 @@ public static class Program
                 $"      {door.From,-8} {door.To,-8}  ({door.Square.X,3},{door.Square.Y,3})   "
                 + $"{(door.IsDoor ? "a door" : "walk-on"),-9}   {door.WalkableNeighbours,18}"
                 + $"   {door.NeighboursFromTheWater,14}");
+
+        WriteWhatFencesTheDoor(world, everyRun, reached, stood, known, into);
     }
+
+    /// <summary>
+    /// And what is holding each of them shut (305).
+    /// </summary>
+    /// <remarks>
+    /// 304 said "they are inside 287's pockets", which names the ground and not the fence. 288 had
+    /// sorted fences into three kinds a milestone earlier and had never been asked about a door.
+    /// </remarks>
+    private static void WriteWhatFencesTheDoor(
+        WorldData world,
+        IReadOnlyList<(TheFloorTable.Setting At, Attempt Played)> everyRun,
+        IReadOnlyCollection<string> reached,
+        IReadOnlyCollection<(string MapId, GridPosition Square)> stood,
+        IReadOnlyList<ADoorNotTaken> known,
+        IReadOnlyList<ADoorNotTaken> into)
+    {
+        List<(string, GridPosition)> theDoors = [.. into.Select(d => (d.From, d.Square))];
+
+        // THE WALK'S OWN TWO LISTS, and they are not the same list. `Blocked` holds frontiers a
+        // MOVE would open — a tree, a boulder — and `PeopleInTheWay` holds squares somebody is
+        // rooted to. A door can be shut by either and only the second is a person.
+        List<(string, GridPosition, int)> refused =
+        [
+            .. everyRun
+                .SelectMany(r => r.Played.Blocked.Select(b => (b.MapId, b.Square, b.LocalId))
+                    .Concat(r.Played.PeopleInTheWay.Select(p => (p.MapId, p.Square, p.LocalId))))
+                .Distinct(),
+        ];
+
+        IReadOnlyList<ADoorFenced> fenced = WhatFencesTheDoor.For(
+            world.Maps, theDoors, stood, surfing: true, refused, reached);
+
+        IReadOnlyList<ADoorFenced> theKnownRow = WhatFencesTheDoor.For(
+            world.Maps,
+            [.. known.Where(d => d.Why == WhyNotTaken.StoodOnIt).Select(d => (d.From, d.Square))],
+            stood,
+            surfing: true,
+            refused,
+            reached);
+
+        Console.WriteLine();
+        Console.WriteLine(
+            "    AND WHAT IS HOLDING THEM SHUT (305) — 288's three fences, asked of a door for the"
+            + " first time:");
+        Console.WriteLine();
+        Console.WriteLine("      what fences the door's own square         the 43   the doors it went through");
+
+        foreach (WhatFences what in Enum.GetValues<WhatFences>())
+            Console.WriteLine(
+                $"      {Describe(what),-39}   {fenced.Count(d => d.Fenced == what),6}   "
+                + $"{theKnownRow.Count(d => d.Fenced == what),25}"
+                + (what == WhatFences.Nothing ? "   <- the row whose answer is known" : "")
+                + (what == WhatFences.SameGround ? "   <- MUST BE NOUGHT (288)" : ""));
+
+        // A UNION OF SIX RUNS IS NOT A RUN (283). "Steps reach it from where the walk stood" is a
+        // sentence about ONE walk, and asking it of the union puts one run's square beside another
+        // run's grid — so the must-be-nought count is re-asked of each setting on its own.
+        Console.WriteLine();
+        Console.WriteLine(
+            "    AND THE SAME QUESTION ASKED OF EACH RUN ON ITS OWN, because the union of six is"
+            + " not a walk and the nought above is a count that MUST be nought:");
+        Console.WriteLine();
+        Console.WriteLine(
+            "      setting                                    stood on   in the way   same ground   behind a ledge   sealed");
+
+        foreach ((TheFloorTable.Setting at, Attempt played) in everyRun)
+        {
+            IReadOnlyList<ADoorFenced> itsOwn = WhatFencesTheDoor.For(
+                world.Maps,
+                theDoors,
+                [.. played.StoodOn],
+                at.Surf || played.LearnedToCrossOnPass > 0,
+                [
+                    .. played.Blocked.Select(b => (b.MapId, b.Square, b.LocalId))
+                        .Concat(played.PeopleInTheWay.Select(p => (p.MapId, p.Square, p.LocalId))),
+                ],
+                played.Reached);
+
+            Console.WriteLine(
+                $"      {at.Command,-42} {itsOwn.Count(d => d.Fenced == WhatFences.Nothing),8}   "
+                + $"{itsOwn.Count(d => d.Fenced == WhatFences.SomebodyInTheWay),10}   "
+                + $"{itsOwn.Count(d => d.Fenced == WhatFences.SameGround),11}   "
+                + $"{itsOwn.Count(d => d.Fenced == WhatFences.BehindALedge),14}   "
+                + $"{itsOwn.Count(d => d.Fenced == WhatFences.Sealed),6}");
+        }
+
+        List<ADoorFenced> steppable = [.. fenced.Where(d => d.Fenced == WhatFences.SameGround)];
+
+        if (steppable.Count > 0)
+            Console.WriteLine(
+                $"    THE {steppable.Count} THE FENCES CANNOT EXPLAIN: "
+                + string.Join(
+                    ", ",
+                    steppable.Select(d =>
+                        $"{d.MapId} {NameOf(world, d.MapId)} ({d.Square.X},{d.Square.Y}) -> {d.To}")));
+
+        Console.WriteLine();
+
+        foreach (ADoorFenced door in fenced.Where(d => d.Fenced == WhatFences.SomebodyInTheWay))
+            Console.WriteLine(
+                $"    {door.MapId} {NameOf(world, door.MapId)} ({door.Square.X},{door.Square.Y})"
+                + $" -> {door.To} {NameOf(world, door.To)} is fenced by "
+                + (door.OpenedBy.Count == 0
+                    ? "everybody in the way at once — no one of them stepping aside opens it"
+                    : string.Join(
+                        " or ",
+                        door.OpenedBy.Select(who => Describe(world, door.MapId, who)))
+                      + (door.OpenedBy.Count > 1 ? " — any ONE of them opens it" : " — that one person")));
+
+        List<ADoorFenced> nothingLands = [.. fenced.Where(d => d.NoWayIn)];
+        List<ADoorFenced> onlyUnreached = [.. fenced.Where(d => d.OnlyFromUnreached)];
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    {nothingLands.Count} of the {fenced.Count} sit in a pocket NOTHING IN THE WORLD"
+            + " lands anybody in — no warp anywhere names a door inside it, so the only way through"
+            + " is from the far side.");
+        Console.WriteLine(
+            $"    {onlyUnreached.Count} more are landed in ONLY FROM MAPS THE RUN NEVER REACHES,"
+            + " which is 303's closure again and not a reason of its own. That leaves"
+            + $" {fenced.Count(d => d.LandedInFromReached.Count > 0 && d.Fenced != WhatFences.Nothing)}"
+            + " door(s) whose pocket the run could be put down in and never is.");
+
+        Console.WriteLine();
+        Console.WriteLine(
+            "      from     to        square      pocket   ways in   landed in from");
+
+        foreach (ADoorFenced door in fenced
+                     .OrderBy(d => d.To, StringComparer.Ordinal)
+                     .ThenBy(d => d.MapId, StringComparer.Ordinal)
+                     .DistinctBy(d => (d.To, d.Square)))
+            Console.WriteLine(
+                $"      {door.MapId,-8} {door.To,-8}  ({door.Square.X,3},{door.Square.Y,3})   "
+                + $"{door.Pocket,6}   {door.WarpsInThePocket.Count,7}   "
+                + (door.LandedInFrom.Count == 0
+                    ? "NOTHING"
+                    : string.Join(", ", door.LandedInFrom.Take(3).Select(m => $"{m} {NameOf(world, m)}"))
+                      + (door.LandedInFrom.Count > 3 ? $", and {door.LandedInFrom.Count - 3} more" : "")));
+    }
+
+    /// <summary>One person the walk refused to walk through, in the terms the file has.</summary>
+    private static string Describe(WorldData world, string mapId, int localId)
+    {
+        MapObject? who = world.Find(mapId)?.Objects.FirstOrDefault(o => o.LocalId == localId);
+
+        if (who is null) return $"person {localId}";
+
+        return $"person {localId} at ({who.X},{who.Y}), graphics {who.GraphicsId}, movement"
+            + $" {who.MovementType}"
+            + (who.IsObstacle ? $", shifted by move {who.ShiftedBy}" : "")
+            + (who.HiddenBy != 0 ? $", hidden by flag 0x{who.HiddenBy:X4}" : ", behind no flag")
+            + (who.IsTrainer ? ", a trainer" : "");
+    }
+
+    private static string Describe(WhatFences what) => what switch
+    {
+        WhatFences.Nothing => "nothing — the walk stood on it",
+        WhatFences.SomebodyInTheWay => "SOMEBODY IS STANDING IN THE WAY",
+        WhatFences.SameGround => "steps reach it from where the walk stood",
+        WhatFences.BehindALedge => "a ledge hop reaches it and no step does",
+        _ => "SEALED — neither steps nor hops reach it",
+    };
 
     private static string Describe(WhyNotTaken why) => why switch
     {

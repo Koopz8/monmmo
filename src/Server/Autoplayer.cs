@@ -642,6 +642,18 @@ public sealed record Attempt(
     /// </remarks>
     public IReadOnlyCollection<(string MapId, GridPosition Square)> StoodOn { get; init; } = [];
 
+    /// <summary>
+    /// The squares this walk refused because somebody was standing on one — the walker's own
+    /// list, not a second copy of the rule about who counts as a wall (223).
+    /// </summary>
+    /// <remarks>
+    /// Carried out of the walk at 305, which needed to ask whether a door the run could have
+    /// stepped to has a person in front of it. <c>Blocked</c> is a different list and answers a
+    /// different question: it holds the frontiers a MOVE would open, and somebody rooted to a
+    /// square is not one of those.
+    /// </remarks>
+    public IReadOnlyCollection<Standing> PeopleInTheWay { get; init; } = [];
+
 
     /// <summary>
     /// How many attempts at a fight failed, which is more than the number of trainers that beat
@@ -2006,6 +2018,7 @@ public static class Autoplayer
             ],
             ReachedOnlyWithWhatItTookBack = onlyWithThose,
             StoodOn = stoodAtTheEnd,
+            PeopleInTheWay = last.People,
             CannotGetBack = cannotGetBack,
             TheLastStepIn =
             [
