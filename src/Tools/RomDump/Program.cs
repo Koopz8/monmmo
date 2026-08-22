@@ -10107,6 +10107,10 @@ public static class Program
             [.. GatesThatAreObstacles.In(rom, world).Where(g => g.Removed).Select(g => g.Flag)];
 
         Console.WriteLine(
+            "    NEVER SET is the six buckets added up, and a ! beside it means they no longer partition —"
+            + " the split and the total are one number here, not two kept by two hands (309).");
+        Console.WriteLine();
+        Console.WriteLine(
             "      setting                                    gates set  never set   boundary  reach  obstacle"
             + "  picked up  past it  took back   ever on  took back  places  routines   signs  at  on");
 
@@ -10123,14 +10127,27 @@ public static class Program
 
             int boundary = Why(ShutBecause.NothingSetsIt);
             int obstacle = Why(ShutBecause.AnObstacle);
+            int reach = Why(ShutBecause.NeverRan);
+            int pickedUp = Why(ShutBecause.TakenOffTheFloor);
+            int pastIt = Why(ShutBecause.OnlyPastTheBoundary);
+            int wasTakenBack = Why(ShutBecause.TheRunTookItBack);
 
             rows.Add((at.Command, boundary, obstacle));
 
+            // NEVER SET IS THE SUM OF THE SIX AND NOT A SEVENTH COUNT.
+            //
+            // The block said 106 on one line and printed six buckets summing to 109 on the next,
+            // because the total and the split were two numbers kept by two hands. Adding the
+            // columns up here means the printed line cannot disagree with itself whatever else
+            // changes — and if the classification ever produces a reason this does not name, the
+            // check below says so instead of the total quietly drifting.
+            int neverSet = boundary + reach + obstacle + pickedUp + pastIt + wasTakenBack;
+
             Console.WriteLine(
                 $"      {at.Command.PadRight(TheFloorTable.CommandColumn)}  {gates.HowManyOf(played.Flags),9}"
-                + $"  {shut.Count,9}  {boundary,9}  {Why(ShutBecause.NeverRan),5}  {obstacle,8}"
-                + $"  {Why(ShutBecause.TakenOffTheFloor),9}  {Why(ShutBecause.OnlyPastTheBoundary),7}"
-                + $"  {Why(ShutBecause.TheRunTookItBack),9}"
+                + $"  {neverSet,9}{(neverSet == shut.Count ? " " : "!")} {boundary,8}  {reach,5}  {obstacle,8}"
+                + $"  {pickedUp,9}  {pastIt,7}"
+                + $"  {wasTakenBack,9}"
                 + $"  {played.EverOn.Count,8}  {tookBack.Count,9}"
                 + $"  {played.Specials.Values.Sum(),6}  {played.Specials.Count,8}"
                 + $"  {played.SignsRead.Count,6}"

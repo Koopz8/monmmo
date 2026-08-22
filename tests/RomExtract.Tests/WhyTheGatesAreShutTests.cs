@@ -98,17 +98,27 @@ public sealed class WhyTheGatesAreShutTests
     /// </para>
     /// </remarks>
     [Fact]
-    public void TheReasonsPartitionTheShutGates()
+    public void TheSixNamedReasonsAccountForEveryShutGate()
     {
         IReadOnlyList<ShutGate> shut = Shut();
 
-        int summed = Enum.GetValues<ShutBecause>().Sum(why => shut.Count(g => g.Why == why));
+        // NAMED, not counted over the enum. Summing `shut.Count(g => g.Why == why)` across
+        // Enum.GetValues is a tautology — every gate's Why is SOME enum value, so it can never
+        // fail. What can fail is a seventh reason being added and the printer still listing six:
+        // this names the six the output prints and asserts nothing falls outside them.
+        ShutBecause[] printed =
+        [
+            ShutBecause.NothingSetsIt,
+            ShutBecause.NeverRan,
+            ShutBecause.AnObstacle,
+            ShutBecause.TakenOffTheFloor,
+            ShutBecause.OnlyPastTheBoundary,
+            ShutBecause.TheRunTookItBack,
+        ];
 
-        Assert.Equal(shut.Count, summed);
-
-        // And every reason the enum names is one this classification can actually produce, so a
-        // bucket added and never assigned cannot sit in the output reading nought forever (35).
-        Assert.All(shut, g => Assert.Contains(g.Why, Enum.GetValues<ShutBecause>()));
+        Assert.Equal(printed.Length, Enum.GetValues<ShutBecause>().Length);
+        Assert.Equal(shut.Count, printed.Sum(why => shut.Count(g => g.Why == why)));
+        Assert.All(shut, g => Assert.Contains(g.Why, printed));
     }
 
     /// <summary>

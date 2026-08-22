@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-308`, **3554 tests green** — re-read at 297, where the old line still said `claude-314` and
+`claude-309`, **3555 tests green** — re-read at 297, where the old line still said `claude-314` and
 3274 (trap 14, in the sentence that tells you where you are standing).
 
 Standing rules — do not break these:
@@ -1348,7 +1348,7 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-308-the-slot-nobody-cleared.md` first, then `307`, then `306`, then `305`, then `304`, then
+Read `claude/milestone-309-a-superlative-is-not-a-setting.md` first, then `308`, then `307`, then `306`, then `305`, then `304`, then
 `303`, then `302`, then `301`, then `300`, then `299`, then `298`, then `297`, then `296`, then `295`, then `294`,
 then `293`, then `292`, then `291`, then `290`, then `289`, then `288`, then `287`, then `286`,
 then `285`, then `284`, then `283`, then `282`, then `281`, then `280`, then `279`, then `278`, then `277`, then `276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
@@ -2161,6 +2161,13 @@ somebody standing in the way** — MT. EMBER `1.103`, behind `0x0089`, which not
 sets. CERULEAN CAVE is closed: the run now reaches it, off the SAPPHIRE thread.
 
 ## Where the reading stands
+
+**RE-AUDITED AT 309 after a lever was added (307) and the memory rule changed (308).** The
+run-dependent lines are printed by `--the-floor` now and are not to be maintained by hand. Three
+populations, separated by ONE experiment — re-run the OLD superlative under the NEW build: the
+FILE lines and the whole floor row held exactly; the lines quoting *the widest* moved because the
+last row moved and nothing was wrong with them; and two were genuinely wrong (`869/76` is 873/80,
+and the six why-shut buckets summed to 109 under a total of 106).
 
 **AUDITED LINE BY LINE AT 231, against a run of every instrument.** 45 lines checked: 39 were
 right, 4 were wrong (fixed here), and 4 quote numbers **no instrument in this repository prints
