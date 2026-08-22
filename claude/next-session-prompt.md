@@ -709,6 +709,20 @@ Traps worth carrying:
     what names their own blocks is a literal in code, which the climb had said per site since 191.
     **Before believing a proximity test, ask what it would find if the thing were merely nearby.**
 
+115. **A BREAK'S KILL COUNT IS WORTH WHAT ITS FAILURES ARE** (289). A break predicted six and
+    killed seven; the seventh was a socket test in the server, which does not call the class being
+    broken and passes on a clean tree. Its budget for one message was 30 seconds, the suite is ~28
+    idle and was 55 in that run because break-guard builds first on a busy container — **the
+    timeout was inside the noise**. Raised to 120 with the measurement beside it; the break then
+    killed six. **Read the NAMES in a break's output, not the number**, and an over-prediction
+    that matches by accident is worse than one that does not.
+
+    The reading itself: **a map is not one place.** The 405 reached maps are 945 pieces of
+    walkable ground, 193 are in more than one, the walk stands in 506 and in more than one piece
+    of 61 of them. Of the 439 it never stands in, 47 hold a warp, 20 run along a crossable border,
+    and **372 hold neither — 2948 squares nothing in this world file opens**, the biggest being
+    ROUTE 25's 270 squares of unreachable sea.
+
 114. **A WRONG READING THAT GIVES THE RIGHT ANSWER** (288). The reverse half of the ledge
     reading asked `HopOnto(over, Back(d))`, which can never equal the square it is testing — the
     whole branch was dead code. It reports **0 behind a ledge**, and 0 is the right answer on this
@@ -996,8 +1010,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-288-how-a-pocket-is-shut.md` first, then `287`, then `286`, then `285`,
-then `284`, then `283`, then `282`, then `281`, then `280`, then `279`, then `278`, then `277`, then `276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
+Read `claude/milestone-289-what-a-map-is-made-of.md` first, then `288`, then `287`, then `286`,
+then `285`, then `284`, then `283`, then `282`, then `281`, then `280`, then `279`, then `278`, then `277`, then `276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
 `250`, `249`, `248`, `247`, `246`, `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
@@ -1238,6 +1252,10 @@ And it prints the sampling band THREE ways, because three separate choices move 
 visible from the number: hash order, FILE order (275), and SCATTERED rather than in runs (277). The
 maps' own at groups of 114 goes 0.163..0.425 (hash) to 0.156..0.703 (file order, runs) to
 **0.068..0.185** (file order, scattered).
+
+`--the-way-back` breaks every reached map into its PIECES since 289 — 945 of them over 405 maps,
+193 maps in more than one, the walk in 506 — and sorts the pieces it never stands in by what opens
+them: a warp, a border, or nothing (47 / 20 / 372, and the 372 are 2948 squares).
 
 `--the-way-back` splits every pocket THREE ways since 288 — same ground / behind a ledge / sealed
 — and the answer is 0 / 0 / 4019, with the first nought being the check that the instrument and
