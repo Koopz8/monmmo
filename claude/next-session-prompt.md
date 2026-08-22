@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-299`, **3476 tests green** — re-read at 297, where the old line still said `claude-314` and
+`claude-300`, **3481 tests green** — re-read at 297, where the old line still said `claude-314` and
 3274 (trap 14, in the sentence that tells you where you are standing).
 
 Standing rules — do not break these:
@@ -710,6 +710,21 @@ Traps worth carrying:
     what names their own blocks is a literal in code, which the climb had said per site since 191.
     **Before believing a proximity test, ask what it would find if the thing were merely nearby.**
 
+128. **WIDENING A WALK IS A CHANGE TO WHAT ELSE IT NOW REACHES** (300). 299 took the distance off
+    `WhatStoodInTheWay` — **which has no contiguity check at all** — so the walk could run off the
+    end of one script and name a thing in the way belonging to whatever block the reader
+    concatenated next. 74's rule turned on the milestone before: *when you teach a reader to stop
+    being wrong in one direction, ask what the other direction now does.* Measured, it is
+    **0 of 140** — every sorted site names something in its own run, median three commands on,
+    most twenty-six. Decided on adjacency anyway, with a decoy, because a rule the cartridge never
+    exercises is a rule no break can be aimed at (57).
+
+    And 298's error bar — 13 of 244 credited places with a call or a branch between the value and
+    the call — **followed one level: 0 goto, 3 conditional jumps the value survives, 5 calls whose
+    blocks write no slot, 5 calls whose blocks call something, and NOUGHT that writes the very
+    slot.** The bar of 13 is really 5 and not one credit was wrong. **Both halves of 300 are the
+    NEGATIVE** (30), which is the answer worth as much as its opposite.
+
 127. **SWEEPING A WINDOW MEANS SWEEPING WHAT IT DECIDES** (299). 298 swept the forward window and
     reported it plateaus at three. Every column 298 printed does. **The one it did not print does
     not**: `SpecialContracts`' across-a-barrier count — this project's does-not-know column for the
@@ -1168,8 +1183,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-299-measuring-the-columns-that-plateau.md` first, then `298`, then `297`,
-then `296`, then `295`, then `294`,
+Read `claude/milestone-300-the-negative-was-nought-both-times.md` first, then `299`, then `298`,
+then `297`, then `296`, then `295`, then `294`,
 then `293`, then `292`, then `291`, then `290`, then `289`, then `288`, then `287`, then `286`,
 then `285`, then `284`, then `283`, then `282`, then `281`, then `280`, then `279`, then `278`, then `277`, then `276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
@@ -1367,6 +1382,13 @@ dotnet run -c Release --project src/Tools/RomDump -- firered.gba --operands-ever
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --the-control
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --the-ruler
 ```
+
+**297-300 CLOSED A SEAM: not one distance in any of these readings is chosen here any more.**
+`SpecialCalls.Before` and its two copies, `SpecialCalls.After`, `SpecialContracts.ComparedAfter`
+and `WhoTheCompareBelongsTo` are all bounded by rules read off the script — contiguity, the
+neighbouring call, a slot something spent, and *a compare belongs to the last answerer before it*.
+The last two `4`s in the repository are `BattleMusicLocator.Window` and `Ferries.Nearby`, in
+another domain.
 
 `--routines` ends with **AND THE FORWARD WINDOW IN THE OTHER ARM** (299) — `SpecialContracts`'
 own forward window swept, where only BRANCHED ON is flat, with the `none` row and the cross-check
@@ -2488,13 +2510,20 @@ still work.**
     `--routines` change.
   * **`All`'s threading is still unguarded** (294, 296, 297, 298). Every fixture goes through `In`.
 * **What 298 left.**
-  * **Four more copies of the run AFTER a call** — `SpecialContracts.ComparedAfter`,
-    `WhoTheCompareBelongsTo`, `DaycareLocator`, `SpecialCalls.After`. `DaycareLocator`'s cruder
-    barrier list is worth **nought** (936 of 936 agree); the other two are unmeasured.
+  * ~~**Four more copies of the run AFTER a call.**~~ **DONE AT 299 AND 300.**
+    `SpecialContracts.ComparedAfter` had the biggest window fault in the project (148 -> 454);
+    `WhoTheCompareBelongsTo` shares the setting now and gained the contiguity it never had;
+    `DaycareLocator` is worth **nought** (936 of 936 agree).
   * **`BattleMusicLocator.Window` and `Ferries.Nearby`** are the same 4 in another domain, unswept.
-  * **A `call` between a value and the call it is credited to** — 13 of 244, and closing it means
-    following a `call` one level in the ARGUMENT direction, which `--through-a-call` already does
-    in the answer direction.
+    **They are the last two in the repository.**
+  * ~~**A `call` between a value and the call it is credited to.**~~ **FOLLOWED AT 300 and it is
+    NOUGHT** — 0 of the 13 is a value the block overwrote, 5 are unread because the block calls
+    something of its own, 8 come back clean.
+* **What 300 left.**
+  * **The five that call something of their own.** Closing them means following a call TWO levels,
+    which nothing in this project does in either direction.
+  * **`All`'s threading is STILL unguarded** (294, 296, 297, 298, 299, 300 — six milestones). Every
+    fixture reaches `In`, and the whole-world entry point is pinned by nothing.
 * **What 297 left.**
   * **What `special 0x0132` DOES with `0x403A`.** Compiled code — the sixth wall of that kind.
   * **Whether the value is the DOOR or the FLOOR.** `1.58`'s eleven values are its eleven doors'
