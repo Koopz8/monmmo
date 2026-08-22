@@ -6,7 +6,8 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-314`, 3274 tests green.
+`claude-297`, **3469 tests green** — re-read at 297, where the old line still said `claude-314` and
+3274 (trap 14, in the sentence that tells you where you are standing).
 
 Standing rules — do not break these:
 
@@ -709,6 +710,21 @@ Traps worth carrying:
     what names their own blocks is a literal in code, which the climb had said per site since 191.
     **Before believing a proximity test, ask what it would find if the thing were merely nearby.**
 
+123. **THE SAME WALK RUN FORWARD IS THE FLOOR UNDER THE WALK RUN BACK** (297). 296 named its own
+    caveat — a value COPIED into a slot is invisible as an argument — and put no number on it.
+    Measured: **26 places, 12 routines**, split three ways by the band the source word falls in.
+    And nothing behind a call can be an argument to it, so the same walk run forward is the floor,
+    with the plain `setvar` in the table as the row whose answer is known: **2.46 in front of a
+    call for every one behind it, against the three copy kinds' 0.50, 1.33 and 0.29.** The kind
+    supplying ten of the twelve new routines scores worst, and 33 of its 45 behind-a-call places
+    copy `0x800D` — a script moving a reply about. **37 / 29 / 8 STANDS**, for a measured reason
+    rather than because nobody looked, and it is the first of five readings of that number not to
+    move it.
+
+    And the other half of the caveat cannot be wrong: a copy's destination is marked spent, which
+    reads a WRITE as a read — and a write kills an earlier `setvar` exactly as a read does, so the
+    two cannot differ. 57 with nothing to fix (64).
+
 122. **A VALUE IS FOR THE NEXT THING THAT READS THE SLOT** (296). 295's barrier was the previous
     CALL; an ordinary command naming the slot spends the value too. With that in,
     **37 routines are handed a value, 29 in `0x8004`, 8 only elsewhere** — 295's 39/30/9 corrected
@@ -719,6 +735,20 @@ Traps worth carrying:
     And **a `setvar` reads nothing** — its second word is a literal even when it equals a slot
     number. This cartridge never does it, so the reading is identical either way and only a fixture
     can hold the rule. `copyvar` is not a `setvar` and its source half is a real reference.
+
+124. **A ONE-DOOR MAP IS THIS TABLE'S BLANK ENTRY** (297). The one copy kind above its floor adds
+    NO routine and points at `0x403A` instead: written on four maps and named on no other, handed
+    to `special 0x0132` at **four of that routine's four places**, and taking **exactly one value
+    per map that can warp there on three of the four** — 3/3, 11/11, 5/5, with TRAINER TOWER's 1
+    of 9 the row this reading does not get to drop. All four are the LIFT CABINS, three of which
+    `--the-way-back` calls sentinel-only rooms the walk enters and never leaves (74) — two
+    structures built for different questions, one list. The floor is the same question asked of
+    every (variable, map) pair the scan writes and it is **45.2% until the one-door pairs are
+    counted out** — a map with one way in is matched by any variable written once — falling to
+    **8.9% at three doors and 5.9% at five**. 71's rule in a new table. And whether it is ALONE is
+    printed beside the share, because a share cannot say: five variables match on every map they
+    are written on, `0x403A` is not one of them, and the widest any of the five manages is **2
+    doors** where `0x403A` manages 11.
 
 121. **A RULE READ OFF THE SCRIPT BEATS A DISTANCE CHOSEN HERE** (295). 294 marked the argument
     window MODELLED and could not replace it. The replacement is two rules: the run must be
@@ -1103,7 +1133,8 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-296-a-slot-something-else-already-took.md` first, then `295`, then `294`,
+Read `claude/milestone-297-the-copy-is-commoner-behind-the-call.md` first, then `296`, then
+`295`, then `294`,
 then `293`, then `292`, then `291`, then `290`, then `289`, then `288`, then `287`, then `286`,
 then `285`, then `284`, then `283`, then `282`, then `281`, then `280`, then `279`, then `278`, then `277`, then `276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
@@ -1301,6 +1332,13 @@ dotnet run -c Release --project src/Tools/RomDump -- firered.gba --operands-ever
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --the-control
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --the-ruler
 ```
+
+`--routines` ends with **WHAT A COPY INTO A SLOT IS WORTH** (297): 296's own caveat measured
+against the same walk run FORWARD, with the plain `setvar` as the row whose answer is known
+(2.46) and the three copy kinds at 0.50, 1.33 and 0.29; all 26 places printed by BYTE POSITION
+with their record counts; then `0x403A` and the door-count ladder with its one-door pairs
+counted out, and the list of every variable that matches everywhere so the reader can see
+whether it is alone.
 
 `--the-control` is fifteen seconds; sections 4-6 are 270's and the window-at-nought ladder is
 271's. `--flags` sorts the boundary's sixty by what names them since 271 and reads the 38 off a
@@ -2022,6 +2060,11 @@ REACHING IS NOT RETURNING and until 265 only one of them was ever printed. `--th
     the map by another door, 118 are ONE WAY. Control (the next door along): 219 / 233 / 823
   116 borders, 114 declared from both sides; the 2 are 3.50 and 3.51 both naming 3.14 THREE
     ISLAND upward, which names 3.49 downward — three maps claim to be south of it, it claims one
+  0x403A IS THE LIFT'S COUNT (297): written on 1.46, 1.58, 10.6 and 2.11 and named on no other map,
+    handed to special 0x0132 at 4 of that routine's 4 places, and taking exactly one value per map
+    that can warp there on THREE of the four — 3/3, 11/11, 5/5, TRAINER TOWER 1 of 9. Floor: 45.2%
+    over every (variable, map) pair the scan writes, 8.9% with the one-door pairs counted out, 5.9%
+    at five doors. 5 variables match on EVERY map they are written on and the widest manages 2 doors
   9 maps have NO exit but the sentinel: 0.0-0.4 (the rooms above a centre; 0.1 and 0.4 each have
     19 doors in from 19 maps, one per town), 1.46, 1.58, 2.11 TRAINER TOWER, 10.6. The walk gets
     into 3; the other 6 are entered by a script rather than by standing on a square
@@ -2109,7 +2152,9 @@ asked of (routine, 0x8004): 269 pairs, 95 in more than one place, and NOUGHT of 
   the default is `NoLimit`, and widening can now REMOVE a routine as well as add one;
   33 in 0x8004 and **11 ONLY in another** — 0x8004 x33, 0x8005 x16, 0x8006 x7, 0x8007/0x8008/0x800F
   x1 each. The two numbers are different populations (a run takes one arm of every branch) and
-  neither corrects the other. `--special` prints the slots before it reads one, and `--routines`
+  neither corrects the other. **297 measured what a COPY into a slot would add — 26 places, 12
+  routines — and the floor refuses it**: the same walk run FORWARD scores the plain setvar at 2.46
+  in front of a call for every one behind, and the three copy kinds at 0.50, 1.33 and 0.29. `--special` prints the slots before it reads one, and `--routines`
   lists all eleven (293) — **nothing branches on any of them**. Asked of every routine in every
   slot, **0x194 is still the only selector**: the blind spot hid nothing — asked at twelve window
   settings from 1 to 4096, 0x194 is the only one at ALL of them. The two that flickered under the
@@ -2381,6 +2426,23 @@ still work.**
   `--routines` lists them, and **nothing branches on any of the eleven**. `0x0138` is the only
   routine handed values in TWO slots at once (`0x8005` and `0x8006`) and what that pair means is
   unasked.
+* **What 296 left, and 297 answered one of.**
+  * ~~**A `copyvar` into a slot is a WRITE this does not see.**~~ **MEASURED AT 297 and DECLINED**:
+    26 places, 12 routines, and the same walk run FORWARD refuses all three kinds (0.50 / 1.33 /
+    0.29 against the plain setvar's 2.46). **37 / 29 / 8 stands.** The other half of that caveat —
+    a copy's destination read as spending the slot — cannot be wrong, because a write kills an
+    earlier setvar exactly as a read does.
+  * **The FORWARD window is still four and still chosen** (294, 295, 296, 297). Everything
+    "compared against" in 291-297 rests on it and it has never been swept. The backward half got
+    two READ rules; the forward half has a constant. **This is the cheapest owed thing left.**
+  * **`All`'s threading is still unguarded** (294). Every fixture goes through `In`.
+* **What 297 left.**
+  * **What `special 0x0132` DOES with `0x403A`.** Compiled code — the sixth wall of that kind.
+  * **Whether the value is the DOOR or the FLOOR.** `1.58`'s eleven values are its eleven doors'
+    map numbers less 43, exactly; `10.6`'s five are plus four; `1.46`'s three fit no offset. Two of
+    three is not a reading.
+  * **TRAINER TOWER**, `2.11`: one value, nine doors, and the row this reading does not get to
+    drop.
 * **`3.57 sign (9,43)`** — the LEMONADE example that has been quoted in this prompt for
   milestones as something the run could not reach. It can now.
 
@@ -2531,6 +2593,13 @@ Guards have come back green because **the fixture was more forgiving than the ca
    one function. The mixed fixture broke both, so a break that weakened the first was caught by
    the second and the first stayed untested and green. **A fixture for rule A has to satisfy
    rule B.**
+
+13. **A fixture whose every ROW is a shape the two readings agree on** (297 — number 5 in a new
+   place). A break swapping "cut on the DOORS" for "cut on the VALUES" came back GREEN against all
+   three of its fixtures, including the one written for exactly that discrimination: every row in
+   them had `values == doors`, and on such a row the two cuts are the same function. **And one of
+   the two columns could never have seen it** — a match has as many values as doors by definition,
+   so only the pairs column moves. Before asserting a column, check the break can move that column.
 
 Check for these shapes directly rather than waiting for a break to find them. And the same nop
 that makes a slide can make a width **undiscriminable**: the `0x6F` fixture separates four from
