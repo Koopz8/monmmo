@@ -8380,6 +8380,58 @@ public static class Program
                     + $" {world.Find(one.MapId)?.Name ?? "?",-20} {one.BehindALedge,5}");
             }
 
+            // WHAT A MAP IS MADE OF (289). "Sealed" names how a pocket is shut and not what it
+            // is shut FROM: a map's walkable ground is not one place. This breaks every reached
+            // map into its connected pieces and asks which the walk stood in.
+            IReadOnlyList<APiece> pieces = WhatAMapIsMadeOf.In(
+                world.Maps.Where(m => reachedBy[name].Contains(m.Id)),
+                stoodBy[name].Select(t => (t.Item1, t.Item2)),
+                surfing: true,
+                world.Find);
+
+            var byMap = pieces.GroupBy(p => p.MapId).ToList();
+
+            Console.WriteLine();
+            Console.WriteLine(
+                $"    WHAT A MAP IS MADE OF (289) — the {byMap.Count} reached map(s) are"
+                + $" {pieces.Count} piece(s) of walkable ground. {byMap.Count(g => g.Count() > 1)}"
+                + $" map(s) are in more than one; the most is"
+                + $" {byMap.Max(g => g.Count())} ({byMap.MaxBy(g => g.Count())!.Key}"
+                + $" {world.Find(byMap.MaxBy(g => g.Count())!.Key)?.Name ?? "?"})");
+
+            Console.WriteLine(
+                $"      the walk stands in {pieces.Count(p => p.StoodOn)} of them —"
+                + $" {byMap.Count(g => g.Count(p => p.StoodOn) > 1)} map(s) it stands in more than"
+                + " ONE piece of, which is a map it enters by two doors that do not join up");
+
+            foreach (var group in byMap.Where(g => g.Count(p => p.StoodOn) > 1))
+            {
+                Console.WriteLine(
+                    $"        {group.Key,-8} {world.Find(group.Key)?.Name ?? "?",-20} "
+                    + string.Join(
+                        ", ",
+                        group.Where(p => p.StoodOn).OrderByDescending(p => p.Size)
+                            .Select(p => $"{p.Size}")));
+            }
+
+            // AND THE PIECES NOTHING OPENS. A piece the walk never stood in and no warp lands in
+            // is ground this world file cannot put anybody on by any door at any lever setting.
+            IReadOnlyList<APiece> shutOut = [.. pieces.Where(p => p.NothingOpensIt)];
+
+            Console.WriteLine(
+                $"      {pieces.Count(p => !p.StoodOn)} piece(s) the walk never stood in;"
+                + $" {pieces.Count(p => !p.StoodOn && p.Warps > 0)} of those hold a warp,"
+                + $" {pieces.Count(p => !p.StoodOn && p.Warps == 0 && p.Crossings > 0)} run along"
+                + $" a border a neighbour crosses in from, and {shutOut.Count} hold NEITHER —"
+                + $" {shutOut.Sum(p => p.Size)} square(s) nothing in this world file opens");
+
+            foreach (APiece piece in shutOut.OrderByDescending(p => p.Size).Take(8))
+            {
+                Console.WriteLine(
+                    $"        {piece.MapId,-8} {world.Find(piece.MapId)?.Name ?? "?",-20}"
+                    + $" {piece.Size,5} square(s), no warp");
+            }
+
             // AND THE DOORS INSIDE THEM. The cable club's nineteen are in a pocket; asking how
             // many of the world's warps are is the population that finding belongs to. A door
             // nothing can walk to is a door in the file and not a door in the world.
