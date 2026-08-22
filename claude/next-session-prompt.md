@@ -6,7 +6,7 @@
 I'm building MonMMO, a from-scratch MMO whose data is extracted from my own Pokémon FireRed
 cartridge. C# / .NET 8, xUnit, Raylib-cs client, SQLite server. Repo is at
 `~/OneDrive/Desktop/pokemmo`, branch `main`, everything merged. Base is the tip of
-`claude-307`, **3529 tests green** — re-read at 297, where the old line still said `claude-314` and
+`claude-308`, **3554 tests green** — re-read at 297, where the old line still said `claude-314` and
 3274 (trap 14, in the sentence that tells you where you are standing).
 
 Standing rules — do not break these:
@@ -718,7 +718,34 @@ Traps worth carrying:
     what names their own blocks is a literal in code, which the climb had said per site since 191.
     **Before believing a proximity test, ask what it would find if the thing were merely nearby.**
 
-137. **"THE RUN ANSWERS NOUGHT" WAS A SENTENCE ABOUT A VARIABLE NOTHING HAD WRITTEN** (307).
+140. **A CUT WITH ONE EDGE IS A CUT THE OTHER BAND SAILS OVER** (308). `FirstRemembered`'s own
+    paragraph is about the twelve pads in the `0x400x` band — *a pad three hundred scripts
+    scribble on is not something the story remembers* — and it is written `variable >= 0x4010`.
+    The engine's argument slots are numerically ABOVE that, so **the band the rule exists to
+    exclude was on the remembered side of it**, and a value copied into `0x800D` on `41.0`
+    survived into `12.4` two maps later. Measured on the rule's OWN criterion: places per number
+    is **214.2** in the `0x8000` band against **11.1** in the one the cut was drawn for, with the
+    calibration row printed in the same table. **When a threshold is justified by a measurement on
+    one band, check what else is on the far side of it.**
+
+139. **A COMPARISON DIFFERING IS NOT A BRANCH DIFFERING** (308). The blast radius of a leftover
+    read as an answer was **506 places** off the comparison's result and is **85** off the arm the
+    conditional actually took. `0x0187` and `0x039` are **397 of the 506 and NOUGHT of the 85**:
+    both are compared against a value every conditional there tests EQUAL against, so Greater
+    against Less changes nothing. 9's trap one level in — *a count of how wrong something is is
+    not a count of who cares* — and both columns are printed permanently, because the loose one is
+    the argument for the tight one (25). It also leaves 214's sentence about `0x0187` standing:
+    0 of its 166 places take a different arm.
+
+138. **THE FLOOR BEING NOUGHT NAMES WHAT IS LEFT** (308). After the cut was fixed, the leftover
+    count at `--play` is **0 of 512** and every one of the 38 that survive at other settings needs
+    `--say-yes` and holds the value **1** — which is what `HowAScriptRuns` writes into `0x800D`
+    when it answers a yes-or-no. So the residue is neither the cartridge's nor the memory rule's:
+    it is one MODELLED lever leaking into a routine's answer slot. **A reading whose floor row is
+    empty has named its own remaining cause.**
+
+137. **"THE RUN ANSWERS NOUGHT" WAS A SENTENCE ABOUT A VARIABLE NOTHING HAD WRITTEN** (307, and
+    the denominator at 308).
     That line has been in this prompt since 214, measured on `special 0x0187`, and it is right
     there. **An unanswerable `special` or `specialvar` writes NOTHING into the answer slot** —
     `ScriptRunner` says so in as many words — so the compare after it reads whatever the last
@@ -1295,7 +1322,7 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-307-the-list-nothing-runs.md` first, then `306`, then `305`, then `304`, then
+Read `claude/milestone-308-the-slot-nobody-cleared.md` first, then `307`, then `306`, then `305`, then `304`, then
 `303`, then `302`, then `301`, then `300`, then `299`, then `298`, then `297`, then `296`, then `295`, then `294`,
 then `293`, then `292`, then `291`, then `290`, then `289`, then `288`, then `287`, then `286`,
 then `285`, then `284`, then `283`, then `282`, then `281`, then `280`, then `279`, then `278`, then `277`, then `276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
@@ -1305,7 +1332,7 @@ then `285`, then `284`, then `283`, then `282`, then `281`, then `280`, then `27
 `238`, `237`,
 `236`, `235`, `234`, `233`, `232`, `231`, `230`, `229`, `228`, `227`, `226`, `225`, `224`, `223`, `222`, `221`, `220`, `219`, `218`, `217`, `216`, `215`, `214`, `213`, `212`, `211`, `210`, `209`, `208`, `207`, `206`, `205`, `204`, `203`, `202`, `201`, `200`, `199`, `198`, `197`, `196`, `195`, `194`, `193`, `192`, `191`, `190`, `189`,
 `188`, `187`, `186`, `185`, `184`, `183`, `182`, `181`, `180`, `179`, `178`, `177`, `176`.
-**Fifty-eight faults closed and every one was in this project, not on the cartridge.** A walk that
+**Fifty-nine faults closed and every one was in this project, not on the cartridge.** A walk that
 stopped at a conditional call; one byte with no width; three scans that rolled their own "every
 script" list; a list ranked by a count instead of by what it costs; a party that could not gain
 a level; a roadmap line that called a fix a cost; a continuation that carried flags and not
@@ -1440,7 +1467,15 @@ world file at all, so every run this project has printed walked a world whose ma
 unconditional scripts. They move 61 flags, **54 of which no other kind of script moves either
 way** — second only to `person`'s 152 — and 47 of those hide somebody, 74 objects between them.
 One of them is 306's `0x0005`: `2.1 TRAINER TOWER`'s own script sets it, the run could not see it,
-and it is worth nine maps. 239's fault exactly, one list further on.
+and it is worth nine maps. 239's fault exactly, one list further on; and at 308 **the cut that
+decides what a scene leaves for the next one, which had one edge** — `FirstRemembered >= 0x4010`
+is justified in its own paragraph by the twelve pads in the `0x400x` band, and the engine's
+argument slots are numerically above it, so the scratchiest band in the game (16 numbers at 3428
+places, 214.2 each against the remembered band's 11.1) was on the REMEMBERED side of a cut written
+to exclude scratch. A `copyvar 0x800D, 0x8004` on `41.0` was still in the slot when `12.4` ran two
+maps later, and that is what an unanswerable routine's compare read. Adopted: 0 maps at every
+setting, the two flags it stops setting hold nothing and gate nothing, and the one it starts
+setting gates nineteen objects and stops flickering.
 
 `246` is the read that is not a command, and the literal-pool test for whether compiled code holds
 a number — both live inside `--namespaces`, which is now the fullest single instrument in the
@@ -1503,8 +1538,18 @@ dotnet run -c Release --project src/Tools/RomDump -- firered.gba --the-control
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --the-ruler
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --the-species
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --the-fifth-list
+dotnet run -c Release --project src/Tools/RomDump -- firered.gba --the-answer-slot
 dotnet run -c Release --project src/Tools/RomDump -- firered.gba --play --say-yes --boat --surf --in-order --on-load
 ```
+
+`--the-answer-slot` is 308, and it is the denominator 307 owed. A leftover can only be mistaken
+for an answer at a comparison that follows an UNANSWERED CALL with nothing in between, so it counts
+those PLACES — (map, script, the call's own byte position), worst pass each — and sorts them four
+ways: nobody read it, answered nought, read a leftover harmlessly, read one that changed a branch.
+Every row is printed twice, the second with **`--remember-slots`**, which is the behaviour every
+number this project printed before 308 was measured under (241). Then `--answer-nought`'s price,
+with a MUST-BE-NOUGHT control column; then the band table that says why there was anything in the
+slot at all.
 
 `--the-fifth-list` is 307. Two halves: what a map's own script list holds by KIND BYTE (234
 unconditional entries at 163 addresses on 159 maps, against 91 conditional the walk already runs),
@@ -2014,13 +2059,16 @@ delta to it.
 ```
 --play                                      183 / 160 in 6, party of 6 at 52, 11 of 104 handed twice
                                             crossing water: nobody ever knew move 57 — a wall
---play --say-yes                            243 / 234 in 6, party of 4 at 67, 10 of 155 handed twice
---play --say-yes --in-order                 243 / 236 in 6, party of FIVE at 67, 0 of 152 handed twice
---play --say-yes --boat                     388 / 300 in 7, party of 4 at 78, 11 of 207 handed twice
---play --say-yes --boat --in-order          388 / 301 in 7, party of FIVE at 78, 0 of 203 handed twice
+--play --say-yes                            243 / 232 in 6, party of 4 at 67, 10 of 155 handed twice
+--play --say-yes --in-order                 243 / 234 in 6, party of FIVE at 67, 0 of 152 handed twice
+--play --say-yes --boat                     388 / 298 in 7, party of 4 at 78, 11 of 207 handed twice
+--play --say-yes --boat --in-order          388 / 299 in 7, party of FIVE at 78, 0 of 203 handed twice
 --play --say-yes --boat --surf --in-order   388 / 300 in 5, party of five at 75, 0 of 203 handed twice
 --play --say-yes --boat --surf --in-order --on-load
-                                           397 / 314 in 7, party of SIX at 75, 1 of 204 handed twice
+                                           397 / 313 in 7, party of SIX at 75, 1 of 204 handed twice
+                                            <- EVERY FLAG COUNT MOVED AT 308 and the map counts did
+                                               not: the engine's argument slots stopped surviving a
+                                               script. --remember-slots is the old behaviour
                                             <- --surf now costs ONE flag, not two (239)
                                             <- THE BOAT ROWS MOVED AT 285: 381 -> 388 maps. One
                                                side of one map carries three neighbours and the
@@ -2030,21 +2078,24 @@ delta to it.
                                                which nothing exported and nothing ran
 
 the differences, printed by subtracting two of those same seven rows:
-  --say-yes  (MODELLED)  +60 maps, +74 flags, +0 passes, -2 party
+  --say-yes  (MODELLED)  +60 maps, +72 flags, +0 passes, -2 party
   --boat     (MODELLED)  +145 maps, +66 flags (+65 with --in-order on), +1 pass, +0 party
                          <- +138 and +61 until 285
   --in-order (stricter)  +0 maps, +2 flags (+1 with --boat on), +0 passes, +1 party
-  --surf     (override)  +0 maps, -1 flag, -2 passes, +0 party
-  --on-load  (MODELLED)  +9 maps, +14 flags, +2 passes, +1 party
+  --surf     (override)  +0 maps, +1 flag, -2 passes, +0 party
+                         <- +1, NOT -1. The sign changed at 308 and this prompt had said -1 since
+                            239. A delta quoted for a milestone is 12's trap wearing a minus sign
+  --on-load  (MODELLED)  +9 maps, +13 flags, +2 passes, +1 party
                          <- ALL NINE ARE TRAINER TOWER, and --on-load is worth +0 maps at every
                             setting without the boat, because 2.1 is only reached by boat
 
 AND THE SECOND COLUMN (265, asked of all six at 285, seven at 307) — reaching and returning are
 two facts and every number above is the first one:
   --play                    37179 stood,  46 cannot get back on 3 map(s), 3 whole
-  --play --say-yes          69260 stood,  48 cannot get back on 4 map(s), 3 whole
-  --play --say-yes --boat  105105 stood, 284 cannot get back on 7 map(s), 4 whole
-  ... --on-load            106021 stood, 345 cannot get back on 9 map(s), 5 whole
+  --play --say-yes          69259 stood,  48 cannot get back on 4 map(s), 3 whole
+  --play --say-yes --boat  105104 stood, 284 cannot get back on 7 map(s), 4 whole
+  ... --on-load            106014 stood, 345 cannot get back on 9 map(s), 5 whole
+  (the stood counts moved by one or two at 308 and nothing else in this block did)
   the --in-order and --surf rows are the same to within two squares. What is left stranded is
   ICEFALL CAVE (177, entered by eight ledge hops), the three lift cabins, and FUCHSIA's 2 —
   ledges and sentinel rooms, which are one-way by construction — and at 307, 2.11 TRAINER TOWER
@@ -3108,14 +3159,18 @@ the other, and nothing about a single green run says which. 207 writes the 2x2 d
 
 ## Open, and honestly owed
 
-* **THE ANSWER SLOT IS NEVER CLEARED, AND A QUARTER OF THE READS FIND SOMEBODY ELSE'S NUMBER**
-  (307, trap 137). `--trace 0x800D` at the widest: **968 of 3646 reads found a value already in
-  the slot, against NINE writes.** Whether the run should write nought into the answer variable
-  before an unanswerable `special` is a MODELLING DECISION and it moves every row of the floor
-  table, so it is measured and not made. The cheapest next step is the DENOMINATOR THIS DOES NOT
-  HAVE: how many of those reads are the first command after an unanswerable call — which is the
-  only place the leftover can be mistaken for an answer — against how many are ordinary reads of
-  a slot somebody legitimately wrote.
+* ~~**THE ANSWER SLOT IS NEVER CLEARED**~~ **MEASURED AND MOSTLY CLOSED AT 308.** The denominator
+  is 1143 places at the widest, of which 598 nobody reads and 533 read a leftover — and **85 of
+  those took a different arm**, not the 506 the comparison column says. The CAUSE was the
+  one-sided memory cut (trap 140), now fixed, and the leftover count went 533 -> 39. What is left:
+  * **The 38 are `--say-yes`'s own doing** — the floor is NOUGHT, and every survivor holds the
+    value 1, which is what `HowAScriptRuns` writes into `0x800D` to answer a yes-or-no. Whether
+    that lever should write into the slot every routine answers into, or into somewhere the
+    routines do not share, is a modelling decision and it is not made.
+  * **`--answer-nought` exists and is off.** It drives the count to nought by construction and
+    costs 0 maps at every setting; with the memory rule fixed there is very little left for it.
+  * **`0x0194`'s 20 arm changes and `0x0180`'s 19** were the two routines where a leftover
+    genuinely decided something under the old rule. Nobody has asked what they should answer.
 * **THE KIND BYTE OF THE FIFTH LIST IS KEPT AND NOT USED** (307). 55 entries are kind 1, 130 are
   kind 3, 47 kind 5 and 2 kind 7, and `--on-load` runs all four the same way. It is the only thing
   in the data that says anything about WHEN, and asking the lever per kind is one parameter — it
