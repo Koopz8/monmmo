@@ -78,15 +78,28 @@ public static class SpecialCalls
     private const int LastArgument = 0x800F;
 
     /// <summary>
-    /// How many commands either side count as "around" the call.
+    /// How many commands AFTER a call count as "around" it.
     /// <para>
-    /// <b>Four, and nothing had asked whether four is enough (294).</b> The loop stops at the
-    /// first non-adjacent command anyway, so this only bites where a call has five or more
-    /// commands packed contiguously in front of it. <see cref="All"/> takes it as a parameter now
-    /// so the question can be answered by sweeping it rather than argued about.
+    /// <b>Four, and it still bounds the forward half only (295).</b> 294 swept the backward half
+    /// and found it never plateaued, so 292's "44 of 178" was a property of this constant. The
+    /// backward half is bounded by two rules read off the script instead — contiguity, and the
+    /// previous call — and under those it converges at twelve and stops moving, so
+    /// <see cref="NoLimit"/> is what <see cref="Before"/> now takes by default.
     /// </para>
     /// </summary>
     public const int Window = 4;
+
+    /// <summary>
+    /// No distance limit at all on the backward search — what <see cref="Before"/> takes unless a
+    /// caller is deliberately sweeping it (295).
+    /// </summary>
+    /// <remarks>
+    /// Two READ rules bound it: the run must be byte-contiguous, and it stops at the previous
+    /// call. Under those the answer converges at a window of twelve and is identical at 4096, so
+    /// a distance is not doing any work — and a number that has to be chosen is a number that
+    /// gets quoted as though it were measured (294).
+    /// </remarks>
+    public const int NoLimit = int.MaxValue;
 
     /// <summary>
     /// Commands that put their own answer in the result variable.
@@ -560,7 +573,7 @@ public static class SpecialCalls
     }
 
 
-    public static List<SpecialCall> All(Rom rom, MapLibrary library, int window = Window)
+    public static List<SpecialCall> All(Rom rom, MapLibrary library, int window = NoLimit)
     {
         var found = new List<SpecialCall>();
 
@@ -585,7 +598,7 @@ public static class SpecialCalls
     /// </para>
     /// </summary>
     public static List<SpecialCall> In(
-        Rom rom, string mapId, string what, uint address, int window = Window)
+        Rom rom, string mapId, string what, uint address, int window = NoLimit)
     {
         var found = new List<SpecialCall>();
 
@@ -642,13 +655,24 @@ public static class SpecialCalls
     /// </para>
     /// </summary>
     private static List<(int, int)> Before(
-        List<ScriptCommand> commands, int at, int window = Window)
+        List<ScriptCommand> commands, int at, int window = NoLimit)
     {
         var arguments = new List<(int, int)>();
 
-        for (int i = at - 1; i >= 0 && i >= at - window; i--)
+        // `at - window` would overflow at NoLimit, so the distance is counted forwards.
+        for (int i = at - 1; i >= 0 && at - i <= window; i--)
         {
             if (!Adjacent(commands[i], commands[i + 1])) break;
+
+            // AND STOP AT THE PREVIOUS CALL (295).
+            //
+            // A value put in an argument slot belongs to the FIRST call after it, not to every
+            // call that follows. 236's own example is the shape: the FAN CLUB on 14.9 sets
+            // 0x8004 and asks 0x0A3 eight times over, and without this the eighth call collects
+            // all eight fans. It is a rule read off the script rather than a distance chosen
+            // here, which is what 294 said the window needed and could not supply.
+            if (commands[i].Code is Special or SpecialVar) break;
+
             if (commands[i].Code != SetVar) continue;
             if (commands[i].Word() is < FirstArgument or > LastArgument) continue;
 

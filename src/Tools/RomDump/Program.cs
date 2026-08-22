@@ -10678,7 +10678,7 @@ public static class Program
         Console.WriteLine(
             "      window   handed a value   in 0x8004   only elsewhere   selectors   arguments");
 
-        foreach (int window in new[] { 1, 2, 3, 4, 6, 8, 12, 16, 24 })
+        foreach (int window in new[] { 1, 2, 3, 4, 6, 8, 12, 16, 24, 48, 96, 4096 })
         {
             IReadOnlyList<SpecialCall> calls = window == SpecialCalls.Window
                 ? atFour

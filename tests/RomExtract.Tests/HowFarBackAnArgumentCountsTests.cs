@@ -131,6 +131,56 @@ public sealed class HowFarBackAnArgumentCountsTests
         Assert.Empty(Arguments(rom, 24));
     }
 
+    // ------------------------------------------------- the rule that replaced the knob (295)
+
+    /// <summary>
+    /// <b>A VALUE BELONGS TO THE FIRST CALL AFTER IT.</b> Without this the second call collects
+    /// the first one's argument as well — which is the FAN CLUB on <c>14.9</c>, where a script
+    /// sets the slot and asks <c>0x0A3</c> eight times over. It is a rule read off the script
+    /// rather than a distance chosen in this repository, and under it the whole sweep converges
+    /// at a window of twelve and stops moving.
+    /// </summary>
+    [Fact]
+    public void AValueBelongsToTheFirstCallAfterIt()
+    {
+        var image = new byte[0x1000];
+
+        List<byte> script = [.. Puts(9), .. Calls(), .. Calls(), End];
+
+        script.CopyTo(image, 0x200);
+
+        var rom = new Rom(image);
+
+        IReadOnlyList<SpecialCall> calls =
+            [.. SpecialCalls.In(rom, "1.0", "person", Rom.BaseAddress + 0x200)];
+
+        Assert.Equal(2, calls.Count);
+        Assert.Equal([(Slot, 9)], calls[0].Arguments);
+        Assert.Empty(calls[1].Arguments);
+    }
+
+    /// <summary>
+    /// And the backward search is not bounded by a distance any more: the same value nine commands
+    /// back is found at the default, because the default is <c>NoLimit</c> and the two READ rules
+    /// do the bounding.
+    /// </summary>
+    [Fact]
+    public void TheDefaultHasNoDistanceLimitAtAll()
+    {
+        Rom rom = Image(between: 9);
+
+        Assert.Empty(Arguments(rom, SpecialCalls.Window));
+        Assert.Equal([(Slot, 9)], Arguments(rom, SpecialCalls.NoLimit));
+
+        // And NoLimit is what a caller gets without asking.
+        Assert.Equal(
+            [(Slot, 9)],
+            Assert.Single(
+                SpecialCalls.In(rom, "1.0", "person", Rom.BaseAddress + 0x200)
+                    .Where(c => c.Routine == Routine))
+                .Arguments);
+    }
+
     private const byte Goto = 0x05;
 
     private static byte[] Pointer(int to) =>
