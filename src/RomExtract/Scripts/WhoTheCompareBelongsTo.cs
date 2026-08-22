@@ -161,19 +161,33 @@ public static class WhoTheCompareBelongsTo
 
     /// <summary>
     /// The first thing after the routine that could have answered, and what it turns out to be
-    /// — or null when nothing in the window could have.
+    /// — or null when nothing in the run could have.
     /// <para>
     /// Exposed against a handful of bytes rather than a whole world, for the same reason the
     /// other two readings are: a rule a test can only reach through a cartridge is a rule no
     /// test reaches.
     /// </para>
+    /// <para>
+    /// <b>THE RUN, not the list (300).</b> This had no contiguity check at all, and 299 took the
+    /// distance off it — so the walk could run off the end of one script and name a thing in the
+    /// way that belongs to the next block the reader happened to concatenate. <b>It costs nought
+    /// on this cartridge</b>: all 140 sorted sites name something in their own run, median three
+    /// commands on, most twenty-six. The rule is decided on adjacency anyway, because a rule the
+    /// cartridge never exercises is a rule no break can be aimed at (57) — the fixture carries it.
+    /// </para>
     /// </summary>
+    /// <summary>Whether two commands sit next to each other in the image.</summary>
+    private static bool Adjacent(ScriptCommand first, ScriptCommand second) =>
+        second.Offset == first.Offset + 1 + first.Arguments.Length;
+
     public static (InTheWay Was, uint Called)? WhatStoodInTheWay(
         Rom rom, List<ScriptCommand> commands, int at, IReadOnlySet<int>? answering = null,
         int forward = SpecialContracts.NoLimit)
     {
         for (int i = at + 1; i < commands.Count && i - at <= forward; i++)
         {
+            if (!Adjacent(commands[i - 1], commands[i])) break;
+
             if (!SpecialCalls.AnswersItself(commands[i].Code)) continue;
 
             if (commands[i].Code == ScriptCommands.Call)

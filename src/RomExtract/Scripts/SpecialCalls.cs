@@ -455,6 +455,43 @@ public static class SpecialCalls
         WhatIsLeftInside(rom, address, answer);
 
     /// <summary>
+    /// Which ARGUMENT SLOTS a called block writes, one level in (300).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="WhatACallLeaves"/> is this question asked of the answer variable, and 214 made a
+    /// plain <c>call</c> a barrier in the answer scan because of it. The argument scan has no such
+    /// barrier and the same argument applies: a called block can write an argument slot exactly as
+    /// it can write the answer. This is the count that closes it.
+    /// </para>
+    /// <para>
+    /// One level only. <paramref name="rom"/>'s block may itself call something, and when it does
+    /// this says so rather than chasing it — a reading that stops and says where is worth more
+    /// than one that guesses (47).
+    /// </para>
+    /// </remarks>
+    public static (IReadOnlySet<int> Slots, bool CallsSomething) WhichSlotsACallWrites(
+        Rom rom, uint address)
+    {
+        var slots = new HashSet<int>();
+        var calls = false;
+
+        foreach (ScriptCommand command in ScriptReader.Read(rom, address))
+        {
+            if (command.Code is Call or CallIf or Special or SpecialVar or 0x09 or 0x08)
+                calls = true;
+
+            // Every command whose FIRST operand is a variable it writes — 252's table, which is
+            // the one this repository measured rather than a fourth private copy of it.
+            if (command.Code is not (SetVar or 0x17 or 0x18 or 0x19 or 0x1A or 0x42)) continue;
+
+            if (command.Word() is >= FirstArgument and <= LastArgument) slots.Add(command.Word());
+        }
+
+        return (slots, calls);
+    }
+
+    /// <summary>
     /// Everything a called block can leave in the answer variable, and what chooses between them.
     /// </summary>
     /// <param name="Answers">

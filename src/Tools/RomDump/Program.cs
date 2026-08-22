@@ -10838,17 +10838,56 @@ public static class Program
                 $"      {row.What,-51}   {row.Places,6}   {row.Agree,5}   {row.CrudeSaysMore,12}"
                 + $"   {row.ReadSaysMore,13}");
 
-        (int credited, int across) = OneQuestionThreeReadings.TheErrorBar(rom, library);
+        IReadOnlyDictionary<int, OneQuestionThreeReadings.WhatWasBetween> sorted =
+            OneQuestionThreeReadings.Sorted(rom, library);
+
+        int across = sorted.Count(v => v.Value != OneQuestionThreeReadings.WhatWasBetween.Nothing);
 
         Console.WriteLine();
         Console.WriteLine(
-            $"    AND THE COLUMN THIS CANNOT READ: {across} of the {credited} places credited with a value have"
-            + " a call or a branch standing between the value and the call. 214 made a plain");
+            $"    AND THE COLUMN 298 COULD NOT READ, FOLLOWED ONE LEVEL (300): {across} of the"
+            + $" {sorted.Count} places credited with a value have a call or a branch standing between");
         Console.WriteLine(
-            "    `call` a barrier in the ANSWER scan because the block it jumps into can answer;"
-            + " the ARGUMENT scan has no such barrier and a called block can write a slot the same");
-        Console.WriteLine("    way. Printed beside the count it is sure of rather than left out (47).");
+            "    the value and the call. 214 made a plain `call` a barrier in the ANSWER scan because"
+            + " the block it jumps into can answer; a called block can write an argument SLOT the");
+        Console.WriteLine(
+            "    same way, and nothing had followed one. Sorted by what the block actually does:");
+        Console.WriteLine();
+
+        foreach (OneQuestionThreeReadings.WhatWasBetween kind in
+                 Enum.GetValues<OneQuestionThreeReadings.WhatWasBetween>()
+                     .Where(k => k != OneQuestionThreeReadings.WhatWasBetween.Nothing))
+            Console.WriteLine(
+                $"      {sorted.Count(v => v.Value == kind),3}   {Describe(kind)}");
+
+        int wrong = sorted.Count(
+            v => v.Value == OneQuestionThreeReadings.WhatWasBetween.ACallThatWritesTheSlot);
+
+        int unread = sorted.Count(
+            v => v.Value == OneQuestionThreeReadings.WhatWasBetween.ACallThatCallsSomething);
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    THE FINDING IS THE NEGATIVE (30): {wrong} of the {across} is a value the block"
+            + $" overwrote. {unread} are unread because the block calls something of its own, and"
+            + " the rest come back");
+        Console.WriteLine(
+            $"    clean — so 298's error bar of {across} is really {unread}, and nought of it is a"
+            + " credit this project got wrong.");
     }
+
+    private static string Describe(OneQuestionThreeReadings.WhatWasBetween kind) => kind switch
+    {
+        OneQuestionThreeReadings.WhatWasBetween.AGoto =>
+            "a GOTO — the call is not reached from the value at all",
+        OneQuestionThreeReadings.WhatWasBetween.AConditionalJump =>
+            "a conditional jump — the call is reached on the arm it does not take, value intact",
+        OneQuestionThreeReadings.WhatWasBetween.ACallThatWritesNoSlot =>
+            "a call whose block writes NO argument slot — the credit stands",
+        OneQuestionThreeReadings.WhatWasBetween.ACallThatCallsSomething =>
+            "a call whose block calls something of its own — one level was not enough",
+        _ => "a call whose block WRITES that very slot — the credit is WRONG",
+    };
 
     /// <summary>
     /// 296's own stated limitation, measured (297).

@@ -97,21 +97,51 @@ public static class OneQuestionThreeReadings
         ];
     }
 
+    /// <summary>What a thing standing between a value and its call turns out to be (300).</summary>
+    public enum WhatWasBetween
+    {
+        /// <summary>Nothing at all — the run from the value to the call is straight.</summary>
+        Nothing,
+
+        /// <summary>A <c>goto</c>: the call is not reached from the value at all.</summary>
+        AGoto,
+
+        /// <summary>A conditional jump: the call is reached on the arm it does not take.</summary>
+        AConditionalJump,
+
+        /// <summary>A call whose block writes no argument slot — the credit stands.</summary>
+        ACallThatWritesNoSlot,
+
+        /// <summary>A call whose block calls something — one level was not enough.</summary>
+        ACallThatCallsSomething,
+
+        /// <summary>A call whose block WRITES the very slot — the credit is wrong.</summary>
+        ACallThatWritesTheSlot,
+    }
+
     /// <summary>
     /// How many credited values have a <c>call</c> or a branch standing between them and the call
-    /// they are credited to — the error bar this reading cannot close.
+    /// they are credited to — 298's error bar, and 300's resolution of it.
     /// </summary>
     /// <remarks>
     /// <b>214 made a plain <c>call</c> a barrier in the ANSWER scan</b> because the block it jumps
     /// into can answer, and the ARGUMENT scan has no such barrier: a called block can write an
-    /// argument slot exactly as it can write the answer variable. This is the count of places
-    /// where that could have happened, printed beside the count the reading is sure of, because a
-    /// verdict is worth what its does-not-know column is small (47).
+    /// argument slot exactly as it can write the answer variable. 298 printed the count of places
+    /// where that could have happened; 300 follows the call one level and sorts them, and the
+    /// finding is the NEGATIVE — <b>nought is a credit the block overwrote</b> (30).
     /// </remarks>
-    public static (int Credited, int AcrossACall) TheErrorBar(Rom rom, MapLibrary library)
+
+    /// <summary>
+    /// 298's thirteen, followed one level and sorted (300).
+    /// </summary>
+    /// <remarks>
+    /// <b>The worst verdict per place wins</b>, because a place with a call it cannot see past is
+    /// unread whatever else is in the way. Trap 30: the interesting result here is the NEGATIVE —
+    /// whether any credit turns out to be a value the block overwrote.
+    /// </remarks>
+    public static IReadOnlyDictionary<int, WhatWasBetween> Sorted(Rom rom, MapLibrary library)
     {
-        var credited = new HashSet<int>();
-        var across = new HashSet<int>();
+        var sorted = new Dictionary<int, WhatWasBetween>();
         var seen = new HashSet<int>();
 
         foreach ((string mapId, string _, uint address) in library.EveryScript())
@@ -124,25 +154,50 @@ public static class OneQuestionThreeReadings
                     continue;
 
                 if (!seen.Add(commands[i].Offset)) continue;
-                if (SpecialCalls.ArgumentsBefore(commands, i).Count == 0) continue;
 
-                credited.Add(commands[i].Offset);
+                List<(int Slot, int Value)> handed = SpecialCalls.ArgumentsBefore(commands, i);
+
+                if (handed.Count == 0) continue;
+
+                sorted[commands[i].Offset] = WhatWasBetween.Nothing;
 
                 List<ScriptCommand> run =
                 [
                     .. SpecialCalls.Around(commands, i, SpecialCalls.Backwards).Select(c => c.Command),
                 ];
 
-                // Everything between the call and the FURTHEST value it is credited with.
                 int furthest = run.FindLastIndex(
                     c => c.Code == SetVar &&
                          c.Word() is >= SpecialCalls.FirstArgument and <= SpecialCalls.LastArgument);
 
-                if (run.Take(furthest).Any(c => Leaves.Contains(c.Code)))
-                    across.Add(commands[i].Offset);
+                foreach (ScriptCommand between in run.Take(furthest).Where(c => Leaves.Contains(c.Code)))
+                {
+                    WhatWasBetween verdict = between.Code switch
+                    {
+                        0x05 => WhatWasBetween.AGoto,
+                        0x06 => WhatWasBetween.AConditionalJump,
+                        _ => Follow(rom, between, handed),
+                    };
+
+                    if (verdict > sorted[commands[i].Offset]) sorted[commands[i].Offset] = verdict;
+                }
             }
         }
 
-        return (credited.Count, across.Count);
+        return sorted;
     }
+
+    private static WhatWasBetween Follow(
+        Rom rom, ScriptCommand call, List<(int Slot, int Value)> handed)
+    {
+        (IReadOnlySet<int> slots, bool nested) =
+            SpecialCalls.WhichSlotsACallWrites(rom, call.Pointer(0));
+
+        if (slots.Overlaps(handed.Select(a => a.Slot))) return WhatWasBetween.ACallThatWritesTheSlot;
+
+        return nested
+            ? WhatWasBetween.ACallThatCallsSomething
+            : WhatWasBetween.ACallThatWritesNoSlot;
+    }
+
 }
