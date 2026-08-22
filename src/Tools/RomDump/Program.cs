@@ -6819,7 +6819,9 @@ public static class Program
                 + " from the far side and unreachable from this one: "
                 + string.Join(
                     ", ",
-                    walled.Select(d => $"{d.From} ({d.Square.X},{d.Square.Y}) -> {d.To}")));
+                    walled.Select(d =>
+                        $"{d.From} {NameOf(world, d.From)} ({d.Square.X},{d.Square.Y}) -> {d.To}"
+                        + $" {NameOf(world, d.To)}")));
 
         List<ADoorNotTaken> bySea = [.. known.Concat(into).Where(d => d.OnlyFromTheWater)];
 
@@ -6832,7 +6834,10 @@ public static class Program
             + (bySea.Count == 0
                 ? "none here"
                 : string.Join(
-                    ", ", bySea.Take(4).Select(d => $"{d.From} ({d.Square.X},{d.Square.Y}) -> {d.To}"))));
+                    ", ",
+                    bySea.Take(4).Select(d =>
+                        $"{d.From} {NameOf(world, d.From)} ({d.Square.X},{d.Square.Y}) -> {d.To}"
+                        + $" {NameOf(world, d.To)}"))));
 
         Console.WriteLine();
         Console.WriteLine("      from     to        square      it is       neighbours on foot   from the water");

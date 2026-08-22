@@ -64,8 +64,9 @@ public sealed record ADoorNotTaken(
 /// <para>
 /// <b>And walled-in is asked of the surfing grid.</b> Water is solid on foot and walkable on the
 /// sea, so a door whose one open neighbour is water reads nought neighbours in the walking grid —
-/// one door here is exactly that (<c>1.4 (33,15) -> 1.5</c>) and calling it unreachable would file
-/// a square the run floats up to as one nothing could ever reach.
+/// one door here is exactly that — <c>1.4 (33,15) -> 1.5</c>, both of them S.S. ANNE, whose harbour
+/// is 1446 squares of open water — and calling it unreachable would file a square the run floats
+/// up to as one nothing could ever reach.
 /// </para>
 /// </summary>
 public static class WhyTheDoorIsNotTaken
