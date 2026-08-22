@@ -152,10 +152,17 @@ public static class SpecialContracts
     private const byte GotoIf = 0x06;
     private const byte CallIf = 0x07;
 
-    /// <summary>How many commands either side count as belonging to the call.</summary>
+    /// <summary>
+    /// The distance this used to stop at, kept as the setting every number quoted off it was
+    /// measured at (299).
+    /// </summary>
     public const int Window = 4;
 
-    public static List<SpecialContract> Derive(Rom rom, MapLibrary library, Action<string>? log = null)
+    /// <summary>No distance at all — what the forward walk takes now.</summary>
+    public const int NoLimit = int.MaxValue;
+
+    public static List<SpecialContract> Derive(
+        Rom rom, MapLibrary library, Action<string>? log = null, int forward = NoLimit)
     {
         var arguments = new Dictionary<int, int>();
         var compared = new Dictionary<int, Dictionary<int, int>>();
@@ -195,7 +202,7 @@ public static class SpecialContracts
 
                 int answer = command.Code == SpecialCalls.SpecialVar ? command.Word() : AnswerVariable;
 
-                (List<int> values, List<int> beyond) = ComparedAfter(commands, i, answer);
+                (List<int> values, List<int> beyond) = ComparedAfter(commands, i, answer, forward);
 
                 // Every read is a site; the byte position is what says how many PLACES those
                 // sites are, and one address hanging off two triggers is read twice.
@@ -455,21 +462,21 @@ public static class SpecialContracts
     /// </para>
     /// </summary>
     public static (IReadOnlyList<int> Direct, IReadOnlyList<int> Beyond) WhatIsComparedAfter(
-        List<ScriptCommand> commands, int at, int answer = AnswerVariable)
+        List<ScriptCommand> commands, int at, int answer = AnswerVariable, int forward = NoLimit)
     {
-        (List<int> direct, List<int> beyond) = ComparedAfter(commands, at, answer);
+        (List<int> direct, List<int> beyond) = ComparedAfter(commands, at, answer, forward);
 
         return (direct, beyond);
     }
 
     private static (List<int> Direct, List<int> Beyond) ComparedAfter(
-        List<ScriptCommand> commands, int at, int answer)
+        List<ScriptCommand> commands, int at, int answer, int forward = NoLimit)
     {
         var values = new List<int>();
         var beyond = new List<int>();
-        var past = false;
+        var answerers = 0;
 
-        for (int i = at + 1; i < commands.Count && i <= at + Window; i++)
+        for (int i = at + 1; i < commands.Count && i - at <= forward; i++)
         {
             if (!Adjacent(commands[i - 1], commands[i])) break;
 
@@ -479,7 +486,16 @@ public static class SpecialContracts
 
             // And somebody else may have ANSWERED. Everything from here on is theirs as far
             // as this reading can tell, so it is counted apart rather than credited here.
-            if (SpecialCalls.AnswersItself(commands[i].Code)) past = true;
+            //
+            // A COMPARE BELONGS TO THE LAST ANSWERER BEFORE IT (299), which is 295's rule for
+            // arguments read in the other direction. Past the FIRST answerer a compare is the
+            // reading's does-not-know bucket; past the SECOND it belongs to somebody two removes
+            // away and is not evidence about this call at all. That is what bounds this walk —
+            // 298 removed the distance from the direct half and left this half's `Window` in
+            // place, and swept, the barrier count runs 148 at four to 621 at ninety-six.
+            if (SpecialCalls.AnswersItself(commands[i].Code) && ++answerers > 1) break;
+
+            bool past = answerers > 0;
 
             if (commands[i].Code != Compare || commands[i].Word() != answer) continue;
 

@@ -311,4 +311,92 @@ public sealed class TheOtherArmOfTheBarrierTests
         Assert.Empty(direct);
         Assert.Empty(beyond);
     }
+
+    // ------------------------------------------- the distance, and what replaced it (299)
+
+    /// <summary>
+    /// <b>A CHAIN OF COMPARES IS LONGER THAN FOUR COMMANDS (299).</b> This reading stopped four
+    /// past the call, and a script asking <c>compare 1 ; if ; compare 2 ; if ; compare 3 ; if</c>
+    /// is six — so the window chopped every such chain and the table read the first two values
+    /// and no more.
+    /// <para>
+    /// On the cartridge that is worth six routines, four of which become a RUN FROM ONE UPWARDS
+    /// once it goes and none of which was one before, and <c>0x0EC</c>'s missing 2 fills in. The
+    /// fixture is that shape: a third value outside the old window, which is the only thing a
+    /// distance and a rule disagree about here.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AChainOfComparesIsNotCutAtFour()
+    {
+        byte[] image = Blank();
+
+        Put(image, 0x1000, Special, 0x1C, 0x00);
+        Put(image, 0x1003, Compare, 0x0D, 0x80, 0x01, 0x00);
+        Put(image, 0x1008, GotoIf, 0x01);
+        Address(image, 0x100A, 0x1200);
+        Put(image, 0x100E, Compare, 0x0D, 0x80, 0x02, 0x00);
+        Put(image, 0x1013, GotoIf, 0x01);
+        Address(image, 0x1015, 0x1200);
+        Put(image, 0x1019, Compare, 0x0D, 0x80, 0x03, 0x00);
+        Put(image, 0x101E, GotoIf, 0x01);
+        Address(image, 0x1020, 0x1200);
+        Put(image, 0x1024, End);
+        Put(image, 0x1200, Return);
+
+        List<ScriptCommand> commands = ScriptReader.Read(new Rom(image), Rom.BaseAddress + 0x1000);
+
+        Assert.Equal([1, 2, 3], SpecialContracts.WhatIsComparedAfter(commands, 0, Answer).Direct);
+
+        // And at the setting every number quoted off this reading was measured at, the third is
+        // not there — which is what makes 299's sweep a reading rather than a restatement.
+        Assert.Equal(
+            [1, 2],
+            SpecialContracts.WhatIsComparedAfter(commands, 0, Answer, SpecialContracts.Window)
+                .Direct);
+    }
+
+    /// <summary>
+    /// <b>A COMPARE BELONGS TO THE LAST ANSWERER BEFORE IT (299)</b>, which is 295's rule for
+    /// arguments read in the other direction. Past the FIRST answerer a compare is this reading's
+    /// does-not-know bucket; past the SECOND it belongs to somebody two removes away and is not
+    /// evidence about this call at all.
+    /// <para>
+    /// That rule is what replaced the distance, and it is worth 621 -> 454 on the cartridge. The
+    /// fixture has TWO things in the way and a compare after each, so a version stopping at the
+    /// first, at neither, or at a distance all give different answers.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ACompareBelongsToTheLastAnswererBeforeIt()
+    {
+        byte[] image = Blank();
+
+        Put(image, 0x1000, Special, 0x1C, 0x00);
+        Put(image, 0x1003, Special, 0x1D, 0x00);          // the first answerer
+        Put(image, 0x1006, Compare, 0x0D, 0x80, 0x05, 0x00);
+        Put(image, 0x100B, GotoIf, 0x01);
+        Address(image, 0x100D, 0x1200);
+        Put(image, 0x1011, Special, 0x1E, 0x00);          // the second
+        Put(image, 0x1014, Compare, 0x0D, 0x80, 0x09, 0x00);
+        Put(image, 0x1019, GotoIf, 0x01);
+        Address(image, 0x101B, 0x1200);
+        Put(image, 0x101F, End);
+        Put(image, 0x1200, Return);
+
+        List<ScriptCommand> commands = ScriptReader.Read(new Rom(image), Rom.BaseAddress + 0x1000);
+
+        (IReadOnlyList<int> direct, IReadOnlyList<int> beyond) =
+            SpecialContracts.WhatIsComparedAfter(commands, 0, Answer);
+
+        Assert.Empty(direct);
+
+        // FIVE and not NINE: the five is past one answerer and is the does-not-know bucket, the
+        // nine is past two and belongs to a call this one cannot see at all.
+        Assert.Equal([5], beyond);
+
+        // And the middle call gets the nine, which is the same rule seen from the other end — so
+        // a version that dropped everything past an answerer would fail here rather than pass.
+        Assert.Equal([9], SpecialContracts.WhatIsComparedAfter(commands, 1, Answer).Beyond);
+    }
 }

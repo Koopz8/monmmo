@@ -10662,6 +10662,108 @@ public static class Program
         WriteHowFarPastACallToLook(rom, library, all);
 
         WriteOneQuestionThreeReadings(rom, library);
+
+        WriteTheOtherForwardWindow(rom, library);
+    }
+
+    /// <summary>
+    /// The forward window in the OTHER arm, swept (299).
+    /// </summary>
+    /// <remarks>
+    /// 298 swept <c>SpecialCalls.After</c>'s forward half and found it plateaus at three — true of
+    /// every column it printed, and <b>false of the one the other forward reading exists to
+    /// produce</b>. <c>SpecialContracts</c>' across-a-barrier count, which is this project's
+    /// does-not-know column for the whole routine reading, runs 148 at a window of four to 621 at
+    /// ninety-six. <b>Measuring the columns that plateau is not sweeping the window.</b>
+    /// </remarks>
+    private static void WriteTheOtherForwardWindow(Rom rom, MapLibrary library)
+    {
+        Console.WriteLine();
+        Console.WriteLine(
+            "  AND THE FORWARD WINDOW IN THE OTHER ARM (299) — 298 swept SpecialCalls.After and"
+            + " every column it printed plateaued at three. SpecialContracts has its own forward");
+        Console.WriteLine(
+            "  window and its own barrier rule, and the number it exists to produce — the compares"
+            + " this reading CANNOT attribute — does not plateau anywhere near four:");
+        Console.WriteLine();
+        Console.WriteLine(
+            "      forward   across a barrier   routines   no clean compare   ONLY across   branched on");
+
+        foreach (int forward in new[] { 1, 2, 3, 4, 6, 8, 12, 24, 96, SpecialContracts.NoLimit })
+        {
+            List<SpecialContract> derived = SpecialContracts.Derive(rom, library, null, forward);
+
+            Console.WriteLine(
+                $"      {(forward == SpecialContracts.NoLimit ? "none" : forward.ToString()),7}"
+                + $"   {derived.Sum(c => c.AcrossABarrier),16}"
+                + $"   {derived.Count(c => c.AcrossABarrier > 0),8}"
+                + $"   {derived.Sum(c => c.NothingClean),16}"
+                + $"   {derived.Count(c => c.Branches == 0 && c.AcrossABarrier > 0),11}"
+                + $"   {derived.Count(c => c.Branches > 0),11}"
+                + (forward == SpecialContracts.Window
+                    ? "   <- what every number quoted off this was measured at"
+                    : forward == SpecialContracts.NoLimit ? "   <- what it takes now" : ""));
+        }
+
+        Console.WriteLine();
+        Console.WriteLine(
+            "    Only BRANCHED ON is flat. The distance is gone and what bounds the walk is a rule"
+            + " read off the script: A COMPARE BELONGS TO THE LAST ANSWERER BEFORE IT, so past the");
+        Console.WriteLine(
+            "    SECOND answerer a compare belongs to somebody two removes away and is not evidence"
+            + " about this call at all. That rule alone is worth 621 -> 454; the rest was the window.");
+
+        WriteWhatTheWindowWasCutting(rom, library);
+    }
+
+    /// <summary>
+    /// The cross-check on 299's change: WHAT the window was cutting off (299).
+    /// </summary>
+    /// <remarks>
+    /// A wider window finding more compares proves nothing on its own — it would find more in the
+    /// reversed image too. What makes it a reading is the SHAPE of what it finds: a script asking
+    /// <c>compare 1 ; if ; compare 2 ; if ; compare 3 ; if</c> is longer than four commands, so a
+    /// window of four chops the chain, and what should appear when it is removed is TRUNCATED RUNS
+    /// filling in. It is a prediction the change could have failed and did not (27).
+    /// </remarks>
+    private static void WriteWhatTheWindowWasCutting(Rom rom, MapLibrary library)
+    {
+        List<SpecialContract> now =
+            SpecialContracts.Derive(rom, library, null, SpecialContracts.NoLimit);
+
+        Dictionary<int, SpecialContract> was = SpecialContracts
+            .Derive(rom, library, null, SpecialContracts.Window)
+            .ToDictionary(c => c.Routine);
+
+        static string Say(SpecialContract c) =>
+            string.Join(",", c.Compared.OrderBy(v => v.Key).Select(v => $"{v.Key}x{v.Value}"));
+
+        List<SpecialContract> moved = [.. now.Where(c => Say(c) != Say(was[c.Routine]))];
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    AND WHAT THE WINDOW WAS CUTTING — {moved.Count} routine(s) gained a compared value,"
+            + " and the shape of what they gained is the check. A script asking `compare 1 ; if ;");
+        Console.WriteLine(
+            "    compare 2 ; if ; compare 3 ; if` is longer than four commands, so a window of four"
+            + " chops the chain — and what should turn up when it goes is TRUNCATED RUNS filling in:");
+        Console.WriteLine();
+
+        foreach (SpecialContract c in moved.OrderBy(c => c.Routine))
+            Console.WriteLine(
+                $"      0x{c.Routine:X3}   was [{Say(was[c.Routine])}]   now [{Say(c)}]"
+                + (c.LooksLikeACount && !was[c.Routine].LooksLikeACount
+                    ? "   <- a run from one upwards, now"
+                    : ""));
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    {now.Count(c => c.LooksLikeACount)} routine(s) are compared against a run from one"
+            + $" upwards where {was.Values.Count(c => c.LooksLikeACount)} were — asked with"
+            + " SpecialContract.LooksLikeACount rather than a fourth copy of it, which is what these");
+        Console.WriteLine(
+            "    three milestones are about. A routine compared against one through N counts"
+            + " something with N of it, and this reading has printed NOUGHT of them until now.");
     }
 
     /// <summary>

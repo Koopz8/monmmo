@@ -99,7 +99,8 @@ public static class WhoTheCompareBelongsTo
     /// A verdict for every site whose compare is only past a barrier, over every script the
     /// maps hang off anything.
     /// </summary>
-    public static List<ACompareAcross> In(Rom rom, MapLibrary library)
+    public static List<ACompareAcross> In(
+        Rom rom, MapLibrary library, int forward = SpecialContracts.Window)
     {
         var found = new List<ACompareAcross>();
 
@@ -131,14 +132,15 @@ public static class WhoTheCompareBelongsTo
                     : SpecialContracts.AnswerVariable;
 
                 (IReadOnlyList<int> direct, IReadOnlyList<int> beyond) =
-                    SpecialContracts.WhatIsComparedAfter(commands, i, answer);
+                    SpecialContracts.WhatIsComparedAfter(commands, i, answer, forward);
 
                 // Only the sites the table gave up on. One with a clean compare as well has an
                 // owner already, and reporting it here would count it twice — and the rule for
                 // which is which is asked of SpecialContracts rather than repeated here.
                 if (!SpecialContracts.NothingCleanHere(direct, beyond)) continue;
 
-                (InTheWay Was, uint Called)? stood = WhatStoodInTheWay(rom, commands, i, answering);
+                (InTheWay Was, uint Called)? stood =
+                    WhatStoodInTheWay(rom, commands, i, answering, forward);
 
                 if (stood is null) continue;
 
@@ -167,9 +169,10 @@ public static class WhoTheCompareBelongsTo
     /// </para>
     /// </summary>
     public static (InTheWay Was, uint Called)? WhatStoodInTheWay(
-        Rom rom, List<ScriptCommand> commands, int at, IReadOnlySet<int>? answering = null)
+        Rom rom, List<ScriptCommand> commands, int at, IReadOnlySet<int>? answering = null,
+        int forward = SpecialContracts.Window)
     {
-        for (int i = at + 1; i < commands.Count && i <= at + SpecialContracts.Window; i++)
+        for (int i = at + 1; i < commands.Count && i - at <= forward; i++)
         {
             if (!SpecialCalls.AnswersItself(commands[i].Code)) continue;
 
