@@ -35,13 +35,24 @@ public sealed class WhatCountsTheDoorsTests
     /// <b>THE THING.</b> A hit on a one-door map is not a hit, and the floor has to be able to say
     /// so. The fixture holds one trivial match and one real one, so a cut that keeps the trivial
     /// row reads 2 of 2 where the honest answer is 1 of 1.
+    /// <para>
+    /// <b>And a THIRD row that does not match</b>, whose value count and door count differ. Without
+    /// it every row here has <c>values == doors</c>, and on such rows a cut on the values and a cut
+    /// on the doors are the same function — a break swapping one for the other came back green
+    /// against this fixture and the next one both (fixture-lie 5, trap 20).
+    /// </para>
     /// </summary>
     [Fact]
     public void TheOneDoorPairsAreCountedOutAboveACutOfOne()
     {
-        List<AVariableOnAMap> all = [On("1.0", values: 1, doors: 1), On("1.58", values: 11, doors: 11)];
+        List<AVariableOnAMap> all =
+        [
+            On("1.0", values: 1, doors: 1),
+            On("1.58", values: 11, doors: 11),
+            On("1.1", values: 3, doors: 1),
+        ];
 
-        Assert.Equal((2, 2), WhatCountsTheDoors.Floor(all, 1));
+        Assert.Equal((3, 2), WhatCountsTheDoors.Floor(all, 1));
         Assert.Equal((1, 1), WhatCountsTheDoors.Floor(all, 2));
     }
 
@@ -50,8 +61,9 @@ public sealed class WhatCountsTheDoorsTests
     /// be chosen by the answer: a variable is included or not by a property of the map it sits on,
     /// before anything about the variable is looked at (79).
     /// <para>
-    /// The two rows disagree about which one survives each cut, so a version cutting on values
-    /// gives the other answer rather than the same one.
+    /// <b>The MATCH column cannot see this break at all</b> — a matching row has as many values as
+    /// doors, so the two cuts treat every match identically and only the PAIRS column moves. A
+    /// fixture asserting the match count is named for a discrimination it does not make.
     /// </para>
     /// </summary>
     [Fact]
@@ -59,15 +71,16 @@ public sealed class WhatCountsTheDoorsTests
     {
         List<AVariableOnAMap> all =
         [
+            // Five values on a one-door map: a cut on the values keeps it, a cut on the doors
+            // does not, and it is not a match either way.
             new(0x4001, "1.0", "ONE", [1, 2, 3, 4, 5], 1, 1),
-            new(0x4002, "1.1", "TWO", [1], 5, 5),
+            new(0x4002, "1.1", "TWO", [1, 2, 3, 4, 5], 5, 5),
         ];
 
-        // Cut at five doors: the five-VALUE row goes and the five-DOOR row stays.
         (int pairs, int match) = WhatCountsTheDoors.Floor(all, 5);
 
         Assert.Equal(1, pairs);
-        Assert.Equal(0, match);
+        Assert.Equal(1, match);
     }
 
     /// <summary>
