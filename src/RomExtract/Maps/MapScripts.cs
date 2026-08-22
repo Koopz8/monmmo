@@ -93,6 +93,28 @@ public static class MapScripts
         return found;
     }
 
+    /// <summary>
+    /// The unconditional entries of one map's list, as the world file's record carries them (307).
+    /// <para>
+    /// <b>Here rather than inside the exporter, because a rule inside a sweep is a rule no fixture
+    /// can reach</b> — 219, 221, 222 and 223 were four green breaks running with that one cause.
+    /// The exporter needs a whole cartridge; this needs a list.
+    /// </para>
+    /// <para>
+    /// Two conditions and both matter. A conditional kind's pointer is a table of variable, value
+    /// and script and is <em>not</em> a script, so running it would be a misread that parses;
+    /// those arrive through <see cref="OnEntry"/> instead. A nought pointer is not an entry at
+    /// all. What this drops is counted and printed by <c>--the-fifth-list</c> rather than left
+    /// silent, which is 54's rule.
+    /// </para>
+    /// </summary>
+    public static List<MapScriptOnLoad> Unconditional(IEnumerable<MapScriptEntry> list) =>
+    [
+        .. list
+            .Where(e => e.Pointer != 0 && !IsConditional(e.Kind))
+            .Select(e => new MapScriptOnLoad(e.Kind, e.Pointer)),
+    ];
+
     private const int LongestTable = 8;
 
     private const int ConditionBytes = 8;

@@ -1,8 +1,8 @@
 namespace PokeMmo.Server;
 
 /// <summary>
-/// The six lever settings the floor table is quoted at, read off six runs, and the differences
-/// between them worked out from those same six rows.
+/// The seven lever settings the floor table is quoted at, read off seven runs, and the
+/// differences between them worked out from those same seven rows.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -20,11 +20,12 @@ namespace PokeMmo.Server;
 /// maintained by hand, so neither can drift away from the other.
 /// </para>
 /// <para>
-/// Two of the levers are <b>MODELLED</b> — <c>--say-yes</c> answers every yes-or-no with yes and
-/// <c>--boat</c> joins every dock to every other. <c>--surf</c> is an override on something
-/// <b>READ</b>: the walk crosses water on its own when the party knows the move, and the lever is
-/// what is left when it never does. <c>--in-order</c> is the one lever that makes the run
-/// stricter. Every row says which.
+/// Three of the levers are <b>MODELLED</b> — <c>--say-yes</c> answers every yes-or-no with yes,
+/// <c>--boat</c> joins every dock to every other, and <c>--on-load</c> runs the fifth list, whose
+/// entries carry no condition and whose timing is inside compiled code. <c>--surf</c> is an
+/// override on something <b>READ</b>: the walk crosses water on its own when the party knows the
+/// move, and the lever is what is left when it never does. <c>--in-order</c> is the one lever
+/// that makes the run stricter. Every row says which.
 /// </para>
 /// </remarks>
 public static class TheFloorTable
@@ -46,8 +47,20 @@ public static class TheFloorTable
     /// <summary>See <see cref="SayYes"/>.</summary>
     public static Lever InOrder { get; } = new("--in-order", "stricter");
 
+    /// <summary>
+    /// The fifth list — a map's own unconditional scripts (307).
+    /// <para>
+    /// MODELLED for one reason and it is written down in <c>MapScripts</c>: these entries carry
+    /// no condition, so running one means knowing <em>when</em> the cartridge runs it, and the
+    /// kind byte's meaning — on load, on transition, on the first frame — is inside compiled
+    /// code. What is READ is that they are scripts on this map, that 233 of 234 decode, and that
+    /// they move 61 flags of which 54 no other kind of script moves either way.
+    /// </para>
+    /// </summary>
+    public static Lever OnLoad { get; } = new("--on-load", "MODELLED");
+
     /// <summary>One row's worth of levers.</summary>
-    public sealed record Setting(bool SayYes, bool Boat, bool Surf, bool InOrder)
+    public sealed record Setting(bool SayYes, bool Boat, bool Surf, bool InOrder, bool OnLoad = false)
     {
         /// <summary>The command line that produces this row, which is what a session retypes.</summary>
         public string Command =>
@@ -55,7 +68,8 @@ public static class TheFloorTable
             + (SayYes ? " " + TheFloorTable.SayYes.Name : "")
             + (Boat ? " " + TheFloorTable.Boat.Name : "")
             + (Surf ? " " + TheFloorTable.Surf.Name : "")
-            + (InOrder ? " " + TheFloorTable.InOrder.Name : "");
+            + (InOrder ? " " + TheFloorTable.InOrder.Name : "")
+            + (OnLoad ? " " + TheFloorTable.OnLoad.Name : "");
 
         /// <summary>Which levers are on, in the order they are named above.</summary>
         public IReadOnlyList<Lever> On =>
@@ -64,6 +78,7 @@ public static class TheFloorTable
             .. Boat ? new[] { TheFloorTable.Boat } : [],
             .. Surf ? new[] { TheFloorTable.Surf } : [],
             .. InOrder ? new[] { TheFloorTable.InOrder } : [],
+            .. OnLoad ? new[] { TheFloorTable.OnLoad } : [],
         ];
 
         /// <summary>
@@ -93,13 +108,14 @@ public static class TheFloorTable
             Compare(Boat, other.Boat, TheFloorTable.Boat);
             Compare(Surf, other.Surf, TheFloorTable.Surf);
             Compare(InOrder, other.InOrder, TheFloorTable.InOrder);
+            Compare(OnLoad, other.OnLoad, TheFloorTable.OnLoad);
 
             return added.Count == 1 && lost.Count == 0 ? added[0] : null;
         }
     }
 
     /// <summary>
-    /// The six settings the table is quoted at, in the order it prints them.
+    /// The seven settings the table is quoted at, in the order it prints them.
     /// </summary>
     /// <remarks>
     /// Named here rather than in whoever prints them, and asserted to be six distinct settings
@@ -114,7 +130,20 @@ public static class TheFloorTable
         new(SayYes: true, Boat: true, Surf: false, InOrder: false),
         new(SayYes: true, Boat: true, Surf: false, InOrder: true),
         new(SayYes: true, Boat: true, Surf: true, InOrder: true),
+        new(SayYes: true, Boat: true, Surf: true, InOrder: true, OnLoad: true),
     ];
+
+    /// <summary>
+    /// How wide the command column has to be, taken off the widest command this table has.
+    /// <para>
+    /// <b>One name, and it is computed.</b> It was the literal <c>42</c> in eight places across
+    /// two files, which is 126's fault in a formatting string: adding a fifth lever made the
+    /// widest command fifty characters and every one of those eight columns broke, in eight
+    /// separate lines nobody would have thought to change together. A width read off
+    /// <see cref="Settings"/> cannot disagree with the rows it is printing.
+    /// </para>
+    /// </summary>
+    public static int CommandColumn { get; } = Settings.Max(s => s.Command.Length);
 
     /// <summary>What one run of one setting came to.</summary>
     public sealed record Row(
@@ -171,7 +200,7 @@ public static class TheFloorTable
     public static IReadOnlyList<string> Render(IReadOnlyList<Row> rows) =>
     [
         .. rows.Select(r =>
-            $"{r.At.Command,-42} {r.Reached} / {r.Flags} in {r.Passes}, "
+            $"{r.At.Command.PadRight(CommandColumn)} {r.Reached} / {r.Flags} in {r.Passes}, "
             + $"party of {r.Party} at {r.HighestLevel}, "
             + $"{r.HandedTwice} of {r.HandedOver} handed twice"),
     ];

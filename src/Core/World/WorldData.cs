@@ -27,6 +27,22 @@ public static class Beginning
     public const string MapId = "4.1";
 }
 
+/// <summary>
+/// One unconditional entry in a map's own script list: the kind the cartridge tagged it, and the
+/// script it points at.
+/// </summary>
+/// <remarks>
+/// The kind byte is kept rather than thrown away because it is the only thing in the data that
+/// says anything at all about WHEN the script runs — on load, on transition, on the first frame.
+/// What any of those means is compiled code and this project does not claim to know; keeping the
+/// byte is what lets a later reading ask the question per kind instead of about all of them at
+/// once.
+/// </remarks>
+/// <param name="Kind">The kind byte. Never one of the conditional kinds — those become
+/// <see cref="MapData.OnEntry"/>, and the filter lives in one place.</param>
+/// <param name="ScriptAddress">Where it points. A cartridge address, so in memory only.</param>
+public sealed record MapScriptOnLoad(int Kind, uint ScriptAddress);
+
 public sealed record MapData(string Id, string Name, int Width, int Height, byte[] Collision)
 {
     /// <summary>
@@ -114,6 +130,28 @@ public sealed record MapData(string Id, string Name, int Width, int Height, byte
     /// </para>
     /// </summary>
     public IReadOnlyList<MapEntryScript> OnEntry { get; init; } = [];
+
+    /// <summary>
+    /// The unconditional entries in this map's own script list — <b>the fifth list</b> (307).
+    /// <para>
+    /// The other half of <see cref="OnEntry"/>. A map's script list holds entries of several
+    /// kinds; two of them point at a table of variable, value and script and become
+    /// <see cref="OnEntry"/>, and the rest point straight at a script with no condition on it.
+    /// Those were read on the cartridge side from 224 onwards and <b>never exported</b>, so
+    /// every walk over this record went over a world whose maps have no unconditional scripts —
+    /// 239's fault exactly, one list further on.
+    /// </para>
+    /// <para>
+    /// <b>In memory only, like a trigger's script address and for the same reason.</b> An entry
+    /// of this list is a kind byte and a cartridge address and nothing else, so there is nothing
+    /// in it the server could use; it does not travel in the world file.
+    /// </para>
+    /// <para>
+    /// Carrying them is not running them. <em>When</em> the cartridge runs one is inside compiled
+    /// code, which is why <c>--on-load</c> is a lever and is marked MODELLED.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<MapScriptOnLoad> OnLoad { get; init; } = [];
 
     /// <summary>The arrival script armed by what this player's variables hold, if any.</summary>
     public MapEntryScript? EntryFor(Func<int, int> read) =>

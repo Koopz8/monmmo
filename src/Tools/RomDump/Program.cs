@@ -218,6 +218,7 @@ public static class Program
         if (options.TheWayBack) WriteTheWayBack(rom, options.StartAt);
         if (options.WhichWay) WriteWhichWay(rom, options.StartAt);
         if (options.Water) WriteWater(rom);
+        if (options.TheFifthList) WriteTheFifthList(rom, options.StartAt);
         if (options.Operands) WriteOperands(rom);
         if (options.OperandsEverywhere) WriteOperandsEverywhere(rom);
         if (options.TheControl) WriteTheControl(rom);
@@ -229,7 +230,7 @@ public static class Program
             WritePlaythrough(
                 rom, options.RoutineAnswers, options.StartAt, options.Boat, options.Money, options.SayYes,
                 options.Variables, options.Surf, options.InOrder, options.Watch, options.Signs,
-                options.Moved);
+                options.Moved, options.OnLoad);
         if (options.WhereFrom.Count > 0) WriteWhereFrom(rom, options.WhereFrom);
         if (options.InTheImage.Count > 0) WriteInTheImage(rom, options.InTheImage);
         if (options.ClimbFrom.Count > 0) WriteClimb(rom, options.ClimbFrom);
@@ -6108,6 +6109,41 @@ public static class Program
                 ? $" — AND {played.TraceDropped} MORE DROPPED, the trace filled up"
                 : ""));
 
+        // AND WHAT THE VARIABLE HELD WHEN SOMEBODY LOOKED, WHICH IS THE DENOMINATOR UNDER
+        // "THE RUN ANSWERS NOUGHT" (307).
+        //
+        // That sentence has been in this prompt since 214, measured on `special 0x0187`, and it
+        // is true of a variable nothing has written: an unanswerable `special` or `specialvar`
+        // writes NOTHING into the answer slot, so the compare after it reads whatever is still
+        // there. For 0x0187's slot at the time, that was nought. For 0x800D — the busiest number
+        // in the game — it is nought slightly over half the time and something an earlier script
+        // left the rest of it, and those two cases have printed identically.
+        //
+        // Reads only. A write's `Held` is what it is about to overwrite and says nothing about
+        // what anybody branched on.
+        int lookedAtSomething = played.Trace.Count(t => !t.What.Wrote && t.What.Held != 0);
+
+        if (reads > 0)
+        {
+            Console.WriteLine(
+                $"    of the {reads} read(s), {lookedAtSomething} found a value ALREADY IN THE SLOT"
+                + $" — {100.0 * lookedAtSomething / reads:F1}% — against {played.Trace.Count - reads}"
+                + " write(s). A routine this cannot answer leaves the slot alone, so a compare after"
+                + " one reads what the last script left, and \"the run answers nought\" is a"
+                + " sentence about the other half.");
+
+            // AND WHETHER THAT SHARE IS ABOUT THE RUN OR ABOUT THE CAP. The trace stops at a
+            // fixed size, so on a busy variable the percentage above is a property of the first
+            // N touches and not of the walk. Said in the output rather than left to be assumed —
+            // a share with a truncated denominator is 8's trap wearing a percent sign.
+            if (played.TraceDropped > 0)
+            {
+                Console.WriteLine(
+                    $"    BUT THE TRACE FILLED UP: that share is about the first {played.Trace.Count}"
+                    + $" touch(es) and not about the run, which had at least {played.TraceDropped} more.");
+            }
+        }
+
         foreach (Traced touch in played.Trace) Console.WriteLine($"    {touch}");
     }
 
@@ -6512,7 +6548,7 @@ public static class Program
 
             Attempt played = Autoplayer.Play(
                 world, first.Id, rules, reader.Read, null, at.Boat, 0, beaten, at.Surf,
-                remembered, at.InOrder, doorsTo);
+                remembered, at.InOrder, doorsTo, runOnLoad: at.OnLoad);
 
             rows.Add(TheFloorTable.Read(at, played, world.Maps.Count));
             everyRun.Add((at, played));
@@ -6530,7 +6566,7 @@ public static class Program
         Console.WriteLine("  and what each run did about the sea, which is READ and not a lever");
 
         foreach (TheFloorTable.Row row in rows)
-            Console.WriteLine($"    {row.At.Command,-42} {row.Water}");
+            Console.WriteLine($"    {row.At.Command.PadRight(TheFloorTable.CommandColumn)} {row.Water}");
 
         Console.WriteLine();
         Console.WriteLine(
@@ -6589,7 +6625,7 @@ public static class Program
             int whole = byMap.Count(m => stoodOn.GetValueOrDefault(m.Map) == m.Stuck);
 
             Console.WriteLine(
-                $"      {at.Command,-42} {played.StoodOn.Count,6}  {played.CannotGetBack.Count,15}"
+                $"      {at.Command.PadRight(TheFloorTable.CommandColumn)} {played.StoodOn.Count,6}  {played.CannotGetBack.Count,15}"
                 + $"  {byMap.Count,5}  {whole,6}");
         }
 
@@ -6715,7 +6751,7 @@ public static class Program
             IReadOnlyList<Unreached> here = WhyTheRestAreUnreached.In(world.Maps, played.Reached);
 
             Console.WriteLine(
-                $"      {at.Command,-42} {here.Count(u => u.Why == WhyUnreached.NoWayInAtAll),9}"
+                $"      {at.Command.PadRight(TheFloorTable.CommandColumn)} {here.Count(u => u.Why == WhyUnreached.NoWayInAtAll),9}"
                 + $"   {here.Count(u => u.Why == WhyUnreached.OnlyFromSomewhereUnreached),19}"
                 + $"   {here.Count(u => u.Why == WhyUnreached.NamedFromReachedGround),19}");
         }
@@ -6933,7 +6969,7 @@ public static class Program
                 played.Reached);
 
             Console.WriteLine(
-                $"      {at.Command,-42} {itsOwn.Count(d => d.Fenced == WhatFences.Nothing),8}   "
+                $"      {at.Command.PadRight(TheFloorTable.CommandColumn)} {itsOwn.Count(d => d.Fenced == WhatFences.Nothing),8}   "
                 + $"{itsOwn.Count(d => d.Fenced == WhatFences.SomebodyInTheWay),10}   "
                 + $"{itsOwn.Count(d => d.Fenced == WhatFences.SameGround),11}   "
                 + $"{itsOwn.Count(d => d.Fenced == WhatFences.BehindALedge),14}   "
@@ -7178,7 +7214,7 @@ public static class Program
                 WhySignsWentUnread.Of(world, played.SignsRead, [.. played.Reached]);
 
             Console.WriteLine(
-                $"      {at.Command,-42} {played.SignsRead.Count,4}    {theirs.Count,4}"
+                $"      {at.Command.PadRight(TheFloorTable.CommandColumn)} {played.SignsRead.Count,4}    {theirs.Count,4}"
                 + $"       {theirs.Count(u => u.Why == UnreadBecause.ItNeverGotToThatWall),4}"
                 + $"        {theirs.Count(u => u.Why == UnreadBecause.NothingCouldStandBesideIt),4}");
         }
@@ -7369,7 +7405,7 @@ public static class Program
                 List<RanASign> these = [.. played.SignsRead.Where(s => s.Address == widest)];
 
                 Console.WriteLine(
-                    $"      {at.Command,-42} {these.Count,3} square(s) x"
+                    $"      {at.Command.PadRight(TheFloorTable.CommandColumn)} {these.Count,3} square(s) x"
                     + $" {(these.Count == 0 ? 0 : these.Max(s => s.Times))} pass(es) ="
                     + $" {these.Sum(s => s.Times),4} read(s)");
             }
@@ -7384,7 +7420,7 @@ public static class Program
         Rom rom, IReadOnlyDictionary<int, int> answers, string startAt, bool boat = false, int money = 0,
         bool sayYes = false, IReadOnlyDictionary<int, int>? variables = null, bool surf = false,
         bool inOrder = false, int? watch = null, bool signs = false,
-        IReadOnlyList<int>? moved = null)
+        IReadOnlyList<int>? moved = null, bool onLoad = false)
     {
         Console.WriteLine();
         Console.WriteLine("A PLAYTHROUGH");
@@ -7449,7 +7485,7 @@ public static class Program
 
         Attempt played = Autoplayer.Play(
             world, first.Id, rules, reader.Read, Console.WriteLine, boat, money, beatenTrainers, surf,
-            remembered, inOrder, doorsTo);
+            remembered, inOrder, doorsTo, runOnLoad: onLoad);
 
         int hanging = played.Questions.Values.Sum();
 
@@ -9988,6 +10024,189 @@ public static class Program
     /// the record reaches any reading. The filter is right — a square nobody can stand on is not
     /// a square — but a filter with no count is a filter that could be removing anything.
     /// </remarks>
+
+    /// <summary>
+    /// What the fifth list moves, what nothing else moves, and what running it is worth (307).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Two halves, and the second one exists because the first cannot answer the question on its
+    /// own. Reading the list says <em>54 flags are moved by nothing else</em>; only a run says
+    /// whether the walk ends up with them anyway, and only two runs in ONE process can price the
+    /// lever without being a before-and-after across two builds (19).
+    /// </para>
+    /// </remarks>
+    private static void WriteTheFifthList(Rom rom, string startAt)
+    {
+        Console.WriteLine();
+        Console.WriteLine("THE FIFTH LIST — READ SINCE 224, RUN BY NOTHING");
+        Console.WriteLine();
+
+        MapLibrary library = MapLibrary.Open(rom);
+        List<LoadedMap> maps = [.. library.All()];
+
+        TheFifthList.Reading reading = TheFifthList.Read(rom, maps);
+
+        Console.WriteLine("  A MAP'S OWN SCRIPT LIST, BY KIND BYTE");
+        Console.WriteLine();
+        Console.WriteLine("    Kinds 2 and 4 point at a table of variable, value and script and the walk has run");
+        Console.WriteLine("    them since the list was found. Every other kind points straight at a script, and");
+        Console.WriteLine("    READS AS SCRIPT is asked only of those — a condition table read as commands is a");
+        Console.WriteLine("    misread that parses, so it is left blank rather than counted as a failure.");
+        Console.WriteLine();
+        Console.WriteLine("      kind  entries  maps  addresses  resolve  reads as script  the walk runs it");
+
+        foreach (TheFifthList.AKindByte kind in reading.ByKind)
+        {
+            bool conditional = MapScripts.IsConditional(kind.Kind);
+
+            Console.WriteLine(
+                $"      0x{kind.Kind:X2}  {kind.Entries,7}  {kind.Maps,4}  {kind.Addresses,9}  {kind.Resolves,7}"
+                + $"  {(conditional ? "     (a table)" : $"{kind.ReadsAsScript,15}")}"
+                + $"  {(conditional ? "yes, as on arrival" : "NO")}");
+        }
+
+        int conditionalEntries = reading.ByKind.Where(k => MapScripts.IsConditional(k.Kind)).Sum(k => k.Entries);
+        int unconditional = reading.ByKind.Sum(k => k.Entries) - conditionalEntries;
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    {unconditional} unconditional entry(ies) against {conditionalEntries} conditional — and what the"
+            + " export's filter removes is this second number, printed rather than silent (54).");
+
+        Console.WriteLine();
+        Console.WriteLine("  WHAT EACH KIND MOVES THAT NO OTHER KIND MOVES");
+        Console.WriteLine();
+        Console.WriteLine("    ONLY is the column this table exists for: flags this kind sets or clears and that no");
+        Console.WriteLine("    other kind touches either way. It is what dropping a kind costs, and the other four");
+        Console.WriteLine("    rows are here so the fifth's can be read against something rather than admired (68).");
+        Console.WriteLine();
+        Console.WriteLine("      kind          scripts  addresses  maps  sets  clears  ONLY  the walk runs it");
+
+        foreach (TheFifthList.AKind kind in reading.Kinds.OrderByDescending(k => k.Scripts))
+        {
+            Console.WriteLine(
+                $"      {kind.Kind,-12}  {kind.Scripts,7}  {kind.Addresses,9}  {kind.Maps,4}"
+                + $"  {kind.TurnedOn.Count,4}  {kind.TurnedOff.Count,6}  {kind.Only.Count,4}"
+                + $"  {(kind.Kind == TheFifthList.OnLoad ? "NO — until --on-load" : "yes")}");
+        }
+
+        TheFifthList.AKind fifth = reading.FifthList;
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    So the list nothing runs is the one carrying the SECOND most flags nothing else moves:"
+            + $" {fifth.Only.Count} of them, on {fifth.Maps} map(s).");
+
+        Console.WriteLine();
+        Console.WriteLine("  AND WHAT THOSE FLAGS HOLD");
+        Console.WriteLine();
+        Console.WriteLine("    Counted off the OBJECT records, which is a different structure from the scripts");
+        Console.WriteLine("    entirely — a flag nothing hides costs the walk nothing however many scripts move it,");
+        Console.WriteLine("    and that is the half of this list that can come back nought (134).");
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    {reading.Gating} of the {fifth.Only.Count} hide somebody, {reading.PeopleHeld} object(s) between them.");
+        Console.WriteLine();
+        Console.WriteLine("      flag    set  cleared  people  maps  moved by");
+
+        foreach (TheFifthList.AFlagOnlyHere flag in reading.OnlyHere.Where(f => f.Gates).Take(20))
+        {
+            Console.WriteLine(
+                $"      0x{flag.Flag:X4}  {(flag.TurnedOn ? "yes" : " no"),3}  {(flag.TurnedOff ? "yes" : " no"),7}"
+                + $"  {flag.People,6}  {flag.Maps,4}  {string.Join(", ", flag.Where.Take(3))}"
+                + (flag.Where.Count > 3 ? $" and {flag.Where.Count - 3} more" : string.Empty));
+        }
+
+        int holdNobody = fifth.Only.Count - reading.Gating;
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"    and {holdNobody} of them hide nobody at all: "
+            + string.Join(", ", reading.OnlyHere.Where(f => !f.Gates).Take(14).Select(f => $"0x{f.Flag:X4}"))
+            + (holdNobody > 14 ? $" and {holdNobody - 14} more" : string.Empty));
+
+        // THE SECOND HALF: what running them is worth, both runs in one process.
+        //
+        // 19's rule. 239 priced signs by running the playthrough twice one commit apart and
+        // writing the two tables side by side; every number in it was right and nobody without
+        // that build could have found out. The same run with the lever off is the control.
+        Console.WriteLine();
+        Console.WriteLine("  AND WHAT RUNNING THEM IS WORTH — the same setting twice, in one process");
+        Console.WriteLine();
+
+        WorldData world = WorldExporter.Export(rom);
+        GameRules rules = RulesExporter.Export(rom);
+        MapData first = world.Find(startAt) ?? world.Maps.First();
+        Dictionary<int, int> teaches = TeachingMachines(rom);
+
+        Dictionary<uint, uint> doorsTo = EntriesToAScene
+            .In(rom, maps.SelectMany(EveryScriptOn), HowAScriptRuns.FirstRemembered)
+            .GroupBy(d => d.Where.Address)
+            .ToDictionary(g => g.Key, g => g.First().Leads);
+
+        Console.WriteLine(
+            $"    {world.Maps.Sum(m => m.OnLoad.Count)} unconditional entry(ies) reached the export, on"
+            + $" {world.Maps.Count(m => m.OnLoad.Count > 0)} of {world.Maps.Count} maps — the number the walk"
+            + " could not see at all before this milestone.");
+        Console.WriteLine();
+
+        Attempt Run(TheFloorTable.Setting at, bool onLoad)
+        {
+            var beaten = new HashSet<int>();
+            var remembered = new Dictionary<int, int>();
+
+            var reader = new HowAScriptRuns(rom, teaches, null, null, at.SayYes, beaten, remembered);
+
+            return Autoplayer.Play(
+                world, first.Id, rules, reader.Read, null, at.Boat, 0, beaten, at.Surf,
+                remembered, at.InOrder, doorsTo, runOnLoad: onLoad);
+        }
+
+        HashSet<(string MapId, uint Address)> onLoadPairs =
+        [
+            .. world.Maps.SelectMany(m => m.OnLoad.Select(e => (m.Id, e.ScriptAddress))),
+        ];
+
+        Console.WriteLine("      setting                                    maps  flags  passes  party  on-load scripts run");
+
+        foreach (TheFloorTable.Setting at in TheFloorTable.Settings)
+        {
+            Attempt without = Run(at, false);
+            Attempt with = Run(at, true);
+
+            // Counted off the EXPORT's own (map, address) pairs rather than off a kind stamped
+            // on the run, because the run's record is keyed on the pair and 224 is the milestone
+            // about counting one thing when you meant another.
+            int ran = with.Ran.Count(r => onLoadPairs.Contains((r.Key.MapId, r.Key.Address)));
+            int onHowManyMaps = with.Ran.Where(r => onLoadPairs.Contains((r.Key.MapId, r.Key.Address)))
+                .Select(r => r.Key.MapId).Distinct().Count();
+
+            Console.WriteLine(
+                $"      {at.Command.PadRight(TheFloorTable.CommandColumn)}  {without.Reached.Count,4}  {without.Flags.Count,5}"
+                + $"  {without.Passes,6}  {without.Party.Count,5}  (off)");
+            Console.WriteLine(
+                $"      {"  the same run with --on-load".PadRight(TheFloorTable.CommandColumn)}  {with.Reached.Count,4}  {with.Flags.Count,5}"
+                + $"  {with.Passes,6}  {with.Party.Count,5}  {ran,3} on {onHowManyMaps} map(s)");
+
+            List<string> gained = [.. with.Reached.Except(without.Reached).Order()];
+            List<string> lost = [.. without.Reached.Except(with.Reached).Order()];
+
+            Console.WriteLine(
+                $"      {"  the difference".PadRight(TheFloorTable.CommandColumn)}  {with.Reached.Count - without.Reached.Count,+4}"
+                + $"  {with.Flags.Count - without.Flags.Count,+5}"
+                + $"  {with.Passes - without.Passes,+6}  {with.Party.Count - without.Party.Count,+5}"
+                + (gained.Count > 0 ? $"  gained {string.Join(", ", gained.Take(10))}" : string.Empty)
+                + (lost.Count > 0 ? $"  LOST {string.Join(", ", lost.Take(10))}" : string.Empty));
+            Console.WriteLine();
+        }
+
+        Console.WriteLine(
+            "    A number moving DOWN is not a regression until it has been read (7): setting a flag HIDES");
+        Console.WriteLine(
+            "    somebody, so a fifth-list script that sets one takes a person — and their script — off the map.");
+    }
+
     private static void WriteDropped(Rom rom)
     {
         Console.WriteLine();
@@ -15231,7 +15450,7 @@ public static class Program
 
             Attempt played = Autoplayer.Play(
                 world, start.Id, rules, reader.Read, null, at.Boat, 0, beaten, at.Surf,
-                remembered, at.InOrder, doorsTo);
+                remembered, at.InOrder, doorsTo, runOnLoad: at.OnLoad);
 
             HashSet<string> reached = [.. played.Reached];
 
@@ -15268,7 +15487,7 @@ public static class Program
             }
 
             Console.WriteLine(
-                $"    {at.Command,-42} map reached {standing.Count,3}   BESIDE {beside.Count,3}"
+                $"    {at.Command.PadRight(TheFloorTable.CommandColumn)} map reached {standing.Count,3}   BESIDE {beside.Count,3}"
                 + $"   UNDERFOOT {underfoot.Count,3}   of {buried.Count}, on"
                 + $" {standing.Select(b => b.MapId).Distinct().Count(),3} of"
                 + $" {buried.Select(b => b.MapId).Distinct().Count()} map(s)");
@@ -21741,6 +21960,14 @@ public static class Program
         /// <summary>Which metatile behaviours are the sea, asked without the elevation nibble.</summary>
         public bool Sea { get; private init; }
 
+        /// <summary>What the fifth list moves that nothing else does, and what the run never runs.</summary>
+        public bool TheFifthList { get; private init; }
+
+        /// <summary>
+        /// With <c>--play</c>: run the fifth list — a map's own unconditional scripts. MODELLED.
+        /// </summary>
+        public bool OnLoad { get; private init; }
+
         public bool Operands { get; private init; }
 
         /// <summary>The operand sweep over the whole file rather than over the map scan.</summary>
@@ -21986,6 +22213,8 @@ public static class Program
             var theRuler = false;
             var whichWay = false;
             var sea = false;
+            var theFifthList = false;
+            var onLoadLever = false;
             var operands = false;
             var moved = new List<int>();
             var slots = new List<byte>();
@@ -22288,6 +22517,12 @@ public static class Program
                         break;
                     case "--sea":
                         sea = true;
+                        break;
+                    case "--the-fifth-list":
+                        theFifthList = true;
+                        break;
+                    case "--on-load":
+                        onLoadLever = true;
                         break;
                     case "--operands":
                         operands = true;
@@ -22664,6 +22899,8 @@ public static class Program
                 TheWayBack = theWayBack,
                 WhichWay = whichWay,
                 Sea = sea,
+                TheFifthList = theFifthList,
+                OnLoad = onLoadLever,
                 Operands = operands,
                 OperandsEverywhere = operandsEverywhere,
                 TheControl = theControl,

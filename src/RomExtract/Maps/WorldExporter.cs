@@ -89,6 +89,21 @@ public static class WorldExporter
                     // the cartridge, exactly as they do for a trigger.
                     OnEntry = MapScripts.OnEntry(rom, header),
 
+                    // AND THE REST OF THAT SAME LIST, which this export has never carried.
+                    //
+                    // 239's shape exactly: the fourth list was read on the cartridge side and
+                    // absent from the exported record, so the walk went over a world with 519
+                    // sign scripts it could not see. Here the CONDITIONAL entries travelled and
+                    // the unconditional ones did not, so the walk went over a world whose maps
+                    // have no unconditional scripts at all — and 61 flags are moved by them, 54
+                    // of which no other kind of script moves either way (307).
+                    //
+                    // Carrying them is not running them. WHEN the cartridge runs one is not
+                    // written down anywhere in the data and that is still true; --on-load is the
+                    // lever, and it is MODELLED. Exporting them is what makes the lever possible
+                    // and what makes "the run cannot see this" stop being true by construction.
+                    OnLoad = MapScripts.Unconditional(MapScripts.Read(rom, header)),
+
                     // And the doors that are on no square, read out of the same scripts.
                     // A map's warp records say where its doorways go; these say where its
                     // boats and lifts do, and until now nothing on the server's side of

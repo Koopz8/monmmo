@@ -189,6 +189,18 @@ public enum WhatRanIt
 
     /// <summary>Something read off a wall. The fourth list, and new at 239.</summary>
     ASign,
+
+    /// <summary>
+    /// An unconditional entry in the map's own script list. The fifth list, and new at 307.
+    /// <para>
+    /// <b>MODELLED, and only when <c>--on-load</c> is on.</b> Which of these the cartridge runs
+    /// and when is inside compiled code: the kind byte says on load, on transition, on the first
+    /// frame, and what those mean is not in the data. What IS read is that they are scripts on
+    /// this map, that they decode, and that they move 61 flags — 54 of which no other kind of
+    /// script in the world moves either way.
+    /// </para>
+    /// </summary>
+    OnLoad,
 }
 
 /// <summary>One sign the walk stood in front of, and how many times it read it.</summary>
@@ -1150,7 +1162,8 @@ public static class Autoplayer
         bool inOrder = false,
         IReadOnlyDictionary<uint, uint>? doorsTo = null,
         bool readSigns = true,
-        bool obeySignSides = true)
+        bool obeySignSides = true,
+        bool runOnLoad = false)
     {
         // WHICH SCENE A SCRIPT IS, WHICH IS NOT THE SAME AS WHICH SCRIPT IT IS.
         //
@@ -1373,7 +1386,8 @@ public static class Autoplayer
                 // the two would drift apart, and this project has found that fault five times.
                 var toRun = new Queue<Runnable>(
                     Reachable(
-                        map, stood, flags, gone, remembered, inOrder, readSigns, obeySignSides));
+                        map, stood, flags, gone, remembered, inOrder, readSigns, obeySignSides,
+                        runOnLoad));
                 var alreadyRun = new HashSet<uint>();
 
                 while (toRun.Count > 0)
@@ -2509,7 +2523,8 @@ public static class Autoplayer
         IReadOnlyDictionary<int, int>? remembered = null,
         bool inOrder = false,
         bool readSigns = true,
-        bool obeySignSides = true)
+        bool obeySignSides = true,
+        bool runOnLoad = false)
     {
         // WHETHER A SCRIPT'S OWN CONDITION IS HONOURED, WHICH IS WHAT THE FLOOR MEANS.
         //
@@ -2561,6 +2576,31 @@ public static class Autoplayer
         // So the counter was right for one instant, between the lab's own script and the next
         // map, and nobody was looking. Every instrument this project has printed the five at
         // the end and none of them could say the balls never saw a two.
+        // AND BEFORE ALL OF IT, THE FIFTH LIST — the entries in the map's own script list that
+        // carry no condition, which nothing in this walk has ever run.
+        //
+        // MODELLED, and off by default. The kind byte distinguishes on load, on transition and
+        // on the first frame, and what any of those means is inside compiled code — the same
+        // wall --buried's base hunt and --arrivals' starting nought both end at. So this is a
+        // lever like --say-yes and --boat, not a correction.
+        //
+        // FIRST, because that is the only order that can be argued for at all: a map's own
+        // script list is what the cartridge runs to bring the map up, and a conditional entry
+        // in the SAME list is checked against variables those scripts may have just written.
+        // Running them after the arrival scripts is not a stricter reading or a looser one, it
+        // is an order the cartridge cannot produce — 239's argument, one list over.
+        //
+        // The conditional kinds are not in this list at all — the export drops them, in the one
+        // place MapScripts.IsConditional is asked, because their pointer is a table of conditions
+        // and not a script: those arrive through OnEntry above, already, and reading a condition
+        // table as commands is a misread that would parse. What that filter removes is counted
+        // and printed by --the-fifth-list rather than left silent (54).
+        if (runOnLoad)
+        {
+            foreach (MapScriptOnLoad entry in map.OnLoad)
+                yield return new Runnable(entry.ScriptAddress, 0, WhatRanIt.OnLoad);
+        }
+
         foreach (MapEntryScript entry in map.OnEntry)
         {
             if (entry.ScriptAddress != 0 && Fires(entry.Variable, entry.Value))

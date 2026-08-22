@@ -120,16 +120,16 @@ public sealed class TheTableNobodyReRanTests
     }
 
     /// <summary>
-    /// The six settings the table is quoted at: six of them, all different, and none orphaned —
-    /// a row no other row is one lever from is a row no difference can ever be stated about.
+    /// The settings the table is quoted at: all different, and none orphaned — a row no other row
+    /// is one lever from is a row no difference can ever be stated about.
     /// </summary>
     [Fact]
-    public void TheSixSettingsAreSixAndNoneOfThemIsOrphaned()
+    public void TheSettingsAreAllDifferentAndNoneOfThemIsOrphaned()
     {
         IReadOnlyList<TheFloorTable.Setting> settings = TheFloorTable.Settings;
 
-        Assert.Equal(6, settings.Count);
-        Assert.Equal(6, settings.Distinct().Count());
+        Assert.Equal(7, settings.Count);
+        Assert.Equal(7, settings.Distinct().Count());
 
         foreach (TheFloorTable.Setting one in settings)
         {
@@ -137,6 +137,43 @@ public sealed class TheTableNobodyReRanTests
                 settings.Any(other => one.OneLeverPast(other) is not null)
                 || settings.Any(other => other.OneLeverPast(one) is not null),
                 $"{one.Command} is one lever from nothing else in the table");
+        }
+    }
+
+    /// <summary>
+    /// <b>Every lever this table names is on in some row and off in some other row.</b>
+    /// <para>
+    /// 35's rule, and it is the one that matters when a lever is added. A count of rows is
+    /// satisfied by whatever the list happens to hold; naming the levers is not. A lever that is
+    /// never on has no difference to be quoted for, and one that is never off has no row to
+    /// subtract from — either way the table is quietly unable to say what that lever costs, and
+    /// nothing about the row count would show it.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void EveryLeverTheTableNamesIsBothOnAndOffSomewhereInIt()
+    {
+        IReadOnlyList<TheFloorTable.Setting> settings = TheFloorTable.Settings;
+
+        (TheFloorTable.Lever Lever, Func<TheFloorTable.Setting, bool> On)[] levers =
+        [
+            (TheFloorTable.SayYes, s => s.SayYes),
+            (TheFloorTable.Boat, s => s.Boat),
+            (TheFloorTable.Surf, s => s.Surf),
+            (TheFloorTable.InOrder, s => s.InOrder),
+            (TheFloorTable.OnLoad, s => s.OnLoad),
+        ];
+
+        Assert.Equal(5, levers.Length);
+
+        foreach ((TheFloorTable.Lever lever, Func<TheFloorTable.Setting, bool> on) in levers)
+        {
+            Assert.True(settings.Any(on), $"{lever.Name} is never on in any row");
+            Assert.True(settings.Any(s => !on(s)), $"{lever.Name} is never off in any row");
+
+            Assert.True(
+                settings.Any(a => settings.Any(b => a.OneLeverPast(b) == lever)),
+                $"no two rows are exactly {lever.Name} apart, so the table cannot price it");
         }
     }
 
