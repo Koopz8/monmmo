@@ -709,6 +709,18 @@ Traps worth carrying:
     what names their own blocks is a literal in code, which the climb had said per site since 191.
     **Before believing a proximity test, ask what it would find if the thing were merely nearby.**
 
+118. **A SWEEP THAT READS ONE SLOT REPORTS THE OTHERS AS ABSENT** (292). 236 measured that 25 of
+    the 178 routines take a value in `0x8004`, and every reading since has read that slot — 291's
+    own instrument hard-coded it with a comment explaining why. Asked of every slot: **44 routines
+    are handed a value in an argument slot, 33 in `0x8004`, and 11 ONLY somewhere else.** The
+    cartridge uses six — `0x8004` x33, `0x8005` x16, `0x8006` x7, and one each at `0x8007`,
+    `0x8008`, `0x800F`. *236 counted the ones that use 0x8004* was the finding; *this cartridge
+    uses 0x8004* never was. 290's stride, one list over.
+
+    **And a control has to be a change that cannot matter.** Reversing a sort order was labelled a
+    control here and killed a fixture, because the fixture asserts the ordered list. 289's lesson
+    from the other end.
+
 117. **COUNT THE VALUES, NOT THE PLACES** (291). 236 counted `0x194`'s places and this prompt has
     called them "nineteen doors" ever since. They are an INDEX: the values run **0..20 with 13, 14
     and 15 never used**, and a contiguous run with holes in it is a table. What the argument
@@ -1037,8 +1049,9 @@ Traps worth carrying:
 
 ## Where things are
 
-Read `claude/milestone-291-the-nineteen-doors-are-an-index.md` first, then `290`, then `289`, then
-`288`, then `287`, then `286`, then `285`, then `284`, then `283`, then `282`, then `281`, then `280`, then `279`, then `278`, then `277`, then `276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
+Read `claude/milestone-292-the-sweep-read-one-slot-of-six.md` first, then `291`, then `290`, then
+`289`, then `288`, then `287`, then `286`, then `285`, then `284`, then `283`, then `282`, then
+`281`, then `280`, then `279`, then `278`, then `277`, then `276`, then `275`, then `274`, then `273`, `272`, `271`, `270`, `269`, `268`, `267`, `266`, `265`, `264`, `263`, `262`, `261`, `260`, `259`, `258`, `257`,
 `256`, `255`, `254`, `253`, `252`, `251`,
 `250`, `249`, `248`, `247`, `246`, `245`, `244`, `243`,
 `242`, `241`, `240`, `239`,
@@ -2033,6 +2046,10 @@ nought of the 98 follow a specialvar; every one of the 68 follows a plain specia
 asked of (routine, 0x8004): 269 pairs, 95 in more than one place, and NOUGHT of the 95 are
   waited at some places and not others — chance at 7.3% a place would give 26.6 (236)
 25 of the 178 routines take a 0x8004 in the run before a call; 0x194/0x173/0x174 take 18/16/16
+  AND IN THE SCAN, ASKED OF EVERY SLOT (292): 44 of 178 are handed a value in an argument slot,
+  33 in 0x8004 and **11 ONLY in another** — 0x8004 x33, 0x8005 x16, 0x8006 x7, 0x8007/0x8008/0x800F
+  x1 each. The two numbers are different populations (a run takes one arm of every branch) and
+  neither corrects the other. `--special` prints the slots before it reads one
 0x9C is 7 byte positions and SEVEN distinct words — a column; 3 of them are the obstacle scripts
 exactly ONE conditional in the map scan has a 0x27 its target lacks, and it is 0x0AB's
 ONE number is named both as a flag and as a variable in the map scan — 0x4001, floor 1.73 (244,
@@ -2290,7 +2307,13 @@ still work.**
     `CannotGetBack` and `TheLastStepIn`, and `--the-floor` prints the second column for all six.
     46 / 48 / 48 / 284 / 284 / 284, and the 284 is ICEFALL CAVE's ledges plus the lift cabins.
 * **`9.6`'s puzzle** — fifteen doors, `0x8004` against `0x8008`. Read far enough to say what it
-  is; it is NOT why the run cycles, whatever 239 said.
+  is; it is NOT why the run cycles, whatever 239 said. **292 narrowed it and did not close it**:
+  `9.6` is VERMILION CITY and calls six routines, of which `0x015B` is called SIXTEEN times here
+  and NOWHERE ELSE in the game, and `0x0187`/`0x0188` fifteen times each — the fifteen doors. None
+  of the three is handed a value in any argument slot, so the 0x8004/0x8008 is not an argument to
+  them.
+* **The eleven routines handed an argument only outside `0x8004`** (292), and **`0x8005` at
+  sixteen routines**, which nothing in this project reads. One `--special` each.
 * **`3.57 sign (9,43)`** — the LEMONADE example that has been quoted in this prompt for
   milestones as something the run could not reach. It can now.
 
