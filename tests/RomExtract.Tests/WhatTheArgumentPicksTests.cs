@@ -174,4 +174,73 @@ public sealed class WhatTheArgumentPicksTests
 
         Assert.Null(WhatTheArgumentPicks.ArgumentOf(call));
     }
+
+    // ---------------------------------------------------------------- the other slots (292)
+
+    private static SpecialCall Slotted(int slot, int value, int at) =>
+        new("9.6", "person", at, Routine, 0x800D, [(slot, value)], [], []);
+
+    /// <summary>
+    /// <b>THE SLOT IS A QUESTION AND IT HAD ONE ANSWER (292).</b> Every sweep in this project
+    /// reads <c>0x8004</c>, so a routine handed its argument anywhere else reads as taking none —
+    /// and on this cartridge <b>11 of the 44 routines that take an argument take it ONLY in some
+    /// other slot</b>. The slots used are 0x8004 x33, 0x8005 x16, 0x8006 x7, and one each at
+    /// 0x8007, 0x8008 and 0x800F.
+    /// </summary>
+    [Fact]
+    public void ARoutineHandedItsValueElsewhereIsInvisibleUnderTheDefault()
+    {
+        SpecialCall[] calls = [Slotted(0x8008, 1, 0x100), Slotted(0x8008, 2, 0x200)];
+
+        // Under the slot every sweep reads, both calls look like "no argument" and the routine
+        // has one bucket — so it is not reported at all.
+        Assert.Empty(WhatTheArgumentPicks.In(calls));
+
+        // Under the slot the cartridge actually uses, it has two.
+        ARoutinesArguments found = Assert.Single(WhatTheArgumentPicks.In(calls, 0x8008));
+
+        Assert.Equal(2, found.Arguments.Count);
+    }
+
+    /// <summary>
+    /// And the slots a routine is handed a value in are counted before anything is read off one —
+    /// values and calls separately, because a slot set to the same number at forty places is one
+    /// value and forty calls.
+    /// </summary>
+    [Fact]
+    public void TheSlotsAreCountedByValuesAndByCalls()
+    {
+        IReadOnlyList<(int Slot, int Values, int Calls)> slots = WhatTheArgumentPicks.SlotsOf(
+        [
+            Slotted(0x8005, 1, 0x100),
+            Slotted(0x8005, 1, 0x200),
+            Slotted(0x8005, 2, 0x300),
+            Slotted(0x8006, 9, 0x400),
+        ]);
+
+        Assert.Equal([(0x8005, 2, 3), (0x8006, 1, 1)], slots);
+    }
+
+    /// <summary>A routine nothing sets a slot for has no slots, rather than an empty 0x8004.</summary>
+    [Fact]
+    public void ARoutineHandedNothingHasNoSlots()
+    {
+        Assert.Empty(WhatTheArgumentPicks.SlotsOf([Call(null, 0x100, 0)]));
+    }
+
+    /// <summary>
+    /// And <c>ArgumentOf</c> reads the slot it is asked for — the whole generalisation rests on
+    /// this one line, and its default is the slot the rest of the project reads.
+    /// </summary>
+    [Fact]
+    public void TheArgumentIsReadFromTheSlotAskedFor()
+    {
+        var call = new SpecialCall(
+            "9.6", "person", 0x100, Routine, 0x800D, [(0x8004, 3), (0x8008, 7)], [], []);
+
+        Assert.Equal(3, WhatTheArgumentPicks.ArgumentOf(call));
+        Assert.Equal(3, WhatTheArgumentPicks.ArgumentOf(call, 0x8004));
+        Assert.Equal(7, WhatTheArgumentPicks.ArgumentOf(call, 0x8008));
+        Assert.Null(WhatTheArgumentPicks.ArgumentOf(call, 0x8005));
+    }
 }

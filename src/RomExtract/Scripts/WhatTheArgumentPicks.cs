@@ -81,8 +81,24 @@ public sealed record ARoutinesArguments(int Routine, IReadOnlyList<OneArgument> 
 /// </summary>
 public static class WhatTheArgumentPicks
 {
-    /// <summary>Every routine called with more than one argument value, most places first.</summary>
-    public static IReadOnlyList<ARoutinesArguments> In(IEnumerable<SpecialCall> calls)
+    /// <summary>
+    /// Every routine called with more than one value in <paramref name="slot"/>, most places
+    /// first.
+    /// </summary>
+    /// <param name="calls">Every routine call the map scan reads.</param>
+    /// <param name="slot">
+    /// Which argument slot to read.
+    /// <para>
+    /// <b>Defaulted to <c>0x8004</c> and that is not the only one (292).</b> 236 measured that 25
+    /// of the 178 routines take a value in <c>0x8004</c> and every sweep since has read that slot
+    /// and no other — so <c>0x015B</c>, the routine called sixteen times on <c>9.6</c> and nowhere
+    /// else in the game, reads as "called with one value or none". Its argument is in
+    /// <c>0x8008</c>. A sweep that can only see one shape reports the shapes it cannot see as
+    /// absent, which is 290's stride one list over.
+    /// </para>
+    /// </param>
+    public static IReadOnlyList<ARoutinesArguments> In(
+        IEnumerable<SpecialCall> calls, int slot = TheArgument)
     {
         var found = new List<ARoutinesArguments>();
 
@@ -91,7 +107,7 @@ public static class WhatTheArgumentPicks
             List<OneArgument> arguments =
             [
                 .. routine
-                    .GroupBy(ArgumentOf)
+                    .GroupBy(c => ArgumentOf(c, slot))
                     .Select(g => new OneArgument(
                         routine.Key,
                         g.Key,
@@ -117,10 +133,28 @@ public static class WhatTheArgumentPicks
     /// pairing it built its "0 of 95" on is (routine, 0x8004). Reading a different slot here would
     /// be a different population wearing the same name.
     /// </remarks>
-    public static int? ArgumentOf(SpecialCall call) =>
-        call.Arguments.Where(a => a.Variable == TheArgument)
+    public static int? ArgumentOf(SpecialCall call, int slot = TheArgument) =>
+        call.Arguments.Where(a => a.Variable == slot)
             .Select(a => (int?)a.Value)
             .LastOrDefault();
+
+    /// <summary>
+    /// Which argument slots this routine is ever handed a value in, and how many distinct values
+    /// each carries — the question that has to be asked before any of the above (292).
+    /// </summary>
+    public static IReadOnlyList<(int Slot, int Values, int Calls)> SlotsOf(
+        IEnumerable<SpecialCall> calls) =>
+    [
+        .. calls.SelectMany(c => c.Arguments.Select(a => (a.Variable, a.Value)))
+            .GroupBy(a => a.Variable)
+            .Select(g => (
+                Slot: g.Key,
+                Values: g.Select(a => a.Value).Distinct().Count(),
+                Calls: g.Count()))
+            .OrderByDescending(s => s.Values)
+            .ThenByDescending(s => s.Calls)
+            .ThenBy(s => s.Slot),
+    ];
 
     /// <summary>The slot this cartridge's scripts put a routine's argument in.</summary>
     public const int TheArgument = 0x8004;

@@ -4191,7 +4191,56 @@ public static class Program
     /// </summary>
     private static void WriteWhatTheArgumentPicks(IReadOnlyList<SpecialCall> all, int routine)
     {
-        IReadOnlyList<ARoutinesArguments> found = WhatTheArgumentPicks.In(all);
+        // WHICH SLOT THIS ROUTINE IS HANDED A VALUE IN, asked before anything else (292). Every
+        // sweep in this project reads 0x8004 because 236 measured that 25 routines take one
+        // there — and a routine handed its argument in another slot then reads as taking none.
+        IReadOnlyList<(int Slot, int Values, int Calls)> slots =
+            WhatTheArgumentPicks.SlotsOf(all.Where(c => c.Routine == routine));
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"  WHICH SLOT 0x{routine:X4} IS HANDED A VALUE IN (292): "
+            + (slots.Count == 0
+                ? "none — nothing sets an argument slot in front of any of its calls"
+                : string.Join(
+                    ", ",
+                    slots.Select(s => $"0x{s.Slot:X4} takes {s.Values} value(s) over {s.Calls} call(s)"))));
+
+        // AND THE SAME QUESTION OF THE WHOLE CARTRIDGE. 236 measured "25 of the 178 routines take
+        // a 0x8004" and every sweep since has read that slot alone. How many take an argument in
+        // some OTHER slot is the number that says whether reading one slot was enough.
+        var byRoutine = all.GroupBy(c => c.Routine)
+            .Select(g => (Routine: g.Key, Slots: WhatTheArgumentPicks.SlotsOf(g)))
+            .ToList();
+
+        Console.WriteLine(
+            $"    of the {byRoutine.Count} routine(s) the map scan calls,"
+            + $" {byRoutine.Count(r => r.Slots.Count > 0)} are handed a value in some argument"
+            + $" slot; {byRoutine.Count(r => r.Slots.Any(x => x.Slot == WhatTheArgumentPicks.TheArgument))}"
+            + $" of those in 0x{WhatTheArgumentPicks.TheArgument:X4}, and"
+            + $" {byRoutine.Count(r => r.Slots.Count > 0 && r.Slots.All(x => x.Slot != WhatTheArgumentPicks.TheArgument))}"
+            + " ONLY in some other slot");
+
+        Console.WriteLine(
+            "    every slot this cartridge's scripts use, by how many routines take a value in it: "
+            + string.Join(
+                ", ",
+                byRoutine.SelectMany(r => r.Slots.Select(x => x.Slot))
+                    .GroupBy(x => x)
+                    .OrderByDescending(g => g.Count())
+                    .ThenBy(g => g.Key)
+                    .Select(g => $"0x{g.Key:X4} x{g.Count()}")));
+
+        int reading = slots.Count > 0 ? slots[0].Slot : WhatTheArgumentPicks.TheArgument;
+
+        if (reading != WhatTheArgumentPicks.TheArgument)
+        {
+            Console.WriteLine(
+                $"    reading 0x{reading:X4} below rather than 0x{WhatTheArgumentPicks.TheArgument:X4},"
+                + " because that is the slot this routine's own callers vary");
+        }
+
+        IReadOnlyList<ARoutinesArguments> found = WhatTheArgumentPicks.In(all, reading);
 
         ARoutinesArguments? here = found.FirstOrDefault(r => r.Routine == routine);
 
@@ -4201,7 +4250,7 @@ public static class Program
 
         Console.WriteLine(
             $"  WHAT THE ARGUMENT PICKS (291) — {found.Count} routine(s) in this cartridge are"
-            + " called with more than one value in 0x8004, and"
+            + $" called with more than one value in 0x{reading:X4}, and"
             + $" {changing.Count} of those have the answer compared against DIFFERENT things"
             + " depending on which value it was: "
             + string.Join(", ", changing.Select(r => $"0x{r.Routine:X4}")));
